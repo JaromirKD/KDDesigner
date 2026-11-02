@@ -1,0 +1,24 @@
+# Build output (PlatformIO) and editor settings
+.pio/
+.vscode/
+
+# Network update files: rebuilt by every firmware build (tools/make_update.py)
+updates/
+
+# Written by the PC mock while it runs: the previous save, the log files and
+# the device history
+data/show/project.bak
+data/show/logs/
+
+# Another project with its own git repository (Sourcetree)
+inspiration/PharosGuiCreator/
+
+# Old backups
+backup-*.zip
+
+# Node, Windows and macOS clutter
+node_modules/
+npm-debug.log*
+Thumbs.db
+desktop.ini
+.DS_Store

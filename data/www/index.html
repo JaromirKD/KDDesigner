@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KD Designer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">KD<span>Designer</span></div>
+  <div id="projName" class="proj"></div>
+  <div class="chips" id="chips"></div>
+  <div class="spacer"></div>
+  <label class="gm" title="Grand master">GM <input type="range" id="gm" min="0" max="100" value="100"><span id="gmVal">100%</span></label>
+  <button id="bo" class="btn" title="Blackout">Blackout</button>
+  <button id="undoBtn" class="btn" title="Undo (Ctrl+Z)" disabled>↶</button>
+  <button id="redoBtn" class="btn" title="Redo (Ctrl+Y)" disabled>↷</button>
+  <button id="save" class="btn primary" title="Save project to USB (Ctrl+S)">Save</button>
+</header>
+<nav class="side" id="nav">
+  <button data-view="dashboard">Dashboard</button>
+  <button data-view="patch">Patch</button>
+  <button data-view="fixtures">Fixtures</button>
+  <button data-view="map">Map</button>
+  <button data-view="effects">Effects</button>
+  <button data-view="scenes">Scenes</button>
+  <button data-view="timelines">Timelines</button>
+  <button data-view="triggers">Triggers</button>
+  <button data-view="variables">Variables</button>
+  <button data-view="schedule">Schedule</button>
+  <button data-view="panel">Panel</button>
+  <button data-view="devices">Devices</button>
+  <button data-view="monitor">Monitoring <span id="monBadge" class="badge"></span></button>
+  <button data-view="console">Console</button>
+  <button data-view="log">Log <span id="logBadge" class="badge"></span></button>
+  <button data-view="dmx">DMX monitor</button>
+  <button data-view="settings">Settings</button>
+</nav>
+<main id="main"></main>
+<div id="toast"></div>
+<script src="fx.js"></script>
+<script src="model.js"></script>
+<script src="fixture-lib.js"></script>
+<!-- The UI in parts, in this order (one shared scope; app-main.js starts it). -->
+<script src="app-core.js"></script>
+<script src="app-grammar.js"></script>
+<script src="app-rig.js"></script>
+<script src="app-library.js"></script>
+<script src="app-show.js"></script>
+<script src="app-triggers.js"></script>
+<script src="app-trigger-tools.js"></script>
+<script src="app-system.js"></script>
+<script src="app-drivers.js"></script>
+<script src="app-main.js"></script>
+</body>
+</html>

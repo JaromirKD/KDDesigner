@@ -1,0 +1,1366 @@
+'use strict';
+// KD Designer web UI - Effects, Scenes and Timelines.
+// Plain scripts sharing one global scope; load order is in index.html.
+
+// ---- Effects: scripts in a small shader-like language (fx.js), run per fixture ----
+// p.effects = [{id, name, code}]. Timeline cues run them on a track's fixtures.
+const fxCompiled = new Map();
+function fxProg(e) {
+  let c = fxCompiled.get(e);
+  if (!c || c.code !== e.code) { c = { code: e.code, prog: KDFX.compile(e.code || '') }; fxCompiled.set(e, c); }
+  return c.prog;
+}
+// Base effects as <option>s, in their groups (KDFX.GROUPS).
+const fxTplOptions = () => Object.entries(KDFX.GROUPS).map(([g, label]) => `<optgroup label="${esc(label)}">${KDFX.TEMPLATES
+  .map((t, k) => (t.group === g ? `<option value="${k}">${esc(t.name)}</option>` : '')).join('')}</optgroup>`).join('');
+// A name no other effect has (other than `self`): "Chase", "Chase 2", ...
+function fxUniqueName(base, self) {
+  const taken = (nm) => P().effects.some((x) => x !== self && x.name === nm);
+  let name = base, k = 2;
+  while (taken(name)) name = `${base} ${k++}`;
+  return name;
+}
+// Under a parameter's slider: its note (the comment after the param line), range and default.
+function fxParamNote(q) {
+  const range = q.type === 'color' ? `default ${q.def}` : `${q.min} … ${q.max}, default ${q.def}`;
+  return `<div class="fx-note">${q.note ? `${esc(q.note)} · ` : ''}<span class="muted">${range}</span></div>`;
+}
+// Fixtures for a preview: those on a map (with positions), a strip of n RGB cells, or an n x n grid.
+function fxPreviewFixtures(src) {
+  if (Array.isArray(src)) return src;
+  const p = P(), m = src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
+  if (m) return m.items.map((it) => ({ f: fixture(it.fixture), x: it.x, y: it.y })).filter((o) => o.f);
+  if (src?.startsWith('grid:')) {
+    const g = +src.slice(5) || 10;
+    return Array.from({ length: g * g }, (_, k) => ({ f: { channels: ['r', 'g', 'b'] }, x: (k % g) / (g - 1), y: Math.floor(k / g) / (g - 1) }));
+  }
+  const n = +(src || '').replace('strip:', '') || 16;
+  return Array.from({ length: n }, (_, k) => ({ f: { channels: ['r', 'g', 'b'] }, x: n > 1 ? k / (n - 1) : 0.5, y: 0.5 }));
+}
+// Which outputs a fixture has, for KDFX.toFixture: { dim, r, g, b, w } true/false.
+function fxOutputs(f) {
+  const ro = channelRoles(f);
+  return { dim: !!ro.dim, r: !!ro.r, g: !!ro.g, b: !!ro.b, w: !!ro.w };
+}
+// Colour of one fixture in a preview frame (what toFixture would send, as CSS).
+function fxPreviewColor(prog, base, outs, i, n, x, y, t, level = 1) {
+  const s = Float64Array.from(base);
+  s[0] = t; s[1] = i; s[2] = n; s[3] = i / n; s[4] = x; s[5] = y;
+  KDFX.run(prog, s);
+  const o = KDFX.toFixture(s, outs, level);
+  if (o.r == null) { const d = o.dim ?? 0; return { css: `rgba(255,214,150,${(0.1 + d * 0.9).toFixed(2)})`, level: d }; }
+  const d = o.dim ?? 1, w = o.w || 0;
+  const c = [o.r + w, o.g + w, o.b + w].map((q) => Math.round(Math.min(1, q) * d * 255));
+  return { css: `rgb(${c.join(',')})`, level: Math.max(...c) / 255 };
+}
+function fxPreviewHtml(src) {
+  const p = P(), fx = fxPreviewFixtures(src), m = src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
+  if (m) return `<div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, '50vh')}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
+    ${fx.map((o, k) => `<div class="mfx" style="left:${o.x * 100}%;top:${o.y * 100}%" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div>`;
+  if (src?.startsWith('grid:')) return `<div class="fx-prev grid" style="grid-template-columns:repeat(${Math.round(Math.sqrt(fx.length))},1fr)">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
+  return `<div class="fx-prev strip">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
+}
+// Effect overlay on the map preview: on/off is a per-browser preference.
+function fxOverlayOn() {
+  try { return localStorage.getItem('kd.fxOverlay') === '1'; } catch { return false; }
+}
+function setFxOverlay(on) {
+  try { on ? localStorage.setItem('kd.fxOverlay', '1') : localStorage.removeItem('kd.fxOverlay'); } catch { /* private mode */ }
+}
+// The overlay runs the effect at every spot of a coarse grid over the map (x, y of that spot),
+// as an RGB fixture at full level, so the pattern shows between and under the fixtures too.
+// i / n / u are those of the nearest fixture, so list-order effects show each fixture's area.
+function fxOverlayPainter(cv, prog, base, fx) {
+  const W = 64, H = Math.max(8, Math.min(96, Math.round((W * cv.clientHeight) / Math.max(1, cv.clientWidth))));
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d'), img = g.createImageData(W, H), s = new Float64Array(base.length), n = Math.max(1, fx.length);
+  const rgb = { r: true, g: true, b: true }, near = new Int32Array(W * H);
+  for (let k = 0; k < W * H; k++) {   // nearest fixture, once (not every frame)
+    const x = ((k % W) + 0.5) / W, y = (Math.floor(k / W) + 0.5) / H;
+    let best = 0, bd = Infinity;
+    fx.forEach((o, j) => { const d = (o.x - x) ** 2 + (o.y - y) ** 2; if (d < bd) { bd = d; best = j; } });
+    near[k] = best;
+  }
+  return (t) => {
+    for (let k = 0; k < W * H; k++) {
+      s.set(base);
+      s[0] = t; s[1] = near[k]; s[2] = n; s[3] = near[k] / n; s[4] = ((k % W) + 0.5) / W; s[5] = (Math.floor(k / W) + 0.5) / H;
+      KDFX.run(prog, s);
+      const o = KDFX.toFixture(s, rgb);
+      img.data[k * 4] = o.r * 255; img.data[k * 4 + 1] = o.g * 255; img.data[k * 4 + 2] = o.b * 255; img.data[k * 4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  };
+}
+// Animate a preview container; values: param overrides; level 0..1.
+function runFxPreview(box, prog, src, values = {}, level = 1) {
+  if (!box || !prog || prog.error) return;
+  const fx = fxPreviewFixtures(src), base = KDFX.slotsFor(prog, values), cells = [...box.querySelectorAll('[data-pv]')], t0 = performance.now();
+  const outs = fx.map((o) => fxOutputs(o.f));   // once, not every frame
+  const glow = fx.length <= 40;   // the glow is costly to draw for hundreds of dots every frame
+  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, base, fx);
+  pageAnimation('fxPreview', () => {
+    const t = (performance.now() - t0) / 1000;
+    if (paintOvl) paintOvl(t);
+    fx.forEach((o, k) => {
+      const c = fxPreviewColor(prog, base, outs[k], k, fx.length, o.x, o.y, t, level);
+      cells[k].style.background = c.css;
+      if (glow) cells[k].style.boxShadow = c.level > 0.05 ? `0 0 ${3 + c.level * 10}px ${c.css}` : 'none';
+    });
+  });
+}
+views.effects = () => {
+  const p = P();
+  S.sel.effect = Math.min(S.sel.effect || 0, Math.max(0, p.effects.length - 1));
+  const e = p.effects[S.sel.effect];
+  const newMenu = `<select id="fxNew"><option value="">+ New effect…</option><option value="empty">Empty</option>
+    ${fxTplOptions()}</select>`;
+  const list = `<div class="list">${p.effects.map((x, i) => {
+    const pr = fxProg(x);
+    return `<div class="item${i === S.sel.effect ? ' sel' : ''}" data-sel="effect:${i}"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span>${pr.error ? '<span class="tag mon-warn">error</span>' : `<span class="tag">${pr.params.length} param${pr.params.length === 1 ? '' : 's'}</span>`}</div>`;
+  }).join('') || '<span class="muted">No effects yet. Start from a base effect.</span>'}</div>`;
+  if (!e) return `<h2>Effects</h2><div class="split"><div>${list}<div class="row" style="margin-top:8px">${newMenu}</div></div>
+    <div><p class="muted">Effects are little scripts, a bit like shaders: they run for every fixture, every frame, and say what colour it should be.
+      Start from a base effect, change it, then use it on a timeline track.</p></div></div>`;
+  const prog = fxProg(e), src = S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16');
+  const used = p.timelines.flatMap((tl) => tl.cues.filter((c) => c.effect === e.id).map((c) => `${tl.name} @ ${(c.t / 1000).toFixed(1)} s`));
+  return `<h2>Effects</h2><div class="split">
+    <div>${list}
+      <div class="row" style="margin-top:8px">${newMenu}<button class="btn small" id="fxDup">Duplicate</button></div></div>
+    <div>
+      <div class="row"><input data-p="effects.${S.sel.effect}.name" value="${esc(e.name)}" style="font-size:16px;flex:1" data-r>
+        <select id="fxBase" title="Swap this effect's code for a base effect. Timeline cues that use it keep using it; Ctrl+Z undoes."><option value="">Change to base effect…</option>${fxTplOptions()}</select>
+        <button class="btn small ghost" data-del="effects.${S.sel.effect}">Delete</button></div>
+      <div class="fx-ed">
+        <div class="fx-code"><pre class="fx-gutter" id="fxGutter"></pre><textarea id="fxCode" spellcheck="false" wrap="off">${esc(e.code || '')}</textarea></div>
+        <div class="fx-err" id="fxErr"></div>
+      </div>
+      <div class="row" style="margin-top:8px"><b>Preview</b>
+        <select id="fxSrc"><option value="strip:16"${src === 'strip:16' ? ' selected' : ''}>Strip of 16</option><option value="strip:8"${src === 'strip:8' ? ' selected' : ''}>Strip of 8</option><option value="grid:10"${src === 'grid:10' ? ' selected' : ''}>Grid 10 × 10 (for XY)</option>
+          ${p.maps.map((m, i) => `<option value="map:${i}"${src === `map:${i}` ? ' selected' : ''}>Map: ${esc(m.name)}</option>`).join('')}</select>
+        ${src.startsWith('map:') ? `<label class="muted" title="Runs the effect over the whole map, not only where the fixtures are, so you can see the pattern between them"><input type="checkbox" id="fxOvl"${fxOverlayOn() ? ' checked' : ''}> show effect on the whole map</label>` : ''}
+        <span class="muted">${used.length ? `Used in: ${used.map(esc).join(', ')}` : 'Not used on a timeline yet.'}</span></div>
+      <div id="fxPrev">${fxPreviewHtml(src)}</div>
+      <div id="fxParams" class="fx-params"></div>
+      <details class="fx-ref" ${S.fxRef ? 'open' : ''}><summary>Language reference</summary>
+        <p><b>Each line</b>: <code>name = expression</code>, or <code>r, g, b = hsv(...)</code> / <code>r, g, b = colorParam</code>. <code>//</code> starts a comment.
+          Operators <code>+ - * / %</code>, compare <code>&lt; &gt; &lt;= &gt;= == !=</code>, <code>&amp;&amp; || !</code>, and <code>cond ? a : b</code>.</p>
+        <p><b>Parameters</b>: <code>param speed = 0.5 [0, 4]</code> (slider), <code>param color = #ff8800</code> (colour: <code>color.r</code>, <code>.g</code>, <code>.b</code>). Each timeline cue can set its own values.</p>
+        <p><b>Inputs</b>: <code>t</code> seconds since the cue · <code>i</code> fixture number in the track (0…) · <code>n</code> how many · <code>u</code> = i / n ·
+          <code>x</code>, <code>y</code> position on the map (0…1) · <code>pi</code>, <code>tau</code></p>
+        <p><b>Outputs</b>: <code>r g b</code> 0…1 · <code>dim</code> 0…1 (default 1) · <code>w</code> (default: the white part of r, g, b). Fixtures without a dimmer get r, g, b × dim; dimmer-only fixtures get dim × the brightest of r, g, b.</p>
+        <div class="fx-funcs">${KDFX.FUNCS.map(([f]) => `<code data-ins="${f}(" title="${esc(KDFX.FDOC[f])}">${f}</code>`).join(' ')}</div>
+      </details>
+    </div></div>`;
+};
+views.effects.after = () => {
+  const p = P();
+  $('#fxNew')?.addEventListener('change', (ev) => {
+    const v = ev.target.value;
+    if (!v) return;
+    const tpl = v === 'empty' ? { name: 'Effect', code: '// r, g, b and dim, per fixture, every frame\nparam color = #ffffff\nr, g, b = color\n' } : KDFX.TEMPLATES[+v];
+    p.effects.push({ id: nextId(p.effects), name: fxUniqueName(tpl.name), code: tpl.code });
+    S.sel.effect = p.effects.length - 1;
+    markDirty();
+    render();
+  });
+  const e = p.effects[S.sel.effect];
+  if (!e) return;
+  $('#fxDup').addEventListener('click', () => {
+    p.effects.push({ id: nextId(p.effects), name: e.name + ' copy', code: e.code });
+    S.sel.effect = p.effects.length - 1;
+    markDirty();
+    render();
+  });
+  // Swap the code for a base effect, keeping the id so timeline cues still use it.
+  $('#fxBase').addEventListener('change', (ev) => {
+    const tpl = KDFX.TEMPLATES[+ev.target.value];
+    if (!tpl) return;
+    e.code = tpl.code;
+    // A name that came from a base effect ("Chase", "Chase 2", "Chase copy") follows the new one.
+    if (KDFX.TEMPLATES.some((x) => e.name === x.name || e.name.startsWith(x.name + ' '))) e.name = fxUniqueName(tpl.name, e);
+    // Cue values for parameters the new code doesn't have (or of another type) are dropped.
+    const params = KDFX.compile(tpl.code).params;
+    for (const tl of p.timelines) for (const c of tl.cues) {
+      if (c.effect !== e.id || !c.params) continue;
+      for (const k of Object.keys(c.params)) {
+        const q = params.find((x) => x.name === k);
+        if (!q || (q.type === 'color') !== (typeof c.params[k] === 'string')) delete c.params[k];
+      }
+    }
+    S.fxValues = null;
+    markDirty();
+    render();
+    toast(`Now based on ${tpl.name} (Ctrl+Z undoes)`);
+  });
+  const ta = $('#fxCode'), gutter = $('#fxGutter');
+  S.fxValues = S.fxValues?.id === e.id ? S.fxValues : { id: e.id, v: {} };
+  let sig = '';
+  const refresh = () => {
+    const prog = fxProg(e);
+    const lines = (e.code || '').split('\n').length;
+    gutter.textContent = Array.from({ length: lines }, (_, k) => (prog.error && prog.error.line === k + 1 ? '▶ ' : '') + (k + 1)).join('\n');
+    $('#fxErr').innerHTML = prog.error ? `<span class="bad">Line ${prog.error.line}: ${esc(prog.error.msg)}</span>` : '<span class="ok">✓ compiles</span>';
+    ta.classList.toggle('invalid', !!prog.error);
+    if (prog.error) return;
+    // Rebuild the parameter controls only when the parameters change.
+    const s2 = JSON.stringify(prog.params);
+    if (s2 !== sig) {
+      sig = s2;
+      $('#fxParams').innerHTML = prog.params.length ? `<b>Parameters</b> <span class="muted">(try values here, not saved; set defaults in the code, or per cue on the timeline. A comment after a param line is its note)</span>` + prog.params.map((q) => (q.type === 'color'
+        ? `<div class="row nowrap"><span class="fx-pn">${esc(q.name)}</span><input type="color" data-fxp="${esc(q.name)}" value="${esc(S.fxValues.v[q.name] || q.def)}"></div>`
+        : `<div class="row nowrap"><span class="fx-pn">${esc(q.name)}</span><input type="range" data-fxp="${esc(q.name)}" min="${q.min}" max="${q.max}" step="${(q.max - q.min) / 200}" value="${S.fxValues.v[q.name] ?? q.def}" style="flex:1"><span class="mono fx-pv">${(+(S.fxValues.v[q.name] ?? q.def)).toFixed(2)}</span></div>`) + fxParamNote(q)).join('') : '';
+      $$('[data-fxp]').forEach((i) => i.addEventListener('input', () => {
+        S.fxValues.v[i.dataset.fxp] = i.type === 'color' ? i.value : +i.value;
+        if (i.nextElementSibling?.classList.contains('fx-pv')) i.nextElementSibling.textContent = (+i.value).toFixed(2);
+        runFxPreview($('#fxPrev'), fxProg(e), S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v);
+      }));
+    }
+    runFxPreview($('#fxPrev'), prog, S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v);
+  };
+  ta.addEventListener('input', () => { e.code = ta.value; markDirty(); refresh(); });
+  ta.addEventListener('scroll', () => (gutter.scrollTop = ta.scrollTop));
+  ta.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Tab') { ev.preventDefault(); ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end'); ta.dispatchEvent(new Event('input')); }
+  });
+  $$('[data-ins]').forEach((c) => c.addEventListener('click', () => { ta.focus(); ta.setRangeText(c.dataset.ins, ta.selectionStart, ta.selectionEnd, 'end'); ta.dispatchEvent(new Event('input')); }));
+  $('#fxSrc').addEventListener('change', (ev) => { S.fxSrc = ev.target.value; render(); });
+  $('#fxOvl')?.addEventListener('change', (ev) => { setFxOverlay(ev.target.checked); render(); });
+  const pm = /^map:(\d+)$/.exec($('#fxSrc').value), prevMap = pm && p.maps[+pm[1]];
+  if (prevMap) attachMapResize($('#fxPrev .map-canvas'), prevMap.aspect);
+  $('.fx-ref').addEventListener('toggle', (ev) => (S.fxRef = ev.target.open));
+  refresh();
+};
+
+// ---- Scenes: the fixtures on a map (or in a list) showing the scene's look, and controls
+// for the selected ones, like a desk's programmer. The table of all levels stays below.
+S.scSel = new Set();   // fixture ids selected on the Scenes page
+S.scMap = 0;           // map shown there (-1 = a list of all fixtures)
+// The scene's levels as DMX values per universe (for fixtureLook).
+function sceneDmx(sc) {
+  const dmx = {};
+  for (const u of P().universes) dmx[u.id] = new Array(512).fill(0);
+  for (const l of sc.levels) {
+    const a = absChannel(l), d = a && dmx[a.u];
+    if (!d) continue;
+    if (a.wide) { d[a.ch - 1] = l.v >> 8; d[a.ch] = l.v & 255; } else d[a.ch - 1] = l.v;
+  }
+  return dmx;
+}
+function paintSceneLook(sc) {
+  const dmx = sceneDmx(sc), inScene = new Set(sc.levels.map((l) => l.fixture)), els = $$('[data-scfx]'), glow = els.length <= 40;
+  for (const el of els) {
+    const f = fixture(+el.dataset.scfx);
+    el.classList.toggle('out', !inScene.has(f.id));
+    paintDot(el.querySelector('.dot'), fixtureLook(f, dmx), glow);
+  }
+}
+// Sets a channel of some fixtures in the scene (adds the level where it's missing).
+function setSceneLevel(sc, fixtures, ch, v) {
+  const changed = [];
+  for (const f of fixtures) {
+    const s = slots(f).find((x) => x.name === ch);
+    if (!s) continue;
+    let l = sc.levels.find((x) => x.fixture === f.id && x.ch === ch);
+    if (!l) sc.levels.push((l = { fixture: f.id, ch, v: 0 }));
+    l.v = Math.max(0, Math.min(s.wide ? 65535 : 255, Math.round(v)));
+    changed.push(l);
+  }
+  previewLevels(changed);
+  markDirty();
+}
+function sceneProgrammerHtml(sc) {
+  const p = P(), sel = p.fixtures.filter((f) => S.scSel.has(f.id));
+  if (!sel.length) return '<p class="muted">Click fixtures above to set them in this scene (Shift/Ctrl+click or drag an area for several). Faded = not in this scene.</p>';
+  const lev = (f, ch) => sc.levels.find((l) => l.fixture === f.id && l.ch === ch);
+  const chans = [];
+  for (const f of sel) for (const s of slots(f)) if (!chans.some((c) => c.name === s.name)) chans.push(s);
+  const nIn = sel.filter((f) => sc.levels.some((l) => l.fixture === f.id)).length;
+  const rgb = sel.filter((f) => { const r = channelRoles(f); return r.r && r.g && r.b; });
+  let wheel = '';
+  if (rgb.length) {
+    const f = rgb[0], ro = channelRoles(f), v8 = (s) => { const v = lev(f, s.name)?.v ?? homeValue(f, s.name); return s.wide ? v >> 8 : v; };
+    wheel = `<div>${colorWheelHtml('sc', rgbToHex(v8(ro.r), v8(ro.g), v8(ro.b)))}</div>`;
+  }
+  const rows = chans.map((c) => {
+    const has = sel.filter((f) => slots(f).some((s) => s.name === c.name));
+    const set = has.map((f) => lev(f, c.name)).filter(Boolean);
+    const max = c.wide ? 65535 : 255, v = set[0]?.v ?? homeValue(has[0], c.name);
+    const note = !set.length ? 'not in scene' : new Set(set.map((l) => l.v)).size > 1 ? 'mixed' : set.length < has.length ? `${set.length} of ${has.length}` : '';
+    return `<div class="sc-ch${set.length ? '' : ' off'}"><span class="sc-chn" title="${esc(c.name)}${c.wide ? ' (16-bit)' : ''} · ${has.length} fixture(s)">${esc(c.name)}</span>
+      <input type="range" min="0" max="${max}" value="${v}" data-scv="${esc(c.name)}">
+      <input type="number" min="0" max="${max}" value="${v}" data-scn="${esc(c.name)}">
+      <span class="muted sc-pct">${Math.round((v / max) * 100)}%</span><span class="sc-note">${note}</span>
+      ${set.length ? `<button class="btn small ghost" data-scrm="${esc(c.name)}" title="Take this channel out of the scene">✕</button>` : '<span></span>'}</div>`;
+  }).join('');
+  const one = sel.length === 1 ? sel[0] : null;
+  return `<div class="sc-prog">
+    <div class="row"><span class="fx-ic">${one ? fxIcon(one) : ''}</span><b>${one ? esc(one.name) : sel.length + ' fixtures'}</b><span class="muted">${one ? (nIn ? 'in this scene' : 'not in this scene') : `${nIn} in this scene`}</span><span class="spacer"></span>
+      ${sel.some((f) => channelRoles(f).dim) ? '<button class="btn small" data-scdim="255">Full</button><button class="btn small" data-scdim="128">50%</button><button class="btn small" data-scdim="0">Off</button>' : ''}
+      <button class="btn small" id="scAddAll" title="Put every channel of these fixtures in the scene (at their home values where not set)">All channels</button>
+      <button class="btn small ghost" id="scRemove"${nIn ? '' : ' disabled'}>Remove from scene</button></div>
+    <div class="sc-body">${wheel}<div class="sc-chs">${rows}</div></div>
+    ${one ? `<details class="sc-fix"${S.scFixOpen ? ' open' : ''}><summary>Fixture settings · ${one.universe}.${one.address}–${one.address + footprint(one) - 1} · ${esc(fixtureType(one))}</summary>
+      <div class="form" style="margin-top:8px"><label>Name</label><input data-p="fixtures.${p.fixtures.indexOf(one)}.name" value="${esc(one.name)}" data-r>${fixtureFieldsHtml(one)}</div>
+      <button class="btn small ghost" id="scOpenFx" style="margin-top:6px">Open on the Fixtures page →</button></details>` : ''}
+  </div>`;
+}
+views.scenes = () => {
+  const p = P();
+  const sc = p.scenes[S.sel.scene];
+  let look = '';
+  if (sc) {
+    for (const id of [...S.scSel]) if (!fixture(id)) S.scSel.delete(id);
+    S.scMap = Math.min(S.scMap, p.maps.length - 1);
+    const m = p.maps[S.scMap];
+    const chip = (f) => `<button class="sc-chip${S.scSel.has(f.id) ? ' sel' : ''}" data-scfx="${f.id}" title="${esc(f.name)} · ${f.universe}.${f.address}"><span class="dot">${fxIcon(f)}</span>${esc(f.name)}</button>`;
+    const pick = `<select id="scMap" title="Where to pick fixtures">${p.maps.map((x, i) => `<option value="${i}"${x === m ? ' selected' : ''}>Map: ${esc(x.name)}</option>`).join('')}<option value="-1"${m ? '' : ' selected'}>List of all fixtures</option></select>`;
+    if (m) {
+      const placed = new Set(m.items.map((it) => it.fixture)), rest = p.fixtures.filter((f) => !placed.has(f.id));
+      // Not taller than ~60 % of the screen until you drag it bigger, so the controls stay in view.
+      look = `<div class="map-wrap"><div class="map-canvas sc-map${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="scCanvas" style="${mapSizeStyle('kd.mapH.scenes', m.aspect, '60vh')}">
+        ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}
+        ${m.items.map((it) => { const f = fixture(it.fixture); return f ? mapDotHtml(f, it, S.scSel.has(f.id) ? ' sel' : '', m.labels !== false, 'data-scfx') : ''; }).join('')}<div class="band" hidden></div>${mapResizeHtml('kd.mapH.scenes')}</div></div>
+        ${rest.length ? `<div class="sc-chips"><span class="muted">Not on this map:</span>${rest.map(chip).join('')}</div>` : ''}`;
+    } else look = `<div class="sc-chips sc-all">${p.fixtures.map(chip).join('') || '<span class="muted">No fixtures yet - add them on the Fixtures page.</span>'}</div>`;
+    // Groups: one click selects a whole group (Shift/Ctrl+click adds it to the selection).
+    const groups = p.groups.length ? `<div class="sc-groups"><span class="muted">Groups:</span>${p.groups.map((g) => {
+      const on = g.fixtures.length && g.fixtures.every((id) => S.scSel.has(id));
+      return `<button class="sc-grp${on ? ' on' : ''}" data-scgrp="${g.id}" title="Select this group (Shift/Ctrl+click adds it)">${esc(g.name)} <span class="muted">${g.fixtures.length}</span></button>`;
+    }).join('')}</div>` : '';
+    look = `<div class="row map-tools">${pick}<span class="muted">Shows the scene's look · click to select · drag an area · Esc clears · Ctrl+A all</span></div>${groups}${look}`;
+  }
+  return `<h2>Scenes</h2><div class="split">
+    <div><div class="list">${p.scenes.map((s, i) => `<div class="item${i === S.sel.scene ? ' sel' : ''}" data-sel="scene:${i}"><span class="id">${s.id}</span>${esc(s.name)}</div>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn small" data-add="scene">+ Scene</button></div></div>
+    <div>${sc ? `
+      <div class="row"><input data-p="scenes.${S.sel.scene}.name" value="${esc(sc.name)}" style="font-size:16px;flex:1">
+        <button class="btn" data-cmd="scene ${sc.id} fade 0">Play</button>
+        <button class="btn" data-cmd="release scene ${sc.id}">Release</button>
+        <label class="row muted" title="Send changes as live channel overrides while editing"><input type="checkbox" id="preview"${S.preview ? ' checked' : ''}> Live preview</label>
+        <button class="btn small" data-cmd="clear overrides">Clear preview</button>
+        <button class="btn small ghost" data-del="scenes.${S.sel.scene}">Delete</button></div>
+      ${look}
+      ${sceneProgrammerHtml(sc)}
+      <details class="sc-table"${S.scTable ? ' open' : ''}><summary>All levels in this scene (${sc.levels.length}) - also raw universe.channel levels</summary>
+      ${S.scTable ? sceneTableHtml(sc) : ''}</details>`
+    : '<span class="muted">Select or create a scene.</span>'}</div></div>`;
+};
+// The table of all levels: only built while it is open, at most S.scRows rows at a time. In a
+// big rig each row names its fixture as text instead of a list of every fixture (that list,
+// once per row, made the page megabytes big).
+function sceneTableHtml(sc) {
+  const p = P(), small = p.fixtures.length <= 60, rows = S.scRows || 200;
+  return `<table style="margin-top:10px"><tr><th>Fixture</th><th>Channel</th><th>Value</th><th class="narrow"></th><th class="narrow">Abs.</th><th></th></tr>
+      ${sc.levels.slice(0, rows).map((l, i) => {
+        const base = `scenes.${S.sel.scene}.levels.${i}`;
+        const f = l.fixture != null ? fixture(l.fixture) : null;
+        const a = absChannel(l);
+        const max = a?.wide ? 65535 : 255;
+        return `<tr><td>${small || l.fixture == null ? `<select data-fx="${base}"><option value="">raw (universe.channel)</option>${small ? opts(p.fixtures, l.fixture) : ''}</select>` : `<span class="muted">${f ? `${f.id} · ${esc(f.name)}` : '?'}</span>`}</td>
+          <td>${l.fixture != null
+            ? `<select data-p="${base}.ch" data-r>${(f ? slots(f) : []).map((s) => `<option value="${esc(s.name)}"${s.name === l.ch ? ' selected' : ''}>${esc(s.name)}${s.wide ? ' (16-bit)' : ''}</option>`).join('')}</select>`
+            : `<div class="row" style="flex-wrap:nowrap"><select data-p="${base}.u" data-t="num">${opts(p.universes, l.u, (u) => u.id)}</select><input type="number" min="1" max="512" data-p="${base}.ch" data-t="num" value="${l.ch}"></div>`}</td>
+          <td><input type="range" min="0" max="${max}" data-p="${base}.v" data-t="num" value="${l.v}" data-live oninput="this.closest('tr').querySelector('.vn').value=this.value"></td>
+          <td><input class="vn" type="number" min="0" max="${max}" data-p="${base}.v" data-t="num" value="${l.v}" data-live data-r></td>
+          <td class="muted mono">${a ? a.u + '.' + a.ch + (a.wide ? '+' + (a.ch + 1) : '') : '?'}</td>
+          <td><button class="btn small ghost" data-del="${base}">✕</button></td></tr>`;
+      }).join('')}</table>
+      ${sc.levels.length > rows ? `<div class="row" style="margin-top:6px"><span class="muted">Showing ${rows} of ${sc.levels.length}.</span><button class="btn small" id="scMoreRows">Show ${Math.min(sc.levels.length - rows, 500)} more</button></div>` : ''}
+      <div class="row" style="margin-top:8px"><button class="btn small" data-add="level">+ Level</button>
+        <select id="addFx"><option value="">Add all channels of…</option>${opts(p.fixtures)}</select>
+        ${p.groups.length ? `<select id="addGrp"><option value="">Add channel of group…</option>${p.groups.map((g) => {
+          const names = [...new Set(g.fixtures.map(fixture).filter(Boolean).flatMap((f) => slots(f).map((s) => s.name)))];
+          return `<optgroup label="${esc(g.name)}">${names.map((n) => `<option value="${g.id}|${esc(n)}">${esc(g.name)} · ${esc(n)}</option>`).join('')}</optgroup>`;
+        }).join('')}</select>` : ''}</div>`;
+}
+views.scenes.after = () => {
+  const p = P(), sc = p.scenes[S.sel.scene];
+  $('#preview')?.addEventListener('change', (e) => (S.preview = e.target.checked));
+  if (sc) wireSceneLook(sc);
+  $('#addFx')?.addEventListener('change', (e) => {
+    const f = fixture(+e.target.value);
+    if (!f) return;
+    for (const s of slots(f)) if (!sc.levels.some((l) => l.fixture === f.id && l.ch === s.name)) sc.levels.push({ fixture: f.id, ch: s.name, v: homeValue(f, s.name) });
+    markDirty();
+    render();
+  });
+  $('#addGrp')?.addEventListener('change', (e) => {
+    const [gid, name] = e.target.value.split('|');
+    const g = P().groups.find((x) => x.id === +gid);
+    if (!g) return;
+    const sc = P().scenes[S.sel.scene];
+    for (const f of g.fixtures.map(fixture).filter(Boolean))
+      if (slots(f).some((s) => s.name === name) && !sc.levels.some((l) => l.fixture === f.id && l.ch === name)) sc.levels.push({ fixture: f.id, ch: name, v: 255 });
+    markDirty();
+    render();
+  });
+  $$('[data-fx]').forEach((el) => el.addEventListener('change', () => {
+    const l = getPath(P(), el.dataset.fx);
+    if (el.value) { const f = fixture(+el.value); l.fixture = f.id; l.ch = slots(f)[0]?.name || 1; delete l.u; }
+    else { delete l.fixture; l.u = P().universes[0]?.id || 1; l.ch = 1; }
+    markDirty();
+    render();
+  }));
+};
+function wireSceneLook(sc) {
+  const p = P(), m = p.maps[S.scMap];
+  // Libraries types give the home values and icons.
+  if (!LIB.list && p.fixtures.some((f) => f.type && !findType(f.type))) loadLibrary(() => S.view === 'scenes' && render());
+  paintSceneLook(sc);
+  $('#scMap').addEventListener('change', (e) => { S.scMap = +e.target.value; render(); });
+  $('.sc-table').addEventListener('toggle', (e) => {
+    S.scTable = e.target.open;
+    if (S.scTable && !$('.sc-table table')) render();   // built on first open
+  });
+  $('#scMoreRows')?.addEventListener('click', () => { S.scRows = (S.scRows || 200) + 500; render(); });
+  $('.sc-fix')?.addEventListener('toggle', (e) => (S.scFixOpen = e.target.open));
+  const paintSel = () => $$('[data-scfx]').forEach((el) => el.classList.toggle('sel', S.scSel.has(+el.dataset.scfx)));
+  $$('[data-scfx]').forEach((el) => el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const id = +el.dataset.scfx;
+    if (e.shiftKey && bandBegin && canvas.contains(el)) return bandBegin(e, id);   // Shift+drag adds an area, also from a fixture
+    if (e.shiftKey || e.ctrlKey || e.metaKey) S.scSel.has(id) ? S.scSel.delete(id) : S.scSel.add(id);
+    else S.scSel = new Set([id]);
+    render();
+  }));
+  $$('[data-scgrp]').forEach((b) => b.addEventListener('click', (e) => {
+    const g = p.groups.find((x) => x.id === +b.dataset.scgrp), ids = g.fixtures.filter((id) => fixture(id));
+    S.scSel = new Set([...(e.shiftKey || e.ctrlKey || e.metaKey ? S.scSel : []), ...ids]);
+    render();
+  }));
+  const canvas = $('#scCanvas');
+  if (canvas) attachMapResize(canvas, m.aspect);
+  const bandBegin = canvas && bandSelect(canvas, m.items, () => S.scSel, (s) => (S.scSel = s), paintSel, render);
+  // The selected fixtures' controls.
+  const sel = p.fixtures.filter((f) => S.scSel.has(f.id));
+  if (!sel.length) return;
+  const max = (ch) => (slots(sel.find((f) => slots(f).some((s) => s.name === ch))).find((s) => s.name === ch).wide ? 65535 : 255);
+  const show = (ch, v) => {
+    const row = $(`[data-scv="${CSS.escape(ch)}"]`).closest('.sc-ch');
+    row.querySelector('[data-scv]').value = v;
+    row.querySelector('[data-scn]').value = v;
+    row.querySelector('.sc-pct').textContent = Math.round((v / max(ch)) * 100) + '%';
+    row.classList.remove('off');
+  };
+  $$('[data-scv]').forEach((el) => {
+    el.addEventListener('input', () => { setSceneLevel(sc, sel, el.dataset.scv, +el.value); show(el.dataset.scv, +el.value); paintSceneLook(sc); });
+    el.addEventListener('change', render);
+  });
+  $$('[data-scn]').forEach((el) => el.addEventListener('change', () => { setSceneLevel(sc, sel, el.dataset.scn, +el.value || 0); render(); }));
+  $$('[data-scrm]').forEach((b) => b.addEventListener('click', () => {
+    sc.levels = sc.levels.filter((l) => !(S.scSel.has(l.fixture) && l.ch === b.dataset.scrm));
+    markDirty();
+    render();
+  }));
+  $$('[data-scdim]').forEach((b) => b.addEventListener('click', () => {
+    for (const f of sel) { const d = channelRoles(f).dim; if (d) setSceneLevel(sc, [f], d.name, d.wide ? +b.dataset.scdim * 257 : +b.dataset.scdim); }
+    render();
+  }));
+  $('#scAddAll').addEventListener('click', () => {
+    for (const f of sel) for (const s of slots(f)) if (!sc.levels.some((l) => l.fixture === f.id && l.ch === s.name)) sc.levels.push({ fixture: f.id, ch: s.name, v: homeValue(f, s.name) });
+    markDirty();
+    render();
+  });
+  $('#scRemove').addEventListener('click', () => {
+    sc.levels = sc.levels.filter((l) => !S.scSel.has(l.fixture));
+    markDirty();
+    render();
+  });
+  // Colour wheel: sets r, g, b of every selected colour fixture.
+  const cw = $('[data-cw="sc"]');
+  if (cw) attachColorWheel(cw, cw.querySelector('.cw-hex').value, (hex, done) => {
+    const rgb = hexToRgb(hex);
+    let shown = false;
+    for (const f of sel) {
+      const ro = channelRoles(f);
+      if (!(ro.r && ro.g && ro.b)) continue;
+      // Picking a colour should give light: a dimmer that isn't in the scene yet goes to full.
+      if (ro.dim && !sc.levels.some((l) => l.fixture === f.id && l.ch === ro.dim.name)) setSceneLevel(sc, [f], ro.dim.name, ro.dim.wide ? 65535 : 255);
+      [ro.r, ro.g, ro.b].forEach((s, k) => {
+        const v = s.wide ? rgb[k] * 257 : rgb[k];
+        setSceneLevel(sc, [f], s.name, v);
+        if (!shown && !done) show(s.name, v);   // the sliders follow the first fixture
+      });
+      shown = true;
+    }
+    paintSceneLook(sc);
+    if (done) render();
+  });
+  $('#scOpenFx')?.addEventListener('click', () => { S.fxSel = new Set([sel[0].id]); S.fxGroup = null; S.fxPanel = ''; S.revealFx = true; S.view = 'fixtures'; render(); });
+  wireFixtureFields();
+}
+// Scene keys: Esc clears the selection, Ctrl+A selects every fixture shown.
+views.scenes.keys = (e) => {
+  if (e.key === 'Escape' && S.scSel.size) { S.scSel = new Set(); render(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    S.scSel = new Set($$('[data-scfx]').map((el) => +el.dataset.scfx));
+    render();
+  }
+};
+
+views.timelines = () => {
+  const p = P();
+  const ti = S.sel.timeline, t = p.timelines[ti];
+  return `<h2>Timelines</h2><div class="split">
+    <div><div class="list">${p.timelines.map((x, i) => `<div class="item${i === ti ? ' sel' : ''}" data-sel="timeline:${i}"><span class="id">${x.id}</span>${esc(x.name)}</div>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn small" data-add="timeline">+ Timeline</button></div></div>
+    <div>${t ? `
+      <div class="row"><input data-p="timelines.${ti}.name" value="${esc(t.name)}" style="font-size:16px;flex:1">
+        <button class="btn" data-cmd="start timeline ${t.id}">▶ Start</button>
+        ${S.tlCursor ? `<button class="btn" data-tlplay title="Play from the cursor (Space)">▶ from ${(S.tlCursor / 1000).toFixed(1)} s</button>` : ''}
+        <button class="btn" data-tlpause title="Pause / carry on (Space, Shift+Space)">❚❚</button>
+        <button class="btn" data-cmd="stop timeline ${t.id} fade 2">■ Release</button>
+        <button class="btn small ghost" data-del="timelines.${ti}">Delete</button></div>
+      <div class="row" style="margin-top:10px">
+        <label class="muted">Length (s)</label><input type="number" min="0" step="0.1" style="width:90px" data-p="timelines.${ti}.length" data-t="sec" value="${(t.length || 0) / 1000}" data-r>
+        <label class="muted"><input type="checkbox" data-p="timelines.${ti}.loop" data-t="bool"${t.loop ? ' checked' : ''}> Loop</label>
+        <label class="muted">Priority</label><input type="number" style="width:70px" data-p="timelines.${ti}.priority" data-t="num" value="${t.priority || 0}">
+        <label class="muted" title="Starting a timeline releases the other timelines in the same group">Group</label>
+        <select data-p="timelines.${ti}.group">${TL_GROUPS.map((g) => `<option value="${g}"${(t.group || '') === g ? ' selected' : ''}>${g || 'none'}</option>`).join('')}</select>
+      </div>
+      ${tlGridHtml(t)}
+      <div class="row" style="margin-top:8px">
+        <button class="btn small" data-add="track"${t.tracks.length >= 16 ? ' disabled' : ''}>+ Track</button>
+        <button class="btn small" data-add="cue">+ Cue</button>
+        <button class="btn small" data-add="trigcue">+ Trigger cue</button></div>
+      <p class="muted keys">Clips work like Ableton: double-click an empty spot to add one, drag to move (Ctrl+drag copies, Alt = no snap), drag the edges for start and length,
+        the little squares at the top for fade in / out. Empty space on a track is empty: its fixtures show what is underneath. Click empty space to put the cursor, drag there to select several.
+        Space plays from the cursor; click the time ruler while playing to jump there. Click a track's name to make it the current track: + Cue adds there (at the cursor).
+        Ctrl+wheel zooms. Each track has its own fixtures and fades on its own; a track without fixtures plays scenes on the whole rig.<br>
+        Keys: Ctrl+C / X / V copy, cut, paste at the cursor · Ctrl+D duplicate · Ctrl+E split at the cursor · Ctrl+A select all · Del delete · ←/→ previous/next cue · ↑/↓ other track · Shift+←/→ move 0.1 s (Ctrl 1 s) · 1–9, 0 colour · [ ] hue · + − intensity · Enter colour wheel · Space play from the cursor / pause / carry on · Esc deselect</p>
+      ${S.trackEdit != null && t.tracks[S.trackEdit] ? trackFixturesHtml(t, S.trackEdit) : ''}
+      ${cueEditorHtml(t)}
+      <h3>All cues</h3>
+      <table class="cue-list"><tr><th class="narrow">Time (s)</th><th>Track</th><th>What</th><th class="narrow">Length (s)</th><th class="narrow">Fade (s)</th><th></th></tr>
+      ${t.cues.map((c, i) => [c, i]).sort((a, b) => a[0].t - b[0].t).map(([c, i]) => `<tr data-cuerow="${i}" class="${i === S.sel.cue ? 'sel' : ''}${c.trigger != null ? ' trig-cue' : ''}">
+        <td><input type="number" min="0" step="0.1" data-p="timelines.${ti}.cues.${i}.t" data-t="sec" value="${c.t / 1000}" style="width:80px" data-r></td><td>${c.trigger != null ? '◆ Triggers' : esc(t.tracks[c.track || 0]?.name || '?')}</td>
+        <td>${esc(cueLabel(c, t))}</td><td class="mono">${c.trigger != null ? '' : c.len ? (c.len / 1000).toFixed(2) : '<span class="muted">hold</span>'}</td>
+        <td class="mono">${c.trigger != null ? '' : ((c.fade || 0) / 1000).toFixed(1) + (c.out ? ` / ${(c.out / 1000).toFixed(1)}` : '')}</td>
+        <td><button class="btn small ghost" data-del="timelines.${ti}.cues.${i}">✕</button></td></tr>`).join('')}</table>`
+    : '<span class="muted">Select or create a timeline.</span>'}</div></div>`;
+};
+// What a cue does, in a few words.
+function cueLabel(c, t) {
+  if (c.trigger != null) {
+    const h = findTrigs(String(c.trigger));
+    return `fire ${h.length === 1 ? `#${h[0].id} ${h[0].name}` : `${c.trigger} (${h.length ? 'ambiguous' : 'not found'})`}`;
+  }
+  if (c.effect != null) {
+    const e = P().effects.find((x) => x.id === c.effect);
+    return `✦ ${e ? e.name : `effect ${c.effect} (missing)`}${c.dim != null && c.dim !== 100 ? ` ${c.dim}%` : ''}`;
+  }
+  if (c.dim != null || c.color != null) return [c.dim != null ? `${c.dim}%` : '', c.color || ''].filter(Boolean).join(' ') || 'preset';
+  const sc = P().scenes.find((s) => s.id === c.scene);
+  return sc ? sc.name : `scene ${c.scene} (missing)`;
+}
+const isPreset = (c) => c.effect == null && (c.dim != null || c.color != null);
+const cueKind = (c) => (c.trigger != null ? 'trigger' : c.effect != null ? 'effect' : isPreset(c) ? 'preset' : 'scene');
+// Fixtures of a track with their map positions, for effect previews (as the controller runs them).
+function trackPreviewFixtures(tr) {
+  const ids = trackFxIds(tr);
+  return ids.map((id, k) => {
+    const it = KDModel.mapPosition(P(), id);
+    return { f: fixture(id), x: it ? it.x : k / ids.length, y: it ? it.y : 0.5 };
+  });
+}
+// Fixture ids of a track (its fixtures + its groups' fixtures), like Show::parse.
+const trackFxIds = (tr) => KDModel.trackFixtureIds(P(), tr);
+// ---- Timeline editing (Ableton-style clips) ----
+// A light cue is a clip: with a length ("len") it ends there and the track is empty
+// after it (fixtures show what is underneath), fading out over "out"; without one it
+// holds until the next cue on its track (Pharos style).
+const TL_HEAD = 210;   // px of the track-name column
+const TL_SNAPS = [['auto', 'Grid'], ['0', 'Off'], ['100', '0.1 s'], ['250', '¼ s'], ['500', '½ s'], ['1000', '1 s'], ['5000', '5 s']];
+const tlGridStep = (pxs) => [100, 250, 500, 1000, 2000, 5000, 10000, 30000, 60000].find((ms) => (ms / 1000) * pxs >= 14) || 60000;
+const tlSnapMs = (pxs) => (S.tlSnap == null || S.tlSnap === 'auto' ? tlGridStep(pxs) : +S.tlSnap);
+const isLight = (c) => c.trigger == null;
+const fmtS = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}:${String(Math.round((ms % 60000) / 1000)).padStart(2, '0')}` : `${+(ms / 1000).toFixed(2)}s`);
+// Where a clip ends: start + length, or (holding) the next cue on its track, else `dflt`.
+function cueEnd(t, c, dflt) {
+  if (!isLight(c)) return c.t;
+  if (c.len) return c.t + c.len;
+  let nx = Infinity;
+  for (const x of t.cues) if (x !== c && isLight(x) && (x.track || 0) === (c.track || 0) && x.t > c.t && x.t < nx) nx = x.t;
+  return nx < Infinity ? nx : dflt;
+}
+// Visible length, pixels per second (zoom; S.tlZoom null = fit the width) and grid step.
+function tlLayout(t) {
+  let len = Math.max(t.length || 0, 5000, ...t.cues.map((c) => c.t + Math.max(c.len || 0, c.fade || 0) + 1000));
+  const viewW = Math.max(200, S.tlViewW || 900);
+  const pxs = S.tlZoom || viewW / (len / 1000);
+  len = Math.max(len, (viewW / pxs) * 1000);
+  return { len, pxs, w: Math.round((len / 1000) * pxs), grid: tlGridStep(pxs) };
+}
+// The selected cues (objects, so they survive reordering); S.sel.cue is the one in the editor.
+function tlSelection(t) {
+  if (!(S.tlSel instanceof Set) || S.tlSelOf !== t) { S.tlSel = new Set(); S.tlSelOf = t; }
+  for (const c of S.tlSel) if (!t.cues.includes(c)) S.tlSel.delete(c);
+  const prim = t.cues[S.sel.cue];
+  if (!prim) S.tlSel.clear();
+  else if (!S.tlSel.has(prim)) { S.tlSel.clear(); S.tlSel.add(prim); }
+  return S.tlSel;
+}
+function tlSelect(t, cues, primary) {
+  S.tlSel = new Set(cues);
+  S.tlSelOf = t;
+  const p = primary && cues.includes(primary) ? primary : [...cues].sort((a, b) => a.t - b.t)[0];
+  S.sel.cue = p ? t.cues.indexOf(p) : -1;
+}
+// The fade ramps of a clip: the darker part above the line, drawn along its crossfade path.
+function rampSvg(path, out) {
+  const ease = KDModel.EASE[path] || KDModel.EASE.linear;
+  const pts = Array.from({ length: 13 }, (_, i) => { const x = i / 12; return `${x},${out ? x : 1 - ease(x)}`; }).join(' ');
+  return `<svg viewBox="0 0 1 1" preserveAspectRatio="none"><polygon points="${out ? '' : '0,0 '}${pts} 1,0" /><polyline points="${pts}" /></svg>`;
+}
+// Inside of a clip: fade-in / fade-out ramps, label, fade handles, edges to resize.
+function blkInner(t, c, end) {
+  const span = Math.max(1, end - c.t), fin = Math.min(c.fade || 0, span), fout = c.len ? Math.min(c.out || 0, span) : 0;
+  return `${c.effect != null || (c.scene != null && !isPreset(c)) ? '<canvas class="thumb"></canvas>' : ''}
+    ${fin ? `<div class="ramp" style="width:${(fin / span) * 100}%">${rampSvg(c.path)}</div>` : ''}
+    ${fout ? `<div class="ramp out" style="width:${(fout / span) * 100}%">${rampSvg('linear', true)}</div>` : ''}
+    <span>${esc(cueLabel(c, t))}${c.len ? '' : ' →'}</span>
+    <i class="fh" data-h="fade" style="left:${(fin / span) * 100}%" title="Drag: fade in"></i>
+    ${c.len ? `<i class="fh out" data-h="out" style="right:${(fout / span) * 100}%" title="Drag: fade out"></i>` : ''}
+    <i class="eg l" data-h="left" title="Drag: change the start"></i><i class="eg r" data-h="right" title="Drag: change the length"></i>`;
+}
+// Look of a colour clip as one solid colour: its colour at its intensity (no colour: warm white).
+function presetCss(c) {
+  const k = c.dim == null ? 1 : c.dim / 100;
+  if (!c.color) return `rgba(255,214,150,${(0.12 + k * 0.88).toFixed(2)})`;
+  return `rgb(${hexToRgb(c.color).map((v) => Math.round(v * k)).join(',')})`;
+}
+const THUMB_ROWS = 24;   // fixtures drawn in a clip preview at most (evenly picked)
+// Preview inside an effect or scene clip, on its canvas at the clip's real size on screen
+// (so zooming shows more detail instead of stretching): time runs left to right (the
+// effect as it plays from the clip's start), the track's fixtures top to bottom.
+function paintClip(t, c, el, end) {
+  const cv = el.querySelector('canvas.thumb');
+  if (!cv) return;
+  const tr = t.tracks[c.track || 0], g = cv.getContext('2d');
+  const W = Math.max(1, Math.min(4000, el.clientWidth)), H = Math.max(1, el.clientHeight);   // very long clips: stretched a little
+  if (c.effect != null) {
+    const e = P().effects.find((x) => x.id === c.effect), prog = e && fxProg(e), fx = tr ? trackPreviewFixtures(tr) : [];
+    if (!prog || prog.error || !fx.length) return;
+    const rows = Math.min(fx.length, THUMB_ROWS, Math.floor(H / 2));
+    const pick = Array.from({ length: rows }, (_, r) => Math.floor((r * fx.length) / rows));
+    const outs = pick.map((k) => fxOutputs(fx[k].f)), base = KDFX.slotsFor(prog, c.params || {}), level = (c.dim ?? 100) / 100;
+    const msPerPx = Math.max(1, end - c.t) / W, step = 2;   // one sample per 2 screen pixels
+    cv.width = W;
+    cv.height = H;
+    for (let x = 0; x < W; x += step) {
+      const ts = ((x + step / 2) * msPerPx) / 1000;
+      pick.forEach((k, r) => {
+        const y0 = Math.round((r * H) / rows), y1 = Math.round(((r + 1) * H) / rows);
+        g.fillStyle = fxPreviewColor(prog, base, outs[r], k, fx.length, fx[k].x, fx[k].y, ts, level).css;
+        g.fillRect(x, y0, step, y1 - y0);
+      });
+    }
+    return;
+  }
+  // Scene: each fixture's colour in it (the track's fixtures, or all on a whole-rig track).
+  const sc = P().scenes.find((s) => s.id === c.scene);
+  if (!sc) return;
+  const ids = tr && trackFxIds(tr).length ? trackFxIds(tr) : P().fixtures.map((f) => f.id), dmx = sceneDmx(sc);
+  const looks = ids.map((id) => fixture(id)).filter(Boolean).map((f) => fixtureLook(f, dmx)).filter((l) => l && l.level > 0);
+  if (!looks.length) return;
+  const rows = Math.min(looks.length, THUMB_ROWS, Math.floor(H / 2));
+  cv.width = W;
+  cv.height = H;
+  for (let r = 0; r < rows; r++) {
+    const y0 = Math.round((r * H) / rows), y1 = Math.round(((r + 1) * H) / rows);
+    g.fillStyle = looks[Math.floor((r * looks.length) / rows)].color;
+    g.fillRect(0, y0, W, y1 - y0);
+  }
+}
+// The track lanes: a ruler, a lane for trigger cues, then one lane per track with a clip per cue.
+function tlGridHtml(t) {
+  const L = tlLayout(t), len = L.len, sel = tlSelection(t);
+  const rstep = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((s) => s * L.pxs >= 64) || 1200;
+  let ruler = '';
+  for (let s = 0; s * 1000 <= len; s += rstep) ruler += `<span style="left:${(s * 1000 / len) * 100}%">${fmtS(s * 1000)}</span>`;
+  const pct = (ms) => (ms / len) * 100;
+  const after = t.length ? `<div class="tl-after" style="left:${pct(t.length)}%"></div>` : '';
+  const cur = S.tlCursor != null ? `<div class="tl-cur" style="left:${pct(S.tlCursor)}%"></div>` : '';
+  const trig = t.cues.map((c, i) => [c, i]).filter(([c]) => !isLight(c)).map(([c, i]) => {
+    const h = findTrigs(String(c.trigger)), tr = h.length === 1 ? h[0] : null, col = tr && trigColor(tr.color);
+    return `<div class="tcue${tr ? '' : ' bad'}${sel.has(c) ? ' sel' : ''}" data-cue="${i}" style="left:${pct(c.t)}%${col ? `;--tc:${col}` : ''}" title="${(c.t / 1000).toFixed(2)} s: ${esc(cueLabel(c, t))}"><span>◆ ${esc(tr ? tr.name : String(c.trigger))}</span></div>`;
+  }).join('');
+  const lanes = t.tracks.map((tr, r) => {
+    const fx = trackFxIds(tr);
+    const blocks = t.cues.map((c, i) => [c, i]).filter(([c]) => isLight(c) && (c.track || 0) === r).map(([c, i]) => {
+      const end = cueEnd(t, c, len);
+      const preset = isPreset(c), effect = c.effect != null;
+      const bad = (preset || effect) && !fx.length || (effect && !P().effects.some((e) => e.id === c.effect && !fxProg(e).error));
+      const col = preset ? (c.color || '#ffffff') : effect ? '#bf5af2' : 'var(--blue)';
+      const a = preset && c.dim != null ? 0.25 + (c.dim / 100) * 0.6 : 0.6;
+      return `<div class="blk${sel.has(c) ? ' sel' : ''}${bad ? ' bad' : ''}${effect ? ' fx' : ''}${preset ? ' solid' : ''}${c.len ? '' : ' hold'}" data-cue="${i}" style="left:${pct(c.t)}%;width:${pct(end - c.t)}%;--bc:${col};--ba:${a}${preset ? `;--solid:${presetCss(c)}` : ''}" title="${(c.t / 1000).toFixed(2)} s · ${c.len ? `length ${(c.len / 1000).toFixed(2)} s` : 'holds until the next cue'} · fade ${((c.fade || 0) / 1000).toFixed(1)} s${c.out ? ` / out ${(c.out / 1000).toFixed(1)} s` : ''} · ${esc(cueLabel(c, t))}${bad ? ' - this track has no fixtures' : ''}">${blkInner(t, c, end)}</div>`;
+    }).join('');
+    return `<div class="tl-row"><div class="tl-h${S.trackEdit === r ? ' on' : ''}${S.tlCursorLane === r ? ' cur' : ''}" data-trackhead="${r}">
+        <input data-p="timelines.${S.sel.timeline}.tracks.${r}.name" value="${esc(tr.name)}" title="Track name">
+        <button class="btn small${fx.length ? '' : ' ghost'}" data-trackedit="${r}" title="Choose the fixtures of this track">${fx.length ? `${fx.length} fixture${fx.length > 1 ? 's' : ''}` : 'whole rig'}</button>
+        ${t.tracks.length > 1 ? `<button class="btn small ghost" data-trackdel="${r}" title="Delete track">✕</button>` : ''}</div>
+      <div class="tl-lane${S.tlCursorLane === r ? ' curlane' : ''}" data-lane="${r}">${after}${cur}${blocks}<div class="head"></div></div></div>`;
+  }).join('');
+  return `<div class="row tl-tools">
+      <label class="muted">Snap</label><div class="seg">${TL_SNAPS.map(([v, n]) => `<button class="${String(S.tlSnap ?? 'auto') === v ? 'on' : ''}" data-tlsnap="${v}" title="${v === 'auto' ? 'Snap to the grid lines (they follow the zoom)' : ''}">${n}</button>`).join('')}</div>
+      <label class="muted" style="margin-left:12px">Zoom</label>
+      <button class="btn small" data-tlzoom="0.66" title="Zoom out (Ctrl+wheel)">−</button><button class="btn small" data-tlzoom="1.5" title="Zoom in (Ctrl+wheel)">+</button>
+      <button class="btn small${S.tlZoom ? '' : ' on'}" data-tlzoom="fit" title="Show the whole timeline">Fit</button>
+      <span class="muted mono" id="tlInfo" style="margin-left:auto">${[S.tlCursor != null ? `cursor ${(S.tlCursor / 1000).toFixed(2)} s` : '', sel.size > 1 ? `${sel.size} selected` : ''].filter(Boolean).join(' · ')}</span></div>
+    <div class="tl-scroll" id="tlScroll"><div class="tl-grid" id="tlGrid" data-len="${len}" data-pxs="${L.pxs}" style="--w:${L.w}px;--g:${(L.grid / 1000) * L.pxs}px">
+    <div class="tl-row"><div class="tl-h muted">time</div><div class="tl-lane ruler" data-ruler>${ruler}${t.length ? `<div class="tl-endm" style="left:${pct(t.length)}%" title="End of the timeline (${(t.length / 1000).toFixed(2)} s) - drag to change"></div>` : ''}${cur}</div></div>
+    <div class="tl-row"><div class="tl-h muted${S.tlCursorLane === 'trig' ? ' cur' : ''}" data-trackhead="trig">◆ Triggers</div><div class="tl-lane trig${S.tlCursorLane === 'trig' ? ' curlane' : ''}" data-lane="trig">${after}${cur}${trig}<div class="head"></div></div></div>
+    ${lanes}<div class="tl-box" hidden></div></div></div>`;
+}
+// Ableton's rule when clips land on each other: the clip underneath is cut back, split
+// around the new one, or (fully covered) removed. Holding clips only lose their start.
+function resolveOverlaps(t, moved) {
+  const drop = new Set(), add = [];
+  for (const m of moved) {
+    if (!isLight(m) || !m.len) continue;
+    const s = m.t, e = m.t + m.len;
+    for (const o of t.cues) {
+      if (o === m || moved.has(o) || drop.has(o) || !isLight(o) || (o.track || 0) !== (m.track || 0)) continue;
+      const oe = o.len ? o.t + o.len : null;
+      if (o.t >= s && o.t < e) {
+        if (oe == null) o.t = e;
+        else if (oe > e) { o.len = oe - e; o.t = e; }
+        else drop.add(o);
+      } else if (o.t < s && oe != null && oe > s) {
+        if (oe > e) add.push({ ...structuredClone(o), t: e, len: oe - e, fade: 0 });
+        o.len = s - o.t;
+        o.out = 0;
+      }
+    }
+  }
+  t.cues = t.cues.filter((c) => !drop.has(c)).concat(add);
+  for (const c of t.cues) if (c.len) { c.fade = Math.min(c.fade || 0, c.len); if (c.out) c.out = Math.min(c.out, c.len - c.fade); }
+  return drop.size;
+}
+// Copy of cues shifted by dt (and dl tracks), not yet in the timeline.
+const cloneCues = (cues, dt, dl = 0) => cues.map((c) => { const n = { ...structuredClone(c), t: c.t + dt }; if (isLight(c)) n.track = (c.track || 0) + dl; return n; });
+// Time span of some cues: [first start, last end] (a holding clip counts as 1 s).
+function cueSpan(t, cues) {
+  const a = Math.min(...cues.map((c) => c.t));
+  return [a, Math.max(...cues.map((c) => (isLight(c) ? cueEnd(t, c, c.t + 1000) : c.t + 100)))];
+}
+function pasteCues(t, src, at, dl) {
+  const [a] = cueSpan(t, src);
+  const copies = cloneCues(src, at - a, dl);
+  t.cues.push(...copies);
+  resolveOverlaps(t, new Set(copies));
+  tlSelect(t, copies);
+  return copies;
+}
+// Fixture picker of a track: groups, fixtures, and (if there is one) the map to click on.
+function trackFixturesHtml(t, r) {
+  const p = P(), tr = t.tracks[r], base = `timelines.${S.sel.timeline}.tracks.${r}`;
+  const on = new Set(trackFxIds(tr));
+  // Which map to pick on: the one chosen here, else the map open on the Map page.
+  const mi = Math.min(S.trackMap ?? S.sel.map ?? 0, p.maps.length - 1), m = p.maps[mi];
+  const onMap = m ? m.items.filter((it) => fixture(it.fixture)) : [];
+  return `<div class="track-fx">
+    <div class="row"><b>Fixtures of track '${esc(tr.name)}'</b><span class="muted">${on.size ? `${on.size} fixture(s)` : 'none: scenes play on the whole rig, presets do nothing'}</span>
+      <button class="btn small ghost" data-trackedit="${r}" style="margin-left:auto">Done</button></div>
+    ${p.groups.length ? `<div class="row"><span class="muted" style="min-width:70px">Groups</span>${p.groups.map((g) => `<label class="chk"><input type="checkbox" data-trackgrp="${g.id}"${tr.groups.includes(g.id) ? ' checked' : ''}>${esc(g.name)}</label>`).join('')}</div>` : ''}
+    <div class="row"><span class="muted" style="min-width:70px">Fixtures</span>${p.fixtures.map((f) => {
+      const viaGroup = !tr.fixtures.includes(f.id) && on.has(f.id);
+      return `<label class="chk${viaGroup ? ' muted' : ''}" title="${viaGroup ? 'In the track through a group' : ''}"><input type="checkbox" data-trackfx="${f.id}"${on.has(f.id) ? ' checked' : ''}${viaGroup ? ' disabled' : ''}>${esc(f.name)}</label>`;
+    }).join('')}</div>
+    ${p.maps.length > 1 ? `<div class="row"><span class="muted" style="min-width:70px">Map</span><div class="seg">${p.maps.map((x, i) => `<button class="${i === mi ? 'on' : ''}" data-trackmap="${i}">${esc(x.name)} <small>(${x.items.filter((it) => on.has(it.fixture)).length}/${x.items.length})</small></button>`).join('')}</div></div>` : ''}
+    ${m ? (onMap.length ? `<div class="mini-map" style="aspect-ratio:${m.aspect}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}
+      ${onMap.map((it) => { const f = fixture(it.fixture); return `<div class="mfx${on.has(f.id) ? ' sel' : ''}" data-trackfx-map="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)}"><span class="dot">${fxIcon(f)}</span><span class="lbl">${esc(f.name)}</span></div>`; }).join('')}</div>
+      <p class="muted keys">Click fixtures on map '${esc(m.name)}' to add or remove them.</p>`
+      : `<p class="muted keys">Map '${esc(m.name)}' has no fixtures on it yet - place them on the Map page.</p>`) : ''}
+    <input type="hidden" data-base="${base}"></div>`;
+}
+// Editor for the selected cue.
+function cueEditorHtml(t) {
+  const c = t.cues[S.sel.cue];
+  if (!c) return '<p class="muted">Click a block to edit its cue.</p>';
+  const p = P(), base = `timelines.${S.sel.timeline}.cues.${S.sel.cue}`;
+  const kind = cueKind(c);
+  const tr = t.tracks[c.track || 0], fx = tr ? trackFxIds(tr) : [];
+  const noFx = '<span class="bad">This track has no fixtures - choose them with the button on the track.</span>';
+  let what = '';
+  if (kind === 'trigger') {
+    const h = findTrigs(String(c.trigger)), cur = h.length === 1 ? h[0] : null;
+    what = `<label>Trigger</label><div class="row nowrap"><select data-p="${base}.trigger" data-r class="${cur ? '' : 'invalid'}" style="flex:1">
+        ${cur ? '' : `<option selected value="${esc(String(c.trigger))}">${h.length > 1 ? 'ambiguous' : 'unknown'}: ${esc(String(c.trigger))}</option>`}
+        ${p.triggers.filter((x) => x.type !== 'comment').map((x) => `<option value="${esc(x.name)}"${x === cur ? ' selected' : ''}>#${x.id} ${esc(x.name)}</option>`).join('')}</select>
+        ${cur ? `<a href="#" data-goto-trigger="${cur.id}" class="muted">open →</a>` : ''}</div>`;
+  } else {
+    if (kind === 'preset') what = `
+      <label>Intensity</label><div class="row nowrap"><label class="muted"><input type="checkbox" data-cueset="dim"${c.dim != null ? ' checked' : ''}> set</label>
+        ${c.dim != null ? `<input type="range" min="0" max="100" data-p="${base}.dim" data-t="num" value="${c.dim}" oninput="this.nextElementSibling.value=this.value" style="flex:1"><input type="number" min="0" max="100" data-p="${base}.dim" data-t="num" value="${c.dim}" style="width:64px" data-r><span class="muted">%</span>` : '<span class="muted">left as it is</span>'}</div>
+      <label>Colour</label><div><label class="muted"><input type="checkbox" data-cueset="color"${c.color != null ? ' checked' : ''}> set</label>
+        ${c.color != null ? colorWheelHtml('cue', c.color) : '<span class="muted"> left as it is</span>'}</div>
+      <label></label><span class="muted">${fx.length ? `For the ${fx.length} fixture(s) of this track. RGB without a dimmer channel is scaled by the intensity; RGBW gets white = the common part of R, G and B.` : noFx}</span>`;
+    else if (kind === 'effect') {
+      const e = p.effects.find((x) => x.id === c.effect), prog = e && fxProg(e);
+      const pv = c.params || {};
+      what = `<label>Effect</label><div class="row nowrap"><select data-p="${base}.effect" data-t="num" data-r style="flex:1">${e ? '' : `<option selected value="${c.effect}">missing effect ${c.effect}</option>`}${p.effects.map((x) => `<option value="${x.id}"${x.id === c.effect ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+          <a href="#" data-goto-effect="${c.effect}" class="muted">edit →</a></div>
+        <label>Level</label><div class="row nowrap"><input type="range" min="0" max="100" data-p="${base}.dim" data-t="num" value="${c.dim ?? 100}" oninput="this.nextElementSibling.value=this.value" style="flex:1"><input type="number" min="0" max="100" data-p="${base}.dim" data-t="num" value="${c.dim ?? 100}" style="width:64px" data-r><span class="muted">%</span></div>
+        ${prog?.error ? `<label></label><span class="bad">The effect has an error (line ${prog.error.line}: ${esc(prog.error.msg)})</span>` : ''}
+        ${prog && !prog.error ? prog.params.map((q) => {
+          const set = pv[q.name] != null, v = set ? pv[q.name] : q.def;
+          const reset = set ? `<button class="btn small ghost" data-fxreset="${esc(q.name)}" title="Back to the effect's default">default</button>` : '<span class="muted fx-def">default</span>';
+          return q.type === 'color'
+            ? `<label>${esc(q.name)}</label><div>${fxParamNote(q)}${reset}${colorWheelHtml('fxp:' + q.name, v)}</div>`
+            : `<label>${esc(q.name)}</label><div><div class="row nowrap"><input type="range" min="${q.min}" max="${q.max}" step="${(q.max - q.min) / 200}" data-fxparam="${esc(q.name)}" value="${v}" style="flex:1"><span class="mono fx-pv">${(+v).toFixed(2)}</span>${reset}</div>${fxParamNote(q)}</div>`;
+        }).join('') : ''}
+        <label>Preview</label><div id="cueFxPrev">${fx.length ? `<div class="fx-prev strip">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>` : noFx}</div>`;
+    } else what = `<label>Scene</label><select data-p="${base}.scene" data-t="num" data-r>${opts(p.scenes, c.scene)}</select>
+      <label></label><span class="muted">${fx.length ? `Only the channels of this track's ${fx.length} fixture(s) are played.` : 'Track without fixtures: the whole scene is played.'}</span>`;
+    what = `<label>Length (s)</label><div class="row nowrap">${c.len ? `<input type="number" min="0.1" step="0.1" data-p="${base}.len" data-t="sec" value="${c.len / 1000}" style="width:90px" data-r>` : ''}
+        <label class="muted" title="Without a length the clip holds until the next cue on its track (Pharos style). With one, the track is empty after it: its fixtures show what is underneath."><input type="checkbox" data-cuehold${c.len ? '' : ' checked'}> hold until the next cue</label></div>
+      ${what}`;
+    what += `<label>Fade in (s)</label><input type="number" min="0" step="0.1" data-p="${base}.fade" data-t="sec" value="${(c.fade || 0) / 1000}" data-r>
+      ${c.len ? `<label>Fade out (s)</label><input type="number" min="0" step="0.1" data-p="${base}.out" data-t="sec" value="${(c.out || 0) / 1000}" data-r title="Fades to what is underneath, ending at the end of the clip">` : ''}
+      <label>Crossfade path</label><div class="row nowrap"><select data-p="${base}.path" data-r>${PATHS.map(([v, n]) => `<option value="${v}"${(c.path || 'linear') === v ? ' selected' : ''}>${n}</option>`).join('')}</select><span class="muted">${pathCurve(c.path || 'linear')}</span></div>`;
+  }
+  return `<div class="cue-ed"><div class="row"><b>Cue at ${(c.t / 1000).toFixed(1)} s</b>
+      <div class="seg" style="margin-left:auto">${[['preset', 'Preset'], ['effect', '✦ Effect'], ['scene', 'Scene'], ['trigger', '◆ Trigger']].map(([k, n]) => `<button class="${kind === k ? 'on' : ''}" data-cuekind="${k}">${n}</button>`).join('')}</div>
+      <button class="btn small ghost" data-del="${base}">Delete cue</button></div>
+    <div class="form">
+      <label>Time (s)</label><input type="number" min="0" step="0.1" data-p="${base}.t" data-t="sec" value="${c.t / 1000}" data-r>
+      ${kind === 'trigger' ? '' : `<label>Track</label><select data-p="${base}.track" data-t="num" data-r>${t.tracks.map((x, r) => `<option value="${r}"${(c.track || 0) === r ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`}
+      ${what}</div></div>`;
+}
+// Small SVG of a crossfade path for the trigger/timeline editors.
+function pathCurve(path) {
+  const ease = KDModel.EASE[path] || KDModel.EASE.linear;
+  const pts = Array.from({ length: 21 }, (_, i) => `${i * 2},${20 - ease(i / 20) * 16}`).join(' ');
+  return `<svg width="40" height="22" viewBox="0 -2 40 24"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+}
+views.timelines.after = () => {
+  const grid = $('#tlGrid');
+  if (!grid) return;
+  const p = P(), t = p.timelines[S.sel.timeline];
+  const len = +grid.dataset.len, pxs = +grid.dataset.pxs, snapMs = tlSnapMs(pxs);
+  const sc = $('#tlScroll'), sel = tlSelection(t);
+  // Keep the scroll position over re-renders; with "fit" follow the width of the page.
+  sc.scrollLeft = S.tlScroll || 0;
+  sc.addEventListener('scroll', () => { S.tlScroll = sc.scrollLeft; });
+  const viewW = sc.clientWidth - TL_HEAD - 2;
+  if (Math.abs(viewW - (S.tlViewW || 0)) > 2) { S.tlViewW = viewW; if (!S.tlZoom) return render(); }
+  const lanes = $$('[data-lane]', grid), ruler = $('[data-ruler]', grid);
+  const msAt = (x) => { const r = ruler.getBoundingClientRect(); return ((x - r.left) / r.width) * len; };
+  // Snap to the grid; Alt held = no snap (10 ms), like Ableton.
+  const snap = (ms, ev) => Math.max(0, ev.altKey || !snapMs ? Math.round(ms / 10) * 10 : Math.round(ms / snapMs) * snapMs);
+  const laneAt = (y) => lanes.find((l) => { const r = l.getBoundingClientRect(); return y >= r.top && y <= r.bottom; });
+  const laneEl = (c) => lanes.find((l) => l.dataset.lane === (isLight(c) ? String(c.track || 0) : 'trig'));
+  const pctOf = (ms) => (ms / len) * 100 + '%';
+  const trackCues = (r, not) => t.cues.filter((x) => isLight(x) && (x.track || 0) === r && !not.has(x));
+  const markSel = () => $$('[data-cue]', grid).forEach((b) => b.classList.toggle('sel', sel.has(t.cues[+b.dataset.cue])));
+  const newKind = (r) => (trackFxIds(t.tracks[r]).length ? 'preset' : 'scene');
+  const info = (msg) => { $('#tlInfo').textContent = msg; };   // live numbers while dragging
+  $$('.blk', grid).forEach((el) => { const c = t.cues[+el.dataset.cue]; paintClip(t, c, el, cueEnd(t, c, len)); });
+  // Clips and trigger cues. Body: click selects (Shift/Ctrl+click adds), drag moves the
+  // selection in time and to other tracks (Ctrl+drag copies). Edges change start/length,
+  // the small squares at the top the fade in / fade out.
+  $$('[data-cue]', grid).forEach((el) => el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    const i = +el.dataset.cue, c = t.cues[i], mode = e.target.dataset.h || 'move';
+    const add = e.shiftKey || e.ctrlKey || e.metaKey, wasSel = sel.has(c);
+    if (!wasSel) { if (!add) sel.clear(); sel.add(c); markSel(); }
+    const group = mode === 'move' ? [...sel] : [c];
+    const orig = new Map(group.map((x) => [x, { t: x.t, track: x.track || 0, len: x.len, fade: x.fade || 0, out: x.out || 0 }]));
+    const o = orig.get(c), end0 = cueEnd(t, c, len), ms0 = msAt(e.clientX);
+    const others = new Set(group);
+    let moved = false;
+    const move = (ev) => {
+      if (!moved && Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) < 4) return;
+      moved = true;
+      const at = msAt(ev.clientX);
+      if (mode === 'move') {
+        let dt = snap(o.t + at - ms0, ev) - o.t;
+        dt = Math.max(dt, -Math.min(...group.map((x) => orig.get(x).t)));
+        const l = laneAt(ev.clientY);
+        let dl = isLight(c) && l && l.dataset.lane !== 'trig' ? +l.dataset.lane - o.track : 0;
+        for (const x of group) if (isLight(x)) dl = Math.max(-orig.get(x).track, Math.min(t.tracks.length - 1 - orig.get(x).track, dl));
+        for (const x of group) {
+          const ox = orig.get(x), b = grid.querySelector(`[data-cue="${t.cues.indexOf(x)}"]`);
+          x.t = ox.t + dt;
+          if (isLight(x)) x.track = ox.track + dl;
+          b.style.left = pctOf(x.t);
+          b.style.transform = isLight(x) && dl ? `translateY(${laneEl(x).getBoundingClientRect().top - laneEl({ track: ox.track }).getBoundingClientRect().top}px)` : '';
+        }
+        lanes.forEach((x) => x.classList.toggle('drop', !!dl && group.some((g) => isLight(g) && x.dataset.lane === String(g.track))));
+        info(`${(c.t / 1000).toFixed(2)} s${dt ? ` (${dt > 0 ? '+' : ''}${(dt / 1000).toFixed(2)} s)` : ''}${ev.ctrlKey || ev.metaKey ? ' · copy' : ''}`);
+        return;
+      }
+      if (!isLight(c)) return;
+      const r = o.track;
+      if (mode === 'right') {
+        // Up to the next clip on the track (it is not pushed away).
+        const nx = Math.min(Infinity, ...trackCues(r, others).filter((x) => x.t > o.t).map((x) => x.t));
+        c.len = Math.max(100, Math.min(nx, snap(at, ev)) - o.t);
+      } else if (mode === 'left') {
+        // From the end of the clip before it, to just before its own end.
+        const prevEnd = Math.max(0, ...trackCues(r, others).filter((x) => x.t < o.t).map((x) => (x.len ? x.t + x.len : x.t + 100)));
+        const end = o.len ? o.t + o.len : end0;
+        c.t = Math.max(prevEnd, Math.min(end - 100, snap(at, ev)));
+        if (o.len) c.len = end - c.t;
+      } else if (mode === 'fade') {
+        const span = cueEnd(t, c, len) - c.t;
+        c.fade = Math.max(0, Math.min(span - (c.out || 0), Math.round((at - c.t) / (ev.altKey ? 10 : 100)) * (ev.altKey ? 10 : 100)));
+      } else if (mode === 'out') {
+        c.out = Math.max(0, Math.min(c.len - (c.fade || 0), Math.round((c.t + c.len - at) / (ev.altKey ? 10 : 100)) * (ev.altKey ? 10 : 100)));
+      }
+      if (c.len) c.fade = Math.min(c.fade || 0, c.len);
+      const end = cueEnd(t, c, len);
+      el.style.left = pctOf(c.t);
+      el.style.width = pctOf(end - c.t);
+      el.innerHTML = blkInner(t, c, end);
+      paintClip(t, c, el, end);
+      info(`${(c.t / 1000).toFixed(2)} s${c.len ? ` · length ${(c.len / 1000).toFixed(2)} s` : ''} · fade ${((c.fade || 0) / 1000).toFixed(1)}${c.len ? ` / ${((c.out || 0) / 1000).toFixed(1)}` : ''} s`);
+    };
+    const up = (ev) => {
+      el.removeEventListener('pointermove', move);
+      if (!moved) {
+        // A plain click selects just this one; Shift/Ctrl+click on a selected one deselects it.
+        if (add && wasSel) sel.delete(c);
+        else if (!add) { sel.clear(); sel.add(c); }
+        // A second click (it re-renders in between, so no dblclick event) on a holding
+        // clip adds a cue at that spot: there is no empty space on its track to click.
+        const now = Date.now(), last = S.lastBlkClick;
+        S.lastBlkClick = { c, at: now };
+        if (last && last.c === c && now - last.at < 450 && isLight(c) && !c.len) {
+          S.lastBlkClick = null;
+          const at = snap(msAt(ev.clientX), ev);
+          if (at - c.t >= 200) return addCue(t, { t: at, track: c.track || 0 }, newKind(c.track || 0));
+        }
+        S.tlCursor = snap(msAt(ev.clientX), ev);
+        S.tlCursorLane = isLight(c) ? c.track || 0 : 'trig';
+        tlSelect(t, [...sel], sel.has(c) ? c : null);
+        return render();
+      }
+      let land = group;
+      if (mode === 'move' && (ev.ctrlKey || ev.metaKey)) {
+        // Ctrl+drag: copies land there, the originals go back.
+        land = group.map((x) => structuredClone(x));
+        for (const x of group) { x.t = orig.get(x).t; if (isLight(x)) x.track = orig.get(x).track; }
+        t.cues.push(...land);
+      }
+      const gone = resolveOverlaps(t, new Set(land));
+      if (gone) toast(`${gone} clip${gone > 1 ? 's' : ''} underneath removed (Ctrl+Z to undo)`);
+      tlSelect(t, land, land[group.indexOf(c)]);
+      markDirty();
+      render();
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up, { once: true });
+  }));
+  // Empty lane: click puts the cursor there (for paste, split, insert) and deselects,
+  // drag draws a box that selects clips, double-click adds a clip.
+  lanes.forEach((lane) => lane.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('[data-cue]')) return;
+    e.preventDefault();
+    lane.setPointerCapture(e.pointerId);
+    const box = $('.tl-box', grid), g0 = grid.getBoundingClientRect();
+    const keep = e.shiftKey || e.ctrlKey ? new Set(sel) : new Set();
+    let moved = false;
+    const move = (ev) => {
+      if (!moved && Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) < 5) return;
+      moved = true;
+      const x0 = Math.min(e.clientX, ev.clientX), x1 = Math.max(e.clientX, ev.clientX);
+      const y0 = Math.min(e.clientY, ev.clientY), y1 = Math.max(e.clientY, ev.clientY);
+      Object.assign(box.style, { left: x0 - g0.left + 'px', top: y0 - g0.top + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px' });
+      box.hidden = false;
+      const a = msAt(x0), b = msAt(x1);
+      const inLanes = new Set(lanes.filter((l) => { const r = l.getBoundingClientRect(); return r.bottom >= y0 && r.top <= y1; }).map((l) => l.dataset.lane));
+      sel.clear();
+      for (const c of keep) sel.add(c);
+      for (const c of t.cues) {
+        const ln = isLight(c) ? String(c.track || 0) : 'trig';
+        if (inLanes.has(ln) && c.t <= b && (isLight(c) ? cueEnd(t, c, len) : c.t + 1) >= a) sel.add(c);
+      }
+      markSel();
+    };
+    const up = (ev) => {
+      lane.removeEventListener('pointermove', move);
+      box.hidden = true;
+      if (moved) { tlSelect(t, [...sel]); return render(); }
+      const at = snap(msAt(ev.clientX), ev), now = Date.now(), last = S.lastLaneClick;
+      S.lastLaneClick = { lane: lane.dataset.lane, at: now, x: ev.clientX };
+      if (last && last.lane === lane.dataset.lane && now - last.at < 450 && Math.abs(last.x - ev.clientX) < 8) {
+        S.lastLaneClick = null;
+        if (lane.dataset.lane === 'trig') return addCue(t, { t: at }, 'trigger');
+        // New clip up to the next one on the track, at most 4 s.
+        const r = +lane.dataset.lane;
+        const nx = Math.min(Infinity, ...trackCues(r, new Set()).filter((x) => x.t > at).map((x) => x.t));
+        return addCue(t, { t: at, track: r, len: Math.max(100, Math.min(4000, nx - at)) }, newKind(r));
+      }
+      S.tlCursor = at;
+      S.tlCursorLane = lane.dataset.lane === 'trig' ? 'trig' : +lane.dataset.lane;
+      if (!keep.size) tlSelect(t, []);
+      render();
+    };
+    lane.addEventListener('pointermove', move);
+    lane.addEventListener('pointerup', up, { once: true });
+  }));
+  // Ruler: click/drag puts the cursor there; the end marker sets the timeline length.
+  ruler.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    ruler.setPointerCapture(e.pointerId);
+    const endm = e.target.classList.contains('tl-endm');
+    const move = (ev) => {
+      const at = snap(msAt(ev.clientX), ev);
+      if (endm) { t.length = Math.max(100, at); e.target.style.left = pctOf(t.length); info(`length ${(t.length / 1000).toFixed(2)} s`); }
+      else { S.tlCursor = at; $$('.tl-cur', grid).forEach((x) => (x.style.left = pctOf(at))); }
+    };
+    move(e);
+    ruler.addEventListener('pointermove', move);
+    ruler.addEventListener('pointerup', () => {
+      ruler.removeEventListener('pointermove', move);
+      if (endm) markDirty();
+      // While it plays, the timeline jumps to where you let go.
+      else { const pb = tlPlayback(t); if (pb && !pb.paused && !pb.ended) tlPlayFrom(t, S.tlCursor); }
+      render();
+    }, { once: true });
+  });
+  // Zoom: Ctrl+wheel around the mouse, or the buttons (around the middle).
+  const zoomTo = (z, clientX) => {
+    const r = sc.getBoundingClientRect(), x = clientX ?? r.left + TL_HEAD + (r.width - TL_HEAD) / 2;
+    const ms = msAt(x);
+    S.tlZoom = Math.max(0.5, Math.min(800, z));
+    S.tlScroll = Math.max(0, (ms / 1000) * S.tlZoom - (x - r.left - TL_HEAD));
+    render();
+  };
+  sc.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    zoomTo(pxs * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX);
+  }, { passive: false });
+  $$('[data-tlzoom]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.tlzoom === 'fit') { S.tlZoom = null; S.tlScroll = 0; return render(); }
+    zoomTo(pxs * +b.dataset.tlzoom);
+  }));
+  // Clicking a track's name area makes it the current track (for + Cue and paste). No
+  // re-render, so clicking into the name field still lets you type.
+  $$('[data-trackhead]', grid).forEach((h) => h.addEventListener('pointerdown', () => {
+    const v = h.dataset.trackhead;
+    S.tlCursorLane = v === 'trig' ? 'trig' : +v;
+    $$('[data-trackhead]', grid).forEach((x) => x.classList.toggle('cur', x === h));
+    lanes.forEach((l) => l.classList.toggle('curlane', l.dataset.lane === v));
+  }));
+  $$('[data-tlpause]').forEach((b) => b.addEventListener('click', () => {
+    const pb = tlPlayback(t);
+    if (!pb) return toast(`Timeline ${t.id} is not running`, true);
+    tlPause(t, !pb.paused);
+  }));
+  $$('[data-tlplay]').forEach((b) => b.addEventListener('click', () => tlPlayFrom(t, S.tlCursor || 0)));
+  $$('[data-tlsnap]').forEach((b) => b.addEventListener('click', () => { S.tlSnap = b.dataset.tlsnap; render(); }));
+  $$('[data-trackedit]').forEach((b) => b.addEventListener('click', () => { const r = +b.dataset.trackedit; S.trackEdit = S.trackEdit === r ? null : r; render(); }));
+  $$('[data-trackdel]').forEach((b) => b.addEventListener('click', () => {
+    const r = +b.dataset.trackdel, n = t.cues.filter((c) => c.trigger == null && (c.track || 0) === r).length;
+    if (!confirm(`Delete track '${t.tracks[r].name}'${n ? ` and its ${n} cue(s)` : ''}?`)) return;
+    t.cues = t.cues.filter((c) => c.trigger != null || (c.track || 0) !== r);
+    t.cues.forEach((c) => { if ((c.track || 0) > r) c.track--; });
+    t.tracks.splice(r, 1);
+    S.trackEdit = null;
+    S.sel.cue = -1;
+    markDirty();
+    render();
+  }));
+  // Track fixtures: checkboxes and the mini map.
+  const tr = t.tracks[S.trackEdit];
+  const toggleFx = (id, on) => { tr.fixtures = on ? [...new Set([...tr.fixtures, id])] : tr.fixtures.filter((x) => x !== id); markDirty(); render(); };
+  $$('[data-trackfx]').forEach((el) => el.addEventListener('change', () => toggleFx(+el.dataset.trackfx, el.checked)));
+  $$('[data-trackmap]').forEach((b) => b.addEventListener('click', () => { S.trackMap = +b.dataset.trackmap; render(); }));
+  $$('[data-trackfx-map]').forEach((el) => el.addEventListener('click', () => {
+    const id = +el.dataset.trackfxMap;
+    if (!tr.fixtures.includes(id) && trackFxIds(tr).includes(id)) return toast('This fixture is in the track through a group', true);
+    toggleFx(id, !tr.fixtures.includes(id));
+  }));
+  $$('[data-trackgrp]').forEach((el) => el.addEventListener('change', () => {
+    const id = +el.dataset.trackgrp;
+    tr.groups = el.checked ? [...new Set([...tr.groups, id])] : tr.groups.filter((x) => x !== id);
+    markDirty();
+    render();
+  }));
+  // Cue editor.
+  const c = t.cues[S.sel.cue];
+  $$('[data-cuekind]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.cuekind;
+    if (k === 'effect' && !p.effects.length) return toast('Make an effect first (Effects page)', true);
+    for (const f of ['trigger', 'dim', 'color', 'scene', 'effect', 'params']) delete c[f];
+    if (k === 'trigger') { const real = p.triggers.filter((x) => x.type !== 'comment'); c.trigger = (real.find((x) => x.type === 'manual') || real[0])?.name || '1'; delete c.track; delete c.fade; delete c.path; }
+    else {
+      c.track ??= 0;
+      c.fade ??= 1000;
+      if (k === 'preset') { c.dim = 100; c.color = S.tlLastColor || '#ffffff'; }
+      else if (k === 'effect') { c.effect = p.effects[0].id; c.params = {}; }
+      else c.scene = p.scenes[0]?.id || 1;
+    }
+    markDirty();
+    render();
+  }));
+  // Colour wheels: the preset colour, and colour parameters of an effect.
+  $$('.cw').forEach((el) => {
+    const id = el.dataset.cw;
+    const get = () => (id === 'cue' ? c.color : (c.params?.[id.slice(4)] ?? fxProg(p.effects.find((e) => e.id === c.effect)).params.find((q) => q.name === id.slice(4))?.def));
+    attachColorWheel(el, get(), (hex, done) => {
+      if (id === 'cue') c.color = S.tlLastColor = hex;
+      else { c.params = c.params || {}; c.params[id.slice(4)] = hex; }
+      markDirty();
+      const blk = grid.querySelector(`.blk[data-cue="${S.sel.cue}"]`);
+      if (blk && id === 'cue') { blk.style.setProperty('--bc', hex); blk.style.setProperty('--solid', presetCss(c)); }
+      if (blk && id !== 'cue') paintClip(t, c, blk, cueEnd(t, c, len));
+      if (id !== 'cue') startCuePreview();
+      if (done) { S.cwFocus = document.activeElement === el ? id : null; render(); }
+    });
+    if (S.cwFocus === id) { el.focus(); S.cwFocus = null; }
+  });
+  $$('[data-fxparam]').forEach((i) => i.addEventListener('input', () => {
+    c.params = c.params || {};
+    c.params[i.dataset.fxparam] = +i.value;
+    i.nextElementSibling.textContent = (+i.value).toFixed(2);
+    markDirty();
+    startCuePreview();
+    const blk = grid.querySelector(`.blk[data-cue="${S.sel.cue}"]`);
+    if (blk) paintClip(t, c, blk, cueEnd(t, c, len));
+  }));
+  $$('[data-fxparam]').forEach((i) => i.addEventListener('change', () => render()));
+  $$('[data-fxreset]').forEach((b) => b.addEventListener('click', () => { delete c.params[b.dataset.fxreset]; markDirty(); render(); }));
+  // Live preview of an effect cue on the track's fixtures.
+  function startCuePreview() {
+    if (!c || c.effect == null) return;
+    const e = p.effects.find((x) => x.id === c.effect), tr = t.tracks[c.track || 0];
+    if (!e || !tr) return;
+    runFxPreview($('#cueFxPrev'), fxProg(e), trackPreviewFixtures(tr), c.params || {}, (c.dim ?? 100) / 100);
+  }
+  startCuePreview();
+  $$('[data-cuehold]').forEach((el) => el.addEventListener('change', () => {
+    if (el.checked) { delete c.len; delete c.out; }
+    else { c.len = Math.max(100, Math.min(cueEnd(t, c, c.t + 4000), c.t + 60000) - c.t); }
+    markDirty();
+    render();
+  }));
+  $$('[data-cueset]').forEach((el) => el.addEventListener('change', () => {
+    const k = el.dataset.cueset;
+    if (el.checked) c[k] = k === 'dim' ? 100 : '#ffffff';
+    else delete c[k];
+    if (c.dim == null && c.color == null) c.dim = 100;   // a preset sets at least one of them
+    markDirty();
+    render();
+  }));
+  $$('[data-cuerow]').forEach((row) => row.addEventListener('click', (e) => { if (e.target.closest('button,input')) return; S.sel.cue = +row.dataset.cuerow; render(); }));
+  // Playhead: interpolate between 1 s status updates.
+  const heads = $$('.head', grid);
+  pageAnimation('playhead', () => {
+    const ph = tlHeadPos(t);
+    if (ph) {
+      const left = Math.min(100, (ph.at / len) * 100) + '%';
+      heads.forEach((h) => { h.style.display = 'block'; h.style.left = left; });
+      // Zoomed in: keep the playhead in view while it plays (unless the mouse is busy).
+      const x = (ph.at / 1000) * pxs, vw = sc.clientWidth - TL_HEAD;
+      if (ph.moving && !document.querySelector('#tlGrid :active') && (x < sc.scrollLeft || x > sc.scrollLeft + vw - 20)) sc.scrollLeft = Math.max(0, x - 40);
+    } else heads.forEach((h) => (h.style.display = 'none'));
+  });
+};
+// Where the playhead of a timeline is now: { at: ms, moving } or null when not running.
+// Interpolates between the 1 s status updates.
+function tlHeadPos(t) {
+  let pb = tlPlayback(t);
+  // Just after a jump, a status sent before it would pull the playhead back: trust the
+  // jump for 2 s unless the status is from after it (paused since, or running/ended near it).
+  const j = S.tlJump, now = Date.now();
+  if (j && j.id === t.id && now - j.at < 2000) {
+    const want = j.ms + (now - j.at);
+    const fresh = pb && (pb.paused ? pb.pos >= j.ms - 50 && pb.pos <= want + 50 : Math.abs(pb.pos + (now - S.statusAt) - want) <= 400);
+    if (!fresh) pb = { pos: want - (now - S.statusAt) };
+  }
+  if (!pb) return null;
+  const pos = pb.paused || pb.ended ? pb.pos : pb.pos + (now - S.statusAt);
+  // A looping timeline wraps around; otherwise it holds at its end.
+  const at = !t.length ? pos : t.loop ? pos % Math.max(t.length, 1) : Math.min(pos, t.length);
+  return { at, moving: !pb.paused && !pb.ended && !(t.length && !t.loop && pos >= t.length) };
+}
+// Timeline keys: ←/→ previous/next cue on the track, ↑/↓ other track,
+// Shift+←/→ move 0.1 s (Ctrl: 1 s), 1-9/0 palette colour, [ ] hue, + - intensity,
+// Enter = colour wheel, Del delete, Space play/pause, Esc deselect, and like Ableton:
+// Ctrl+C/X/V copy, cut, paste at the cursor, Ctrl+D duplicate after itself,
+// Ctrl+E split at the cursor, Ctrl+A select all. Keys that change cues work on the selection.
+views.timelines.keys = async (e) => {
+  if (document.activeElement?.closest?.('.cw')) return;   // the colour wheel has its own keys
+  const p = P(), t = p?.timelines[S.sel.timeline];
+  if (!t) return;
+  const c = t.cues[S.sel.cue], k = e.key, mod = e.ctrlKey || e.metaKey, kl = k.toLowerCase();
+  const sel = [...tlSelection(t)];
+  const lane = (x) => (x.trigger != null ? -1 : x.track || 0);
+  const done = () => { e.preventDefault(); markDirty(); render(); };
+  // Space: pause while playing; when paused carry on, unless you clicked a new spot since
+  // (then play from there); when stopped play from the cursor (from the start without one).
+  if (k === ' ') {
+    e.preventDefault();
+    const pb = tlPlayback(t);
+    if (pb && !pb.paused && !pb.ended) return tlPause(t, true);
+    if (pb?.paused && (e.shiftKey || S.tlCursor == null || S.tlCursor === S.tlPauseCursor)) return tlPause(t, false);
+    return tlPlayFrom(t, S.tlCursor || 0);
+  }
+  if (mod && kl === 'a') { e.preventDefault(); tlSelect(t, [...t.cues]); return render(); }
+  if (mod && kl === 'v') {
+    if (!S.tlClip?.length) return toast('Nothing copied yet (select clips, Ctrl+C)', true);
+    // At the cursor (else right after the selection); on the cursor's track if it has one.
+    const src = S.tlClip, [a, b] = cueSpan(t, src);
+    const at = S.tlCursor ?? (sel.length ? cueSpan(t, sel)[1] : a);
+    const tracks = src.filter(isLight).map((x) => x.track || 0);
+    let dl = typeof S.tlCursorLane === 'number' && tracks.length ? S.tlCursorLane - Math.min(...tracks) : 0;
+    if (tracks.length) dl = Math.max(-Math.min(...tracks), Math.min(t.tracks.length - 1 - Math.max(...tracks), dl));
+    pasteCues(t, src, at, dl);
+    S.tlCursor = at + (b - a);
+    return done();
+  }
+  if (!c) {
+    if (k.startsWith('Arrow') && t.cues.length) { e.preventDefault(); S.sel.cue = t.cues.indexOf([...t.cues].sort((a, b) => a.t - b.t)[0]); render(); }
+    if (mod && kl === 'e') splitAtCursor(t, e) && done();
+    return;
+  }
+  if (mod && (kl === 'c' || kl === 'x')) {
+    e.preventDefault();
+    S.tlClip = sel.map((x) => structuredClone(x));
+    toast(`${sel.length} cue${sel.length > 1 ? 's' : ''} ${kl === 'c' ? 'copied' : 'cut'}`);
+    if (kl === 'x') { t.cues = t.cues.filter((x) => !sel.includes(x)); tlSelect(t, []); return done(); }
+    return;
+  }
+  if (mod && kl === 'd') {
+    const [a, b] = cueSpan(t, sel);
+    pasteCues(t, sel, b, 0);
+    S.tlCursor = b + (b - a);
+    return done();
+  }
+  if (mod && kl === 'e') { if (splitAtCursor(t, e)) done(); return; }
+  if ((k === 'ArrowLeft' || k === 'ArrowRight') && (e.shiftKey || mod)) {
+    const d = (k === 'ArrowLeft' ? -1 : 1) * (mod ? 1000 : 100);
+    const dt = Math.max(d, -Math.min(...sel.map((x) => x.t)));
+    for (const x of sel) x.t += dt;
+    resolveOverlaps(t, new Set(sel));
+    return done();
+  }
+  if (k === 'ArrowLeft' || k === 'ArrowRight') {
+    const same = t.cues.map((x, i) => [x, i]).filter(([x]) => lane(x) === lane(c)).sort((a, b) => a[0].t - b[0].t);
+    const at = same.findIndex(([, i]) => i === S.sel.cue), to = same[at + (k === 'ArrowLeft' ? -1 : 1)];
+    if (to) { e.preventDefault(); S.sel.cue = to[1]; render(); }
+    return;
+  }
+  if (k === 'ArrowUp' || k === 'ArrowDown') {
+    const lanes = [-1, ...t.tracks.map((_, r) => r)];
+    let li = lanes.indexOf(lane(c));
+    for (;;) {
+      li += k === 'ArrowUp' ? -1 : 1;
+      if (li < 0 || li >= lanes.length) return;
+      const there = t.cues.map((x, i) => [x, i]).filter(([x]) => lane(x) === lanes[li]);
+      if (!there.length) continue;
+      there.sort((a, b) => Math.abs(a[0].t - c.t) - Math.abs(b[0].t - c.t));
+      e.preventDefault();
+      S.sel.cue = there[0][1];
+      return render();
+    }
+  }
+  if (k === 'Escape') { tlSelect(t, []); S.tlCursor = null; S.tlCursorLane = null; return render(); }
+  // Delete leaves an empty space (clips after it don't move).
+  if (k === 'Delete' || k === 'Backspace') { t.cues = t.cues.filter((x) => !sel.includes(x)); tlSelect(t, []); return done(); }
+  if (k === 'Enter') { const w = $('.cue-ed .cw'); if (w) { e.preventDefault(); w.focus(); } return; }
+  if (mod || e.altKey) return;
+  // Colour and intensity keys: every selected cue they apply to.
+  let any = false;
+  for (const x of sel) {
+    const kind = cueKind(x);
+    // The colour these keys work on: the preset colour, or an effect's first colour parameter.
+    const colParam = kind === 'effect' ? fxProg(p.effects.find((f) => f.id === x.effect) || { code: '' }).params?.find((q) => q.type === 'color') : null;
+    const getCol = () => (kind === 'preset' ? x.color : colParam ? (x.params?.[colParam.name] ?? colParam.def) : null);
+    const setCol = (hex) => { if (kind === 'preset') x.color = S.tlLastColor = hex; else if (colParam) { x.params = x.params || {}; x.params[colParam.name] = hex; } };
+    if (/^[0-9]$/.test(k) && (kind === 'preset' || colParam)) { setCol(PALETTE[(+k + 9) % 10]); any = true; }
+    else if ((k === '[' || k === ']') && getCol()) {
+      const [h, s, v] = rgbToHsv(...hexToRgb(getCol()));
+      setCol(hsvToHex((h + (k === '[' ? -15 : 15) + 360) % 360, s, v));
+      any = true;
+    } else if ((k === '+' || k === '=' || k === '-') && (kind === 'preset' || kind === 'effect')) {
+      x.dim = Math.max(0, Math.min(100, (x.dim ?? 100) + (k === '-' ? -10 : 10)));
+      any = true;
+    }
+  }
+  if (any) done();
+};
+// Play a timeline from ms (start, restart or jump). The playhead moves at once instead
+// of waiting for the next status update.
+async function tlPlayFrom(t, ms) {
+  const r = await cmd(`start timeline ${t.id}${ms ? ` at ${(ms / 1000).toFixed(2)}` : ''}`);
+  if (!r.ok) return toast(r.reply, true);
+  // An older controller (or a mock started before this feature) ignores "at" and starts at 0.
+  if (ms && !/ at /.test(r.reply)) {
+    toast('The controller started from the beginning: it does not know "start from here" yet. Update the firmware, or restart the mock.', true);
+    S.tlJump = null;
+    return;
+  }
+  S.tlJump = { id: t.id, ms, at: Date.now() };
+  if (S.status) {
+    S.status.playbacks = (S.status.playbacks || []).filter((x) => !(x.kind === 'timeline' && x.id === t.id));
+    S.status.playbacks.push({ kind: 'timeline', id: t.id, pos: ms, paused: false, ended: false });
+    S.statusAt = Date.now();
+  }
+}
+// Pause (or resume) a timeline; the playhead stops or moves on at once.
+async function tlPause(t, pause) {
+  const ph = tlHeadPos(t), r = await cmd(`${pause ? 'pause' : 'resume'} timeline ${t.id}`);
+  toast(r.reply, !r.ok);
+  const pb = tlPlayback(t);
+  if (!r.ok || !pb || !ph) return;
+  S.tlJump = null;
+  S.tlPauseCursor = S.tlCursor;   // Space carries on unless the cursor is moved after this
+  Object.assign(pb, { pos: ph.at, paused: pause });
+  S.statusAt = Date.now();
+}
+const tlPlayback = (t) => S.status?.playbacks?.find((x) => x.kind === 'timeline' && x.id === t.id);
+// Ctrl+E: cut the selected clips (or, with none selected, those on the cursor's track)
+// in two at the cursor. The second half starts without a fade, so the look carries on.
+function splitAtCursor(t, e) {
+  e.preventDefault();
+  const at = S.tlCursor;
+  if (at == null) { toast('Click in the timeline to put the cursor where to split', true); return false; }
+  let cands = [...tlSelection(t)];
+  if (!cands.length) cands = t.cues.filter((x) => isLight(x) && (x.track || 0) === S.tlCursorLane);
+  const hit = cands.filter((x) => isLight(x) && x.t < at && cueEnd(t, x, Infinity) > at);
+  if (!hit.length) { toast('No clip under the cursor', true); return false; }
+  const halves = hit.map((x) => {
+    const end = x.len ? x.t + x.len : null;
+    const b = { ...structuredClone(x), t: at, fade: 0 };
+    if (end != null) { b.len = end - at; x.len = at - x.t; x.out = 0; x.fade = Math.min(x.fade || 0, x.len); b.out = Math.min(b.out || 0, b.len); }
+    return b;
+  });
+  t.cues.push(...halves);
+  tlSelect(t, halves);
+  return true;
+}
+// New cue on a timeline; kind = preset | scene | trigger; at = { t, track, len }. Selects it.
+function addCue(t, at, kind) {
+  const p = P();
+  const c = { t: at.t };
+  if (at.len && kind !== 'trigger') c.len = at.len;
+  if (kind === 'trigger') {
+    const real = p.triggers.filter((x) => x.type !== 'comment');
+    const pick = real.find((x) => x.type === 'manual') || real[0];
+    if (!pick) return toast('Make a trigger first', true);
+    c.trigger = pick.name || String(pick.id);
+  } else {
+    c.track = at.track || 0;
+    c.fade = 1000;
+    // A new colour clip is a solid colour bar: the last colour picked (white at first).
+    if (kind === 'preset') { c.dim = 100; c.color = S.tlLastColor || '#ffffff'; }
+    else c.scene = p.scenes[0]?.id || 1;
+  }
+  t.cues.push(c);
+  S.sel.cue = t.cues.length - 1;
+  markDirty();
+  render();
+}

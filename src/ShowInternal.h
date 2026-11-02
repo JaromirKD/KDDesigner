@@ -1,0 +1,52 @@
+#pragma once
+// Show engine internals shared by Show.cpp (playback engine, output) and
+// ShowParse.cpp (reading project.json into the tables below). Not for other modules:
+// they use Show.h.
+#include <vector>
+#include "Fx.h"
+#include "Show.h"
+
+namespace ShowImpl {
+constexpr int U = KD_MAX_UNIVERSES;
+
+// A fixture channel: "dim" is 8-bit, "pos:16" is a 16-bit pair (coarse + fine).
+struct Slot { String name; int offset; bool wide; };
+struct Fixture { int id; String name; int u; int address; std::vector<Slot> slots; int footprint; uint8_t curve; };
+
+enum Curve : uint8_t { CurveLinear, CurveSquare, CurveNonDim, CurvePreheat5, CurvePreheat10 };
+
+// Effects: compiled programs, and per effect cue its parameter values and fixtures.
+// A target is one fixture: its dimmer/R/G/B/W channels (-1 = none) and map position.
+struct FxTarget { uint8_t u; int16_t d, r, g, b, w; bool dWide; float x, y; };
+struct FxCue { int prog; std::vector<double> slots; double level; std::vector<FxTarget> targets; };
+
+// The loaded project (replaced as a whole by Show::parse).
+extern Settings cfg;
+extern JsonDocument doc;
+extern std::vector<UniverseCfg> universes;
+extern std::vector<Fixture> fixtures;
+extern std::vector<Scene> scenes;
+extern std::vector<Timeline> timelines;
+extern std::vector<Scene> cueScenes;   // levels of track presets / track-limited scenes
+extern std::vector<Fx::Program> fxProgs;
+extern std::vector<FxCue> fxCues;
+extern std::vector<double> fxScratch;
+extern uint32_t projectVersion;        // bumps on every successful load, so open panels can refresh
+
+// Per channel, from the patch (bit masks are 64 bytes = 512 channels).
+extern uint8_t gmExempt[U][64];        // position/beam channels the grand master leaves alone
+extern uint8_t wide[U][64];            // coarse channel of a 16-bit pair
+extern uint8_t curveOf[U][512];        // dimmer curve per channel
+
+void stopAllPlaybacks();               // before a new project is swapped in
+
+inline bool testBit(const uint8_t* m, int i) { return m[i >> 3] & (1 << (i & 7)); }
+inline void setBit(uint8_t* m, int i) { m[i >> 3] |= (1 << (i & 7)); }
+inline void clearBit(uint8_t* m, int i) { m[i >> 3] &= ~(1 << (i & 7)); }
+inline int clampInt(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+inline int indexOfUniverse(const std::vector<UniverseCfg>& list, int id) {
+  for (size_t i = 0; i < list.size(); i++) if (list[i].id == id) return i;
+  return -1;
+}
+}  // namespace ShowImpl

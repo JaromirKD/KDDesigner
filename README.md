@@ -1,0 +1,470 @@
+# KD Designer
+
+A stand-alone DMX / Art-Net / sACN show controller for the **Arduino Portenta H7**, inspired by Pharos Designer 2.
+You program it from a browser, and everything (the show, the web UI and the logs) lives on a USB stick.
+
+```
+            ┌──────────────── Portenta H7 (M7 core) ─────────────────┐
+ USB stick ─┤ Storage   /usb/show/project.json, /usb/www, /usb/logs  │
+            │   │                                                    │
+            │ Show engine 40 Hz ── timelines · scenes · overrides ── GM│── DMX thread ── UART ─ RS485 ─ DMX 1..n
+            │   ▲         ▲                                         │── Art-Net (UDP 6454, ArtPoll reply)
+            │ Triggers   Cmd language  ◄── web console / UDP "cmd:"  │── sACN E1.31 (multicast 239.255.x.y)
+            │   ▲                                                    │
+            │ time · interval · UDP · GPIO · startup · timeline end   │
+            │                                                        │
+            │ Web threads: HTTP (UI + JSON API) · SSE live log/status │── Ethernet
+            └────────────────────────────────────────────────────────┘
+```
+
+## Hardware
+
+| Part | Notes |
+|---|---|
+| Portenta H7 | The M7 core runs everything. The M4 is free for future work, e.g. DMA-driven DMX. |
+| Portenta Breakout or Mid Carrier | Provides Ethernet RJ45 and a USB-A host port. The breakout's USB-A VBUS is switched on via `PA_15`. |
+| **or** Portenta Machine Control | The Portenta H7 inside Arduino's industrial box: Ethernet, USB-A, **one** RS485 port (used for DMX 1) and 24 V / 0-10 V I/O you can use in the show (see **Machine Control I/O** below). Needs its own firmware build (`machine_control`). |
+| RS485 transceiver per DMX port | MAX485 works for a start. Use isolated parts (ISO3082/ADM2587E) for real installs. |
+| USB stick | FAT32. |
+
+DMX wiring (per port): UART TX → transceiver DI, DE and /RE tied to 3.3 V (transmit only), A/B → XLR pins 3/2, GND → pin 1. Add a 120 Ω terminator at the end of the line.
+Default TX pins are in [src/Config.h](src/Config.h) (`PA_9` = UART1, `PG_14` = UART6). **Check these against your carrier's pinout** before wiring.
+On the **Machine Control** there is no extra transceiver: DMX 1 comes out of its RS485 terminals (half duplex, A/B → XLR 3/2, GND → 1, its own terminator switched off). There is no DMX 2; use Art-Net/sACN for more universes.
+
+## Build & flash
+
+The code is in `src/` (`main.cpp` has `setup()`/`loop()`). Use either tool:
+
+**PlatformIO** (recommended, used for all builds so far)
+1. Install [PlatformIO](https://platformio.org/): the VS Code extension or `pip install platformio`.
+2. Connect the Portenta over USB-C, then build and upload. If the upload can't find the board, double-tap the reset button; the green LED then pulses.
+
+```bash
+python -m platformio run -t upload
+```
+
+   For a Portenta in a **Machine Control**, build and upload the `machine_control` firmware instead (it adds Arduino's Machine Control library and uses the box's RS485 port and USB-A):
+
+```bash
+python -m platformio run -e machine_control -t upload
+```
+
+3. Watch the serial log:
+
+```bash
+python -m platformio device monitor
+```
+
+**Arduino IDE 2**
+1. Boards Manager: install **Arduino Mbed OS Portenta Boards**.
+2. Library Manager: install **ArduinoJson** (Benoit Blanchon, v7) and **Arduino_USBHostMbed5**. For the Machine Control also **Arduino_PortentaMachineControl**, and add `#define KD_BOARD_PMC` at the top of `src/Config.h`.
+3. Open `KDDesigner.ino` (the folder must stay named `KDDesigner`). The IDE compiles `src/` automatically.
+4. Tools → Board → **Arduino Portenta H7 (M7 core)**, pick the port, then Upload.
+
+## Prepare the USB stick
+
+Copy the contents of [data/](data) to the root of a FAT32 stick:
+
+```
+/www/index.html, app-*.js, fx.js,     web UI (copy the whole www folder:
+     model.js, style.css              the page needs every file)
+/www/panel.html                       touch panel (http://<ip>/panel)
+/show/project.json                    the show (written by the UI on Save)
+/logs/                                created automatically (system.log + system.1-4.log, 8 MB each; history/)
+```
+
+Boot the controller and open `http://<ip>/`. The IP appears in the serial log; DHCP is the default, with `192.168.1.50` as the fallback.
+If `/www` is missing, the controller still serves a minimal page with the live log.
+
+## Updating over the network (no USB cable, no stick swap)
+
+The show and map images are always saved over the network (Save, image upload). New **firmware** and a new **web UI** can go that way too, once the controller has been set up over USB-C one time.
+
+**Once, on the bench (USB-C):**
+1. Update the Portenta's bootloader. Network updates need bootloader version 22 or newer. Arduino IDE → File → Examples → **STM32H747_System → STM32H747_manageBootloader**, upload it, open the Serial Monitor and answer `Y`. Settings → Software update shows the bootloader version if it's too old.
+2. Upload the KD Designer firmware and prepare the stick as above.
+
+The controller prepares the QSPI flash itself on the first start (it adds partition 2 if it's missing; that's where Arduino's own update tools keep updates too).
+
+**Every update after that:**
+1. Every firmware build also writes an update file: `updates/KD-Designer-<version>-portenta.kdupdate` (or `-machine_control`). It holds the firmware **and** the whole web UI. Raise `KD_VERSION` in `platformio.ini` for each update you hand out.
+2. In the web UI: Settings → **Software update → Install update file…**, pick the file and confirm.
+3. The controller checks the whole file first (checksums, right board, a real M7 program). Only then does it replace the `www` folder on the stick and store the firmware in its QSPI flash. It restarts, the bootloader installs the firmware, and the page reloads with the new version. **No light output for about half a minute**, so update outside show hours. The project, images, state and logs are kept.
+4. After the restart the controller checks that its flash really holds the new firmware. The log and Settings then show "last update 0.1.0 -> 0.2.0: installed" or **NOT installed**.
+
+If the upload is cut off or the file is damaged, nothing changes. A file for the other board type (Portenta vs. Machine Control) is refused. Only if a new firmware has a bug that breaks the network do you need the USB-C cable once to put the old version back, so try each update on the bench first.
+
+A web-UI-only update (no restart, any controller): `python tools/make_update.py --www-only`.
+
+## Developing the UI without hardware
+
+```bash
+node tools/mock-server.js
+```
+
+Then open http://localhost:8080. The mock serves `data/www`, simulates playback, DMX output, triggers and the live log, and **saves to `data/show/project.json`** (the previous version is kept as `project.bak`).
+
+## Show files: working on a PC, moving shows to and from the controller
+
+Settings → **Project file** works like "Save as" / "Open":
+- **Export show file…** downloads the project as it is in the editor (unsaved changes included) plus its map images, as one file `<name>-<date>.kdshow`. Use it as a backup, or to take a show home.
+- **Open show file…** loads a `.kdshow` (or a plain `project.json`) into the editor and uploads its map images. Nothing changes on the controller until you press **Save**; **Undo** goes back to the previous project. If the file has other network settings than the controller, you're asked which to keep, so a show made on a PC doesn't move the controller to another IP.
+- **New project** starts empty (keeping the controller's network settings).
+
+To make or edit a show on your PC, double-click **`KD Designer (PC).cmd`** in the project folder (needs [Node.js](https://nodejs.org)). It lists your shows in `Documents\KD Shows`; type a number to open one, or a name to start a new one (`0` = the sample project). The mock starts on the first free port from 8080 and the browser opens; close the window to stop (save first). You can also drop a show folder onto the file. Without the launcher:
+
+```bash
+node tools/mock-server.js 8080 C:\Shows\MyShow
+```
+
+In the browser, build the show (or open a `.kdshow` exported from the controller), press Save to keep it in that folder, and **Export show file…** when it's ready. On the controller: **Open show file…** → **Save**.
+
+Check a project without the browser: `node tools/check-project.js [project.json]` compiles every effect and lists the triggers that would get a red **!** (bad actions or conditions, missing references).
+
+## Patch: outputs and universes
+
+- **Protocols**: DMX, Art-Net and sACN each have a global on/off switch (Patch page, saved in `settings.outputs`) and a live switch on the dashboard (`output artnet off`; reverts on reboot). With DMX off, the RS485 lines go idle, so another desk can take over.
+- **Universes**: up to 4 internal universes (`KD_MAX_UNIVERSES`). Each has a tick box per protocol (`useDmx`, `useArtnet`, `useSacn`) plus its DMX port, Art-Net port-address and destination (broadcast or a node IP), and sACN universe.
+- **Frame rates** (Patch → Protocols, `settings.outputs`): DMX 1–44 fps (a full 512-slot frame takes ~23 ms), Art-Net and sACN 1–60 fps. For Art-Net and sACN you choose between "only changes" (+1 s keep-alive) and continuously at the set rate. The engine runs at 40 Hz, or up to 60 Hz when a network rate above 40 is set. Change live with `output sacn fps 30`.
+
+## Working in the web UI
+
+- **Undo / redo**: **Ctrl+Z** / **Ctrl+Y** (or Ctrl+Shift+Z), or the ↶ ↷ buttons next to Save, for any change to the project in the web UI (the last 60 steps). A slider drag or typing a name counts as one step. While you are typing in a text field, Ctrl+Z undoes the typing instead. Undoing back to the last save makes the project "saved" again. The history is in the browser only: it is gone after a reload, and it does not undo what was already saved to the controller.
+- **Big rigs** (hundreds of fixtures, up to 4 full universes): tested with 600 fixtures on 4 full universes and a 2048-level scene; every page draws in well under 0.1 s. Maps with more than 40 fixtures use small dots without icons and without the glow, so live view and effect previews stay smooth.
+
+## Fixtures, groups and maps
+
+- **Fixtures**: name + universe + start address + a list of channel names (`dim, r, g, b, pan…`).
+  - `pos:16` makes a **16-bit** coarse/fine pair (0–65535), for winches and motors. Fades and masters work on the full 16-bit value.
+  - A per-fixture **dimmer curve**: linear, square law, non-dim (switch at 50%), 5% or 10% preheat.
+  - Channels whose name starts with pan, tilt, pos, zoom, focus, gobo, prism, color_wheel, cw, macro, ctrl, speed, enable, shutter, strobe, fx, sound, iris, frost, blade, mode, cto, cct or none, and all 16-bit channels, are exempt from the grand master, blackout and curve.
+  - The **Fixtures** page lists them like the trigger list: number, icon, name, groups, `universe.address` and type. Ctrl/Shift+click selects several; Ctrl+C / V, Ctrl+D (copies go to the next free address), Del (also removes them from scenes, tracks, groups and maps), ↑↓, Ctrl+A.
+  - With several selected: set universe or curve for all, **number the addresses** one after the other, or make / add to a group.
+  - **+ Add fixtures…** opens the fixture library: search (e.g. `rgbw`, `chauvet slimpar`, `mac aura`), pick the type and mode, how many, the universe and start address (next free by default), and optionally place them on the current map. The library has:
+    - **Generic** types: dimmer, dimmer pack, relay, RGB, RGBW, RGBA, RGBAW, RGBWA+UV, tunable white, pixel bars / tape, batten, moving head spot / wash / beam, LED profile and fresnel, strobe, blinder, UV, fog, hazer, fan, motor / winch, servo, laser, projector shutter.
+    - **637 brand fixtures** from 137 manufacturers (Chauvet, Martin, Robe, ETC, GLP, Clay Paky, ADJ, Cameo, Eurolite, Showtec, Stairville…), taken from the [Open Fixture Library](https://open-fixture-library.org) (MIT licence; the same source QLC+ uses). Always check the DMX chart against the fixture's manual. `node tools/build-fixture-lib.js <open-fixture-library/fixtures>` rebuilds `data/www/fixture-library.json` from a newer download.
+    - Pixel modes (`8 x (r, g, b)`) add **one fixture per cell** plus a group, so effects run along the bar; channels before the cells become a "master" fixture.
+    - Library channels get standard names (`dim r g b w a uv lime`, `pan:16 tilt:16`, `shutter strobe gobo color_wheel zoom fx ctrl…`), so presets, effects and the grand master treat them right. Some channels have a **home value** (e.g. a moving head's open shutter), used when the fixture is added to a scene.
+  - **Fixture types…**: your own fixture definitions, written as text and saved with the project. A type with the same maker / model as a library type replaces it. **Import file…** reads an Open Fixture Library `.json` (download a fixture there as "Open Fixture Library JSON") or a QLC+ `.qxf`, and turns it into text you can check and edit:
+    ```
+    fixture Museum / Vitrine LED strip
+    icon pixel                     # par, wash, spot, profile, fresnel, bar, pixel, matrix, dimmer, strobe, blinder, fog, fan, laser, effect, relay, motor, screen, generic
+    curve linear                   # optional default dimmer curve
+    note Our own 4-cell strip      # optional
+    mode 4 cells: dim, 4 x (r, g, b)
+    mode Simple: dim, r, g, b, strobe=0, shutter=255
+    ```
+    `:16` makes a 16-bit pair, `=value` is the home value. After **Apply**, fixtures of a changed type can be given the new channels.
+  - A fixture made from a type remembers its type and **mode**: change the mode in the fixture editor and the channels follow (scene levels on channels it no longer has are removed). Typing channels by hand still works for anything else.
+  - **Change type…** (next to Type in the fixture editor, on the Fixtures and Scenes pages, or for several selected fixtures at once) swaps a fixture for another type from the library, e.g. a generic RGBW for the real model. It keeps the fixture's number, name, address, groups, map place and timeline tracks, and the scene levels on channels the new type also has. Before changing it says how many scene levels would be removed and whether the fixture would now overlap the next one (fix that with the address or "Number them"). Pixel (cell) modes can't be used here; add those as new fixtures.
+  - Every fixture has an **icon** (on the Fixtures list, the maps and the Scenes page), taken from its type or guessed from its channels; pick another one in the fixture editor.
+  - Type, mode, icon and your own fixture types are only used by the web UI; the controller drops them after loading, like maps.
+- **Groups**: named sets of fixtures, made and edited on the Fixtures page (select fixtures → **+ Group from selected**). Groups fill timeline tracks and add many fixtures to a scene at once.
+- **Map**: floor plans with your fixtures on them, like the Layout in Pharos Designer.
+  - Add maps with **+ Map**, upload a background image (JPG/PNG/WebP/SVG, max 4 MB, stored on the stick in `show/media/`), or use the empty grid.
+  - In the fixture list, click a fixture, then **Shift+click** another to select everything in between, or **Ctrl+click** to add/remove one. Drag any selected one onto the map and **all selected fixtures go on in one go**, as a square block in list order (first fixture top-left), still selected so you can give them a shape straight away. Fixtures already on the map move along.
+  - Drag fixtures from the list onto the map, or add new ones there (**+ Add fixtures…** opens the library and places them on this map; + Dimmer/RGB/RGBW get the next free address). Drag to move (snaps to a grid), arrows nudge, Del removes from the map.
+  - Click, Shift/Ctrl+click or drag a box to select. **Shift+drag** adds a box to the selection, also when you start on a fixture (handy in a dense pixel grid); a plain drag on a fixture moves the selection. The Scenes page map works the same. With a selection you can **make a group**, **add them to a group**, **add the fixtures to a timeline track**, or arrange them:
+    - **Shape…**: line ↔, line ↕, diagonal line, circle, half circle, rectangle outline (e.g. LED strip round a showcase), grid, **grid zigzag wired (snake)** or zigzag line, in the area the fixtures cover now. A circle stays round on a wide floor plan, and shapes never get bigger than the map.
+    - Next to it: **keep neighbours** (fixtures go in the order they are in now) or **in patch order (address)** (fixture 1 first, the way pixels are wired), and **Columns** for grids (empty = square). Changing these redoes the shape you just made.
+    - Big pixel grids: add e.g. a "Generic / RGB pixel bar / tape" with 100 cells (+ Add fixtures…, it is placed on the map as a group), click the group, pick **Grid, zigzag wired (snake)**, **in patch order** and 10 columns: a 10 × 10 LED grid with every other row running back, as it is wired. Maps with more than 40 fixtures show smaller dots without icons.
+    - **Rotate**: drag the round ⟳ handle above the selection (Shift = 15° steps; it shows the angle while you drag), the ⟲ ⟳ buttons (15°), or the `[` `]` keys (5°, Shift = 15°).
+    - **Spread out / pull together**: drag the ⤡ handle at the frame's corner, the − + buttons, or the `-` `+` keys (Shift = more).
+  - **Groups** are listed under the fixtures: click one to select its fixtures on the map (it shows e.g. 3/4 when not all of them are on this map). With one fixture selected you can edit its name, universe and address.
+  - **Map size**: drag the grip on the map's bottom edge to make it bigger or smaller (double-click it to reset). The map keeps its shape; the size is remembered per page in this browser, separately for the Map, Scenes and Effects (preview) pages.
+  - **Live**: each fixture shows its current output (RGB(W) times its dimmer, or the dimmer as warm white).
+  - Maps are only used by the web UI. The controller drops them after loading the project, so they use no RAM there.
+
+## Scenes, timelines and effects
+
+- **Scenes**: a set of levels, either by fixture/channel name or raw `universe.channel`.
+  - The Scenes page shows a **map** (pick which one, or a list of all fixtures) with every fixture in the scene's colour and level; fixtures not in the scene are faded. Fixtures that aren't on that map are listed under it.
+  - **Groups** above the map: click one to select all its fixtures (Shift/Ctrl+click adds the group to what is selected). A fully selected group is highlighted.
+  - Click a fixture (Shift/Ctrl+click or drag an area for several, Esc clears, Ctrl+A all) to edit it like on a desk's programmer: a **colour wheel** for fixtures with r/g/b (a dimmer that isn't in the scene yet goes to full), **Full / 50% / Off** for the dimmer, and a slider for every channel. Changes go to all selected fixtures; ✕ takes a channel out of the scene, **All channels** adds the rest at their home values, **Remove from scene** takes the fixtures out.
+  - With one fixture selected, **Fixture settings** edits its name, mode, icon, address and channels right there.
+  - **Live preview** sends your changes to the outputs as overrides while you edit (**Clear preview** removes them).
+  - **All levels in this scene** (below) is the full table, also for raw `universe.channel` levels. It is only built when you open it and shows 200 rows at a time (**Show more**); with more than 60 fixtures each row names its fixture instead of offering a list of all of them.
+- **Timelines** have **tracks** (lanes) with cues as **clips**, edited like Ableton Live's arrangement view.
+  - A clip has a **length**: after it the track is **empty**, and its fixtures show what is underneath (lower-priority timelines, or nothing). The dark slope at the start is the fade in, the one at the end the **fade out** (to what is underneath). Untick the length ("hold until the next cue") for the old Pharos behaviour: the clip runs until the next cue on its track (dashed right edge, `→`). Older projects' cues all hold.
+  - **What a clip shows**: a colour clip is a **solid bar** in its colour at its intensity. An effect clip shows a **preview** of the effect as it plays (time left to right, the track's fixtures top to bottom), a scene clip the colour of each fixture in the scene. A new colour clip gets the last colour you picked (white at first).
+  - **Mouse**: double-click an empty spot to add a clip (up to 4 s, or up to the next clip). Drag a clip to move it, also to another track; **Ctrl+drag** copies. Drag its **edges** to change start and length, and the small **squares** at its top corners for fade in and fade out. Click empty space to put the **cursor** (dashed line); drag in empty space to **box-select** clips; Shift/Ctrl+click adds to the selection. Drag the orange marker on the ruler to change the timeline's length.
+  - **Playing from a spot**: click to put the cursor, then **Space** (or **▶ from … s**) plays from there. Click or drag on the time ruler while it plays to jump. Space (or ❚❚) while playing pauses; Space again carries on from the pause, unless you clicked a new spot in the meantime (then it plays from there). The playhead stops at the end of a timeline that doesn't loop. Starting part-way gives exactly the look of that moment: a fade that is half done starts half done, a running effect starts mid-way. Trigger cues before that point are skipped. The command is `start timeline <tl> at <seconds>`.
+  - Click a track (its name area or its lane) to make it the **current track** (orange edge). **+ Cue** adds a clip at the cursor on the current track, and moves the cursor after it, so pressing it again adds the next one. Without a cursor it goes after the last clip of the selected cue's track.
+  - Dropping a clip on another works like Ableton: the one underneath is cut back, split around it, or (fully covered) removed. Ctrl+Z undoes.
+  - **Snap**: to the grid lines (they follow the zoom), off, or a fixed step. Hold **Alt** while dragging for no snap. **Zoom** with Ctrl+mouse wheel or the − / + / Fit buttons; while playing, the view follows the playhead.
+  - Each **track** has its own fixtures and/or groups, picked with the checkboxes or by clicking them on a map (with several maps, choose which one above it). Each track **fades on its own**, so a slow wall fade and a quick FOH change can overlap. A track without fixtures plays scenes on the whole rig.
+  - A cue is a **preset** (intensity and/or colour for the track's fixtures), a **scene** (only the channels of the track's fixtures), or a **◆ trigger** (in the Triggers lane).
+  - Presets: RGB fixtures without a dimmer channel get their colour scaled by the intensity. RGBW fixtures get white = the common part of R, G and B.
+  - Click a clip (or a trigger cue's name) to edit it below, including typing an exact time, length and fades. The **All cues** list also has an editable time for every cue. Max 16 tracks per timeline.
+  - **✦ Effect cues** run an effect on the track's fixtures until the next cue on that track, crossfading in over the cue's fade. Each cue has its own parameter values, a level (%) and a live preview.
+  - Colours use a **colour wheel** (hue around, saturation outwards, brightness slider, hex/RGB fields, palette). With the wheel focused: ←/→ hue, ↑/↓ saturation, PgUp/PgDn brightness, 1–9/0 palette.
+  - **Keys** on the timeline (they work on all selected clips): Ctrl+C / Ctrl+X / Ctrl+V copy, cut, paste at the cursor (on the cursor's track) · Ctrl+D duplicate right after itself · Ctrl+E split at the cursor · Ctrl+A select all · Del delete (leaves an empty space) · ←/→ previous/next cue · ↑/↓ other track · Shift+←/→ move 0.1 s (Ctrl: 1 s) · 1–9, 0 palette colour · `[` `]` hue · `+` `-` intensity · Enter colour wheel · Space play from the cursor / pause / carry on · Esc deselect.
+  - In project.json a clip's length is `"len"` and its fade out `"out"` (both ms); without `len` it holds.
+  - Map images you replace or remove are only deleted from the stick when you save, so an unsaved change never points at a deleted image.
+  - Each cue has a **crossfade path** (linear, accelerated, braked, damped S-curve, overshoot), like Pharos.
+  - Options for length, loop and priority. Higher priority wins, and on equal priority the latest started wins (LTP). A timeline's master acts as its layer opacity, so releasing with a fade reveals whatever is underneath.
+  - **Group A–G**: starting a timeline releases the others in its group, crossfading over its first cue's fade (Pharos playback groups).
+  - **Trigger cues** (◆, **+ Trigger cue**): fire a trigger when the timeline reaches that time, e.g. start a video or send a UDP message in sync with the light. They're stored by trigger name (`"trigger": "Test step"`), follow renames, and run the trigger with `{timeline}` set to the timeline number. A timeline that is fading out after a release doesn't fire its trigger cues. Trigger connections show them (`timeline 2 'Puppet show' cue at 5.0 s`).
+- **Effects** (Effects page): small scripts in a shader-like language that run **for every fixture, every frame**, like a fragment shader in an LED test tool.
+  - Start from a base effect, duplicate it and change it. The editor checks the code as you type and shows a live preview on a strip, a **10 × 10 grid** (for XY effects) or one of your maps. There are 22 base effects in three groups:
+    - **Along the fixtures** (list order): Rainbow, Chase, Bounce (scanner), Theatre chase, Two-colour fade, Colour steps, Wipe, Police.
+    - **Whole rig / per fixture**: Breathe, Heartbeat, Strobe, Lightning, Fire, Candle, Sparkle, Twinkle.
+    - **XY: over the map** (use the fixtures' map positions `x`, `y`): Wave across the map, XY ripple (rings from a point), XY sweep (a bar at any angle), XY radar (a turning beam), XY plasma (colour clouds), XY gradient. Fixtures that aren't on a map get `x` = their place in the track and `y` = 0.5, so XY effects look best on fixtures placed on a map.
+  - **Show effect on the whole map** (tick box next to the preview, when previewing on a map): the effect is also drawn over the whole map, see-through, not only on the fixtures. You see the pattern between and around the fixtures, e.g. where a dark wave is right now. Effects that work in list order (Chase, Fire…) show each fixture's colour over the area nearest to it. The tick box is remembered in this browser.
+  - **Change to base effect…** (next to the name) swaps an existing effect's code for another base effect. It keeps its number, so timeline cues that use it carry on with the new look; cue values for parameters that no longer exist are dropped. Ctrl+Z undoes.
+  - **Speed doesn't depend on the number of fixtures**: Chase's speed is in rounds per second, so a lap takes as long on 8 fixtures as on 400. (Effects made from the old Chase base effect had speed in *fixtures* per second, so they got slower on a bigger rig: use Change to base effect → Chase to update them.)
+  - **Parameter notes**: a comment after a `param` line is its note. It is shown under the parameter's slider on the Effects page and in the timeline cue editor, with the range and default. All base effects have notes.
+  - Example:
+    ```
+    param speed = 0.2 [0, 2]     // slider, settable per timeline cue (this comment is its note)
+    param color = #ff8800        // colour parameter: color.r / .g / .b
+    h = fract(t * speed + x)
+    r, g, b = hsv(h, 1, 1)
+    dim = 0.5 + 0.5 * sin(t * tau)
+    ```
+  - Inputs: `t` (seconds), `i`/`n` (fixture number / count in the track), `u` = i/n, `x`/`y` (map position). Outputs: `r g b` 0–1, `dim`, `w`. Functions: `sin cos tan abs floor ceil fract sqrt exp log sign pow min max mod atan step clamp mix smoothstep rand noise tri saw sq pulse hsv`. The full reference is on the Effects page.
+  - The controller compiles the effects when the project loads (`src/Fx.cpp`, same language and results as `data/www/fx.js`). A script error rejects the project with the effect's name and line number.
+
+## Triggers, variables and modes
+
+- **Triggers** run a list of commands. Types:
+  - `startup`, `time` (HH:MM:SS + weekdays), `interval`, `input` (a Portenta GPIO pin, or a Machine Control input; debounced) and `timeline_end`.
+  - `udp`: matches a message exactly or by `prefix*` (the rest goes into `{1}`). It can listen on its own `port` and only accept one sender (`fromIp`).
+  - `osc`: matches an OSC address with `*`/`?` wildcards; the arguments go into `{1}…{n}`. UDP and OSC share up to 6 listen ports.
+  - `projector` (**Projector alarm**): a projector's PJLink error status or lamp hours, checked at every monitoring poll. Pick a projector (or any) and the alarm:
+    - an error part (`fan`, `lamp`, `temperature`, `cover`, `filter`, `other`, or **any**), firing when it **gets worse** (to warning or error), **becomes an error**, or **is ok again**;
+    - **lamp hours reach a limit** (e.g. 4000): fires once when the lamp hours pass it.
+    
+    An alarm that is already there fires once after the controller starts (so you hear about it after a power cut too), but not again when you save the project. Vars `{projector} {alarm} {state} {lamp}` (+ `{hours}` = the limit), e.g. `email tech@site.nl "{projector}: {alarm} {state}" Lamp at {lamp} h`. In the mock, `projector "PJ left" send ERST=000020` (filter error) or `send LAMP=4100` makes the simulated projector report that.
+  - `mode`: the mode changes (to a given mode, or any).
+  - `panel`: a touch-panel button is clicked, pressed or released, **held** (fires once it is held down for the set time, default 2 s; letting go earlier does nothing) or **double-clicked** (two clicks within the set time, default 0.5 s; a click trigger on the same button still fires on every click).
+  - `input` edges can also be **hold** (the input stays on for the set time) and **double** (two presses within the set time).
+  - `sequence` (**Sequence**): fires when other triggers fire **in a given order** within a time (default 5 s from the first step to the last), like a key switch and then a button, or a secret code on panel buttons. A step out of order, or too slow, starts again from the first. The steps are normal triggers; a trigger that is only a step needs no actions of its own (no red ! for that). The editor and the flow view show the steps as arrows into the sequence.
+  - `dmx_in` (**DMX input**): Art-Net or sACN that a lighting desk or media server sends to the controller. Pick the protocol, the universe (Art-Net: port address, 0 = 0:0:0; sACN 1-63999) and channels (`1`, `1-8`, `1,3,5`); it fires per channel when the value **changes**, **goes up to a level or above**, or **drops below** it. Vars `{channel} {index} {value} {old}`. At most 4 input universes. sACN by multicast is received for one universe (the first sACN one used); for more, let the desk send unicast to the controller's IP. If several sources send the same universe, the last packet counts (no merging or priority). In the mock, `dmxin artnet 0 1 255` in the console simulates channel 1 of universe 0 at 255 (`dmxin sacn 1 1-8 0` for a range).
+  - `dmx_change`: an output channel in a range changes. Vars `{channel} {index} {value}` plus per-index **tables**, e.g. `send udp motors "{puppet}{motor}P{=ceil(value*range/255)}\r"`. This replaces the Lua `CompareAndSend` puppet-motor script.
+  - `manual`: only fired by other triggers, for nested task lists.
+  - `comment`: a coloured **separator** in the list.
+- **Trigger list editing:** new triggers go at the end. Ctrl/Shift+click selects several; Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste (also through the system clipboard, between tabs); Ctrl+D duplicates; Del deletes (it warns when other triggers still refer to the deleted ones); ↑↓ select; Ctrl+A selects all. The shortcuts only work while you're not typing in a field. Typing a number in the trigger's **#** field moves it to that place.
+- **Typing mistakes** in actions and conditions get a red wavy underline as you type; hover over the red word to see what's wrong, often with a suggestion ("'strat' is not a command - did you mean 'start'?", "there is no timeline '99'"). When a word is missing at the end, a grey placeholder shows what should come next (`start timeline 3 at <seconds>`), underlined the same way.
+- **Problems (red !):** a trigger that won't work as intended gets a red **!** in the list. Hover over it to see why; the editor lists the reasons too. Checked: every action and condition (the same check as the red underline), a duplicate name, no actions, and settings that point at something that doesn't exist (panel button, timeline, mode, variable, TCP or monitored device, universe), or are missing (UDP message, OSC address, interval). It updates as soon as you leave a field.
+- **Filtering:** the filter box searches number, name, type and notes. The colour dots under it show only triggers with those colours (click several to combine; ∅ = no colour). All colours are listed; ones no trigger uses yet are dimmed. Dragging is off while a filter is active.
+- **Documenting triggers:** every trigger and separator has a **Notes** box under its name for free text (what it's for, who fires it, what to watch out for). A ✎ in the list shows the trigger has notes; hover it to read them, and the filter searches notes too. Notes stay in `project.json` on the stick, and the controller drops them after loading so they use no RAM. For a remark about one step, start an action line with `#`: it's shown greyed out and skipped when the trigger runs.
+- **Trigger connections:** when a trigger is selected, the list marks the triggers it sets off (green →) and the ones that set it off (blue ←). This covers `fire/cancel/repeat trigger`, `mode` changes (mode triggers), `var` changes (variable triggers), `start timeline` (timeline-end triggers) and `http` (HTTP-response triggers). The editor lists the same links as clickable chips under **Set off by** and **Sets off**.
+- **Light up when fired** (tick box next to the Triggers heading, on by default): a trigger's row lights up orange the moment it fires on the controller, with where it came from, e.g. `← 38` (trigger 38) or `← TL 2` (a cue on timeline 2). They light up in the real order and timing: if trigger 38 does `fire trigger 39`, both light up together; with `sleep 0.5` before it, 39 lights up half a second later. A trigger with `sleep`s **stays lit (pulsing) for as long as it runs**, with `⏳ 3 s` = time until its next step; it goes out after its last action. The log shows the source too: `fired (nested from trigger 38)`, `fired (timeline 2 cue)`.
+- **Flow view:** tick **show flow** to see a diagram of the whole chain: event triggers on the left, then what they set off, timelines as blue rounded boxes (with their trigger cues and end triggers). Click a box to select that trigger (its arrows then show why); click a timeline to open it. With "light up when fired" on, the boxes and arrows light up too, so you can follow e.g. button → "Start puppet show" → timeline → cue trigger. Dashed arrows only cancel/stop, or go back to an earlier column. Drag the bottom edge to make it taller. Both tick boxes are remembered in this browser.
+- **History** (tick **show history**): a time line of when each trigger fired, like a logic analyser: one row per trigger that fired, a mark per fire in its colour, the number of fires, over the last 2 / 10 / 60 minutes or everything kept. Hover a mark for the exact time and where it came from (its own event, another trigger, a timeline, by hand, a repeat, a queued fire); click a row to open the trigger. The controller keeps the last 512 fires in memory (not DMX-change triggers, nor DMX-input triggers on "changes", which fire too often), also while no browser is open; they are gone after a restart. After triggers are renumbered, older fires show under the old numbers. If the controller or the PC mock still runs older software, the strip says so: update the firmware, or close and restart the mock (`KD Designer (PC).cmd`).
+- **Templates…** (or **+ From template** under the list): ready-made triggers for visitors (button with cooldown, one request at a time, idle loop and show, visitor counter), opening hours (by the clock, sunset lights, weekend), the technician (projectors on then the input, morning start, night shutdown, offline and lamp-hour emails, long-press restart / all off, secret service code, double-click blackout), effects (channels one by one, blink, relay chase, step through scenes) and external control (OSC, UDP, a desk fader over Art-Net). They use your first timelines, scenes and panel buttons and add the variables they need; check the red ! after adding and change names to fit. Each added trigger has a note saying which template it came from.
+- **Find & replace…** (Ctrl+H): in actions and conditions (and, if ticked, names and notes) of all triggers or only the selected ones, with match case and whole words. It lists every place with the match marked and what it becomes (red when the line would no longer be valid); click one to open that trigger. **Replace all** is one step for Ctrl+Z. Renaming triggers this way updates references to them, like a rename in the editor.
+- Each trigger type has its own tag colour; `if` triggers get a yellow tag.
+- **Trigger names** stay unique automatically for new, duplicated and pasted triggers ("Start (2)"). A manual rename to an existing name is flagged ("same name"). Renaming a trigger updates `fire trigger "<old name>"` references to the new name.
+- **Trigger numbers** always follow the list order (1, 2, 3…; separators aren't numbered). Adding, deleting, moving or dragging a trigger renumbers the list, and references by number (`fire trigger 7`, `repeat`, `cancel`, `stop repeat`, also inside if/then/else) are rewritten to follow. References by name (`fire trigger "Start inloop"`, offered first by autocomplete) never need changing; a name shared by two triggers is flagged as ambiguous.
+- **Every trigger** can have **conditions** (`mode is …`, `mode not …`, `timeline <tl> running|stopped`, `time between 08:00 18:00`, `day is mon,tue`) and a **colour** tag. Actions can use `{variables}` and `{=maths}` (`+ - * / % ceil floor round abs min max`). Drag an action by its **⠿** grip (left of the line) to change the order it runs in.
+- **Pauses between actions:** a line `sleep 0.5` waits half a second before the lines below it run (any number of sleeps per trigger, e.g. 20 relay lines with `sleep 0.5` in between). The trigger's conditions are only checked at the start. `cancel trigger <name>` stops the lines still waiting. `sleep` only works as its own line in a trigger, not after `then`/`else` or in the console.
+- **Waiting for something:** `wait until <condition>` waits until the condition is true (any condition, checked 10 times a second), then the lines below run; if it is true already they run straight away. Add `timeout <s>` to give up: `wait until device "PJ left" is online timeout 120` - after 2 minutes the rest is skipped and a warning is logged. Without a timeout it waits until it happens, the trigger is cancelled (`cancel trigger`) or the project is saved.
+- **Repeating a trigger:** `repeat "Flash once" 8 times every 0.5` fires the trigger "Flash once" 8 times, half a second apart (`for 0.5` means the same); without `every` they fire straight after each other. In the fired trigger `{count}` (and `{i}`) is the round, 1 to 8. The lines below run after the last round. A number works too: `repeat 7 3 times` = trigger 7, three times. Renaming or renumbering the trigger updates these lines.
+- **Loops:** `repeat 8 times every 0.5 io out{=i-1} on` runs the command 8 times, half a second apart; `{i}` counts 1, 2, 3… (also in maths). Without `every` they all run at once (`repeat 4 times set 1.{i} 255`). The lines below the loop run after its last round. The command can be anything, also `fire trigger …` or an `if`, but not `sleep`, `wait` or another loop. (`repeat trigger <name> every <s> [times <n>]` still repeats a whole trigger.)
+- **Cooldown** (every trigger): after it ran, new fires are skipped for that many seconds, e.g. 30 s for a visitor button that people press again and again. **Fire now** and the console still fire it, so you can test.
+- **While running** (every trigger): what happens when it fires again while it is still busy (waiting in a `sleep`, `wait` or `repeat … every`): **run again alongside** (as before), **ignore** the new fire, **restart** (the waiting rest of the first run is dropped), or **queue** (it runs once more right after the current run; more fires meanwhile are ignored). With `wait until timeline 2 stopped` as the last line, "ignore" means "not while the show plays".
+- **Running triggers** show ⏳ with the time to their next step, `⏳ wait` while waiting for a condition (hover for which), or `⟳ 3 left` for a loop. The dashboard's waiting list shows the same.
+- **Another port for a device:** `send udp pc 5000 hello` sends to the device "pc" on port 5000 instead of its own port (also for device groups and `send osc pc 9000 /cue/1/go`). A number with nothing after it is still the message: `send udp pc 1234` sends "1234" to the device's own port.
+- **if / then / else** in any action: `if var visitors >= 50 then scene 2 else scene 1`. Any condition works after `if`, and `then`/`else` take any command, including another `if`.
+- **Variables** (Variables page, like Medialon variables): `number`, `text` or `on/off`, optionally kept across reboots.
+  - Usable in every command as `{visitors}` and in maths `{=visitors*2}`.
+  - Change with `var visitors = 0`, `var visitors + 1`, `var door toggle`; test with `var visitors >= 50`.
+  - A **Variable change** trigger fires on changes (vars `{variable} {value} {old}`).
+  - Link a variable to a **Modbus** point and it follows the PLC; setting it writes back (coils/holding registers; discrete inputs/input registers are read-only).
+- **Mode groups**: independent groups of states, like the Pharos Management Mode module but several at once:
+  ```json
+  "modes": [{ "name": "Curtains", "states": ["Open", "Closed"] },
+            { "name": "Museum", "states": ["Closed", "Open", "Starting up"] }]
+  ```
+  Each group has one active state, kept across reboots (`/usb/show/state.json`). Set it with `mode Curtains Open` or `mode Museum "Starting up"`, react with a `mode` trigger (filter on group and/or state; vars `{group} {mode}`), and test with `mode Museum is Open` / `mode Curtains not Closed`. The dashboard shows a row of state buttons per group, and the touch panel header shows all groups.
+  Old projects with a plain list (`"modes": ["Show", "Test"]`) load as one group called "Mode". `mode Show` / `mode is Show` still work as long as the state name exists in only one group.
+
+## Schedule
+
+- **Schedule** page (like the Medialon scheduler):
+  - Clock with **NTP** sync (`settings.time.ntp`, at boot and every 6 h, `ntp sync`), time zone and automatic **summer time** (EU/US).
+  - **Sunrise/sunset** from `settings.location` (lat/lon): time triggers at `sunset` with an offset (`-15` = 15 min before), and conditions like `time between sunset 23:00`.
+  - **Calendar periods** (`calendar`: name + from/to, `MM-DD` = every year, `YYYY-MM-DD` = once) for holidays and seasons: `calendar Closed inactive`, `date between 07-01 08-31`.
+  - A **next 7 days** overview of all timed triggers, showing which are skipped by calendar/date conditions.
+
+## Devices and monitoring
+
+- **Devices** page:
+  - **Projectors**: PJLink class 1 over TCP 4352, with an optional password (MD5 auth). Commands are queued in a worker thread, so an offline projector never stalls the show. Power state is polled every 30 s and shown on the dashboard. Use a **Projector alarm** trigger to react to lamp, filter, fan or temperature problems and to lamp hours.
+  - **PCs**: Wake-on-LAN (magic packet broadcast on the subnet, ports 9 and 7, needs the MAC) and `startup` / `shutdown` / `reboot` sent as UDP text to the PC (default port 7; the texts can be changed per PC). `pc 1 wake`, `pc all shutdown`. Shutdown/reboot buttons ask for confirmation.
+  - **Network devices**: named UDP/OSC endpoints (e.g. `mediaserver` → 192.168.1.51:7000), used as `send osc mediaserver /play`.
+  - **Device groups**: a name for several network devices (tick them in the table). `send udp screens "PLAY\r"` or `send osc screens /go` sends to every device in the group, each on its own IP and port. Autocomplete offers groups next to devices. Renaming a device keeps it in its groups. A group can't share its name with a device.
+  - **Email**: plain SMTP (port 25/587, optional AUTH LOGIN, **no TLS**), so use a local relay. `email to@site.nl "Subject" body`.
+  - The Devices page has a **tab** for each kind: **Network** (UDP/OSC devices and device groups), **TCP & Modbus**, **PCs**, **Projectors**, **Email**, **Machine Control**, and one per show-device type below.
+  - **Machine Control I/O** (only with the `machine_control` firmware): the inputs and outputs of the Portenta Machine Control the controller runs in. The points are named like the labels on the box:
+    - `in0`–`in7`: 24 V digital inputs. `out0`–`out7`: 24 V digital outputs (0.5 A each; a shorted output switches off until you switch it again).
+    - `io0`–`io11`: **programmable** 24 V I/O. Pick per point whether it is an **input** or an **output** (default input).
+    - `ai0`–`ai2`: analog inputs, per input **0-10 V** (reads volts), **4-20 mA** (reads mA) or **NTC** (reads the resistance in Ω).
+    - `ao0`–`ao3`: analog outputs 0-10 V.
+    - On the **Machine Control** tab: give points a **name**, pick the programmable I/O direction and the analog-input sensor, link a **variable**, and see every point live with On / Off / Pulse buttons and sliders. **All outputs off** switches everything off.
+    - **Commands**: `io out3 on|off|toggle`, `io "Door release" pulse 2` (on for 2 s), `io ao0 7.5` (volts), `io ao0 0 fade 3`, `io all off`. A point can be used by its key or its name.
+    - **Triggers**: an **Input** trigger on `in3`, a programmable input or an analog input. Digital: rising = the input goes on (24 V), falling = off. Analog: fires when the reading crosses the **level** you set (with a small margin so a noisy signal doesn't fire twice). Vars `{input} {value}`.
+    - **Conditions**: `io in2 is on`, `io ai0 > 5`, `if io io4 is off then …`.
+    - **Variables**: a linked variable follows the point (inputs and outputs, `1`/`0` or the reading; analog only on a change of 0.05 or more). For an **output** it works both ways: `var door = 1` also switches the output on.
+    - Outputs keep their state when you save the project. Name, direction, sensor and variable changes work after saving. Inputs are debounced (30 ms) and read every 10 ms; analog inputs every 20 ms.
+    - In the mock, `io <input> on|off|<value>` simulates a signal on an input (the real controller refuses that).
+    - Temperature probes, encoders, CAN and the RTC of the Machine Control are not used yet.
+  - **Show devices**: devices with their own protocol: **Kiss-Box, KNX, BrightSign, DiGidot C4, NETIO, Pharos**, each on its own tab with the settings of every device of that type, its readings with buttons/sliders to control them, a **name** and a **variable** per reading, and setup notes. All devices (and projectors) are checked at the one interval set on the **Monitoring** page. Commands are queued in worker threads (HTTP, UDP and live updates), so an offline device never stalls the show. Device online/offline triggers and `device <name> is online` work for them too.
+    - **Live updates instead of polling** where the device can push: KNX (every bus telegram), Kiss-Box inputs (with "automatic input state" on the box), Pharos (tick **Live updates**: a WebSocket subscription to timeline, scene and group changes) and NETIO (tick **Live updates**: the NETIO's MQTT-flex publishes every change to the **MQTT broker built into the controller**, port 1883; the tab shows the exact config to paste on the NETIO). A ⚡ live tag shows it's connected; the poll then only checks now and then. BrightSign and DiGidot can't push and are polled every **Check every** seconds.
+    - The **MQTT broker** (on as soon as a NETIO uses live updates) also accepts other MQTT clients (QoS 0-2 publishes, subscriptions with `+`/`#`); no retained messages or passwords. It shows on the Monitoring page.
+    - **Monitoring** has tabs too: **All** (a section per kind: projectors, PCs, each show-device type, network), **Projectors**, **PCs**, **Network**, **Machine Control** (every point live, with controls), and one per show-device type showing every reading: each Kiss-Box relay and contact, each KNX address, NETIO output, Pharos timeline / scene / group / trigger, with names, linked variables and controls.
+    - **Health on the Monitoring card**, for every device: **Online for** (since it last came online), **Drop-outs** (times it went offline since the controller started), **Last error** and when. For devices that report their uptime (NETIO, BrightSign, Pharos) also **Uptime** and **Restarts**: when the uptime goes down between two polls the device has restarted (a crash, a power cut or a reboot), even if it was back before the controller noticed it was gone. Each restart is logged as a warning. Plus what each API reports:
+      - Pharos: project name, project file and upload date, **Playing** (the running timelines), last boot time, **reset reason** (why it last restarted), memory, temperatures, fan speeds.
+      - BrightSign: model, serial, firmware, boot version, connection. The DWS API doesn't say which presentation is playing, and has no crash or reboot reason.
+      - NETIO: model, firmware, serial, device clock, mains voltage, loads. DiGidot: scene playing, memory, Art-Net and scene frame rates. Kiss-Box and KNX report nothing beyond answering.
+    - **Variables**: pick a variable next to any reading and it follows the device (device → variable), e.g. a Kiss-Box door contact, a NETIO output, a KNX switch, a Pharos timeline's state (`running`, `paused`…) or the DiGidot scene. React with a **Variable change** trigger. On/off readings are `1`/`0`.
+    - **Kiss-Box** I/O (Kiss-Box protocol firmware, **UDP** mode, default port 9813): pick the **frame** (IO3CC 3 slots / IO8CC 8 slots) and the **card in each slot**: DO4PR (4 power relays), DO8SK (8 outputs 5-30 VDC), DI8DC (8 inputs 12-48 VDC), AO8DA (8 analog outputs 0-10 V, slider 0-255), AI8RA (8 analog inputs 0-5 V). Name every channel (e.g. "Fog machine") and link it to a variable. The controller reads every slot each check; switch on **automatic input state** for input cards in the Kiss-Box editor with the controller's **listen port** (default 9813) as destination, so contact changes arrive straight away. `kissbox io 1.3 on`, `kissbox io 1 all 1 0 1 0 0 0 0 0`, `kissbox io read 2`, raw: `kissbox io send A5 00 02 01`.
+    - **KNX** via a KNX IP interface or router (KNXnet/IP **tunnelling**, UDP 3671; it uses one of the interface's tunnels). Add the group addresses in the table (address, name, datapoint type from a menu, variable), or paste a list (`1/1/1  1  Hall light` per line, e.g. from ETS). They are read once when the tunnel opens and then follow every telegram on the bus (optionally re-read every N s). Controls follow the type: On/Off for switches, ▲▼■ for dim/blinds, a slider for percent, a colour picker for RGB, a field for numbers. `knx gw write "Hall light" on`, `knx gw write 1/2/1 40 5.001`, `knx gw read 3/1/1`. DPTs: 1 on/off, 2, 3 dim (`up`/`down`/`stop`), 5 / 5.001 percent, 5.010 0-255, 6, 7, 8, 9 (temperature etc.), 12, 13, 14, 16 text, 17/18 scene 1-64, 232 RGB `#rrggbb`.
+    - **BrightSign**: `brightsign lobby send play1` sends UDP text to the presentation (**UDP** port, default 5000, as set for UDP input in BrightAuthor). Status and `reboot` use the player's **local DWS** REST API (port 80, digest login: user `admin`, password = the DWS password, by default the serial number; the local DWS must be enabled, it is off by default on BrightSignOS 9). **Newer BrightSignOS versions only allow the DWS over https**, which the controller can't do yet: then UDP commands still work, but status and reboot don't. Any DWS call: `brightsign lobby api get info`, `api get files/sd`, `api put control/reboot`. Make **command buttons** (name + UDP text) on the BrightSign tab. **What's playing**: let the presentation send a UDP message to the controller's trigger port on every state (BrightAuthor: send UDP, e.g. `playing Intro`); the last one shows as **Player says** (and can feed a variable); UDP triggers still fire on it too.
+    - **DiGidot C4**: JSON API (`/ajax.json`, user/password as set on the C4, default `admin`/`admin`). `digidot c4 scene "Rainbow" fade 2` (by name or list number), `playlist <id>`, `stop`, `master 50`, `speed 150`, `trigger <id>`, `reset`, and any API call: `digidot c4 send {"action":"status"}`. Status: scene playing, master, speed, the scene list.
+    - **NETIO** power sockets (JSON API, enable it on the NETIO under M2M API → JSON with read/write; default user/password `netio`). `netio rack output 1 on|off|toggle`, `output all off`, `output 2 restart` (off for the NETIO's own delay, or `restart 5` = 5 s), `output 3 pulse 10`, and any netio.json write: `netio rack send {"Outputs":[{"ID":1,"Action":4}]}`. Status: outputs (by their NETIO names), load in W, inputs, temperature, mains voltage. Pick the **model** (PowerCable 101x / 2PZ / 2Px / 2Kx, PowerBOX 3Px / 4Kx, PowerDIN 4PZ, PowerPDU 4Px / 4Kx / 8Qx / 8Kx / FK6 / 4C, NETIO 4 / 4All) or leave it on "as reported by the NETIO": the outputs, inputs and load columns follow it. A picked model decides the rows exactly; if the NETIO reports a different number of outputs, a warning says so.
+    - **Pharos** LPC / TPC / VLC (Controller HTTP API, plain http). Leave user empty when the web API is open; with a user and password the controller logs in with a token. `pharos lpc timeline 2 start fade 3` (`release`, `toggle`, `pause`, `resume`, `rate 0.5`, `position 50`), `scene 4 start`, `group 0 master 50 fade 2`, `trigger 5`, `release all fade 2`, `text Title Welcome`, `override group 3 intensity 80`, `override fixture 1 color #ff8800`, `clear overrides`, `output art-net off`, `beacon on`, and any API call: `pharos lpc api get system`, `api post timeline {"action":"start","num":1}`. Status: model, firmware, project, temperature, and on separate sub-tabs **Timelines** (state, ▶ ⏸ ⏵ ■), **Scenes** (state, start / toggle / release), **Groups** (level, master slider) and the Pharos project's own **Triggers** (searchable list with a **Fire** button each).
+    - Not tested against real devices yet (only against the simulated ones in the mock). Things to check first: the Kiss-Box byte format on your firmware, the KNX tunnel on your interface, the BrightSign DWS login, the DiGidot fade unit (sent as milliseconds) and whether your Pharos firmware accepts plain http.
+- **TCP devices** (Devices page): kept connected with auto-reconnect; `send tcp watchout run` (line end CR LF/CR/LF/none). Incoming lines fire **TCP message** triggers (`*`, exact or `prefix*`, vars `{device} {message} {1}`).
+- **HTTP** requests to REST APIs: `http get|post|put|delete <url> [body]` (plain http, no https; a JSON body gets `application/json`). Responses fire **HTTP response** triggers (vars `{url} {status} {body}`, first 1 KB).
+- **Modbus TCP** (Devices page): up to 4 PLCs, polled every `pollMs`. Points are linked from the Variables page; raw writes with `modbus plc write coil 5 1`. TCP/Modbus connections show on the Monitoring page and work with `device plc is online`.
+- **Monitoring** tab: every N seconds (default 60, `settings.monitor.interval`, live with `monitor interval 30`, or `monitor check` for now) the controller:
+  - pings every PC and network device (ICMP; switch off per item with the Monitor tick box),
+  - polls projectors over PJLink: power, lamp hours, input, mute, model and error status (fan/lamp/temperature/cover/filter/other).
+  
+  Each host shows online/offline, ping time, last seen and a 32-check history bar, and the nav shows a badge with the number offline. A host counts as offline after `failures` missed checks in a row (default 2), so one lost packet doesn't raise an alarm. Changes are logged and fire **Device online/offline** triggers (vars `{device} {kind} {state}`); the condition `device "PJ left" is online` checks the current state.
+
+- **Device view**: click a card (projector, PC, network device or show device; the ⤢ in the corner) to open it big. Under the card:
+  - **History** for a date and a time slot you pick (◀ ▶ for the day before/after, **Today**, **Whole day**, **8 - 17**; a slot like 22:00 - 06:00 runs overnight). A bar shows when the device was **online** (green) or **offline** (red), and for projectors a second bar when the **power** was on (warming up counts as on, cooling down as off). Show devices get a bar for **every on/off reading**: Kiss-Box relays/outputs and contacts (digital cards), NETIO outputs and inputs, KNX on/off addresses (DPT 1) and Pharos timelines and scenes (on = running, paused or started). Each bar has the name you gave the channel, and at the right how often it went on and for how long in total (e.g. `3× · 6 h 55 min`). While the device is offline its readings are grey: the controller can't know them. Above it: % online, time offline, number of drop-outs, longest offline, and for projectors the time on, how often it was switched on, first on and last off. Grey = unknown: not checked yet after a start, or the controller itself was off (a gap of more than 15 minutes in the history).
+  - A **Log** lane with a mark per log line (colour = level; click a mark to jump to the line), and below it the **log** of just this device: every line in the log files that mentions its name or IP address as a whole word (a device called `io` doesn't match "connection"), in that time slot. Esc or **← All devices** closes it. A slot that includes now refreshes every 15 s.
+  - The history is kept on the stick in `logs/history/`, one small file per day (UTC), for 400 days: every online/offline, power and on/off reading change, a `boot` line at each start and an `alive` line every 10 minutes. The log only reaches back as far as the log files (see the Log section: about 450 000 lines). History starts when this firmware is installed; TCP and Modbus connections have none.
+  - In the PC mock these files are in the show folder's `logs/`.
+
+## Touch panel
+
+- **Touch panel** at `http://<ip>/panel`: pages with optional **PIN**, buttons (colour, width, a Ja/Nee **confirm question**, go-to-page), **labels** set by actions (`label lbl_show Showstatus: show loopt`, `label lbl_show color #3ecf8e`) and a clock. Buttons fire `panel` triggers on press, release or click. Label and mode changes are pushed to the panel immediately.
+
+## Command reference
+
+The same commands work in trigger actions, the web console, `POST /api/cmd` and UDP (`cmd:<command>` on the trigger port replies `OK …`/`ERR …`). The UI autocompletes and validates them.
+
+```
+start timeline <tl> [at <s>]           stop timeline <tl> [fade <s>]
+pause timeline <tl>                    resume timeline <tl>
+master timeline <tl> <0-100> [fade <s>]
+scene <sc> [fade <s>]                  release scene <sc> [fade <s>]
+release all [fade <s>]
+set <universe>.<ch>[-<ch>] <0-255>     clear overrides
+grandmaster <0-100>                    blackout on|off
+mode <group> <state>                   label <name> <text>      label <name> color <colour>
+fire trigger <name|#> [after <s>]      cancel trigger <name|#>
+repeat trigger <name|#> every <s> [times <n>]            stop repeat <name|#>
+sleep <s>                              (trigger actions only: the lines below it run <s> later)
+wait until <condition> [timeout <s>]   (trigger actions only: the lines below run once it is true)
+repeat <trigger> <n> times [every <s>] (trigger actions only: fires that trigger n times; {count} = the round)
+repeat <n> times [every <s>] <command> (trigger actions only: {i} = 1..n; the lines below run after the last)
+log <text>                             email <to> "<subject>" <body>
+send udp <ip> <port> <text>            send udp <device|devicegroup> [<port>] <text>
+send osc <ip> <port> </address> [args] send osc <device|devicegroup> [<port>] </address> [args]
+reply <text>                           (answers the sender of the UDP/OSC that fired the trigger)
+loglevel <category|all> <debug|info|warn|error>
+output dmx|artnet|sacn on|off          output dmx|artnet|sacn fps <n>
+projector <pj|all> on|off              projector <pj|all> mute on|off
+projector <pj|all> input <code>        projector <pj|all> send <raw PJLink, e.g. LAMP ?>
+pc <pc|all> wake|startup|shutdown|reboot
+monitor check                          monitor interval <seconds>
+var <name> = <value>                   var <name> + <n>   var <name> - <n>   var <name> toggle
+if <condition> then <command> [else <command>]
+send tcp <device> <text>               http get|post|put|delete <url> [body]
+modbus <device> write coil|holding <address> <value>
+kissbox <dev> <slot>.<ch> on|off|<0-255>    kissbox <dev> <slot> all <8 values>    kissbox <dev> read <slot>    kissbox <dev> send <hex>
+knx <dev> write <address|name> <value> [<dpt>]                    knx <dev> read <address|name>
+brightsign <dev> send <text>           brightsign <dev> reboot   brightsign <dev> api get|put|post|delete <path> [json]
+digidot <dev> scene <name|#> [fade <s>]   digidot <dev> playlist|trigger <id>   digidot <dev> stop|reset
+digidot <dev> master <0-100>           digidot <dev> speed <%>   digidot <dev> send <json>
+netio <dev> output <n|all|name> on|off|toggle|restart|pulse [<s>]  netio <dev> send <json>
+pharos <dev> timeline <n> start|release|toggle|pause|resume [fade <s>]   pharos <dev> timeline <n> rate <x> | position <%>
+pharos <dev> scene <n> start|release|toggle [fade <s>]   pharos <dev> group <n> master <0-100> [fade <s>]
+pharos <dev> trigger <n> [vars]        pharos <dev> release all [fade <s>]   pharos <dev> text <slot> <text>
+pharos <dev> override fixture|group <n> intensity <0-100> | color #rrggbb [fade <s>]   pharos <dev> clear overrides [fade <s>]
+pharos <dev> output <protocol> on|off  pharos <dev> beacon on|off   pharos <dev> api get|post|put|delete <path> [json]
+io <point> on|off|toggle               io <point> pulse <s>     io <ao0-3> <volts> [fade <s>]     io all off
+ntp sync
+reload
+```
+
+`send udp` and `reply` text support the escapes `\r \n \t \\ \xNN`, e.g. `send udp 192.168.1.10 7001 GO\r`.
+OSC arguments are typed automatically: `12` → int, `0.5` / `-inf` → float, anything else → string (`send osc mediaserver /layer/1/level 0 0 -inf`).
+PJLink input codes: 11/12 RGB, 21 video, 31–33 digital/HDMI, 41 storage, 51 network.
+
+`<tl>`/`<sc>` is an id or a `"quoted name"`. When you add a command, update [src/Cmd.cpp](src/Cmd.cpp), `GRAMMAR` in [data/www/app-grammar.js](data/www/app-grammar.js) and `exec` in the mock ([tools/mock-server.js](tools/mock-server.js)).
+
+Example from a PC: `echo -n "cmd:start timeline 2" | nc -u -w1 <ip> 4000`
+
+## Watchdog (self-restart)
+
+If the firmware ever hangs (a bug, a stuck thread), the controller restarts itself within **15 seconds** (`KD_WATCHDOG_MS` in `src/Config.h`): the board's hardware watchdog has to be "fed" by the main loop, and stops being fed when the loop stops. After the restart the project loads and the **Startup** trigger runs as after a power cut, so put everything the building needs in its normal state in Startup.
+
+The log says why the controller started (`power on`, `reset button`, `power dip`, `restart`, `watchdog`, `crash`), and the dashboard and the Monitoring page show it as **Last start**. A `watchdog` or `crash` start is shown in red and logged as a warning: look in `system.log` for what happened just before. A network update restarts as `restart`.
+
+**Safe mode.** If the controller restarts after a crash **3 times in a row** (a project that crashes it, often from its Startup trigger, would otherwise do so on every start), it starts in safe mode: a red **SAFE MODE** in the header, and **no trigger runs by itself**. That means no Startup, times, inputs, UDP or panel buttons. You can still fire a trigger by hand ("Fire now", the console or `cmd:`), and whatever it fires runs too. Fix the project and **save** it, or restart the controller normally (restart button, power), to end safe mode. Running 5 minutes without a crash clears the count. The count is kept in the board's RTC backup memory. To try the screens in the PC mock, start it with `KD_SAFE_MODE=1`.
+
+## Loop protection
+
+Triggers that set each other off can end up in a loop that never stops, for example:
+- a variable trigger that changes its own variable,
+- a UDP trigger that sends to a broadcast address and receives its own message back,
+- a timeline that fires a trigger that restarts the timeline.
+
+The controller guards against that:
+- **A trigger that fires more than 100 times in one second is paused for 10 seconds.** You see a red log line "fired over 100 times in a second - paused (feedback loop?)", a red **paused** tag on its row on the Triggers page, the dashboard's waiting list, and "1 trigger paused" in the header. DMX-change triggers are not counted: they fire once per channel per engine frame anyway. The limits are `KD_TRIGGER_MAX_PER_S` and `KD_TRIGGER_PAUSE_MS` in `src/Config.h`.
+- **At most 100 waiting actions** (`sleep`s, `wait until`s, `repeat … every` loops, queued fires, `fire trigger … after` and `repeat trigger`s together, `KD_MAX_SCHEDULED`). A loop that keeps adding them would otherwise use up the memory and crash the controller. When the list is full, the new one is dropped with a warning.
+- **UDP/OSC from the controller's own IP is ignored** (it is logged once). A broadcast `send udp` comes back in, and would fire your own triggers. To start your own trigger, use `fire trigger`.
+- `fire trigger` chains stop after 8 levels deep, and at most 32 variable changes are handled per engine frame.
+
+## Logging
+
+- A 512-entry RAM ring is streamed live to every open browser via Server-Sent Events. The UI has filters per level and category, search with highlight, pause, export, and a warning badge.
+- Every entry is also written to Serial and appended to `/usb/logs/system.log`. At 8 MB it moves on to `system.1.log`, the older ones to `system.2.log` … `system.4.log`, and the oldest is deleted: 5 files, 40 MB, about 450 000 lines (a line is ~90 bytes). That's months on a normal day of triggers and device checks, a few weeks on a very busy one; a category on DEBUG fills it much faster. Size and number are `KD_LOG_MAX_BYTES` / `KD_LOG_FILES` in `src/Config.h`. In the mock, `KD_LOG_MAX=2000` makes the files tiny to test this.
+- Per-category firmware verbosity can be changed at runtime (Log page or `loglevel artnet debug`).
+- The status stream reports engine fps, DMX fps, Art-Net/sACN packets/s, UDP rx, worst tick and loop time, and running playbacks. The engine warns when a tick exceeds half its budget.
+
+## HTTP API
+
+| Method | Path | |
+|---|---|---|
+| GET | `/api/status` | System + playback status (`started` = why the controller last started) |
+| GET / PUT | `/api/project` | Read / validate + save + load the project |
+| POST | `/api/cmd` | Body: one or more commands (one per line) |
+| POST | `/api/trigger?id=N` | Fire a trigger manually |
+| GET | `/api/trighistory` | The last 512 trigger fires: `{"now": ms, "h": [[ms, id, source], …]}` (source: 0 own event, a trigger number, 32768 + timeline, 65535 by hand, 65534 repeat, 65533 delayed, 65532 queued) |
+| POST | `/api/panel?control=X&event=click` | Touch-panel button event (`press`, `release`, `click`) |
+| GET | `/api/events[?since=seq]` | SSE: `log`, `status`, `gap` events |
+| GET | `/api/log?since=seq` | Log entries as JSON |
+| GET | `/api/loglevels` | Current level per category |
+| GET | `/api/history?name=X&from=E&to=E` | One device's online/offline, projector power and on/off reading history from the stick: `[[epoch, "online"], [epoch, "p:1.3=1"], …]`, plus `boot` / `alive` lines (max 7 days) |
+| GET | `/api/devlog?name=X&ip=IP&from=E&to=E` | Lines of the log files on the stick that mention the device's name or IP (the last 300) |
+| GET | `/api/dmx?u=ID` | 512 output values of a universe |
+| PUT / DELETE | `/api/media?name=plan.jpg` | Upload (streamed to `show/media/`, max 4 MB) / delete an image |
+| GET | `/media/<name>` | An uploaded image |
+| PUT | `/api/update` | Body: a `.kdupdate` file; installs the web UI and/or firmware (reply `restart: true` = restarting now) |
+| POST | `/api/time` | Body: unix epoch; sets the RTC (the UI does this automatically if unset) |
+
+## Status / roadmap
+
+The firmware compiles cleanly (PlatformIO, `framework-arduino-mbed` 4.6.0; Breakout build ~69% flash / ~45% RAM, Machine Control build ~74% flash / ~46% RAM) but is **not yet tested on hardware**. The network update is also untested on hardware: try it on the bench with the USB-C cable at hand. On the Machine Control check first: that the I/O chips answer (the Machine Control tab says "I/O running"), the analog input readings against a meter, and DMX on its RS485 port. Things to verify first: DMX break/timing on a scope or tester, USB stick detection on your carrier, OSC to your devices, SMTP with your mail relay, and the show-device drivers against the real devices. The web UI and touch panel are tested against the mock server.
+
+Features from the Pharos reference project (`inspiration/`) that are **not** ported:
+- **Lua trigger scripts**: the one script in the project (puppet motors) is covered by the `dmx_change` trigger with tables and `{=maths}`.
+- Visual layouts/backgrounds, interface themes, and Pharos cloud features.
+
+Next steps worth doing:
+- Test the show-device drivers (Kiss-Box, KNX, BrightSign, DiGidot, NETIO, Pharos) on real devices.
+- DMX output via DMA on the M7, if DMX turns out to take too much CPU (the M4 core stays unused for now).
+- DMX / Art-Net / sACN **input** as trigger sources, and merge (HTP) of incoming data.
+- Per-fixture intensity masters, and more effect templates (e.g. using `y`).
+- Server-side PIN checks for the touch panel. The PINs are currently checked in the browser and are readable in `project.json`.
+- Authentication for the web UI.
+- Gzip-compressed UI files on the stick for faster loads.

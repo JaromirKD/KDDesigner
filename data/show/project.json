@@ -1,0 +1,5340 @@
+{
+ "name": "Demo show",
+ "settings": {
+  "tzOffsetMin": 60,
+  "udpPort": 4000,
+  "sacnPriority": 100,
+  "outputs": {
+   "dmx": false,
+   "artnet": true,
+   "sacn": false,
+   "dmxFps": 40,
+   "artnetFps": 30,
+   "sacnFps": 40,
+   "artnetChangesOnly": true,
+   "sacnChangesOnly": false
+  },
+  "monitor": {
+   "interval": 60,
+   "timeout": 1000,
+   "failures": 2
+  },
+  "time": {
+   "ntp": "pool.ntp.org",
+   "ntpEnabled": true,
+   "dst": "eu"
+  },
+  "location": {
+   "lat": 52.16,
+   "lon": 4.49
+  }
+ },
+ "network": {
+  "dhcp": true,
+  "ip": "192.168.1.50",
+  "mask": "255.255.255.0",
+  "gateway": "192.168.1.1"
+ },
+ "modes": [
+  {
+   "name": "System",
+   "states": [
+    "EMERGENCY",
+    "Inloop",
+    "Show",
+    "Test",
+    "Stop",
+    "Opstarten"
+   ]
+  },
+  {
+   "name": "Curtains",
+   "states": [
+    "Open",
+    "Closed"
+   ]
+  },
+  {
+   "name": "Museum",
+   "states": [
+    "Closed",
+    "Open",
+    "Starting up"
+   ]
+  }
+ ],
+ "universes": [
+  {
+   "id": 1,
+   "name": "Stage",
+   "dmxPort": 1,
+   "artnet": 0,
+   "sacn": 1,
+   "useDmx": true,
+   "useArtnet": false,
+   "useSacn": true
+  },
+  {
+   "id": 2,
+   "name": "Motors",
+   "dmxPort": 2,
+   "artnet": 1,
+   "artnetDest": "192.168.1.60",
+   "sacn": 2,
+   "useDmx": false,
+   "useArtnet": true,
+   "useSacn": true
+  }
+ ],
+ "fixtures": [
+  {
+   "id": 1,
+   "name": "FOH left",
+   "universe": 1,
+   "address": 1,
+   "channels": [
+    "dim"
+   ],
+   "curve": "square"
+  },
+  {
+   "id": 2,
+   "name": "FOH right",
+   "universe": 1,
+   "address": 2,
+   "channels": [
+    "dim"
+   ],
+   "curve": "square"
+  },
+  {
+   "id": 3,
+   "name": "Walls front RGBW",
+   "universe": 1,
+   "address": 10,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Walls rear RGBW",
+   "universe": 1,
+   "address": 15,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "House lights",
+   "universe": 1,
+   "address": 30,
+   "channels": [
+    "dim"
+   ],
+   "curve": "preheat5"
+  },
+  {
+   "id": 6,
+   "name": "Work light",
+   "universe": 1,
+   "address": 31,
+   "channels": [
+    "dim"
+   ],
+   "curve": "nondim"
+  },
+  {
+   "id": 7,
+   "name": "Winch ceiling",
+   "universe": 2,
+   "address": 100,
+   "channels": [
+    "pos:16",
+    "speed",
+    "enable"
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Puppet K",
+   "universe": 2,
+   "address": 1,
+   "channels": [
+    "rotation",
+    "arm_l",
+    "arm_r",
+    "eyes",
+    "mouth",
+    "position"
+   ]
+  },
+  {
+   "id": 9,
+   "name": "Dimmer 9",
+   "universe": 1,
+   "address": 32,
+   "channels": [
+    "dim"
+   ]
+  },
+  {
+   "id": 10,
+   "name": "RGBW 10",
+   "universe": 1,
+   "address": 33,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ]
+  },
+  {
+   "id": 11,
+   "name": "RGBW 11",
+   "universe": 1,
+   "address": 38,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ]
+  },
+  {
+   "id": 12,
+   "name": "RGBW 12",
+   "universe": 1,
+   "address": 43,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ]
+  },
+  {
+   "id": 13,
+   "name": "RGBW 13",
+   "universe": 1,
+   "address": 48,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ]
+  },
+  {
+   "id": 14,
+   "name": "RGBW 14",
+   "universe": 1,
+   "address": 53,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ]
+  },
+  {
+   "id": 15,
+   "name": "RGBW 15",
+   "universe": 1,
+   "address": 58,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ]
+  },
+  {
+   "id": 16,
+   "name": "RGB 1",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 63,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 17,
+   "name": "RGB 2",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 66,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 18,
+   "name": "RGB 3",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 69,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 19,
+   "name": "RGB 4",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 72,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 20,
+   "name": "RGB 5",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 75,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 21,
+   "name": "RGB 6",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 78,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 22,
+   "name": "RGB 7",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 81,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 23,
+   "name": "RGB 8",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 84,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 24,
+   "name": "RGB 9",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 87,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 25,
+   "name": "RGB 10",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 90,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 26,
+   "name": "RGB 11",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 93,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 27,
+   "name": "RGB 12",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 96,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 28,
+   "name": "RGB 13",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 99,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 29,
+   "name": "RGB 14",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 102,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 30,
+   "name": "RGB 15",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 105,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 31,
+   "name": "RGB 16",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 108,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 32,
+   "name": "RGB 17",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 111,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 33,
+   "name": "RGB 18",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 114,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 34,
+   "name": "RGB 19",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 117,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 35,
+   "name": "RGB 20",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 120,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 36,
+   "name": "RGB 21",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 123,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 37,
+   "name": "RGB 22",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 126,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 38,
+   "name": "RGB 23",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 129,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 39,
+   "name": "RGB 24",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 132,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 40,
+   "name": "RGB 25",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 135,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 41,
+   "name": "RGB 26",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 138,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 42,
+   "name": "RGB 27",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 141,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 43,
+   "name": "RGB 28",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 144,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 44,
+   "name": "RGB 29",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 147,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 45,
+   "name": "RGB 30",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 150,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 46,
+   "name": "RGB 31",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 153,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 47,
+   "name": "RGB 32",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 156,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 48,
+   "name": "RGB 33",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 159,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 49,
+   "name": "RGB 34",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 162,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 50,
+   "name": "RGB 35",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 165,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 51,
+   "name": "RGB 36",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 168,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 52,
+   "name": "RGB 37",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 171,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 53,
+   "name": "RGB 38",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 174,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 54,
+   "name": "RGB 39",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 177,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 55,
+   "name": "RGB 40",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 180,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 56,
+   "name": "RGB 41",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 183,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 57,
+   "name": "RGB 42",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 186,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 58,
+   "name": "RGB 43",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 189,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 59,
+   "name": "RGB 44",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 192,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 60,
+   "name": "RGB 45",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 195,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 61,
+   "name": "RGB 46",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 198,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 62,
+   "name": "RGB 47",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 201,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 63,
+   "name": "RGB 48",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 204,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 64,
+   "name": "RGB 49",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 207,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 65,
+   "name": "RGB 50",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 210,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 66,
+   "name": "RGB 51",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 213,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 67,
+   "name": "RGB 52",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 216,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 68,
+   "name": "RGB 53",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 219,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 69,
+   "name": "RGB 54",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 222,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 70,
+   "name": "RGB 55",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 225,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 71,
+   "name": "RGB 56",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 228,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 72,
+   "name": "RGB 57",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 231,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 73,
+   "name": "RGB 58",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 234,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 74,
+   "name": "RGB 59",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 237,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 75,
+   "name": "RGB 60",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 240,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 76,
+   "name": "RGB 61",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 243,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 77,
+   "name": "RGB 62",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 246,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 78,
+   "name": "RGB 63",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 249,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 79,
+   "name": "RGB 64",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 252,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 80,
+   "name": "RGB 65",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 255,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 81,
+   "name": "RGB 66",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 258,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 82,
+   "name": "RGB 67",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 261,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 83,
+   "name": "RGB 68",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 264,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 84,
+   "name": "RGB 69",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 267,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 85,
+   "name": "RGB 70",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 270,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 86,
+   "name": "RGB 71",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 273,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 87,
+   "name": "RGB 72",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 276,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 88,
+   "name": "RGB 73",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 279,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 89,
+   "name": "RGB 74",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 282,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 90,
+   "name": "RGB 75",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 285,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 91,
+   "name": "RGB 76",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 288,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 92,
+   "name": "RGB 77",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 291,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 93,
+   "name": "RGB 78",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 294,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 94,
+   "name": "RGB 79",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 297,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 95,
+   "name": "RGB 80",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 300,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 96,
+   "name": "RGB 81",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 303,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 97,
+   "name": "RGB 82",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 306,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 98,
+   "name": "RGB 83",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 309,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 99,
+   "name": "RGB 84",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 312,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 100,
+   "name": "RGB 85",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 315,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 101,
+   "name": "RGB 86",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 318,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 102,
+   "name": "RGB 87",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 321,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 103,
+   "name": "RGB 88",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 324,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 104,
+   "name": "RGB 89",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 327,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 105,
+   "name": "RGB 90",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 330,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 106,
+   "name": "RGB 91",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 333,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 107,
+   "name": "RGB 92",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 336,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 108,
+   "name": "RGB 93",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 339,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 109,
+   "name": "RGB 94",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 342,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 110,
+   "name": "RGB 95",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 345,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 111,
+   "name": "RGB 96",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 348,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 112,
+   "name": "RGB 97",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 351,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 113,
+   "name": "RGB 98",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 354,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 114,
+   "name": "RGB 99",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 357,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 115,
+   "name": "RGB 100",
+   "universe": 1,
+   "type": "Generic / RGB",
+   "mode": "3 ch",
+   "address": 360,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ]
+  },
+  {
+   "id": 116,
+   "name": "LED Moving Head 150W",
+   "universe": 1,
+   "type": "Flash Professional / LED Moving Head 150W",
+   "mode": "17-channel",
+   "address": 363,
+   "channels": [
+    "pan",
+    "tilt",
+    "speed_pt",
+    "fx",
+    "fx2",
+    "speed_fx",
+    "color_wheel",
+    "gobo",
+    "gobo2",
+    "gobo_rot",
+    "zoom",
+    "prism",
+    "prism_rot",
+    "focus",
+    "shutter",
+    "dim",
+    "ctrl"
+   ]
+  }
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "name": "Stage light",
+   "fixtures": [
+    1,
+    2
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Walls",
+   "fixtures": [
+    3,
+    4
+   ]
+  },
+  {
+   "id": 3,
+   "name": "ledGrid",
+   "fixtures": [
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115
+   ]
+  }
+ ],
+ "scenes": [
+  {
+   "id": 1,
+   "name": "Basis",
+   "levels": [
+    {
+     "fixture": 1,
+     "ch": "dim",
+     "v": 200
+    },
+    {
+     "fixture": 2,
+     "ch": "dim",
+     "v": 200
+    },
+    {
+     "fixture": 5,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "g",
+     "v": 140
+    },
+    {
+     "fixture": 4,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 4,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 4,
+     "ch": "g",
+     "v": 140
+    },
+    {
+     "fixture": 16,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 17,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 18,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 19,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 20,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 21,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 22,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 23,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 24,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 25,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 26,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 27,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 28,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 29,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 30,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 31,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 32,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 33,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 34,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 35,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 36,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 37,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 38,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 39,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 40,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 41,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 42,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 43,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 44,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 45,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 46,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 47,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 48,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 49,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 50,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 51,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 52,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 53,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 54,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 55,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 56,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 57,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 58,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 59,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 60,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 61,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 62,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 63,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 64,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 65,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 66,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 67,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 68,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 69,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 70,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 71,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 72,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 73,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 74,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 75,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 76,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 77,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 78,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 79,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 80,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 81,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 82,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 83,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 84,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 85,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 86,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 87,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 88,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 89,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 90,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 91,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 92,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 93,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 94,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 95,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 96,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 97,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 98,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 99,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 100,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 101,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 102,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 103,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 104,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 105,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 106,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 107,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 108,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 109,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 110,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 111,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 112,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 113,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 114,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 115,
+     "ch": "r",
+     "v": 102
+    },
+    {
+     "fixture": 16,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 17,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 18,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 19,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 20,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 21,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 22,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 23,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 24,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 25,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 26,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 27,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 28,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 29,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 30,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 31,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 32,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 33,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 34,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 35,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 36,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 37,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 38,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 39,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 40,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 41,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 42,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 43,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 44,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 45,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 46,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 47,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 48,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 49,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 50,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 51,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 52,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 53,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 54,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 55,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 56,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 57,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 58,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 59,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 60,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 61,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 62,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 63,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 64,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 65,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 66,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 67,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 68,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 69,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 70,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 71,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 72,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 73,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 74,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 75,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 76,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 77,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 78,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 79,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 80,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 81,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 82,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 83,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 84,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 85,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 86,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 87,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 88,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 89,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 90,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 91,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 92,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 93,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 94,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 95,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 96,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 97,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 98,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 99,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 100,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 101,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 102,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 103,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 104,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 105,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 106,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 107,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 108,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 109,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 110,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 111,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 112,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 113,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 114,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 115,
+     "ch": "g",
+     "v": 53
+    },
+    {
+     "fixture": 16,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 17,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 18,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 19,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 20,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 21,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 22,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 23,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 24,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 25,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 26,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 27,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 28,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 29,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 30,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 31,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 32,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 33,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 34,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 35,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 36,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 37,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 38,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 39,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 40,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 41,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 42,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 43,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 44,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 45,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 46,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 47,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 48,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 49,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 50,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 51,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 52,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 53,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 54,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 55,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 56,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 57,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 58,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 59,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 60,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 61,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 62,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 63,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 64,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 65,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 66,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 67,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 68,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 69,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 70,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 71,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 72,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 73,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 74,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 75,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 76,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 77,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 78,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 79,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 80,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 81,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 82,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 83,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 84,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 85,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 86,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 87,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 88,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 89,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 90,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 91,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 92,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 93,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 94,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 95,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 96,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 97,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 98,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 99,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 100,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 101,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 102,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 103,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 104,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 105,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 106,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 107,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 108,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 109,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 110,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 111,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 112,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 113,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 114,
+     "ch": "b",
+     "v": 190
+    },
+    {
+     "fixture": 115,
+     "ch": "b",
+     "v": 190
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Show look",
+   "levels": [
+    {
+     "fixture": 1,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 2,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "dim",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 4,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 4,
+     "ch": "r",
+     "v": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Emergency",
+   "levels": [
+    {
+     "fixture": 5,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "dim",
+     "v": 255
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Ceiling UP",
+   "levels": [
+    {
+     "fixture": 7,
+     "ch": "pos",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "speed",
+     "v": 200
+    },
+    {
+     "fixture": 7,
+     "ch": "enable",
+     "v": 130
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Ceiling DOWN 50%",
+   "levels": [
+    {
+     "fixture": 7,
+     "ch": "pos",
+     "v": 32768
+    },
+    {
+     "fixture": 7,
+     "ch": "speed",
+     "v": 200
+    },
+    {
+     "fixture": 7,
+     "ch": "enable",
+     "v": 130
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "name": "Puppets home",
+   "levels": [
+    {
+     "fixture": 8,
+     "ch": "rotation",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "arm_l",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "arm_r",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "eyes",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "mouth",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "position",
+     "v": 0
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "name": "Puppet K wave",
+   "levels": [
+    {
+     "fixture": 8,
+     "ch": "arm_l",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "mouth",
+     "v": 180
+    }
+   ]
+  }
+ ],
+ "timelines": [
+  {
+   "id": 1,
+   "name": "Inloop",
+   "length": 10000,
+   "loop": false,
+   "priority": 0,
+   "group": "A",
+   "cues": [
+    {
+     "t": 0,
+     "fade": 3000,
+     "scene": 1,
+     "path": "damped"
+    },
+    {
+     "t": 1000,
+     "fade": 1000,
+     "scene": 1
+    },
+    {
+     "t": 0,
+     "track": 1,
+     "fade": 1000,
+     "effect": 5,
+     "params": {}
+    }
+   ],
+   "tracks": [
+    {
+     "name": "Scenes",
+     "fixtures": [],
+     "groups": []
+    },
+    {
+     "name": "Track 2",
+     "fixtures": [],
+     "groups": [
+      3
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Puppet show",
+   "length": 30000,
+   "loop": false,
+   "priority": 0,
+   "group": "A",
+   "cues": [
+    {
+     "t": 0,
+     "fade": 4000,
+     "scene": 2,
+     "path": "damped"
+    },
+    {
+     "t": 2000,
+     "fade": 6000,
+     "scene": 5,
+     "path": "braked"
+    },
+    {
+     "t": 10000,
+     "fade": 2000,
+     "scene": 7,
+     "path": "overshoot"
+    },
+    {
+     "t": 25000,
+     "fade": 4000,
+     "scene": 6
+    },
+    {
+     "t": 7200,
+     "trigger": "Test step"
+    },
+    {
+     "t": 0,
+     "track": 1,
+     "fade": 1000,
+     "dim": 100,
+     "color": "#ff3b30"
+    },
+    {
+     "t": 8000,
+     "track": 1,
+     "fade": 3000,
+     "effect": 1,
+     "params": {}
+    },
+    {
+     "t": 15000,
+     "track": 1,
+     "fade": 2000,
+     "effect": 5,
+     "params": {
+      "speed": 1.43,
+      "color": "#b5c7a3"
+     },
+     "dim": 100
+    }
+   ],
+   "tracks": [
+    {
+     "name": "Scenes",
+     "fixtures": [],
+     "groups": []
+    },
+    {
+     "name": "Walls",
+     "fixtures": [
+      3,
+      4
+     ],
+     "groups": []
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Emergency",
+   "length": 0,
+   "loop": false,
+   "priority": 10,
+   "cues": [
+    {
+     "t": 0,
+     "fade": 0,
+     "scene": 3
+    }
+   ],
+   "tracks": [
+    {
+     "name": "Scenes",
+     "fixtures": [],
+     "groups": []
+    }
+   ]
+  }
+ ],
+ "devices": [
+  {
+   "name": "qlab",
+   "ip": "192.168.1.51",
+   "port": 53000,
+   "notes": "QLab OSC"
+  },
+  {
+   "name": "motors",
+   "ip": "192.168.1.70",
+   "port": 5000,
+   "notes": "Puppet motor controller"
+  },
+  {
+   "name": "Media server",
+   "ip": "192.168.1.77",
+   "port": 7000,
+   "notes": "flaky Wi-Fi bridge (demo)"
+  }
+ ],
+ "pcs": [
+  {
+   "id": 1,
+   "name": "Media PC",
+   "ip": "192.168.1.41",
+   "mac": "00:1B:21:3A:4F:10",
+   "port": 7,
+   "startup": "startup",
+   "shutdown": "shutdown",
+   "reboot": "reboot"
+  },
+  {
+   "id": 2,
+   "name": "QLab Mac",
+   "ip": "192.168.1.51",
+   "mac": "A4:83:E7:12:9C:01",
+   "port": 7,
+   "startup": "startup",
+   "shutdown": "shutdown",
+   "reboot": "reboot"
+  },
+  {
+   "id": 3,
+   "name": "PC 3",
+   "ip": "192.168.1.43",
+   "mac": "",
+   "port": 7,
+   "startup": "startup",
+   "shutdown": "shutdown",
+   "reboot": "reboot"
+  },
+  {
+   "id": 4,
+   "name": "PC 4",
+   "ip": "192.168.1.44",
+   "mac": "",
+   "port": 7,
+   "startup": "startup",
+   "shutdown": "shutdown",
+   "reboot": "reboot"
+  }
+ ],
+ "email": {
+  "server": "192.168.1.5",
+  "port": 25,
+  "user": "",
+  "password": "",
+  "from": "show@example.com"
+ },
+ "projectors": [
+  {
+   "id": 1,
+   "name": "PJ left",
+   "ip": "192.168.1.101",
+   "port": 4352,
+   "password": ""
+  },
+  {
+   "id": 2,
+   "name": "PJ right",
+   "ip": "192.168.1.199",
+   "port": 4352,
+   "password": "panasonic"
+  }
+ ],
+ "panel": {
+  "title": "Japans Theater",
+  "start": 1,
+  "pages": [
+   {
+    "id": 1,
+    "name": "Bediening",
+    "columns": 3,
+    "pin": "1574",
+    "controls": [
+     {
+      "type": "label",
+      "name": "lbl_show",
+      "text": "Showstatus: -",
+      "span": 2
+     },
+     {
+      "type": "clock"
+     },
+     {
+      "type": "button",
+      "name": "Start show",
+      "text": "START SHOW",
+      "color": "#2e7d32",
+      "span": 2
+     },
+     {
+      "type": "button",
+      "name": "Inloop",
+      "text": "Inloop",
+      "color": "#3a4a6b",
+      "confirm": "Weet je zeker dat je direct naar de inloopstand wilt?"
+     },
+     {
+      "type": "button",
+      "name": "Stop",
+      "text": "STOP!",
+      "color": "#b71c1c",
+      "confirm": "Weet je zeker dat je alle shows wilt stoppen?",
+      "span": 3
+     },
+     {
+      "type": "label",
+      "name": "lbl_audio",
+      "text": "Audio: -"
+     },
+     {
+      "type": "button",
+      "name": "Audio mute",
+      "text": "Audio mute",
+      "color": "#5d4037"
+     },
+     {
+      "type": "button",
+      "name": "Systeem",
+      "text": "Systeem…",
+      "color": "#424242",
+      "goto": 2
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "name": "Systeem",
+    "columns": 3,
+    "pin": "2468",
+    "controls": [
+     {
+      "type": "label",
+      "name": "lbl_mode",
+      "text": "Mode: -",
+      "span": 3
+     },
+     {
+      "type": "button",
+      "name": "Teststand",
+      "text": "Teststand",
+      "color": "#f9a825"
+     },
+     {
+      "type": "button",
+      "name": "Projectors on",
+      "text": "Projectors aan",
+      "color": "#3a4a6b"
+     },
+     {
+      "type": "button",
+      "name": "Projectors off",
+      "text": "Projectors uit",
+      "color": "#3a4a6b"
+     },
+     {
+      "type": "button",
+      "name": "Terug",
+      "text": "← Terug",
+      "color": "#424242",
+      "goto": 1,
+      "span": 3
+     }
+    ]
+   }
+  ]
+ },
+ "triggers": [
+  {
+   "id": 10001,
+   "name": "== SYSTEEM",
+   "type": "comment",
+   "color": "red",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 1,
+   "name": "Startup",
+   "type": "startup",
+   "color": "red",
+   "actions": [
+    "mode System Opstarten",
+    "fire trigger \"Start inloop\" after 5"
+   ],
+   "conditions": [],
+   "notes": "Starts show"
+  },
+  {
+   "id": 2,
+   "name": "EMERGENCY (input)",
+   "type": "input",
+   "pin": 0,
+   "edge": "falling",
+   "color": "red",
+   "actions": [
+    "mode System EMERGENCY"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 3,
+   "name": "Mode -> EMERGENCY",
+   "type": "mode",
+   "group": "System",
+   "mode": "EMERGENCY",
+   "color": "red",
+   "actions": [
+    "start timeline 3",
+    "send osc qlab /cue/*/stop",
+    "label lbl_show Showstatus: NOODSTOP",
+    "label lbl_show color #ff5c5c",
+    "email tech@example.com \"Japans Theater\" Emergency stop activated"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 4,
+   "name": "Mode changed (label)",
+   "type": "mode",
+   "color": "red",
+   "actions": [
+    "label lbl_mode {group}: {mode}"
+   ],
+   "conditions": [],
+   "notes": "test"
+  },
+  {
+   "id": 5,
+   "name": "Device offline -> email",
+   "type": "device",
+   "device": "",
+   "state": "offline",
+   "color": "red",
+   "conditions": [
+    "mode System not Stop"
+   ],
+   "actions": [
+    "log {kind} {device} is {state}",
+    "email tech@example.com \"{device} offline\" {kind} {device} stopped answering"
+   ]
+  },
+  {
+   "id": 10002,
+   "name": "== EXTERN (Femke / QLab)",
+   "type": "comment",
+   "color": "orange",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 6,
+   "name": "START SHOW (udp)",
+   "type": "udp",
+   "match": "START SHOW",
+   "color": "orange",
+   "actions": [
+    "fire trigger \"Start puppet show\""
+   ],
+   "conditions": []
+  },
+  {
+   "id": 7,
+   "name": "SOFTWARE_PING",
+   "type": "udp",
+   "match": "SOFTWARE_PING",
+   "color": "orange",
+   "actions": [
+    "reply PONG {mode}\\r"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 8,
+   "name": "QLab cue done",
+   "type": "osc",
+   "address": "/kd/cue/*",
+   "port": 8000,
+   "color": "orange",
+   "actions": [
+    "log QLab reports {address} {1}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10003,
+   "name": "== KLOK",
+   "type": "comment",
+   "color": "green",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 9,
+   "name": "Opening",
+   "type": "time",
+   "at": "09:45:00",
+   "color": "green",
+   "conditions": [
+    "mode System not EMERGENCY"
+   ],
+   "actions": [
+    "pc all wake",
+    "projector all on",
+    "fire trigger \"Start show software\" after 90",
+    "fire trigger \"Start inloop\""
+   ]
+  },
+  {
+   "id": 10,
+   "name": "Closing",
+   "type": "time",
+   "at": "17:30:00",
+   "color": "green",
+   "actions": [
+    "projector all off",
+    "release all fade 10",
+    "mode System Stop",
+    "pc all shutdown"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 11,
+   "name": "Start show software",
+   "type": "manual",
+   "color": "green",
+   "actions": [
+    "pc all startup"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10004,
+   "name": "== TOUCHSCREEN",
+   "type": "comment",
+   "color": "cyan",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 12,
+   "name": "CLICK Start show",
+   "type": "panel",
+   "control": "Start show",
+   "event": "click",
+   "color": "cyan",
+   "conditions": [
+    "mode System not EMERGENCY"
+   ],
+   "actions": [
+    "fire trigger \"Start puppet show\""
+   ]
+  },
+  {
+   "id": 13,
+   "name": "CLICK Inloop",
+   "type": "panel",
+   "control": "Inloop",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "fire trigger \"Start inloop\""
+   ],
+   "conditions": []
+  },
+  {
+   "id": 14,
+   "name": "CLICK Stop",
+   "type": "panel",
+   "control": "Stop",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "mode System Stop",
+    "release all fade 3",
+    "send osc qlab /cue/*/stop",
+    "label lbl_show Showstatus: gestopt",
+    "label lbl_show color #ff9f43"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 15,
+   "name": "CLICK Audio mute",
+   "type": "panel",
+   "control": "Audio mute",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "send osc qlab /cue/*/level 0 0 -inf",
+    "label lbl_audio Audio: muted"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 16,
+   "name": "CLICK Teststand",
+   "type": "panel",
+   "control": "Teststand",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "mode System Test",
+    "repeat trigger \"Test step\" every 2 times 5"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 17,
+   "name": "CLICK Projectors on",
+   "type": "panel",
+   "control": "Projectors on",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "projector all on"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 18,
+   "name": "CLICK Projectors off",
+   "type": "panel",
+   "control": "Projectors off",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "projector all off"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10005,
+   "name": "== TAKENLIJSTEN",
+   "type": "comment",
+   "color": "purple",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 19,
+   "name": "Start inloop",
+   "type": "manual",
+   "color": "purple",
+   "conditions": [
+    "mode System not EMERGENCY"
+   ],
+   "actions": [
+    "mode System Inloop",
+    "start timeline 1",
+    "send osc qlab /cue/105/start",
+    "label lbl_show Showstatus: inloop",
+    "label lbl_show color #d8dbe2"
+   ]
+  },
+  {
+   "id": 20,
+   "name": "Start puppet show",
+   "type": "manual",
+   "color": "purple",
+   "conditions": [
+    "mode System not EMERGENCY",
+    "timeline 2 stopped"
+   ],
+   "actions": [
+    "mode System Show",
+    "start timeline 2",
+    "send osc qlab /cue/200/start",
+    "label lbl_show Showstatus: show loopt",
+    "label lbl_show color #3ecf8e"
+   ]
+  },
+  {
+   "id": 21,
+   "name": "Test step",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "log Test step {count}",
+    "scene {=1+count%2} fade 1"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 22,
+   "name": "Show finished",
+   "type": "timeline_end",
+   "timeline": 2,
+   "color": "purple",
+   "actions": [
+    "fire trigger \"Start inloop\"",
+    "var show_count + 1"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10006,
+   "name": "== MODES",
+   "type": "comment",
+   "color": "indigo",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 23,
+   "name": "Curtains open",
+   "type": "mode",
+   "group": "Curtains",
+   "mode": "Open",
+   "color": "indigo",
+   "actions": [
+    "send udp motors CURTAIN OPEN\\r"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 24,
+   "name": "Curtains closed",
+   "type": "mode",
+   "group": "Curtains",
+   "mode": "Closed",
+   "color": "indigo",
+   "actions": [
+    "send udp motors CURTAIN CLOSE\\r"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 25,
+   "name": "Museum starting up",
+   "type": "mode",
+   "group": "Museum",
+   "mode": "Starting up",
+   "color": "indigo",
+   "actions": [
+    "pc all wake",
+    "projector all on",
+    "fire trigger \"Museum open (after start-up)\" after 120"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 26,
+   "name": "Museum open (after start-up)",
+   "type": "manual",
+   "color": "indigo",
+   "conditions": [
+    "mode Museum is \"Starting up\""
+   ],
+   "actions": [
+    "mode Museum Open",
+    "mode Curtains Open"
+   ]
+  },
+  {
+   "id": 27,
+   "name": "Museum closed",
+   "type": "mode",
+   "group": "Museum",
+   "mode": "Closed",
+   "color": "indigo",
+   "actions": [
+    "mode Curtains Closed",
+    "release all fade 10",
+    "pc all shutdown"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10007,
+   "name": "== LOGIC & SCHEDULE",
+   "type": "comment",
+   "color": "blue",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 28,
+   "name": "Visitor counted (UDP VISITOR)",
+   "type": "udp",
+   "match": "VISITOR",
+   "color": "blue",
+   "actions": [
+    "var visitors + 1",
+    "if var visitors >= 50 then label lbl_show Showstatus: VOL ({visitors})"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 29,
+   "name": "Door opened (PLC)",
+   "type": "variable",
+   "variable": "door",
+   "value": "on",
+   "color": "blue",
+   "actions": [
+    "if mode Museum is Open then log Door opened during opening hours else email tech@example.com \"Door\" Door opened outside opening hours"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 30,
+   "name": "Evening: lights at sunset",
+   "type": "time",
+   "at": "sunset",
+   "offset": -15,
+   "color": "blue",
+   "conditions": [
+    "calendar Closed inactive"
+   ],
+   "actions": [
+    "start timeline 1",
+    "var work_lights = off"
+   ]
+  },
+  {
+   "id": 31,
+   "name": "Morning: release after sunrise",
+   "type": "time",
+   "at": "sunrise",
+   "offset": 30,
+   "color": "blue",
+   "actions": [
+    "release all fade 10"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 32,
+   "name": "Watchout answers",
+   "type": "tcp",
+   "device": "watchout",
+   "match": "ACK*",
+   "color": "blue",
+   "actions": [
+    "log Watchout says {1}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 33,
+   "name": "Media server status",
+   "type": "http",
+   "url": "http://192.168.1.95",
+   "color": "blue",
+   "actions": [
+    "if var media_status != {status} then var media_status = {status}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 34,
+   "name": "Poll media server",
+   "type": "interval",
+   "seconds": 60,
+   "color": "blue",
+   "conditions": [
+    "time between sunrise sunset"
+   ],
+   "actions": [
+    "http get http://192.168.1.95/api/status"
+   ]
+  },
+  {
+   "id": 10008,
+   "name": "== MOTORS",
+   "type": "comment",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 35,
+   "name": "Puppet K -> motor controller",
+   "type": "dmx_change",
+   "universe": 2,
+   "channels": "1-6",
+   "tables": {
+    "puppet": [
+     "K",
+     "K",
+     "K",
+     "K",
+     "K",
+     "K"
+    ],
+    "motor": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "range": [
+     7850,
+     5000,
+     5000,
+     200,
+     75,
+     15000
+    ]
+   },
+   "actions": [
+    "send udp motors {puppet}{motor}P{=ceil(value*range/255)}\\r"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 36,
+   "name": "Broadcast test",
+   "type": "manual",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "send udp 172.16.1.255 5000 test"
+   ]
+  },
+  {
+   "id": 37,
+   "name": "Trigger 37",
+   "type": "manual",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "var visitors = {=(visitors+1)%10}"
+   ]
+  },
+  {
+   "id": 38,
+   "name": "Projector on",
+   "type": "manual",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "projector all on"
+   ]
+  },
+  {
+   "id": 39,
+   "name": "Trigger 39",
+   "type": "manual",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "knx knx write 1/1/1 on ",
+    ""
+   ]
+  },
+  {
+   "id": 40,
+   "name": "On knx change",
+   "type": "variable",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "send udp motors 5000 test"
+   ],
+   "variable": "var1"
+  },
+  {
+   "id": 41,
+   "name": "Trigger 41",
+   "type": "manual",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "sleep  1",
+    "fire trigger 42",
+    "sleep 2",
+    "fire trigger 42",
+    "sleep 1",
+    "log test",
+    "sleep 1",
+    "log test2"
+   ]
+  },
+  {
+   "id": 42,
+   "name": "Turn on all relays",
+   "type": "manual",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "netio rack output 1 on",
+    "netio rack output 2 on",
+    "netio rack2 output 1 on",
+    "netio rack2 output 2 on",
+    "netio rack3 output 1 on",
+    "netio rack3 output 1 on",
+    "netio rack4 output 1 on",
+    "netio rack4 output 1 on",
+    "netio rack5 output 1 on",
+    "netio rack5 output 1 on"
+   ]
+  },
+  {
+   "id": 43,
+   "name": "Trigger 43",
+   "type": "manual",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "repeat \"Trigger 44\" 10 times every 0.5"
+   ]
+  },
+  {
+   "id": 44,
+   "name": "Trigger 44",
+   "type": "manual",
+   "enabled": true,
+   "conditions": [],
+   "actions": [
+    "log test"
+   ]
+  }
+ ],
+ "variables": [
+  {
+   "name": "visitors",
+   "type": "number",
+   "initial": 0,
+   "persist": true
+  },
+  {
+   "name": "show_count",
+   "type": "number",
+   "initial": 0,
+   "persist": true
+  },
+  {
+   "name": "door",
+   "type": "bool",
+   "initial": false,
+   "modbus": {
+    "device": "plc",
+    "table": "discrete",
+    "address": 0
+   }
+  },
+  {
+   "name": "work_lights",
+   "type": "bool",
+   "initial": false,
+   "modbus": {
+    "device": "plc",
+    "table": "coil",
+    "address": 3
+   }
+  },
+  {
+   "name": "media_status",
+   "type": "text",
+   "initial": "unknown"
+  },
+  {
+   "name": "var1",
+   "type": "number",
+   "initial": 0,
+   "persist": false
+  }
+ ],
+ "calendar": [],
+ "tcp": [
+  {
+   "name": "watchout",
+   "ip": "192.168.1.90",
+   "port": 3039,
+   "eol": "\\r\\n"
+  }
+ ],
+ "modbus": [
+  {
+   "name": "plc",
+   "ip": "192.168.1.80",
+   "port": 502,
+   "unit": 1,
+   "pollMs": 500
+  }
+ ],
+ "maps": [
+  {
+   "id": 1,
+   "name": "Hortus 3KK",
+   "aspect": 1.338,
+   "background": "map1-mvw33urn.png",
+   "snap": true,
+   "labels": true,
+   "items": [
+    {
+     "fixture": 1,
+     "x": 0.3,
+     "y": 0.82
+    },
+    {
+     "fixture": 2,
+     "x": 0.7,
+     "y": 0.82
+    },
+    {
+     "fixture": 3,
+     "x": 0.0625,
+     "y": 0.35
+    },
+    {
+     "fixture": 4,
+     "x": 0.88,
+     "y": 0.3
+    },
+    {
+     "fixture": 5,
+     "x": 0.5,
+     "y": 0.94
+    },
+    {
+     "fixture": 6,
+     "x": 0.5,
+     "y": 0.08
+    },
+    {
+     "fixture": 7,
+     "x": 0.5,
+     "y": 0.3
+    },
+    {
+     "fixture": 8,
+     "x": 0.5,
+     "y": 0.52
+    },
+    {
+     "fixture": 116,
+     "x": 0.375,
+     "y": 0.4375
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Circle",
+   "aspect": 1,
+   "background": "",
+   "snap": true,
+   "labels": true,
+   "items": [
+    {
+     "fixture": 10,
+     "x": 0.375,
+     "y": 0.0875
+    },
+    {
+     "fixture": 11,
+     "x": 0.45,
+     "y": 0.125
+    },
+    {
+     "fixture": 12,
+     "x": 0.45,
+     "y": 0.2125
+    },
+    {
+     "fixture": 13,
+     "x": 0.375,
+     "y": 0.25
+    },
+    {
+     "fixture": 14,
+     "x": 0.3,
+     "y": 0.2125
+    },
+    {
+     "fixture": 15,
+     "x": 0.3,
+     "y": 0.125
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "GRID",
+   "aspect": 1,
+   "background": "",
+   "snap": true,
+   "labels": true,
+   "items": [
+    {
+     "fixture": 16,
+     "x": 0.5125,
+     "y": 0.9562499999999999
+    },
+    {
+     "fixture": 17,
+     "x": 0.48424426621180894,
+     "y": 0.9553620277927222
+    },
+    {
+     "fixture": 18,
+     "x": 0.456100044896063,
+     "y": 0.9527016155915149
+    },
+    {
+     "fixture": 19,
+     "x": 0.4281784084364238,
+     "y": 0.9482792628279098
+    },
+    {
+     "fixture": 20,
+     "x": 0.4005895507758154,
+     "y": 0.942112422507884
+    },
+    {
+     "fixture": 21,
+     "x": 0.37344235253127367,
+     "y": 0.9342254323328191
+    },
+    {
+     "fixture": 22,
+     "x": 0.3468439512918949,
+     "y": 0.9246494186497131
+    },
+    {
+     "fixture": 23,
+     "x": 0.3208993187957174,
+     "y": 0.9134221736097088
+    },
+    {
+     "fixture": 24,
+     "x": 0.29571084665422803,
+     "y": 0.9005880060197384
+    },
+    {
+     "fixture": 25,
+     "x": 0.27137794225945155,
+     "y": 0.8861975664759068
+    },
+    {
+     "fixture": 26,
+     "x": 0.5125,
+     "y": 0.05625000000000002
+    },
+    {
+     "fixture": 27,
+     "x": 0.24799663646838727,
+     "y": 0.8703076474687265
+    },
+    {
+     "fixture": 28,
+     "x": 0.22565920461308958,
+     "y": 0.8529809592491051
+    },
+    {
+     "fixture": 29,
+     "x": 0.2044538023320902,
+     "y": 0.8342858823396353
+    },
+    {
+     "fixture": 30,
+     "x": 0.18446411766036475,
+     "y": 0.8142961976679097
+    },
+    {
+     "fixture": 31,
+     "x": 0.16576904075089477,
+     "y": 0.7930907953869102
+    },
+    {
+     "fixture": 32,
+     "x": 0.1484423525312737,
+     "y": 0.7707533635316128
+    },
+    {
+     "fixture": 33,
+     "x": 0.13255243352409313,
+     "y": 0.7473720577405483
+    },
+    {
+     "fixture": 34,
+     "x": 0.11816199398026139,
+     "y": 0.7230391533457718
+    },
+    {
+     "fixture": 35,
+     "x": 0.10532782639029109,
+     "y": 0.6978506812042824
+    },
+    {
+     "fixture": 36,
+     "x": 0.09410058135028682,
+     "y": 0.671906048708105
+    },
+    {
+     "fixture": 37,
+     "x": 0.08452456766718092,
+     "y": 0.6453076474687264
+    },
+    {
+     "fixture": 38,
+     "x": 0.07663757749211597,
+     "y": 0.6181604492241844
+    },
+    {
+     "fixture": 39,
+     "x": 0.07047073717209007,
+     "y": 0.5905715915635761
+    },
+    {
+     "fixture": 40,
+     "x": 0.06604838440848498,
+     "y": 0.562649955103937
+    },
+    {
+     "fixture": 41,
+     "x": 0.06338797220727782,
+     "y": 0.5345057337881909
+    },
+    {
+     "fixture": 42,
+     "x": 0.0625,
+     "y": 0.50625
+    },
+    {
+     "fixture": 43,
+     "x": 0.06338797220727782,
+     "y": 0.4779942662118092
+    },
+    {
+     "fixture": 44,
+     "x": 0.5407557337881911,
+     "y": 0.05713797220727784
+    },
+    {
+     "fixture": 45,
+     "x": 0.5688999551039369,
+     "y": 0.05979838440848495
+    },
+    {
+     "fixture": 46,
+     "x": 0.06604838440848493,
+     "y": 0.44985004489606306
+    },
+    {
+     "fixture": 47,
+     "x": 0.5968215915635761,
+     "y": 0.06422073717209015
+    },
+    {
+     "fixture": 48,
+     "x": 0.6244104492241845,
+     "y": 0.07038757749211605
+    },
+    {
+     "fixture": 49,
+     "x": 0.07047073717209007,
+     "y": 0.42192840843642404
+    },
+    {
+     "fixture": 50,
+     "x": 0.07663757749211603,
+     "y": 0.39433955077581523
+    },
+    {
+     "fixture": 51,
+     "x": 0.08452456766718086,
+     "y": 0.3671923525312737
+    },
+    {
+     "fixture": 52,
+     "x": 0.09410058135028682,
+     "y": 0.3405939512918951
+    },
+    {
+     "fixture": 53,
+     "x": 0.10532782639029103,
+     "y": 0.31464931879571767
+    },
+    {
+     "fixture": 54,
+     "x": 0.1181619939802615,
+     "y": 0.2894608466542279
+    },
+    {
+     "fixture": 55,
+     "x": 0.13255243352409324,
+     "y": 0.26512794225945147
+    },
+    {
+     "fixture": 56,
+     "x": 0.14844235253127358,
+     "y": 0.24174663646838712
+    },
+    {
+     "fixture": 57,
+     "x": 0.16576904075089466,
+     "y": 0.21940920461308983
+    },
+    {
+     "fixture": 58,
+     "x": 0.18446411766036452,
+     "y": 0.1982038023320904
+    },
+    {
+     "fixture": 59,
+     "x": 0.20445380233208998,
+     "y": 0.17821411766036493
+    },
+    {
+     "fixture": 60,
+     "x": 0.2256592046130897,
+     "y": 0.1595190407508948
+    },
+    {
+     "fixture": 61,
+     "x": 0.6515576474687264,
+     "y": 0.07827456766718094
+    },
+    {
+     "fixture": 62,
+     "x": 0.6781560487081051,
+     "y": 0.0878505813502869
+    },
+    {
+     "fixture": 63,
+     "x": 0.7041006812042826,
+     "y": 0.09907782639029122
+    },
+    {
+     "fixture": 64,
+     "x": 0.7292891533457718,
+     "y": 0.11191199398026141
+    },
+    {
+     "fixture": 65,
+     "x": 0.7536220577405484,
+     "y": 0.1263024335240932
+    },
+    {
+     "fixture": 66,
+     "x": 0.7770033635316129,
+     "y": 0.14219235253127366
+    },
+    {
+     "fixture": 67,
+     "x": 0.7993407953869103,
+     "y": 0.15951904075089485
+    },
+    {
+     "fixture": 68,
+     "x": 0.8205461976679098,
+     "y": 0.17821411766036482
+    },
+    {
+     "fixture": 69,
+     "x": 0.8405358823396352,
+     "y": 0.19820380233209012
+    },
+    {
+     "fixture": 70,
+     "x": 0.8592309592491051,
+     "y": 0.21940920461308966
+    },
+    {
+     "fixture": 71,
+     "x": 0.8765576474687262,
+     "y": 0.24174663646838707
+    },
+    {
+     "fixture": 72,
+     "x": 0.24799663646838704,
+     "y": 0.1421923525312737
+    },
+    {
+     "fixture": 73,
+     "x": 0.2713779422594513,
+     "y": 0.12630243352409332
+    },
+    {
+     "fixture": 74,
+     "x": 0.29571084665422775,
+     "y": 0.11191199398026158
+    },
+    {
+     "fixture": 75,
+     "x": 0.32089931879571715,
+     "y": 0.09907782639029133
+    },
+    {
+     "fixture": 76,
+     "x": 0.34684395129189494,
+     "y": 0.08785058135028684
+    },
+    {
+     "fixture": 77,
+     "x": 0.37344235253127356,
+     "y": 0.07827456766718094
+    },
+    {
+     "fixture": 78,
+     "x": 0.4005895507758151,
+     "y": 0.0703875774921161
+    },
+    {
+     "fixture": 79,
+     "x": 0.8924475664759067,
+     "y": 0.2651279422594516
+    },
+    {
+     "fixture": 80,
+     "x": 0.9068380060197385,
+     "y": 0.2894608466542282
+    },
+    {
+     "fixture": 81,
+     "x": 0.9196721736097087,
+     "y": 0.31464931879571734
+    },
+    {
+     "fixture": 82,
+     "x": 0.930899418649713,
+     "y": 0.34059395129189485
+    },
+    {
+     "fixture": 83,
+     "x": 0.940475432332819,
+     "y": 0.3671923525312737
+    },
+    {
+     "fixture": 84,
+     "x": 0.9483624225078839,
+     "y": 0.3943395507758154
+    },
+    {
+     "fixture": 85,
+     "x": 0.9545292628279098,
+     "y": 0.4219284084364239
+    },
+    {
+     "fixture": 86,
+     "x": 0.958951615591515,
+     "y": 0.449850044896063
+    },
+    {
+     "fixture": 87,
+     "x": 0.961612027792722,
+     "y": 0.4779942662118089
+    },
+    {
+     "fixture": 88,
+     "x": 0.9624999999999999,
+     "y": 0.50625
+    },
+    {
+     "fixture": 89,
+     "x": 0.961612027792722,
+     "y": 0.534505733788191
+    },
+    {
+     "fixture": 90,
+     "x": 0.958951615591515,
+     "y": 0.5626499551039369
+    },
+    {
+     "fixture": 91,
+     "x": 0.9545292628279098,
+     "y": 0.5905715915635761
+    },
+    {
+     "fixture": 92,
+     "x": 0.9483624225078839,
+     "y": 0.6181604492241847
+    },
+    {
+     "fixture": 93,
+     "x": 0.940475432332819,
+     "y": 0.6453076474687262
+    },
+    {
+     "fixture": 94,
+     "x": 0.42817840843642385,
+     "y": 0.06422073717209009
+    },
+    {
+     "fixture": 95,
+     "x": 0.4561000448960629,
+     "y": 0.059798384408485006
+    },
+    {
+     "fixture": 96,
+     "x": 0.484244266211809,
+     "y": 0.05713797220727784
+    },
+    {
+     "fixture": 97,
+     "x": 0.930899418649713,
+     "y": 0.671906048708105
+    },
+    {
+     "fixture": 98,
+     "x": 0.9196721736097087,
+     "y": 0.6978506812042827
+    },
+    {
+     "fixture": 99,
+     "x": 0.9068380060197385,
+     "y": 0.723039153345772
+    },
+    {
+     "fixture": 100,
+     "x": 0.8924475664759066,
+     "y": 0.7473720577405485
+    },
+    {
+     "fixture": 101,
+     "x": 0.8765576474687262,
+     "y": 0.7707533635316128
+    },
+    {
+     "fixture": 102,
+     "x": 0.859230959249105,
+     "y": 0.7930907953869104
+    },
+    {
+     "fixture": 103,
+     "x": 0.840535882339635,
+     "y": 0.81429619766791
+    },
+    {
+     "fixture": 104,
+     "x": 0.8205461976679099,
+     "y": 0.8342858823396351
+    },
+    {
+     "fixture": 105,
+     "x": 0.7993407953869104,
+     "y": 0.8529809592491051
+    },
+    {
+     "fixture": 106,
+     "x": 0.7770033635316129,
+     "y": 0.8703076474687264
+    },
+    {
+     "fixture": 107,
+     "x": 0.7536220577405486,
+     "y": 0.8861975664759066
+    },
+    {
+     "fixture": 108,
+     "x": 0.7292891533457717,
+     "y": 0.9005880060197387
+    },
+    {
+     "fixture": 109,
+     "x": 0.7041006812042827,
+     "y": 0.9134221736097087
+    },
+    {
+     "fixture": 110,
+     "x": 0.6781560487081051,
+     "y": 0.9246494186497131
+    },
+    {
+     "fixture": 111,
+     "x": 0.6515576474687264,
+     "y": 0.934225432332819
+    },
+    {
+     "fixture": 112,
+     "x": 0.6244104492241848,
+     "y": 0.9421124225078839
+    },
+    {
+     "fixture": 113,
+     "x": 0.596821591563576,
+     "y": 0.9482792628279099
+    },
+    {
+     "fixture": 114,
+     "x": 0.568899955103937,
+     "y": 0.9527016155915149
+    },
+    {
+     "fixture": 115,
+     "x": 0.5407557337881911,
+     "y": 0.9553620277927222
+    }
+   ]
+  }
+ ],
+ "effects": [
+  {
+   "id": 1,
+   "name": "XY ripple",
+   "code": "// Rings rippling out from a point on the map, like a stone in water\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.5 [0, 3]       // rings per second\nparam size = 3 [0.5, 10]       // rings from the centre to the edge\nparam color = #00c7be          // colour of the rings\nparam back = #000000           // colour between the rings\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nk = pow(0.5 + 0.5 * sin((d * size - t * speed) * tau), 3)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+  },
+  {
+   "id": 2,
+   "name": "Chase",
+   "code": "// One light running along the fixtures, in list order\nparam speed = 1 [0, 8]\nparam width = 0.25 [0.05, 1]\nparam color = #ffffff\npos = fract(t * speed / n)\nd = abs(fract(u - pos + 0.5) - 0.5) * n\nr, g, b = color\ndim = smoothstep(width * n, 0, d)"
+  },
+  {
+   "id": 3,
+   "name": "Breathe",
+   "code": "// Slow fade up and down\nparam speed = 0.25 [0.02, 2]\nparam low = 0.1 [0, 1]\nparam color = #ffb347\nr, g, b = color\ndim = mix(low, 1, 0.5 - 0.5 * cos(t * speed * tau))"
+  },
+  {
+   "id": 4,
+   "name": "Candle",
+   "code": "// Warm, gentle flicker\nparam color = #ff9329\nf = noise(t * 2.1 + i * 3.7) * 0.6 + noise(t * 7.3 + i) * 0.4\nr, g, b = color\ndim = 0.6 + f * 0.4"
+  },
+  {
+   "id": 5,
+   "name": "Chase 2",
+   "code": "// One light running along the fixtures, in list order\nparam speed = 1 [0, 8]\nparam width = 0.25 [0.05, 1]\nparam color = #ffffff\npos = fract(t * speed / n)\nd = abs(fract(u - pos + 0.5) - 0.5) * n\nr, g, b = color\ndim = smoothstep(width * n, 0, d)"
+  },
+  {
+   "id": 6,
+   "name": "Fire",
+   "code": "// Flickering flame, every fixture its own\nparam speed = 3 [0.5, 10]\nf = noise(t * speed + i * 17.3) * 0.7 + noise(t * speed * 2.7 + i * 5.1) * 0.3\nr = 1\ng = 0.25 + f * 0.35\nb = 0\ndim = 0.35 + f * 0.65"
+  },
+  {
+   "id": 7,
+   "name": "Sparkle",
+   "code": "// Random short flashes on a coloured base\nparam rate = 6 [1, 30]\nparam chance = 0.08 [0, 0.5]\nparam base = #1a2a6c\nparam flash = #ffffff\nstep_t = floor(t * rate)\non = rand(step_t * 0.37 + i * 0.011) < chance\nr = on ? flash.r : base.r\ng = on ? flash.g : base.g\nb = on ? flash.b : base.b"
+  },
+  {
+   "id": 8,
+   "name": "Wave across the map",
+   "code": "// Brightness wave moving left to right over the map\nparam speed = 0.3 [0, 2]\nparam size = 1.5 [0.2, 6]\nparam color = #00c7be\nr, g, b = color\ndim = 0.5 + 0.5 * sin((x * size - t * speed) * tau)"
+  },
+  {
+   "id": 9,
+   "name": "Police",
+   "code": "// Red / blue alternating halves\nparam rate = 2 [0.5, 8]\nside = u < 0.5\nphase = sq(t * rate)\non = side ? phase : 1 - phase\nr = on\nb = 1 - on\ndim = pulse(t * rate * 4, 0.5) * 0.5 + 0.5"
+  }
+ ],
+ "deviceGroups": [],
+ "fixtureTypes": [],
+ "drivers": [
+  {
+   "id": 1,
+   "type": "kissbox",
+   "name": "io",
+   "ip": "192.168.1.121",
+   "port": 9813,
+   "listenPort": 9813,
+   "vars": {},
+   "cards": [
+    "DO4PR",
+    "DI8DC"
+   ],
+   "frame": "IO3",
+   "names": {}
+  },
+  {
+   "id": 3,
+   "type": "knx",
+   "name": "knx",
+   "ip": "192.168.1.123",
+   "port": 3671,
+   "addresses": [
+    {
+     "ga": "1/1/1",
+     "dpt": "1",
+     "name": ""
+    },
+    {
+     "ga": "1/1/2",
+     "dpt": "1",
+     "name": ""
+    },
+    {
+     "ga": "1/1/3",
+     "dpt": "1",
+     "name": ""
+    },
+    {
+     "ga": "1/1/4",
+     "dpt": "1",
+     "name": ""
+    }
+   ],
+   "vars": {}
+  },
+  {
+   "id": 4,
+   "type": "knx",
+   "name": "knx2",
+   "ip": "192.168.1.124",
+   "port": 3671,
+   "addresses": [],
+   "vars": {}
+  },
+  {
+   "id": 5,
+   "type": "brightsign",
+   "name": "player",
+   "ip": "192.168.1.125",
+   "port": 80,
+   "user": "admin",
+   "password": "",
+   "udpPort": 5000,
+   "vars": {},
+   "commands": []
+  },
+  {
+   "id": 6,
+   "type": "digidot",
+   "name": "c4",
+   "ip": "192.168.1.126",
+   "port": 80,
+   "user": "admin",
+   "password": "admin",
+   "vars": {}
+  },
+  {
+   "id": 7,
+   "type": "netio",
+   "name": "rack",
+   "ip": "192.168.1.127",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "vars": {},
+   "model": "2PZ",
+   "outputs": 2
+  },
+  {
+   "id": 8,
+   "type": "pharos",
+   "name": "lpc",
+   "ip": "192.168.1.128",
+   "port": 80,
+   "vars": {}
+  },
+  {
+   "id": 9,
+   "type": "netio",
+   "name": "rack2",
+   "ip": "192.168.1.129",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {},
+   "model": "2PZ",
+   "outputs": 2
+  },
+  {
+   "id": 10,
+   "type": "netio",
+   "name": "rack3",
+   "ip": "192.168.1.130",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {}
+  },
+  {
+   "id": 11,
+   "type": "netio",
+   "name": "rack4",
+   "ip": "192.168.1.131",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {}
+  },
+  {
+   "id": 12,
+   "type": "netio",
+   "name": "rack5",
+   "ip": "192.168.1.132",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {}
+  },
+  {
+   "id": 13,
+   "type": "netio",
+   "name": "rack6",
+   "ip": "192.168.1.133",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {}
+  },
+  {
+   "id": 14,
+   "type": "netio",
+   "name": "rack7",
+   "ip": "192.168.1.134",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {}
+  },
+  {
+   "id": 15,
+   "type": "netio",
+   "name": "rack8",
+   "ip": "192.168.1.135",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {}
+  },
+  {
+   "id": 16,
+   "type": "netio",
+   "name": "rack9",
+   "ip": "192.168.1.136",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {}
+  },
+  {
+   "id": 17,
+   "type": "netio",
+   "name": "rack10",
+   "ip": "192.168.1.137",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "live": false,
+   "vars": {}
+  }
+ ],
+ "machineControl": {
+  "out0": {
+   "name": "output1"
+  },
+  "out1": {
+   "name": "output2"
+  }
+ }
+}

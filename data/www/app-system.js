@@ -1,0 +1,1136 @@
+'use strict';
+// KD Designer web UI - Devices, Panel, Variables, Schedule, Monitoring, Console, Log, DMX monitor, Settings.
+// Plain scripts sharing one global scope; load order is in index.html.
+
+function pjState(id) {
+  const s = S.status?.projectors?.find((x) => x.id === id);
+  if (!s || !s.seen) return { dot: '', text: s ? 'checking…' : 'not on controller (save first)', last: '' };
+  if (!s.online) return { dot: 'bad', text: 'offline', last: s.last };
+  return { dot: s.power === 'on' ? 'ok' : s.power === 'off' ? '' : 'warn', text: 'power ' + s.power, last: s.last };
+}
+const pjButtons = (ref) => `<button class="btn small" data-cmd="projector ${ref} on">On</button>
+  <button class="btn small" data-cmd="projector ${ref} off">Off</button>
+  <button class="btn small" data-cmd="projector ${ref} mute on">Mute</button>
+  <button class="btn small" data-cmd="projector ${ref} mute off">Unmute</button>`;
+
+const pcLast = (id) => S.status?.pcs?.find((x) => x.id === id)?.last || '—';
+const pcButtons = (ref) => `<button class="btn small" data-cmd="pc ${ref} wake" title="Wake-on-LAN">⏻ Wake</button>
+  <button class="btn small" data-cmd="pc ${ref} startup">Startup</button>
+  <button class="btn small" data-cmd="pc ${ref} shutdown" data-confirm="Shut down ${ref === 'all' ? 'ALL PCs' : 'this PC'}?">Shutdown</button>
+  <button class="btn small" data-cmd="pc ${ref} reboot" data-confirm="Reboot ${ref === 'all' ? 'ALL PCs' : 'this PC'}?">Reboot</button>`;
+
+// Devices page: a tab per kind of device; the show-device types are in app-drivers.js.
+const DEVICE_TABS = [['network', 'Network'], ['tcp', 'TCP & Modbus'], ['pcs', 'PCs'], ['projectors', 'Projectors'], ['email', 'Email'], ['board', 'Machine Control']];
+const DEVICE_TAB_COUNT = { network: (p) => p.devices.length, tcp: (p) => p.tcp.length + p.modbus.length, pcs: (p) => p.pcs.length, projectors: (p) => p.projectors.length };
+views.devices = () => {
+  const tab = DRIVERS[S.devTab] || DEVICE_TABS.some(([k]) => k === S.devTab) ? S.devTab : 'network';
+  const pages = { network: devicesNetwork, tcp: devicesTcp, pcs: devicesPcs, projectors: devicesProjectors, email: devicesEmail, board: boardPage };
+  return `<h2>Devices</h2>${deviceTabs(tab)}${pages[tab] ? pages[tab](P()) : driverPage(tab)}`;
+};
+function devicesNetwork(p) {
+  return `<h3>Network devices <span class="muted" style="text-transform:none;letter-spacing:0">UDP / OSC targets</span></h3>
+  <table><tr><th>Name</th><th>IP address</th><th class="narrow">Port</th><th>Notes</th><th class="narrow" title="Ping on the Monitoring page">Monitor</th><th></th></tr>
+  ${p.devices.map((d, i) => `<tr>
+    <td><input data-p="devices.${i}.name" value="${esc(d.name)}" placeholder="mediaserver"></td>
+    <td><input data-p="devices.${i}.ip" value="${esc(d.ip)}" pattern="^(\\d{1,3}\\.){3}\\d{1,3}$"></td>
+    <td><input data-p="devices.${i}.port" data-t="num" type="number" min="1" max="65535" value="${d.port ?? ''}"></td>
+    <td><input data-p="devices.${i}.notes" value="${esc(d.notes || '')}" placeholder="e.g. media server OSC (7000)"></td>
+    <td style="text-align:center"><input type="checkbox" data-p="devices.${i}.monitor" data-t="bool"${d.monitor !== false ? ' checked' : ''}></td>
+    <td><button class="btn small ghost" data-del="devices.${i}">✕</button></td></tr>`).join('')}</table>
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="device">+ Device</button>
+    <span class="muted">Use by name: <code>send osc mediaserver /play</code>, <code>send udp motors "K1P200\\r"</code>.</span></div>
+  <h3>Device groups <span class="muted" style="text-transform:none;letter-spacing:0">send to several devices at once</span></h3>
+  ${p.deviceGroups.length ? `<table><tr><th style="width:180px">Name</th><th>Devices</th><th></th></tr>
+  ${p.deviceGroups.map((g, i) => {
+    const clash = p.devices.some((d) => d.name.toLowerCase() === g.name.toLowerCase()) || p.deviceGroups.some((x) => x !== g && x.name.toLowerCase() === g.name.toLowerCase());
+    return `<tr>
+    <td><input data-p="deviceGroups.${i}.name" value="${esc(g.name)}" placeholder="screens" class="${clash ? 'invalid' : ''}" title="${clash ? 'A device or another group has this name' : ''}" data-r></td>
+    <td><div class="row">${p.devices.map((d) => `<label class="chk"><input type="checkbox" data-devgrp="${i}" value="${esc(d.name)}"${g.devices.includes(d.name) ? ' checked' : ''}>${esc(d.name)}</label>`).join('') || '<span class="muted">Add devices first</span>'}
+      ${g.devices.filter((n) => !p.devices.some((d) => d.name === n)).map((n) => `<span class="tag mon-warn" title="This device doesn't exist (any more)">${esc(n)}?</span>`).join('')}</div></td>
+    <td><button class="btn small ghost" data-del="deviceGroups.${i}">✕</button></td></tr>`;
+  }).join('')}</table>` : ''}
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="devgroup">+ Device group</button>
+    <span class="muted"><code>send udp screens "PLAY\\r"</code> sends to every device in group <i>screens</i>, each on its own port. Works for <code>send osc</code> too.</span></div>`;
+}
+function devicesTcp(p) {
+  return `<h3>TCP devices <span class="muted" style="text-transform:none;letter-spacing:0">kept connected · replies fire TCP triggers</span></h3>
+  <table><tr><th>Name</th><th>IP address</th><th class="narrow">Port</th><th class="narrow" title="Added after every line you send">Line end</th><th>Status</th><th>Last received</th><th></th></tr>
+  ${p.tcp.map((d, i) => {
+    const st = S.status?.io?.tcp?.find((x) => x.name === d.name);
+    return `<tr>
+    <td><input data-p="tcp.${i}.name" value="${esc(d.name)}" data-r></td>
+    <td><input data-p="tcp.${i}.ip" value="${esc(d.ip)}"></td>
+    <td><input data-p="tcp.${i}.port" data-t="num" type="number" min="1" max="65535" value="${d.port ?? ''}"></td>
+    <td><select data-p="tcp.${i}.eol">${[['\\r\\n', 'CR LF'], ['\\r', 'CR'], ['\\n', 'LF'], ['', 'none']].map(([v, n]) => `<option value="${esc(v)}"${(d.eol ?? '\\r\\n') === v ? ' selected' : ''}>${n}</option>`).join('')}</select></td>
+    <td data-iost="tcp:${esc(d.name)}"><span class="dot ${st?.state === 'online' ? 'ok' : st?.state === 'offline' ? 'bad' : ''}"></span>${esc(st?.state || 'save first')}</td>
+    <td class="mono muted" style="max-width:240px;overflow:hidden;text-overflow:ellipsis">${esc(st?.lastLine || '—')}</td>
+    <td><button class="btn small ghost" data-del="tcp.${i}">✕</button></td></tr>`;
+  }).join('')}</table>
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="tcpdev">+ TCP device</button>
+    <span class="muted"><code>send tcp watchout run</code> · trigger "TCP message received" · HTTP needs no setup: <code>http get http://10.0.0.20/api/play</code></span></div>
+  <h3>Modbus TCP <span class="muted" style="text-transform:none;letter-spacing:0">PLCs · link points to variables</span></h3>
+  <table><tr><th>Name</th><th>IP address</th><th class="narrow">Port</th><th class="narrow">Unit ID</th><th class="narrow">Poll (ms)</th><th>Linked variables</th><th>Status</th><th></th></tr>
+  ${p.modbus.map((d, i) => {
+    const st = S.status?.io?.modbus?.find((x) => x.name === d.name);
+    const linked = p.variables.filter((v) => v.modbus?.device === d.name).map((v) => `${v.name} (${v.modbus.table} ${v.modbus.address})`);
+    return `<tr>
+    <td><input data-p="modbus.${i}.name" value="${esc(d.name)}" data-r></td>
+    <td><input data-p="modbus.${i}.ip" value="${esc(d.ip)}"></td>
+    <td><input data-p="modbus.${i}.port" data-t="num" type="number" value="${d.port ?? 502}"></td>
+    <td><input data-p="modbus.${i}.unit" data-t="num" type="number" min="0" max="255" value="${d.unit ?? 1}"></td>
+    <td><input data-p="modbus.${i}.pollMs" data-t="num" type="number" min="50" step="50" value="${d.pollMs ?? 500}"></td>
+    <td class="muted">${linked.length ? esc(linked.join(', ')) : 'none - link them on the Variables page'}</td>
+    <td data-iost="modbus:${esc(d.name)}"><span class="dot ${st?.state === 'online' ? 'ok' : st?.state === 'offline' ? 'bad' : ''}"></span>${esc(st?.state || 'save first')}${st?.errors ? ` <span class="muted">(${st.errors} errors)</span>` : ''}</td>
+    <td><button class="btn small ghost" data-del="modbus.${i}">✕</button></td></tr>`;
+  }).join('')}</table>
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="mbdev">+ Modbus device</button>
+    <span class="muted">Raw write: <code>modbus plc write coil 5 1</code></span></div>`;
+}
+function devicesPcs(p) {
+  return `<h3>PCs <span class="muted" style="text-transform:none;letter-spacing:0">Wake-on-LAN + UDP commands</span></h3>
+  <table><tr><th class="narrow">ID</th><th>Name</th><th>IP address</th><th>MAC address</th><th class="narrow">UDP port</th><th>Commands sent (startup · shutdown · reboot)</th><th class="narrow" title="Ping on the Monitoring page">Monitor</th><th>Last</th><th>Control</th><th></th></tr>
+  ${p.pcs.map((x, i) => `<tr>
+    <td><input data-p="pcs.${i}.id" data-t="num" type="number" min="1" value="${x.id}" data-r></td>
+    <td><input data-p="pcs.${i}.name" value="${esc(x.name)}"></td>
+    <td><input data-p="pcs.${i}.ip" value="${esc(x.ip)}" pattern="^(\\d{1,3}\\.){3}\\d{1,3}$"></td>
+    <td><input data-p="pcs.${i}.mac" value="${esc(x.mac || '')}" placeholder="00:11:22:33:44:55" pattern="^([0-9A-Fa-f]{2}[:\\-]?){5}[0-9A-Fa-f]{2}$" class="mono"></td>
+    <td><input data-p="pcs.${i}.port" data-t="num" type="number" min="1" max="65535" value="${x.port ?? 7}"></td>
+    <td><div class="row nowrap">${['startup', 'shutdown', 'reboot'].map((k) => `<input data-p="pcs.${i}.${k}" value="${esc(x[k] ?? k)}" title="Text sent for '${k}'" class="mono" style="width:90px">`).join('')}</div></td>
+    <td style="text-align:center"><input type="checkbox" data-p="pcs.${i}.monitor" data-t="bool"${x.monitor !== false ? ' checked' : ''}></td>
+    <td class="muted" data-pcst="${x.id}">${esc(pcLast(x.id))}</td>
+    <td><div class="row nowrap">${pcButtons(x.id)}</div></td>
+    <td><button class="btn small ghost" data-del="pcs.${i}">✕</button></td></tr>`).join('')}</table>
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="pc">+ PC</button>
+    ${p.pcs.length ? `<span class="muted">All PCs:</span>${pcButtons('all')}` : ''}</div>
+  <p class="muted">Wake-on-LAN is broadcast on the controller's subnet (ports 9 and 7). Enable WoL in the PC's BIOS and network card.
+    Use in triggers: <code>pc 1 wake</code>, <code>pc all shutdown</code>, <code>pc "Media PC" reboot</code>.</p>`;
+}
+function devicesEmail(p) {
+  return `<h3>Email <span class="muted" style="text-transform:none;letter-spacing:0">plain SMTP, no TLS</span></h3>
+  <div class="form">
+    <label>SMTP server</label><input data-p="email.server" value="${esc(p.email.server)}" placeholder="IP or hostname of a mail relay">
+    <label>Port</label><input type="number" data-p="email.port" data-t="num" value="${p.email.port}">
+    <label>Username</label><input data-p="email.user" value="${esc(p.email.user)}" placeholder="leave empty for no login" autocomplete="off">
+    <label>Password</label><input type="password" data-p="email.password" value="${esc(p.email.password)}" autocomplete="new-password">
+    <label>From address</label><input data-p="email.from" value="${esc(p.email.from)}" placeholder="show@example.com">
+    <label></label><span class="muted">Send with <code>email someone@example.com "Floor fault" Frequency drive reports a fault</code>.
+      Needs a server that accepts unencrypted SMTP, e.g. a local relay.</span>
+  </div>`;
+}
+function devicesProjectors(p) {
+  return `<h3>Projectors <span class="muted" style="text-transform:none;letter-spacing:0">PJLink · TCP 4352</span></h3>
+  <table><tr><th class="narrow">ID</th><th>Name</th><th>IP address</th><th class="narrow">Port</th><th>Password</th><th>Status</th><th>Control</th><th></th></tr>
+  ${p.projectors.map((x, i) => {
+    const st = pjState(x.id);
+    return `<tr>
+    <td><input data-p="projectors.${i}.id" data-t="num" type="number" min="1" value="${x.id}" data-r></td>
+    <td><input data-p="projectors.${i}.name" value="${esc(x.name)}"></td>
+    <td><input data-p="projectors.${i}.ip" value="${esc(x.ip)}" pattern="^(\\d{1,3}\\.){3}\\d{1,3}$"></td>
+    <td><input data-p="projectors.${i}.port" data-t="num" type="number" min="1" max="65535" value="${x.port ?? 4352}"></td>
+    <td><input data-p="projectors.${i}.password" type="password" value="${esc(x.password || '')}" placeholder="none" autocomplete="new-password"></td>
+    <td data-pjst="${x.id}" title="${esc(st.last)}"><span class="dot ${st.dot}"></span>${esc(st.text)}</td>
+    <td><div class="row nowrap">${pjButtons(x.id)}</div></td>
+    <td><button class="btn small ghost" data-del="projectors.${i}">✕</button></td></tr>`;
+  }).join('')}</table>
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="projector">+ Projector</button>
+    <span class="muted">Checked at the Monitoring page's interval (power, lamp, input, errors). Hover a status for the last reply. Save before testing a new projector.</span></div>
+  <h3>All projectors</h3><div class="row">${pjButtons('all')}</div>
+  <h3>Raw command</h3>
+  <div class="row nowrap"><input class="cmd" id="pjRaw" value="projector all send LAMP ?" spellcheck="false" autocomplete="off"><button class="btn" id="pjSend">Send</button></div>
+  <p class="muted">In triggers: <code>projector 1 on</code>, <code>projector all off</code>, <code>projector "Left" input 31</code>, <code>projector 2 mute on</code>.</p>`;
+}
+views.devices.after = () => {
+  if (DRIVERS[S.devTab]) return driverPageAfter();
+  $$('[data-devgrp]').forEach((el) => el.addEventListener('change', () => {
+    const g = P().deviceGroups[+el.dataset.devgrp];
+    g.devices = el.checked ? [...new Set([...g.devices, el.value])] : g.devices.filter((n) => n !== el.value);
+    markDirty();
+  }));
+  $('#pjSend')?.addEventListener('click', async () => { const r = await cmd($('#pjRaw').value); toast(r.reply, !r.ok); });
+};
+function renderProjectorStates() {
+  for (const td of $$('[data-pcst]')) td.textContent = pcLast(+td.dataset.pcst);
+  for (const td of $$('[data-iost]')) {
+    const [kind, name] = td.dataset.iost.split(/:(.*)/);
+    const st = S.status?.io?.[kind]?.find((x) => x.name === name);
+    td.innerHTML = `<span class="dot ${st?.state === 'online' ? 'ok' : st?.state === 'offline' ? 'bad' : ''}"></span>${esc(st?.state || 'save first')}${st?.errors ? ` <span class="muted">(${st.errors} errors)</span>` : ''}`;
+  }
+  for (const td of $$('[data-pjst]')) {
+    const st = pjState(+td.dataset.pjst);
+    td.title = st.last;
+    td.innerHTML = `<span class="dot ${st.dot}"></span>${esc(st.text)}`;
+  }
+  for (const td of $$('[data-drvst]')) {
+    const st = drvState(+td.dataset.drvst);
+    td.title = st.last;
+    td.innerHTML = `<span class="dot ${st.dot}"></span>${esc(st.text)}`;
+  }
+  updateDrvLive();
+}
+
+views.panel = () => {
+  const p = P(), pages = p.panel.pages;
+  const pi = Math.min(S.sel.page || 0, Math.max(0, pages.length - 1)), pg = pages[pi];
+  const base = `panel.pages.${pi}`;
+  const pageOpts = (sel) => `<option value="">—</option>${pages.map((x) => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}`;
+  return `<h2>Touch panel <a class="btn small" href="/panel" target="_blank" style="margin-left:8px;text-decoration:none">Open panel ↗</a></h2>
+  <p class="muted" style="margin-top:-6px">A full-screen control page for a tablet or touchscreen at <code>http://&lt;controller&gt;/panel</code>.
+    Buttons fire <b>Panel button</b> triggers; labels are changed by actions with <code>label &lt;name&gt; &lt;text&gt;</code>.</p>
+  <div class="form" style="margin-bottom:12px">
+    <label>Title</label><input data-p="panel.title" value="${esc(p.panel.title || '')}" placeholder="${esc(p.name)}">
+    <label>Start page</label><select data-p="panel.start" data-t="num">${pageOpts(p.panel.start)}</select>
+  </div>
+  <div class="split">
+    <div><div class="list">${pages.map((x, i) => `<div class="item${i === pi ? ' sel' : ''}" data-sel="page:${i}"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span>${x.pin ? '<span class="tag">PIN</span>' : ''}</div>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn small" data-add="page">+ Page</button></div></div>
+    <div>${pg ? `
+      <div class="row"><input data-p="${base}.name" value="${esc(pg.name)}" style="font-size:16px;flex:1">
+        <button class="btn small ghost" data-del="${base}">Delete page</button></div>
+      <div class="row" style="margin-top:10px">
+        <label class="muted">Columns</label><input type="number" min="1" max="6" style="width:70px" data-p="${base}.columns" data-t="num" value="${pg.columns || 3}" data-r>
+        <label class="muted" title="Ask for this PIN before showing the page">PIN</label><input style="width:110px" data-p="${base}.pin" value="${esc(pg.pin || '')}" placeholder="none" inputmode="numeric">
+      </div>
+      <table style="margin-top:10px"><tr><th style="width:96px">Type</th><th>Name (for triggers/labels)</th><th>Text</th><th class="narrow">Colour</th><th>Confirm question</th><th class="narrow">Go to page</th><th class="narrow">Width</th><th></th></tr>
+      ${pg.controls.map((c, i) => {
+        const cb = `${base}.controls.${i}`;
+        const btn = c.type === 'button';
+        return `<tr>
+        <td><select data-p="${cb}.type" data-r>${PANEL_TYPES.map((t) => `<option${c.type === t ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
+        <td>${btn || c.type === 'label' ? `<input data-p="${cb}.name" value="${esc(c.name || '')}" data-r>` : ''}</td>
+        <td>${c.type === 'spacer' || c.type === 'clock' ? '' : `<input data-p="${cb}.text" value="${esc(c.text || '')}" data-r>`}</td>
+        <td>${c.type === 'spacer' ? '' : `<input type="color" data-p="${cb}.color" value="${esc(c.color || (btn ? '#2a3140' : '#d8dbe2'))}" data-r>`}</td>
+        <td>${btn ? `<input data-p="${cb}.confirm" value="${esc(c.confirm || '')}" placeholder="none" data-r>` : ''}</td>
+        <td>${btn ? `<select data-p="${cb}.goto" data-t="num" data-r>${pageOpts(c.goto)}</select>` : ''}</td>
+        <td><input type="number" min="1" max="6" data-p="${cb}.span" data-t="num" value="${c.span || 1}" data-r></td>
+        <td><div class="row nowrap"><button class="btn small ghost" data-pmove="${i}:-1">▲</button><button class="btn small ghost" data-pmove="${i}:1">▼</button><button class="btn small ghost" data-del="${cb}">✕</button></div></td></tr>`;
+      }).join('')}</table>
+      <div class="row" style="margin-top:8px">${PANEL_TYPES.map((t) => `<button class="btn small" data-add="pc-${t}">+ ${t}</button>`).join('')}</div>
+      <h3>Preview</h3>
+      <div class="panel-preview">${panelPageHtml(pg, S.status, true)}</div>`
+    : '<span class="muted">Add a page to start.</span>'}</div></div>`;
+};
+// Shared with panel.html (same markup and CSS there).
+function panelPageHtml(pg, st, preview) {
+  const labels = st?.labels || {};
+  return `<div class="pgrid" style="grid-template-columns:repeat(${pg.columns || 3},1fr)">${pg.controls.map((c) => {
+    const span = `grid-column:span ${Math.min(c.span || 1, pg.columns || 3)}`;
+    if (c.type === 'spacer') return `<div style="${span}"></div>`;
+    if (c.type === 'clock') return `<div class="plabel pclock" style="${span};color:${esc(c.color || '')}">${new Date().toLocaleTimeString().slice(0, 5)}</div>`;
+    if (c.type === 'label') {
+      const l = labels[c.name] || {};
+      return `<div class="plabel" style="${span};color:${esc(l.color || c.color || '')}">${esc(l.text ?? c.text ?? '')}</div>`;
+    }
+    return `<button class="pbtn" style="${span};background:${esc(c.color || '#2a3140')}"${preview ? ' disabled' : ''}>${esc(c.text || c.name || '')}</button>`;
+  }).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Variables
+// ---------------------------------------------------------------------------
+views.variables = () => {
+  const p = P(), vals = S.status?.vars || {};
+  const mbOpts = (sel) => `<option value="">—</option>${p.modbus.map((d) => `<option${sel === d.name ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}`;
+  return `<h2>Variables</h2>
+  <p class="muted" style="margin-top:-6px">Like Medialon variables. Use them in any command as <code>{name}</code>,
+    change them with <code>var visitors + 1</code>, test them with <code>var visitors > 50</code> or <code>if var door = 1 then …</code>,
+    and react with a <b>Variable change</b> trigger. Link one to a Modbus point and it follows the PLC.</p>
+  <table class="vars"><tr><th>Name</th><th class="narrow">Type</th><th>Initial</th><th class="narrow" title="Keep the value across reboots">Keep</th>
+    <th>Modbus link (device · table · address)</th><th>Live value</th><th></th></tr>
+  ${p.variables.map((v, i) => {
+    const base = `variables.${i}`, cur = vals[v.name];
+    const ro = v.modbus?.device && ['discrete', 'input'].includes(v.modbus.table);
+    const live = cur == null ? '<span class="muted">save first</span>'
+      : v.type === 'bool' ? `<button class="toggle${cur === '1' ? ' on' : ''}" data-cmd="var ${esc(quote(v.name))} toggle"${ro ? ' disabled' : ''}>${cur === '1' ? 'on' : 'off'}</button>`
+      : `<div class="row nowrap">${v.type === 'number' ? `<button class="btn small" data-cmd="var ${esc(quote(v.name))} - 1"${ro ? ' disabled' : ''}>−</button>` : ''}
+          <input class="mono" data-varset="${esc(v.name)}" value="${esc(cur)}" style="width:110px"${ro ? ' disabled' : ''}>
+          ${v.type === 'number' ? `<button class="btn small" data-cmd="var ${esc(quote(v.name))} + 1"${ro ? ' disabled' : ''}>+</button>` : ''}</div>`;
+    return `<tr>
+    <td><input data-p="${base}.name" value="${esc(v.name)}" class="mono" data-r></td>
+    <td><select data-p="${base}.type" data-r>${['number', 'text', 'bool'].map((t) => `<option value="${t}"${v.type === t ? ' selected' : ''}>${t === 'bool' ? 'on/off' : t}</option>`).join('')}</select></td>
+    <td>${v.type === 'bool' ? `<select data-p="${base}.initial" data-t="bool-sel"><option value="0"${v.initial ? '' : ' selected'}>off</option><option value="1"${v.initial ? ' selected' : ''}>on</option></select>`
+      : `<input data-p="${base}.initial"${v.type === 'number' ? ' type="number" data-t="num"' : ''} value="${esc(v.initial ?? '')}">`}</td>
+    <td style="text-align:center"><input type="checkbox" data-p="${base}.persist" data-t="bool"${v.persist ? ' checked' : ''}></td>
+    <td><div class="row nowrap"><select data-mb="${i}" data-k="device">${mbOpts(v.modbus?.device)}</select>
+      ${v.modbus?.device ? `<select data-mb="${i}" data-k="table">${['coil', 'discrete', 'holding', 'input'].map((t) => `<option${v.modbus.table === t ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        <input type="number" min="0" max="65535" data-mb="${i}" data-k="address" value="${v.modbus.address ?? 0}" style="width:80px">` : ''}</div></td>
+    <td>${live}${ro ? ' <span class="tag" title="Follows the PLC input">PLC</span>' : ''}</td>
+    <td><button class="btn small ghost" data-del="${base}">✕</button></td></tr>`;
+  }).join('')}</table>
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="variable">+ Variable</button>
+    <span class="muted">Modbus tables: coil & discrete = on/off, holding & input = 16-bit number. Discrete inputs and input registers are read-only.</span></div>`;
+};
+views.variables.after = () => {
+  $$('[data-varset]').forEach((el) => el.addEventListener('change', async () => {
+    const r = await cmd(`var ${quote(el.dataset.varset)} = ${el.value}`);
+    toast(r.reply, !r.ok);
+  }));
+  $$('[data-mb]').forEach((el) => el.addEventListener('change', () => {
+    const v = P().variables[+el.dataset.mb];
+    if (el.dataset.k === 'device') {
+      if (!el.value) delete v.modbus;
+      else v.modbus = Object.assign({ table: v.type === 'bool' ? 'coil' : 'holding', address: 0 }, v.modbus, { device: el.value });
+    } else v.modbus[el.dataset.k] = el.dataset.k === 'address' ? +el.value : el.value;
+    markDirty();
+    render();
+  }));
+};
+// Live values change every second: update them without re-rendering the editor.
+function renderVarValues() {
+  const vals = S.status?.vars || {};
+  for (const el of $$('[data-varset]')) if (document.activeElement !== el && vals[el.dataset.varset] != null) el.value = vals[el.dataset.varset];
+  for (const b of $$('.vars .toggle')) {
+    const name = b.dataset.cmd.replace(/^var "?|"? toggle$/g, '');
+    const on = vals[name] === '1';
+    b.classList.toggle('on', on);
+    b.textContent = on ? 'on' : 'off';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Schedule: clock, location, calendar, upcoming timed triggers
+// ---------------------------------------------------------------------------
+// Same date / summer-time / sun maths as src/Clock.cpp.
+// Sets the controller's clock to this PC's time (Schedule and Settings pages).
+async function setClockFromPc() {
+  try { await api('/api/time', { method: 'POST', body: String(Math.floor(Date.now() / 1000)) }); toast('Clock set'); } catch (e) { toast(e.message, true); }
+}
+const Sched = {
+  days: KDModel.days,
+  inPeriod: KDModel.inPeriod,
+  weekday: (days) => ((days % 7) + 11) % 7,
+  dim: (y, m) => [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1],
+  sunday(y, m, n) {
+    if (n < 0) { const last = Sched.dim(y, m); return last - Sched.weekday(Sched.days(y, m, last)); }
+    return 1 + (7 - Sched.weekday(Sched.days(y, m, 1))) % 7 + (n - 1) * 7;
+  },
+  dst(utcSec, y, rule, tz) {
+    let s, e;
+    if (rule === 'eu') { s = Sched.days(y, 3, Sched.sunday(y, 3, -1)) * 86400 + 3600; e = Sched.days(y, 10, Sched.sunday(y, 10, -1)) * 86400 + 3600; }
+    else if (rule === 'us') { s = Sched.days(y, 3, Sched.sunday(y, 3, 2)) * 86400 + 7200 - tz * 60; e = Sched.days(y, 11, Sched.sunday(y, 11, 1)) * 86400 + 3600 - tz * 60; }
+    else return 0;
+    return utcSec >= s && utcSec < e ? 60 : 0;
+  },
+  // Local minutes after midnight of sunrise/sunset, or -1.
+  sun(y, m, d, rise) {
+    const loc = P().settings.location, s = P().settings;
+    if (loc.lat == null || loc.lon == null) return -1;
+    const utc = KDModel.sunUtc(y, m, d, loc.lat, loc.lon, rise);
+    if (utc == null) return -1;
+    const local = utc + (s.tzOffsetMin ?? 60) + Sched.dst(Sched.days(y, m, d) * 86400 + 43200, y, s.time.dst, s.tzOffsetMin ?? 60);
+    return ((local % 1440) + 1440) % 1440;
+  },
+};
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+// Timed triggers in the next 7 days, with calendar/date conditions evaluated per day.
+function upcomingEvents() {
+  const p = P(), out = [];
+  const now = S.status?.clock?.local ? new Date(S.status.clock.local.replace(' ', 'T')) : new Date();
+  for (let k = 0; k < 7; k++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k);
+    const y = day.getFullYear(), m = day.getMonth() + 1, d = day.getDate();
+    const wd = DAYS[day.getDay()], md = m * 100 + d, ymd = y * 10000 + md;
+    for (const t of p.triggers) {
+      if (t.type !== 'time' || t.enabled === false || (t.days && !t.days.includes(wd))) continue;
+      let min;
+      if (t.at === 'sunrise' || t.at === 'sunset') {
+        const base = Sched.sun(y, m, d, t.at === 'sunrise');
+        if (base < 0) continue;
+        min = ((base + (t.offset || 0)) % 1440 + 1440) % 1440;
+      } else {
+        const [h, mi] = String(t.at || '00:00').split(':').map(Number);
+        min = h * 60 + mi;
+      }
+      if (k === 0 && min < now.getHours() * 60 + now.getMinutes()) continue;  // already passed today
+      let skip = '';
+      const notes = [];
+      for (const c of t.conditions || []) {
+        const w = tokenize(c).map((x) => x.v);
+        if (w[0] === 'calendar' && w.length === 3) {
+          const act = p.calendar.some((e) => e.name.toLowerCase() === w[1].toLowerCase() && Sched.inPeriod(md, ymd, e.from, e.to));
+          if (act !== (w[2] === 'active')) skip = `calendar ${w[1]} ${act ? 'active' : 'inactive'}`;
+        } else if (w[0] === 'date' && w[1] === 'between' && w.length === 4) {
+          if (!Sched.inPeriod(md, ymd, w[2], w[3])) skip = `outside ${w[2]} – ${w[3]}`;
+        } else if (w[0] === 'day' && w[1] === 'is') {
+          if (!w.slice(2).join(',').split(',').map((x) => x.trim()).includes(wd)) skip = 'other weekday';
+        } else notes.push(c);
+      }
+      out.push({ date: day, min, t, skip, notes });
+    }
+  }
+  return out.sort((a, b) => a.date - b.date || a.min - b.min);
+}
+views.schedule = () => {
+  const p = P(), s = p.settings, c = S.status?.clock;
+  const today = new Date();
+  const ty = today.getFullYear(), tm = today.getMonth() + 1, td = today.getDate();
+  const rise = Sched.sun(ty, tm, td, true), set = Sched.sun(ty, tm, td, false);
+  const ev = upcomingEvents();
+  let lastDay = '';
+  return `<h2>Schedule</h2>
+  <div class="grid">
+    <div class="card"><h3 style="margin-top:0">Controller clock</h3>
+      <div class="mon-rows">
+        <span class="muted">Local time</span><span>${c?.set ? esc(c.local) + (c.dst ? ' (summer time)' : '') : '<span class="bad">not set</span>'}</span>
+        <span class="muted">NTP</span><span>${!s.time.ntpEnabled ? 'off' : c?.ntp?.error ? `<span class="bad">${esc(c.ntp.error)}</span>` : c?.ntp?.lastSync ? 'synced ' + ago(c.ntp.lastSync) : 'waiting…'}</span>
+        <span class="muted">Sunrise</span><span>${c?.sunrise || (rise >= 0 ? hhmm(rise) : '—')}</span>
+        <span class="muted">Sunset</span><span>${c?.sunset || (set >= 0 ? hhmm(set) : '—')}</span>
+        <span class="muted">Calendar today</span><span>${c?.calendar?.length ? c.calendar.map((n) => `<span class="tag mon-warn">${esc(n)}</span>`).join(' ') : 'nothing special'}</span>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="btn small" data-cmd="ntp sync">Sync now</button><button class="btn small" id="syncBrowser">Set from this browser</button></div></div>
+    <div class="card"><h3 style="margin-top:0">Time & location</h3>
+      <div class="form" style="grid-template-columns:110px 1fr">
+        <label>Time zone</label><div class="row nowrap"><span class="muted">UTC</span><input type="number" step="15" data-p="settings.tzOffsetMin" data-t="num" value="${s.tzOffsetMin}" style="width:80px" data-r><span class="muted">min (CET = 60)</span></div>
+        <label>Summer time</label><select data-p="settings.time.dst" data-r>${[['eu', 'Europe (last Sun Mar – last Sun Oct)'], ['us', 'USA (2nd Sun Mar – 1st Sun Nov)'], ['none', 'none']].map(([v, n]) => `<option value="${v}"${s.time.dst === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
+        <label>NTP server</label><div class="row nowrap"><input type="checkbox" data-p="settings.time.ntpEnabled" data-t="bool"${s.time.ntpEnabled ? ' checked' : ''}><input data-p="settings.time.ntp" value="${esc(s.time.ntp)}"></div>
+        <label>Latitude</label><input type="number" step="0.0001" data-p="settings.location.lat" data-t="num" value="${s.location.lat ?? ''}" placeholder="52.16" data-r>
+        <label>Longitude</label><input type="number" step="0.0001" data-p="settings.location.lon" data-t="num" value="${s.location.lon ?? ''}" placeholder="4.49 (east +)" data-r>
+      </div></div>
+  </div>
+  <h3>Calendar periods</h3>
+  <p class="muted" style="margin-top:-4px">Holidays, closed days, seasons… Use them as conditions: <code>calendar Closed inactive</code>. MM-DD repeats every year; YYYY-MM-DD is that date only. Several rows may share a name.</p>
+  <table style="max-width:720px"><tr><th>Name</th><th>From</th><th>To</th><th>Today</th><th></th></tr>
+  ${p.calendar.map((e, i) => `<tr>
+    <td><input data-p="calendar.${i}.name" value="${esc(e.name)}" data-r></td>
+    <td><input data-p="calendar.${i}.from" value="${esc(e.from)}" placeholder="12-24" class="mono" data-r></td>
+    <td><input data-p="calendar.${i}.to" value="${esc(e.to || '')}" placeholder="12-26" class="mono" data-r></td>
+    <td>${Sched.inPeriod(tm * 100 + td, ty * 10000 + tm * 100 + td, e.from || '01-01', e.to || e.from || '01-01') ? '<span class="tag mon-warn">active</span>' : '<span class="muted">—</span>'}</td>
+    <td><button class="btn small ghost" data-del="calendar.${i}">✕</button></td></tr>`).join('')}</table>
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="calendar">+ Period</button></div>
+  <h3>Next 7 days</h3>
+  ${ev.length ? `<table class="sched"><tr><th>When</th><th>Trigger</th><th>Note</th></tr>${ev.map((e) => {
+    const dayLabel = e.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    const head = dayLabel !== lastDay ? `<b>${esc(dayLabel)}</b> ` : '';
+    lastDay = dayLabel;
+    return `<tr class="${e.skip ? 'skipped' : ''}"><td class="mono">${head}${hhmm(e.min)}${e.t.at === 'sunrise' || e.t.at === 'sunset' ? ` <span class="muted">${e.t.at}${e.t.offset ? (e.t.offset > 0 ? '+' : '') + e.t.offset : ''}</span>` : ''}</td>
+      <td><a href="#" data-goto-trigger="${e.t.id}">${e.t.id} · ${esc(e.t.name)}</a></td>
+      <td>${e.skip ? `<span class="muted">skipped: ${esc(e.skip)}</span>` : e.notes.length ? `<span class="muted">if ${esc(e.notes.join(' and '))}</span>` : ''}</td></tr>`;
+  }).join('')}</table>` : '<p class="muted">No time triggers in the next 7 days.</p>'}`;
+};
+views.schedule.after = () => {
+  $('#syncBrowser').addEventListener('click', setClockFromPc);
+};
+
+// ---------------------------------------------------------------------------
+// Monitoring
+// ---------------------------------------------------------------------------
+const PJ_ERR_PARTS = ['Fan', 'Lamp', 'Temp', 'Cover', 'Filter', 'Other'];
+const PJ_MUTE = { 30: 'off', 31: 'picture + sound', 11: 'picture', 21: 'sound' };
+// "online" / "offline" / "unknown" for any monitored name (PC, device, projector)
+function hostState(name) {
+  const st = S.status;
+  if (!st) return '';
+  const h = st.monitor?.hosts?.find((x) => x.name.toLowerCase() === String(name).toLowerCase());
+  if (h) return h.state;
+  const pj = [...(st.projectors || []), ...(st.drivers || [])].find((x) => x.name.toLowerCase() === String(name).toLowerCase());
+  if (pj) return !pj.seen ? 'unknown' : pj.online ? 'online' : 'offline';
+  return '';
+}
+function ago(epoch) {
+  const now = S.status?.time || 0;
+  if (!epoch) return 'never';
+  const s = Math.max(0, now - epoch);
+  if (s < 5) return 'just now';
+  if (s < 90) return `${s}s ago`;
+  if (s < 5400) return `${Math.round(s / 60)} min ago`;
+  if (s < 172800) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86400)} days ago`;
+}
+// A duration: "45 s", "12 min", "5 h 20 min", "3 days 4 h".
+function duration(s) {
+  s = Math.max(0, Math.round(s || 0));
+  if (s < 90) return `${s} s`;
+  if (s < 5400) return `${Math.round(s / 60)} min`;
+  if (s < 172800) return `${Math.floor(s / 3600)} h ${Math.floor(s / 60) % 60} min`;
+  return `${Math.floor(s / 86400)} days ${Math.floor(s / 3600) % 24} h`;
+}
+// 32 most recent checks, oldest left; bit 0 = latest, 1 = answered.
+function historyBar(bits, checks) {
+  let html = '';
+  for (let i = 31; i >= 0; i--) {
+    const cls = i >= (checks || 0) ? '' : (bits >>> i) & 1 ? 'up' : 'down';
+    html += `<i class="${cls}"></i>`;
+  }
+  const n = Math.min(checks || 0, 32);
+  let up = 0;
+  for (let i = 0; i < n; i++) up += (bits >>> i) & 1;
+  return `<div class="hist" title="Last ${n} checks: ${up} answered, ${n - up} missed">${html}</div>`;
+}
+const kb = (b) => `${Math.round((b || 0) / 1024)} KB`;
+// Free memory: amber below 64 KB, red below 32 KB (the firmware logs a warning too).
+const memClass = (h) => (h.free < 32768 ? 'bad' : h.free < 65536 ? 'warn' : 'ok');
+function memText(h) {
+  if (!h || !h.size) return '—';
+  return `<span class="mem-${memClass(h)}" title="In use ${kb(h.used)} · lowest free since boot ${kb(h.minFree)}">${kb(h.free)} free of ${kb(h.size)}</span>`;
+}
+// Bar = memory in use now; the tick marks the highest use since boot.
+function memBar(h) {
+  if (!h || !h.size) return '';
+  const pct = Math.round((1 - h.free / h.size) * 100);
+  return `<div class="membar" title="${pct}% in use now · lowest free since boot ${kb(h.minFree)}"><div class="mem-${memClass(h)}" style="width:${pct}%"></div>
+    <span style="left:${Math.round((1 - h.minFree / h.size) * 100)}%"></span></div>`;
+}
+function monSummary(st) {
+  const hosts = st?.monitor?.hosts || [];
+  const pjs = st?.projectors || [];
+  const all = [...hosts.map((h) => h.state), ...[...pjs, ...(st?.drivers || [])].map((p) => (!p.seen ? 'unknown' : p.online ? 'online' : 'offline')),
+    ...(st?.io?.tcp || []).map((x) => x.state), ...(st?.io?.modbus || []).map((x) => x.state)];
+  return { online: all.filter((s) => s === 'online').length, offline: all.filter((s) => s === 'offline').length, unknown: all.filter((s) => s === 'unknown').length, total: all.length };
+}
+views.monitor = () => {
+  const m = P().settings.monitor;
+  return `<h2>Monitoring</h2>
+  <div class="card mon-bar">
+    <div class="row">
+      <label class="muted">Check every</label><input type="number" id="monInterval" min="5" max="3600" value="${m.interval}" style="width:80px"><span class="muted">s</span>
+      <label class="muted" title="How long to wait for a ping reply">Timeout</label><input type="number" id="monTimeout" min="100" max="5000" step="100" value="${m.timeout}" style="width:80px"><span class="muted">ms</span>
+      <label class="muted" title="Missed checks in a row before a host counts as offline">Offline after</label><input type="number" id="monFailures" min="1" max="10" value="${m.failures}" style="width:60px"><span class="muted">missed checks</span>
+      <button class="btn small" id="monApply">Apply</button>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn primary small" data-cmd="monitor check">⟳ Check now</button>
+    </div>
+    <div class="row" id="monSummary" style="margin-top:8px"></div>
+  </div>
+  ${monTabs()}
+  <div id="monBody"></div>
+  <p class="muted">PCs and network devices are pinged (ICMP); projectors are polled over PJLink for power, lamp hours, input, mute and error status.
+    Kiss-Box, KNX, BrightSign, DiGidot, NETIO and Pharos devices are asked for their status in their own protocol at this same interval; with live updates they report changes at once.
+    Turn monitoring off per PC/device on the Devices page. Use a <b>Device online/offline</b> trigger to react, e.g. send an email.
+    <b>Click a card</b> to open it with its online/offline history and its own log lines.</p>`;
+};
+views.monitor.after = () => {
+  renderMonitor();
+  // The cards are redrawn every second; don't replace a button between mouse down and up.
+  $('#monBody').addEventListener('mousedown', () => (S.monHold = true));
+  $('#monBody').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-mon-open]');
+    if (!c || S.monOpen || e.target.closest('button, input, select, textarea, a, label, [data-live]')) return;
+    S.monOpen = c.dataset.monOpen;
+    S.monHold = false;
+    renderMonitor();
+    $('#main').scrollTop = 0;
+  });
+  $('#monApply').addEventListener('click', async () => {
+    const m = P().settings.monitor;
+    m.interval = Math.max(5, Math.min(3600, +$('#monInterval').value || 60));
+    m.timeout = Math.max(100, Math.min(5000, +$('#monTimeout').value || 1000));
+    m.failures = Math.max(1, Math.min(10, +$('#monFailures').value || 2));
+    markDirty();
+    const r = await cmd(`monitor interval ${m.interval}`);
+    toast(r.ok ? `Checking every ${m.interval} s now - press Save to keep it (timeout/failures apply after saving)` : r.reply, !r.ok);
+  });
+};
+views.monitor.keys = (e) => { if (e.key === 'Escape' && S.monOpen) monDetailClose(); };
+addEventListener('mouseup', () => setTimeout(() => (S.monHold = false)));   // after the click handler ran
+
+// ---- One device opened: history graph + its log lines ----------------------------------
+// The controller writes every online/offline (and projector power on/off) change to a day
+// file on the stick (Monitor::record); /api/history reads it back, /api/devlog searches the
+// log files for the device's name or IP. Times are picked in the browser's local time.
+const HIST_GAP = 900;   // no line for this long = the controller was off (it writes "alive" every 600 s)
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const clockHm = (s) => new Date(s * 1000).toTimeString().slice(0, 5);
+function monRange() {
+  const r = (S.monRange ??= { date: ymd(new Date()), from: '00:00', to: '00:00' });
+  const from = new Date(`${r.date}T${r.from}`).getTime() / 1000;
+  let to = new Date(`${r.date}T${r.to}`).getTime() / 1000;
+  if (to <= from) to += 86400;   // 00:00-00:00 = the whole day, 22:00-06:00 = overnight
+  return { from, to };
+}
+function monDetailClose() {
+  S.monOpen = null;
+  stopPageLoop('monDetail');
+  renderMonitor();
+}
+function monDetailHtml(it) {
+  const r = S.monRange ?? (monRange(), S.monRange);
+  return `<div id="monDetail" data-key="${esc(S.monOpen)}">
+    <div class="row" style="margin-bottom:8px"><button class="btn small" id="mdBack">← All devices</button><span class="muted">Esc closes</span></div>
+    <div id="monDetailCard"></div>
+    <div class="card md-hist">
+      <div class="row">
+        <h3 style="margin:0;flex:1">History</h3>
+        <button class="btn small" data-mdday="-1" title="Day before">◀</button>
+        <input type="date" id="mdDate" value="${r.date}">
+        <button class="btn small" data-mdday="1" title="Day after">▶</button>
+        <label class="muted">from</label><input type="time" id="mdFrom" value="${r.from}">
+        <label class="muted">to</label><input type="time" id="mdTo" value="${r.to}">
+        <button class="btn small" data-mdq="today">Today</button>
+        <button class="btn small" data-mdq="day" title="00:00 - 24:00">Whole day</button>
+        <button class="btn small" data-mdq="work" title="08:00 - 17:00">8 - 17</button>
+      </div>
+      <div class="row md-stats" id="mdStats"><span class="muted">loading…</span></div>
+      <div id="mdGraph"></div>
+    </div>
+    <div class="card">
+      <div class="row"><h3 style="margin:0;flex:1">Log</h3><span class="muted" id="mdLogInfo"></span></div>
+      <div class="log md-log" id="mdLog"></div>
+    </div>
+  </div>`;
+}
+function monDetailWire(it) {
+  const set = (k, v) => { S.monRange[k] = v; };
+  const reload = () => {
+    ['date', 'from', 'to'].forEach((k) => ($(`#md${k[0].toUpperCase() + k.slice(1)}`).value = S.monRange[k]));
+    pagePoll('monDetail', () => monDetailLoad(it), 15000);
+  };
+  $('#mdBack').addEventListener('click', monDetailClose);
+  $('#mdDate').addEventListener('change', (e) => { if (e.target.value) { set('date', e.target.value); reload(); } });
+  $('#mdFrom').addEventListener('change', (e) => { if (e.target.value) { set('from', e.target.value); reload(); } });
+  $('#mdTo').addEventListener('change', (e) => { if (e.target.value) { set('to', e.target.value); reload(); } });
+  $$('[data-mdday]').forEach((b) => b.addEventListener('click', () => {
+    const d = new Date(`${S.monRange.date}T12:00`);
+    d.setDate(d.getDate() + +b.dataset.mdday);
+    set('date', ymd(d));
+    reload();
+  }));
+  $$('[data-mdq]').forEach((b) => b.addEventListener('click', () => {
+    const q = b.dataset.mdq;
+    if (q === 'today') set('date', ymd(new Date()));
+    else { set('from', q === 'work' ? '08:00' : '00:00'); set('to', q === 'work' ? '17:00' : '00:00'); }
+    reload();
+  }));
+  // A mark on the log lane jumps to its line.
+  $('#mdGraph').addEventListener('click', (e) => {
+    const m = e.target.closest('[data-logi]');
+    const row = m && $(`#mdLog [data-i="${m.dataset.logi}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: 'center' });
+    row.classList.add('flash');
+    setTimeout(() => row.classList.remove('flash'), 1200);
+  });
+  reload();
+}
+async function monDetailLoad(it) {
+  const { from, to } = monRange(), key = S.monOpen;
+  const q = `name=${encodeURIComponent(it.name)}&from=${from}&to=${to}`;
+  let lines, logs;
+  try {
+    [lines, logs] = await Promise.all([api(`/api/history?${q}`), api(`/api/devlog?${q}&ip=${encodeURIComponent(it.ip || '')}`)]);
+  } catch (e) {
+    if ($('#mdStats')) $('#mdStats').innerHTML = `<span class="bad">Could not read the history: ${esc(e.message)}</span>`;
+    return;
+  }
+  if (S.monOpen !== key || !$('#mdGraph')) return;   // closed or another device opened meanwhile
+  const now = S.status?.time > 1600000000 ? S.status.time : Date.now() / 1000;
+  const up = histSegments(lines, from, to, now, 'online', 'offline');
+  const pw = it.power ? histMask(histSegments(lines, from, to, now, 'on', 'off'), up) : null;
+  const lanes = [{ name: 'Online', segs: up, cls: { online: 'h-up', offline: 'h-down' } }];
+  if (pw) lanes.push({ name: 'Power', segs: pw, cls: { on: 'h-on', off: 'h-off' }, on: 'on' });
+  // A lane per on/off reading of a show device ("p:<key>=1|0"), in the device's own order.
+  if (it.drv) {
+    const pts = drvSt(it.drv).points || [], order = (k) => { const i = pts.findIndex((p) => p.k === k); return i < 0 ? 1e6 : i; };
+    const keys = [...new Set(lines.filter(([, s]) => s.startsWith('p:')).map(([, s]) => s.slice(2, s.lastIndexOf('='))))].sort((a, b) => order(a) - order(b));
+    for (const k of keys) {
+      const on = `p:${k}=1`, off = `p:${k}=0`;
+      lanes.push({ name: drvPointLabel(it.drv, k), segs: histMask(histSegments(lines, from, to, now, on, off), up), cls: { [on]: 'h-pon', [off]: 'h-poff' }, on, small: true });
+    }
+  }
+  $('#mdStats').innerHTML = histStats(up, pw, from, Math.min(to, now));
+  $('#mdGraph').innerHTML = histGraph(lanes, logs, from, to, now);
+  const box = $('#mdLog');
+  box.innerHTML = logs.length ? logs.map((m, i) => `<div class="l L${m.l}" data-i="${i}"><span class="t">${new Date(m.e * 1000).toTimeString().slice(0, 8)}</span><span class="v">${LOG_LVLS[m.l]}</span><span class="c">${m.c}</span><span class="m">${esc(m.m)}</span></div>`).join('')
+    : '<div class="muted" style="padding:6px">Nothing in the log about this device in this time.</div>';
+  box.scrollTop = box.scrollHeight;
+  $('#mdLogInfo').textContent = `${logs.length}${logs.length >= 300 ? ' (the last 300)' : ''} lines mentioning "${it.name}"${it.ip ? ' or ' + it.ip : ''}`;
+}
+// [[t0, t1, state], ...] over from..min(to, now); state = up/down value or null (unknown:
+// not checked yet, or the controller was off).
+function histSegments(lines, from, to, now, upVal, downVal) {
+  const end = Math.min(to, now), segs = [];
+  let state = null, since = from, lastLine = -Infinity;
+  const change = (t, s) => {
+    if (s === state) return;
+    t = Math.max(from, Math.min(end, t));
+    if (t > since) segs.push([since, t, state]);
+    if (t >= since) since = t;
+    state = s;
+  };
+  for (const [t, s] of lines) {
+    if (t - lastLine > HIST_GAP && state !== null) change(lastLine + 600, null);
+    lastLine = t;
+    if (s === 'boot') change(t, null);
+    else if (s === upVal) change(t, upVal);
+    else if (s === downVal) change(t, downVal);
+  }
+  if (end - lastLine > HIST_GAP && state !== null) change(lastLine + 600, null);
+  if (end > since) segs.push([since, end, state]);
+  return segs;
+}
+// A reading (or projector power) is only known while the device answers: unknown elsewhere.
+function histMask(segs, up) {
+  const cuts = [...new Set([...segs, ...up].flatMap(([a, b]) => [a, b]))].sort((a, b) => a - b);
+  const at = (list, t) => list.find(([a, b]) => t >= a && t < b)?.[2] ?? null;
+  const out = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const [a, b] = [cuts[i], cuts[i + 1]], s = at(up, a) === 'online' ? at(segs, a) : null;
+    if (out.length && out[out.length - 1][2] === s && out[out.length - 1][1] === a) out[out.length - 1][1] = b;
+    else out.push([a, b, s]);
+  }
+  return out;
+}
+// "1.3 · Fog machine", "Timeline 1 Inloop", "out2 · Beamer": the name given in the UI or by the device.
+function drvPointLabel(x, k) {
+  const n = x.names?.[k] || (x.addresses || []).find((a) => a.ga === k)?.name || (drvSt(x).points || []).find((p) => p.k === k)?.n || '';
+  return !n || n === k ? k : x.type === 'pharos' ? n : `${k} · ${n}`;
+}
+function histStats(up, pw, from, end) {
+  const sum = (segs, v) => segs.reduce((n, [a, b, s]) => n + (s === v ? b - a : 0), 0);
+  const total = Math.max(1, end - from);
+  if (end <= from) return '<span class="muted">This time is still to come.</span>';
+  const on = sum(up, 'online'), off = sum(up, 'offline'), unk = total - on - off;
+  let drops = 0, longest = 0;
+  up.forEach(([a, b, s], i) => {
+    if (s === 'offline') { longest = Math.max(longest, b - a); if (up[i - 1]?.[2] === 'online') drops++; }
+  });
+  const chip = (cls, k, v) => `<span class="chip ${cls}" title="${k}">${k} <b>${v}</b></span>`;
+  let html = chip('ok', 'Online', `${Math.round((on / total) * 100)}% · ${duration(on)}`) +
+    chip(off ? 'bad' : '', 'Offline', duration(off)) +
+    chip('', 'Drop-outs', drops) +
+    (longest ? chip('', 'Longest offline', duration(longest)) : '') +
+    (unk > 60 ? chip('', 'Unknown', duration(unk)) : '');
+  if (pw) {
+    const ons = pw.filter(([, , s], i) => s === 'on' && pw[i - 1]?.[2] !== 'on');
+    const lastOff = pw.filter(([, , s], i) => s === 'off' && pw[i - 1]?.[2] === 'on').pop();
+    html += chip('', 'Power on', duration(sum(pw, 'on'))) + chip('', 'Switched on', `${ons.length}×`) +
+      (ons.length ? chip('', 'First on', clockHm(ons[0][0])) : '') + (lastOff ? chip('', 'Last off', clockHm(lastOff[0])) : '');
+  }
+  return html;
+}
+// lanes: [{name, segs, cls: {state: class}, on: the "on" state (shows on-time and switch count), small}]
+function histGraph(lanes, logs, from, to, now) {
+  const W = 1000, L = 170, R = 110, gap = 6;
+  const x = (t) => L + ((t - from) / (to - from)) * (W - L - R);
+  let y = 0;
+  lanes.forEach((ln) => { ln.y = y; ln.h = ln.small ? 15 : 22; y += ln.h + gap; });
+  const logY = y;
+  const H = logY + 14 + 22;
+  const word = (s) => (!s ? 'unknown' : s.startsWith('p:') ? (s.endsWith('=1') ? 'on' : 'off') : s);
+  const fmt = (a, b, s) => `${word(s)} ${clockHm(a)} – ${clockHm(b)} (${duration(b - a)})`;
+  let svg = '';
+  // Hour grid: every hour up to 12 h, else every 2/3/6 h.
+  const span = (to - from) / 3600, step = (span <= 12 ? 1 : span <= 24 ? 2 : span <= 48 ? 6 : 12) * 3600;
+  const first = Math.ceil(from / 3600) * 3600;
+  for (let t = first; t <= to; t += 3600) {
+    const local = new Date(t * 1000);
+    if ((local.getHours() * 3600) % step) continue;
+    const anchor = x(t) > W - R - 20 ? 'end' : 'middle';   // the last label stays inside
+    svg += `<line class="hist-grid" x1="${x(t)}" x2="${x(t)}" y1="0" y2="${logY + 14}"/><text class="hist-ax" x="${x(t)}" y="${H - 6}" text-anchor="${anchor}">${clockHm(t)}</text>`;
+  }
+  for (const ln of lanes) {
+    const ty = ln.y + ln.h / 2 + 4, short = ln.name.length > 26 ? ln.name.slice(0, 25) + '…' : ln.name;
+    svg += `<text class="hist-lbl" x="0" y="${ty}"><title>${esc(ln.name)}</title>${esc(short)}</text><rect class="h-none" x="${L}" y="${ln.y}" width="${W - L - R}" height="${ln.h}" rx="3"/>`;
+    for (const [a, b, s] of ln.segs)
+      svg += `<rect class="${s ? ln.cls[s] : 'h-unk'}" x="${x(a)}" y="${ln.y}" width="${Math.max(1, x(b) - x(a))}" height="${ln.h}"><title>${esc(ln.name)}: ${fmt(a, b, s)}</title></rect>`;
+    if (ln.on) {   // at the right: how often it went on, and for how long in total
+      const n = ln.segs.filter(([, , s], i) => s === ln.on && ln.segs[i - 1]?.[2] !== ln.on).length;
+      const t = ln.segs.reduce((sum, [a, b, s]) => sum + (s === ln.on ? b - a : 0), 0);
+      svg += `<text class="hist-n" x="${W - R + 8}" y="${ty}">${n}× · ${duration(t)}<title>switched on ${n}×, on for ${duration(t)} in total</title></text>`;
+    }
+  }
+  // Log lane: a tick per line, coloured by level; click jumps to the line.
+  svg += `<text class="hist-lbl" x="0" y="${logY + 11}">Log</text>`;
+  logs.forEach((m, i) => {
+    if (m.e < from || m.e > to) return;
+    svg += `<rect class="h-log L${m.l}" data-logi="${i}" x="${x(m.e) - 1.5}" y="${logY}" width="3" height="14"><title>${new Date(m.e * 1000).toTimeString().slice(0, 8)} ${esc(m.m)}</title></rect>`;
+  });
+  if (now > from && now < to) svg += `<line class="hist-now" x1="${x(now)}" x2="${x(now)}" y1="0" y2="${logY + 14}"><title>now</title></line>`;
+  return `<svg class="md-graph" viewBox="0 0 ${W} ${H}">${svg}</svg>
+    <div class="row muted md-legend"><span><i class="h-up"></i>online</span><span><i class="h-down"></i>offline</span>${lanes.some((l) => l.name === 'Power') ? '<span><i class="h-on"></i>power on</span><span><i class="h-off"></i>power off / standby</span>' : ''}${lanes.some((l) => l.small) ? '<span><i class="h-pon"></i>reading on</span><span><i class="h-poff"></i>off</span>' : ''}<span><i class="h-unk"></i>unknown (not checked yet, device offline or controller off)</span></div>`;
+}
+
+function renderMonitor() {
+  const body = $('#monBody');
+  if (!body || S.monHold) return;
+  // Don't wipe a value someone is typing on a card.
+  const a = document.activeElement;
+  if (!S.monOpen && a && a.tagName === 'INPUT' && a.type !== 'range' && body.contains(a)) return;
+  const st = S.status, p = P();
+  const sum = monSummary(st);
+  const mon = st?.monitor;
+  $('#monSummary').innerHTML = st ? `<span class="chip ok">${sum.online} online</span>
+    <span class="chip ${sum.offline ? 'bad' : ''}">${sum.offline} offline</span>
+    ${sum.unknown ? `<span class="chip">${sum.unknown} not checked yet</span>` : ''}
+    <span class="muted">Last check ${ago(mon?.lastRun)} · next in ${Math.max(0, mon?.nextIn ?? 0)} s · every ${mon?.interval ?? '?'} s</span>` : '<span class="muted">Waiting for controller…</span>';
+  const card = (state, title, sub, rows, extra, actions, open) => `<div class="card mon-card ${state}${open ? ' mon-open' : ''}"${open ? ` data-mon-open="${esc(open)}"` : ''}>
+    <div class="row nowrap"><span class="dot ${state === 'online' ? 'ok' : state === 'offline' ? 'bad' : ''}"></span><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(title)}</b>
+      <span class="tag mon-${state}">${state}</span>${open && !S.monOpen ? '<span class="mon-expand" title="Open: history and log">⤢</span>' : ''}</div>
+    <div class="muted mono" style="font-size:12px;margin:2px 0 8px 14px">${esc(sub)}</div>
+    <div class="mon-rows">${rows.map(([k, v]) => `<span class="muted">${k}</span><span>${v}</span>`).join('')}</div>
+    ${extra || ''}${actions ? `<div class="row" style="margin-top:8px">${actions}</div>` : ''}</div>`;
+  const s = st?.stats;
+  const controller = st ? card(Date.now() - S.statusAt < 4000 ? 'online' : 'offline', 'Controller', `${st.ip} · firmware ${st.version}`, [
+    ['Uptime', fmtTime(st.uptime).replace(/\.\d$/, '')], ['Last start', startedText(st.started)], ['USB stick', st.usb ? 'mounted' : '<span class="bad">missing</span>'],
+    ['Engine', `${s.engineFps} fps · tick ${s.tickUs} µs`], ['DMX', `${s.dmxFps} fps`],
+    ['Art-Net / sACN', `${s.artTx} / ${s.sacnTx} pkt/s`], ['Clock', st.time > 1600000000 ? new Date(st.time * 1000).toLocaleString() : 'not set'],
+    ['Memory', memText(s.heap)], ['Lowest free', s.heap ? kb(s.heap.minFree) + ' (since boot)' : '—'],
+  ], memBar(s.heap)) : '';
+  const pjCard = (x) => {
+    const j = st?.projectors?.find((y) => y.id === x.id) || {};
+    const state = !j.seen ? 'unknown' : j.online ? 'online' : 'offline';
+    const errs = j.errors ? `<div class="row" style="gap:4px;margin-top:6px">${PJ_ERR_PARTS.map((n, k) => {
+      const v = j.errors[k];
+      return `<span class="tag ${v === '2' ? 'mon-offline' : v === '1' ? 'mon-warn' : 'mon-ok'}" title="${n}: ${v === '2' ? 'error' : v === '1' ? 'warning' : 'ok'}">${n}</span>`;
+    }).join('')}</div>` : '';
+    const inp = PJ_INPUTS.find(([v]) => v === j.input);
+    return card(state, x.name, `${x.ip} · ${j.model || 'projector'}${j.pjName && j.pjName !== x.name ? ' · "' + j.pjName + '"' : ''}`, [
+      ['Power', j.power || '—'], ['Lamp', j.lamp != null ? `${j.lamp} h` : '—'],
+      ['Input', j.input ? `${j.input}${inp ? ' · ' + inp[1] : ''}` : '—'], ['Mute', j.mute ? PJ_MUTE[j.mute] || j.mute : '—'],
+      ['Last seen', ago(j.lastSeen)], ['Last reply', esc(j.last || '—')],
+    ], errs + historyBar(j.history, j.checks), `<button class="btn small" data-cmd="projector ${x.id} on">On</button><button class="btn small" data-cmd="projector ${x.id} off">Off</button>`, `projector:${x.id}`);
+  };
+  const pjCards = p.projectors.map(pjCard);
+  const hostCard = (h, kind) => {
+    const x = (kind === 'pc' ? p.pcs : p.devices).find((y) => y.name === h.name) || {};
+    const rows = [['Ping', h.latency != null && h.state === 'online' ? `${h.latency} ms` : '—'], ['Last seen', ago(h.lastSeen)], ['Last check', ago(h.lastCheck)]];
+    if (kind === 'pc') rows.push(['MAC', x.mac || '—'], ['Last action', pcLast(x.id)]);
+    return card(h.state, h.name, kind === 'pc' ? h.ip : `${h.ip}${x.port ? ':' + x.port : ''}${x.notes ? ' · ' + x.notes : ''}`, rows,
+      historyBar(h.history, h.checks), kind === 'pc' ? pcButtons(x.id) : '', `${kind}:${h.name}`);
+  };
+  const hosts = mon?.hosts || [];
+  // One device opened: its card big, with history and log (see monDetail*).
+  if (S.monOpen) {
+    const [k, ...rest] = S.monOpen.split(':'), ref = rest.join(':');
+    let it = null;
+    if (k === 'projector') { const x = p.projectors.find((y) => String(y.id) === ref); if (x) it = { name: x.name, ip: x.ip, power: true, html: () => pjCard(x) }; }
+    else if (k === 'drv') { const x = p.drivers.find((y) => String(y.id) === ref); if (x) it = { name: x.name, ip: x.ip, drv: x, html: () => drvMonCard(x, card, false) }; }
+    else { const h = hosts.find((y) => y.kind === k && y.name === ref); if (h) it = { name: h.name, ip: h.ip, html: () => hostCard(h, k) }; }
+    if (it) {
+      if ($('#monDetail')?.dataset.key !== S.monOpen) { body.innerHTML = monDetailHtml(it); monDetailWire(it); }
+      const dc = $('#monDetailCard');
+      if (!(a && dc.contains(a) && a.tagName === 'INPUT' && a.type !== 'range')) dc.innerHTML = it.html();
+      return;
+    }
+    S.monOpen = null;   // removed from the project
+    stopPageLoop('monDetail');
+  }
+  const section = (title, cards, empty) => `<h3>${title}</h3>${cards.length ? `<div class="grid mon-grid">${cards.join('')}</div>` : `<p class="muted">${empty}</p>`}`;
+  const keep = body.scrollTop;
+  const tab = monTabList().some(([k]) => k === S.monTab) ? S.monTab : 'all';
+  // One show-device type: every device with all its readings and controls.
+  if (DRIVERS[tab] || tab === 'board') {
+    body.innerHTML = `<div class="grid mon-grid wide">${tab === 'board' ? pmcMonCard(card, false) : p.drivers.filter((x) => x.type === tab).map((x) => drvMonCard(x, card, false)).join('')}</div>`;
+    body.scrollTop = keep;
+    return;
+  }
+  const pcSec = () => section('PCs', hosts.filter((h) => h.kind === 'pc').map((h) => hostCard(h, 'pc')), 'No monitored PCs (Devices page).');
+  const netSec = () => section('Network devices', hosts.filter((h) => h.kind === 'device').map((h) => hostCard(h, 'device')), 'No monitored network devices (Devices page).') +
+    ((st?.io?.tcp?.length || st?.io?.modbus?.length) ? section('TCP & Modbus connections', [
+      ...(st.io.tcp || []).map((x) => card(x.state, x.name, `TCP ${x.ip}:${x.port}`, [['Last received', x.lastLine ? esc(x.lastLine) : '—'], ['When', ago(x.lastRx)]])),
+      ...(st.io.modbus || []).map((x) => card(x.state, x.name, `Modbus ${x.ip}`, [['Last good poll', ago(x.lastOk)], ['Errors', String(x.errors)],
+        ['Variables', esc(p.variables.filter((v) => v.modbus?.device === x.name).map((v) => `${v.name}=${st.vars?.[v.name] ?? '?'}`).join(', ') || '—')]])),
+    ], '') : '') + (st?.mqtt?.enabled ? section('MQTT broker', [mqttCard(st.mqtt, card)], '') : '');
+  if (tab !== 'all') {
+    body.innerHTML = tab === 'projectors' ? section('Projectors', pjCards, '') : tab === 'pcs' ? pcSec() : netSec();
+    body.scrollTop = keep;
+    return;
+  }
+  // All: a section per kind, show devices by type.
+  const drvSecs = Object.entries(DRIVERS).map(([t, v]) => {
+    const list = p.drivers.filter((x) => x.type === t);
+    return list.length ? section(v.label, list.map((x) => drvMonCard(x, card, true)), '') : '';
+  }).join('');
+  body.innerHTML = section('Controller', [controller], '') +
+    (pmcUsed() ? section('Machine Control', [pmcMonCard(card, true)], '') : '') +
+    (p.projectors.length ? section('Projectors', pjCards, '') : '') +
+    pcSec() + drvSecs + netSec();
+  body.scrollTop = keep;
+}
+views.console = () => `<h2>Console</h2>
+  <div class="console" id="consoleOut">${S.consoleLines.join('')}</div>
+  <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input id="consoleIn" class="cmd" placeholder="Type a command… (Tab to complete, ↑ for history)" spellcheck="false" autocomplete="off"></div>
+  <p class="muted">Commands: ${GRAMMAR.map((g) => g.parts[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}</p>`;
+views.console.after = () => {
+  const inp = $('#consoleIn'), out = $('#consoleOut');
+  out.scrollTop = out.scrollHeight;
+  inp.focus();
+  let h = S.history.length;
+  inp.addEventListener('keydown', (e) => {
+    if (document.querySelector('.ac[style*="block"] .opt:not(.hint)')) return;
+    if (e.key === 'ArrowUp' && h > 0) { inp.value = S.history[--h]; e.preventDefault(); }
+    if (e.key === 'ArrowDown') { h = Math.min(S.history.length, h + 1); inp.value = S.history[h] || ''; e.preventDefault(); }
+  });
+};
+async function runConsole() {
+  const inp = $('#consoleIn');
+  const line = inp.value.trim();
+  if (!line) return;
+  inp.value = '';
+  S.history = S.history.filter((x) => x !== line).concat(line).slice(-100);
+  localStorage.setItem('kd.history', JSON.stringify(S.history));
+  const push = (cls, text) => {
+    S.consoleLines.push(`<div class="${cls}">${esc(text)}</div>`);
+    const out = $('#consoleOut');
+    if (out) { out.insertAdjacentHTML('beforeend', S.consoleLines[S.consoleLines.length - 1]); out.scrollTop = out.scrollHeight; }
+  };
+  push('in', '> ' + line);
+  const r = await cmd(line);
+  push(r.ok ? 'ok' : 'err', r.reply || (r.ok ? 'ok' : 'error'));
+}
+
+views.log = () => {
+  S.logUnseen = 0;
+  updateHeader();
+  const f = S.logFilter;
+  return `<h2>Live log</h2>
+  <div class="logbar">
+    <select id="lvMin">${LOG_LVLS.map((l, i) => `<option value="${i}"${f.min === i ? ' selected' : ''}>≥ ${l}</option>`).join('')}</select>
+    <div class="cats">${LOG_CATS.map((c) => `<label><input type="checkbox" data-cat="${c}"${f.cats.has(c) ? ' checked' : ''}>${c}</label>`).join('')}</div>
+    <input id="lvText" placeholder="Search…" value="${esc(f.text)}" style="width:160px">
+    <button class="btn small" id="lvPause">${S.logPaused ? 'Resume' : 'Pause'}</button>
+    <button class="btn small" id="lvClear">Clear view</button>
+    <button class="btn small" id="lvExport">Export</button>
+    <span class="muted" id="logCount"></span>
+  </div>
+  <div class="log" id="logBox"></div>
+  <h3>Firmware log levels</h3>
+  <div class="row" id="levels"><span class="muted">loading…</span></div>`;
+};
+views.log.after = () => {
+  const f = S.logFilter;
+  const refill = () => {
+    const box = $('#logBox');
+    box.innerHTML = S.log.filter(logVisible).slice(-2000).map(logRowHtml).join('');
+    box.scrollTop = box.scrollHeight;
+    $('#logCount').textContent = box.childElementCount + ' shown';
+  };
+  refill();
+  $('#lvMin').addEventListener('change', (e) => { f.min = +e.target.value; refill(); });
+  $$('[data-cat]').forEach((el) => el.addEventListener('change', () => { el.checked ? f.cats.add(el.dataset.cat) : f.cats.delete(el.dataset.cat); refill(); }));
+  $('#lvText').addEventListener('input', (e) => { f.text = e.target.value; refill(); });
+  $('#lvPause').addEventListener('click', (e) => { S.logPaused = !S.logPaused; e.target.textContent = S.logPaused ? 'Resume' : 'Pause'; if (!S.logPaused) refill(); });
+  $('#lvClear').addEventListener('click', () => { S.log = []; refill(); });
+  $('#lvExport').addEventListener('click', () => {
+    const txt = S.log.filter((m) => !m.gap).map((m) => `${logTime(m)}\t${LOG_LVLS[m.l]}\t${m.c}\t${m.m}`).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+    a.download = `kd-log-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.txt`;
+    a.click();
+  });
+  api('/api/loglevels').then((lv) => {
+    if (!$('#levels')) return;   // left the page before the answer came
+    $('#levels').innerHTML = LOG_CATS.map((c) => `<label class="row muted" style="gap:4px">${c}<select data-lvl="${c}">${LOG_LVLS.map((l) => `<option${lv[c] === l ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`).join('');
+    $$('[data-lvl]').forEach((el) => el.addEventListener('change', async () => {
+      const r = await cmd(`loglevel ${el.dataset.lvl.toLowerCase()} ${el.value.toLowerCase()}`);
+      toast(r.reply, !r.ok);
+    }));
+  }).catch(() => { if ($('#levels')) $('#levels').innerHTML = '<span class="muted">unavailable</span>'; });
+};
+
+views.dmx = () => `<h2>DMX monitor</h2>
+  <div class="row" style="margin-bottom:10px"><label class="muted">Universe</label>
+    <select id="dmxU">${opts(P().universes, S.dmxU)}</select>
+    <span class="muted">Click a channel to set an override. Live output after grand master.</span>
+    <button class="btn small" data-cmd="clear overrides">Clear overrides</button></div>
+  <div class="dmx" id="dmxGrid">${Array.from({ length: 512 }, (_, i) => `<div data-ch="${i + 1}"><i></i><b>${i + 1}</b><span>0</span></div>`).join('')}</div>`;
+views.dmx.after = () => {
+  const fxAt = {};
+  for (const f of P().fixtures) if (f.universe === S.dmxU) (f.channels || []).forEach((c, i) => (fxAt[f.address + i] = `${f.name} · ${c}`));
+  $$('#dmxGrid > div').forEach((d) => (d.title = fxAt[d.dataset.ch] || `channel ${d.dataset.ch}`));
+  $('#dmxU').addEventListener('change', (e) => { S.dmxU = +e.target.value; render(); });
+  $('#dmxGrid').addEventListener('click', async (e) => {
+    const d = e.target.closest('[data-ch]');
+    if (!d) return;
+    const v = prompt(`Override ${S.dmxU}.${d.dataset.ch} (0-255)`, d.querySelector('span').textContent);
+    if (v !== null) { const r = await cmd(`set ${S.dmxU}.${d.dataset.ch} ${v}`); if (!r.ok) toast(r.reply, true); }
+  });
+  const cells = $$('#dmxGrid > div');
+  pagePoll('dmx', async () => {
+    try {
+      const vals = await api('/api/dmx?u=' + S.dmxU);
+      vals.forEach((v, i) => {
+        cells[i].lastChild.textContent = v;
+        cells[i].firstChild.style.height = (v / 255) * 100 + '%';
+      });
+    } catch { /* offline */ }
+  }, 250);
+};
+
+views.settings = () => {
+  const p = P();
+  return `<h2>Settings</h2>
+  <div class="form">
+    <label>Project name</label><input data-p="name" value="${esc(p.name)}">
+    <label>Time zone offset</label><input type="number" data-p="settings.tzOffsetMin" data-t="num" value="${p.settings.tzOffsetMin}" title="minutes from UTC (CET = 60, CEST = 120)">
+    <label>UDP trigger port</label><input type="number" data-p="settings.udpPort" data-t="num" value="${p.settings.udpPort}">
+    <label>sACN priority</label><input type="number" min="0" max="200" data-p="settings.sacnPriority" data-t="num" value="${p.settings.sacnPriority}">
+  </div>
+  <h3>Project file</h3>
+  <div class="row"><button class="btn" id="showExport" title="The project and its map images in one file, to keep or to edit on a PC">Export show file…</button>
+    <label class="btn" title="A .kdshow file (or a plain project.json)">Open show file…<input type="file" id="showOpen" accept=".kdshow,.json" hidden></label>
+    <button class="btn ghost" id="showNew">New project</button></div>
+  <p class="muted">Export saves the project as it is in the editor (unsaved changes included) with its map images as one <code>.kdshow</code> file.
+    Open loads such a file into the editor; press Save to put it on the controller. Make or edit a show on a PC with the mock: <code>node tools/mock-server.js 8080 C:\\Shows\\MyShow</code>.</p>
+  <h3>Mode groups</h3>
+  <table style="max-width:820px"><tr><th style="width:200px">Group</th><th>States (comma separated)</th><th></th></tr>
+  ${p.modes.map((g, i) => `<tr>
+    <td><input data-p="modes.${i}.name" value="${esc(g.name)}" data-r></td>
+    <td><input data-mstates="${i}" value="${esc(g.states.join(', '))}" placeholder="Open, Closed"></td>
+    <td><button class="btn small ghost" data-del="modes.${i}">✕</button></td></tr>`).join('')}</table>
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="modegroup">+ Mode group</button></div>
+  <p class="muted">Each group has one active state at a time, kept across reboots (like the Pharos Management Mode module, but several at once).
+    Set with <code>mode Curtains Open</code>, react with a <b>Mode change</b> trigger, check with <code>mode Museum is Open</code>.</p>
+  <h3>Network (applied after reboot)</h3>
+  <div class="form">
+    <label>DHCP</label><input type="checkbox" data-p="network.dhcp" data-t="bool"${p.network.dhcp ? ' checked' : ''} data-r>
+    ${p.network.dhcp ? '' : `<label>IP address</label><input data-p="network.ip" value="${esc(p.network.ip)}">
+    <label>Subnet mask</label><input data-p="network.mask" value="${esc(p.network.mask)}">
+    <label>Gateway</label><input data-p="network.gateway" value="${esc(p.network.gateway)}">`}
+  </div>
+  <h3>Controller</h3>
+  <div class="row"><button class="btn" id="syncClock">Set clock from this browser</button>
+    <button class="btn" data-cmd="reload">Reload project from USB</button></div>
+  <h3>Software update</h3>
+  <p id="updInfo">${updInfoHtml()}</p>
+  <div class="row"><label class="btn" title="A .kdupdate file (made by the firmware build, in the updates folder)">Install update file…<input type="file" id="updFile" accept=".kdupdate" hidden></label>
+    <span id="updProgress" class="muted"></span></div>
+  <p class="muted">Installs new firmware and a new web UI over the network, no USB cable or stick swap needed. The project, images and logs are kept.
+    A firmware update restarts the controller: no light output for about half a minute.</p>
+  <h3>Raw project JSON</h3>
+  <textarea class="json" id="raw" spellcheck="false"></textarea>
+  <div class="row" style="margin-top:6px"><button class="btn" id="applyRaw">Apply JSON</button><span class="muted">Applies to the editor; press Save to send it to the controller.</span></div>`;
+};
+views.settings.after = () => {
+  // Set as a value, not escaped into the HTML: with a big rig the JSON is several 100 KB.
+  $('#raw').value = JSON.stringify(P(), null, 2);
+  $$('[data-mstates]').forEach((el) => el.addEventListener('change', () => {
+    P().modes[+el.dataset.mstates].states = [...new Set(el.value.split(',').map((s) => s.trim()).filter(Boolean))];
+    markDirty();
+  }));
+  $('#syncClock').addEventListener('click', setClockFromPc);
+  $('#updFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) installUpdate(f); });
+  pagePoll('updInfo', () => { if (!S.updating) $('#updInfo').innerHTML = updInfoHtml(); }, 2000);
+  $('#applyRaw').addEventListener('click', () => {
+    try { replaceProject(JSON.parse($('#raw').value)); toast('Project applied - press Save to store it'); } catch (e) { toast('Invalid JSON: ' + e.message, true); }
+  });
+  $('#showExport').addEventListener('click', exportShow);
+  $('#showOpen').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) openShow(f); });
+  $('#showNew').addEventListener('click', () => {
+    if (!confirm(`Start a new, empty project?${S.dirty ? ' Unsaved changes are lost (export them first if needed).' : ''} The controller keeps the old one until you press Save.`)) return;
+    const p = emptyProject();
+    p.network = JSON.parse(JSON.stringify(P().network));   // a new show must not move the controller to another IP
+    replaceProject(p);
+    toast('New project - press Save to put it on the controller');
+  });
+};
+
+// ---- Software update (.kdupdate, tools/make_update.py; installed by src/Update.cpp) ----
+function updInfoHtml() {
+  const st = S.status, u = st?.update;
+  if (!u) return '<span class="muted">waiting for the controller…</span>';
+  return `Firmware <b>${esc(st.version)}</b> (${esc(u.target)})`
+    + (u.ready ? ' · ready for updates' : ` · <span class="bad">firmware updates not possible: ${esc(u.problem || '?')}</span>`)
+    + (u.last ? ` · last update ${esc(u.last)}: ${u.lastOk ? 'installed' : '<span class="bad">NOT installed</span>'}` : '');
+}
+async function installUpdate(f) {
+  // The header is the first two lines: "KDUPDATE 1" and the JSON with version, target and files.
+  const lines = new TextDecoder().decode(await f.slice(0, 65536).arrayBuffer()).split('\n');
+  let h;
+  try { h = lines[0] === 'KDUPDATE 1' && JSON.parse(lines[1]); } catch { h = null; }
+  if (!h?.files) return toast(`${f.name} is not a KD Designer update file`, true);
+  const u = S.status?.update || {}, fw = h.files.some((x) => x.name === 'firmware.bin');
+  if ((fw || h.target !== 'any') && u.target && h.target !== u.target) return toast(`This update is for a ${h.target} controller, this one is ${u.target}`, true);
+  if (fw && u.ready === false) return toast(`Firmware updates are not possible on this controller: ${u.problem}`, true);
+  if (S.dirty) return toast('Save (or undo) your changes first: the page reloads after the update', true);
+  const what = fw ? `firmware ${S.status?.version || '?'} → ${h.version} and the web UI` : 'the web UI';
+  if (!confirm(`Install ${f.name}?\n\nUpdates ${what} (built ${h.built}).`
+    + `${fw ? '\nThe controller then restarts: no light output for about half a minute.' : ''}\nThe project, images and logs are kept.`)) return;
+  const prog = $('#updProgress'), show = (t) => { if (prog?.isConnected) prog.textContent = t; };
+  S.updating = true;
+  const t0 = Date.now();
+  // XHR, not fetch: it reports upload progress.
+  const r = await new Promise((done) => {
+    const x = new XMLHttpRequest();
+    x.open('PUT', '/api/update');
+    x.upload.onprogress = (e) => { if (e.lengthComputable) show(`Uploading… ${Math.round((e.loaded / e.total) * 100)} %`); };
+    x.onload = () => { try { done(JSON.parse(x.responseText)); } catch { done({ ok: false, reply: x.statusText || 'no answer' }); } };
+    x.onerror = () => done({ ok: false, reply: 'connection lost' });
+    x.send(f);
+  });
+  if (!r.ok) { S.updating = false; show(''); return toast(`Update failed: ${r.reply}`, true); }
+  if (!r.restart) { show(r.reply); toast(`${r.reply} - reloading the page`); return setTimeout(() => location.reload(), 1500); }
+  // Back once it answers with an uptime shorter than the time since the upload started.
+  show('Installing - the controller is restarting…');
+  let st = null;
+  while (Date.now() - t0 < 180000) {
+    await new Promise((ok) => setTimeout(ok, 2000));
+    try { st = await api('/api/status'); } catch { st = null; continue; }
+    if (st.uptime < Date.now() - t0 && !st.update?.restarting) break;
+    st = null;
+  }
+  S.updating = false;
+  if (!st) return show('No answer after 3 minutes - check the controller (power, network, or the USB-C cable).');
+  if (st.update?.lastOk === false || st.version !== h.version) {
+    show('');
+    return toast(`The firmware was NOT installed: the controller still runs ${st.version}. Look at the log.`, true);
+  }
+  show(`Updated to ${st.version} - reloading the page`);
+  setTimeout(() => location.reload(), 1500);
+}
+
+// ---- Show files (.kdshow): "Save as" / "Open" between the controller and a PC --------
+// One JSON file: { kdshow: 1, exported, project, media: { 'map1-x.jpg': '<base64>' } }.
+// Only map backgrounds live outside project.json, so those are the media that go along.
+const showMediaNames = (p) => [...new Set((p.maps || []).map((m) => m.background).filter(Boolean))];
+// Put another project in the editor as unsaved changes (Undo goes back to the old one).
+function replaceProject(p) {
+  // Images only the old project used: deleted on the next save (save() keeps ones still in use).
+  for (const name of showMediaNames(P())) S.mediaTrash.add(name);
+  S.project = normalize(p);
+  renumberTriggers();
+  for (const k of Object.keys(S.sel)) S.sel[k] = k === 'cue' ? -1 : 0;
+  S.mapSel.clear();
+  S.trackEdit = null;
+  markDirty();
+  render();
+}
+async function exportShow() {
+  const el = document.activeElement;
+  if (el?.dataset?.p) onBound({ target: el, type: 'input' });   // the field still being typed in
+  const p = P(), media = {}, missing = [];
+  for (const name of showMediaNames(p)) {
+    try {
+      const r = await fetch('/media/' + encodeURIComponent(name));
+      if (!r.ok) throw new Error(r.statusText);
+      const blob = await r.blob();
+      const url = await new Promise((ok, fail) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = fail; fr.readAsDataURL(blob); });
+      media[name] = url.slice(url.indexOf(',') + 1);
+    } catch { missing.push(name); }
+  }
+  const file = { kdshow: 1, exported: new Date().toISOString(), project: p, media };
+  const d = new Date(), pad = (n) => String(n).padStart(2, '0');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' }));
+  a.download = `${(p.name || 'show').replace(/[^\w-]+/g, '_')}-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.kdshow`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  if (missing.length) toast(`Exported without image(s) not found on the controller: ${missing.join(', ')}`, true);
+  else toast(`Exported${S.dirty ? ' (with unsaved changes)' : ''}`);
+}
+async function openShow(f) {
+  let file;
+  try { file = JSON.parse(await f.text()); } catch (e) { return toast(`${f.name} is not a show file: ${e.message}`, true); }
+  // A .kdshow, or a plain project.json (no images).
+  const p = file.kdshow ? file.project : file, media = file.kdshow ? file.media || {} : {};
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return toast(`${f.name} has no project in it`, true);
+  if (S.dirty && !confirm('Open this file? Unsaved changes in the editor are replaced (Undo brings them back).')) return;
+  // The file was maybe made on a PC: don't let it move the controller to another address by accident.
+  const net = (n) => (n?.dhcp !== false ? 'DHCP' : n.ip || '?');
+  if (p.network && net(p.network) !== net(P().network)
+    && confirm(`The file's network setting is ${net(p.network)}, this controller's is ${net(P().network)}.\n\nOK = keep this controller's network settings, Cancel = use the file's (after a reboot).`))
+    p.network = JSON.parse(JSON.stringify(P().network));
+  const failed = [];
+  for (const [name, b64] of Object.entries(media)) {
+    try {
+      const bin = atob(b64), buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      const j = await (await fetch(`/api/media?name=${encodeURIComponent(name)}`, { method: 'PUT', body: buf })).json();
+      if (!j.ok) throw new Error(j.reply);
+    } catch { failed.push(name); }
+  }
+  replaceProject(p);
+  // A plain project.json carries no images: those may already be on the controller.
+  const lost = file.kdshow ? showMediaNames(P()).filter((n) => !(n in media)) : [];
+  if (failed.length) toast(`Image upload failed: ${failed.join(', ')}`, true);
+  else if (lost.length) toast(`Image(s) missing from the file: ${lost.join(', ')}`, true);
+  toast(`Opened ${f.name} - press Save to put it on the controller`);
+}

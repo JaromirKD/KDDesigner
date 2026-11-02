@@ -1,0 +1,64 @@
+# KD Designer - project guide for Claude
+
+Show controller on an **Arduino Portenta H7** (M7 core, Mbed OS Arduino core), inspired by
+Pharos Designer 2: DMX / Art-Net / sACN output, timelines with tracks and effects, triggers,
+projectors (PJLink), PCs, UDP/OSC/TCP/HTTP/Modbus, a web UI for programming and a touch panel.
+Everything (web UI, project, logs, images) lives on a USB stick. The user (Jaromir) is a show/AV
+technician; explain in plain words, he reads the README rather than the code.
+
+`README.md` is the user manual and feature list - read it first for what exists. `NEXT-STEPS.md`
+lists known loose ends and the planned tidy-up.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `src/` | Firmware (C++14, PlatformIO). `main.cpp` loop + threads; `Show.cpp` light engine (playbacks, tracks, effects, output), `ShowParse.cpp` project.json -> engine tables, sharing `ShowInternal.h` (public API stays `Show.h`); `Project.*` reloads every module after a (re)load; `Cmd.*` command language; `Triggers.*`; `Fx.*` effect compiler/VM; `State.*` modes, labels, devices, device groups; `Io.*` TCP/HTTP/Modbus/NTP; `Drivers.*` show devices (Kiss-Box, KNX, BrightSign, DiGidot, NETIO, Pharos: HTTP / UDP / push threads, polls, Pharos WebSocket, `drivers` in project.json); `Mqtt.*` small MQTT broker (NETIO MQTT-flex pushes to it); `Web.*` HTTP server + API; `Update.*` network update (`.kdupdate` -> `/usb/www` + QSPI `/ota/UPDATE.BIN`, armed for the bootloader via RTC backup registers); `Util.*` shared helpers (`isNumber`, `findRef`, `unescape`, `rest`, `httpMethod`, `epochNow`, `md5`); others per subsystem |
+| `KDDesigner.ino` | Comment-only file so the Arduino IDE can open the project (code is in `src/`) |
+| `data/www/` | Web UI, copied to the stick's `/www` (vanilla JS, no build step, no CDN). `index.html` loads, in order: `fx.js` (effect language), `model.js` (project rules: fixture channels, channel names, track fixtures, map positions, fade paths; date and sunrise maths `days`/`inPeriod`/`sunUtc`), `fixture-lib.js` (fixture-type text format, generic types, icons, OFL/QLC+ importers), then `app-core.js` (state, API, binding, render, page loops, colour helpers), `app-grammar.js` (command grammar, autocomplete, validation, highlighting, builder), `app-rig.js` (dashboard, patch, fixtures, map, colour wheel), `app-library.js` (fixture library, Add fixtures panel, project fixture types, fixture form/icons), `app-show.js` (effects, scenes with map + programmer, timelines), `app-triggers.js`, `app-trigger-tools.js` (trigger templates, find & replace, fire-history strip), `app-system.js` (devices, panel, variables, schedule, monitoring, console, log, DMX, settings), `app-drivers.js` (show-device tabs on Devices and Monitoring, Kiss-Box cards, KNX DPTs), `app-main.js` (add/delete items, global handlers, boot). `fx.js` and `model.js` are also `require`d by the mock. Plus `style.css`, `panel.html` (touch panel), `fixture-library.json` (637 fixtures from the Open Fixture Library, fetched by the UI only when needed) |
+| `tools/build-fixture-lib.js` | Rebuilds `fixture-library.json` from an Open Fixture Library `fixtures/` folder (uses fixture-lib.js) |
+| `data/show/project.json` | The sample project = the user's working project. `media/` holds uploaded map images |
+| `tools/mock-server.js` | PC mock of the controller API (Node, no dependencies) serving `data/www` and `data/show` (or the show folder given as 2nd argument, created empty if missing - handy for tests on a copy) |
+| `KD Designer (PC).cmd` | Double-click launcher for the mock: show picker (`Documents\KD Shows`), free port, opens the browser (`KD_NOBROWSER=1` skips that, for tests) |
+| `tools/make_update.py` | Writes `updates/*.kdupdate` (firmware + `data/www`) after every PlatformIO build (`extra_scripts`); `--www-only` by hand. Format read by `src/Update.cpp`, `checkUpdate` in the mock and `installUpdate` in app-system.js - keep the three in step |
+| `tools/check-project.js` | `node tools/check-project.js [file]`: loads the UI scripts in Node, compiles every effect and prints each trigger's red-! problems. Run it after grammar or effect changes |
+| `inspiration/` | The user's Pharos Designer project (.pd2) the features were ported from - reference only |
+| `.claude/launch.json` | Preview config "mock" (port 8080) |
+
+## Rules that are not obvious from the code
+
+- **Things that exist in several places must change together:**
+  - **Commands**: firmware `src/Cmd.cpp` (+ `Triggers.cpp` for conditions; device-driver commands in `Drivers.cpp` `*Cmd()`), mock `tools/mock-server.js` (`exec`, `checkCondition`, `drvCommand`), and the UI grammar `GRAMMAR` / `COND_GRAMMAR` in `app-grammar.js` (autocomplete, validation, highlighting, builder, hover help: `matchPart`, `completeBase`, tips, `builderField`).
+  - **Effect language**: `data/www/fx.js` and `src/Fx.cpp` - same syntax, opcodes, function numbering, outputs and the integer `rand` hash. `toFixture()` in fx.js = `runEffect()` in Show.cpp = `effectFrame()` in the mock.
+  - **Project parsing**: `Show::parse` (ShowParse.cpp) / `State::load` / other `load()`s in the firmware (a new module's `load()` goes in `Project::loadModules`), `normalize()` in app-core.js, and the mock.
+  - **Machine Control I/O** (`machineControl` in project.json, points `in0-7 out0-7 io0-11 ai0-2 ao0-3`): firmware `src/Board.cpp` (only built with `-DKD_BOARD_PMC`, env `machine_control`; the default env has no I/O), mock `board*` functions, UI `PMC_*`/`pmc*` in app-core.js, the Machine Control tab in app-drivers.js, the `io` command/condition in the grammar, and the `input` trigger's `io`/`level`.
+  - **Project rules** in `model.js` (UI + mock) mirror `ShowParse.cpp`: channel names `dim/intensity/i/master`, `r/red`, `g/green`, `b/blue`, `w/white` (`channelRoles` / `colorSlots`), track fixture order, first-map position, fade paths (`EASE` / `ease()` in Show.cpp).
+  - **Device history** (Monitoring device view): `Monitor::record` / `flushHistory` / `historyJson` + `Log::search` in the firmware (`/api/history`, `/api/devlog`), `histRecord` / `flushHistory` / `historyLines` / `logSearch` in the mock, `histSegments` / `histGraph` in app-system.js (day-file line format `epoch state kind name`, state `online|offline`, `on|off` projector power, `p:<key>=1|0` show-device reading; `boot`/`alive`, the 600 s alive / 900 s gap rule). Every place that changes a device's online state (or projector power) calls `record`, including the first check; readings are recorded in `setPoint` (Drivers.cpp) / `drvSet` (mock), and which ones count as on/off is `onOff()` = `drvOnOff()`. Log lines match the name/IP as a whole word (`hasWord`).
+  - **Clock maths**: `src/Clock.cpp` (days, summer time, sunrise/sunset, calendar periods) = `days` / `inPeriod` / `sunUtc` in `model.js` (used by `Sched` in app-system.js and `SchedM` in the mock).
+- **Timeline clip length** (`len`/`out` on a cue): the firmware turns it into a release cue (`pushCue` in ShowParse.cpp, `release`/`from` in `Cue`) and fades the track's opacity (`TrackFade.op`, `endRelease` in Show.cpp); the mock mirrors it (`timelineEvents`, `endRelease`). No `len` = hold until the next cue (old projects). The editor is in app-show.js (`tlGridHtml`, `resolveOverlaps`, `splitAtCursor`).
+- **Trigger runs**: `sleep`, `wait until` and `repeat <n> times every` schedule the rest of a trigger's actions (`Scheduled` in Triggers.cpp with `kind`; `line >= 0` = part of a run, which is what "while running" and the UI's ⏳ look at). The same in the mock (`runActions`, the 50 ms scheduler) and the UI grammar (`splitHead` / `validateHead` in app-grammar.js: the condition or command after the head uses its own grammar). Cooldown, while-running, hold/double, sequences and the fire history (`remember`, `/api/trighistory`) are mirrored in the mock's `runTrigger`.
+- **DMX input** (`dmx_in` triggers): `Net::poll` (now under `g_engine`) keeps up to `KD_MAX_DMX_IN` received universes that `Triggers::load` asks for (`Net::setDmxInputs`); the sACN socket joins one multicast group. The mock has no network input: `dmxin <artnet|sacn> <universe> <channels> <value>` in its console.
+- **Triggers are renumbered in list order** (`renumberTriggers`); separators get ids 10001+. References by number in actions, timeline trigger cues and sequence `steps` are rewritten on renumber; by name on rename (`renameTriggerRefs`). Name references are preferred.
+- **Fixture types are UI-only.** A fixture in project.json stays `channels: [...]`; `type` ("Maker / Model"), `mode` and `icon` only drive the UI, and `p.fixtureTypes` (array of type texts) holds the project's own types. Library channel names (`oflName` in fixture-lib.js) must start with a prefix in `isExemptChannel` (ShowParse.cpp) unless they are intensity/colour - keep both lists in step.
+- **The firmware drops UI-only data after loading** to save RAM: trigger `notes`, fixture `type`/`mode`/`icon`, `fixtureTypes`, `maps` (positions are copied for effects first) and `effects` (compiled). `/api/project` GET still serves the full file from the stick.
+- **Map images**: uploaded at once to `show/media/`, but a replaced/removed image is only deleted after the next successful save (`S.mediaTrash`).
+- **Threads**: anything touching the engine holds `g_engine` (rtos::Mutex). Events (timeline end, trigger cues, device state, variables) are queued and handled in the main loop.
+- **Memory budget**: RAM ~47 %, flash ~70 % (Machine Control build ~48 % / ~75 %).
+- **Show-device readings** ("points") have keys per type (`1.3` Kiss-Box slot.channel, `1/2/3` KNX, `out1`/`in1` NETIO, `tl1`/`sc1`/`grp1` Pharos, `scene`/`master` DiGidot, `msg` BrightSign); `vars` (and KNX address `var`) link them to variables, in Drivers.cpp, the mock (`drvLinks`) and app-drivers.js. Kiss-Box `names`/`commands` are UI-only and dropped by the firmware. Per playback per universe there are several 512-byte arrays (`KD_MAX_PLAYBACKS` 8, `KD_MAX_UNIVERSES` 4, `KD_MAX_TRACKS` 16) - check the build's RAM line after engine changes.
+- **UI performance with big rigs** (~600 fixtures, 4 full universes): `fixture(id)` and `findType(key)` use indexes - use them in loops, don't `.find` on `P().fixtures`. Never emit a `<select>` of all fixtures per row (the Scenes table did: 36 MB of HTML); build heavy parts only when shown. Maps with > 40 fixtures are `.dense` (no icons, glow or transitions). Test with a generated big project on a copy.
+- Keep C++14 (no `if` with initializers, no structured bindings); `bit` is an Arduino macro (use `testBit`); chrono literals need `using namespace std::chrono_literals`.
+
+## Build and test
+
+- Firmware: `python -m platformio run` (PlatformIO is installed as a Python module; Git is NOT installed, so libraries come from the PIO registry). It has never run on real hardware yet - say so when relevant.
+- No native C++ compiler on this PC, so `Fx.cpp` can't be unit-tested here; keep it a line-by-line mirror of fx.js.
+- UI: start the preview **"mock"** (`node tools/mock-server.js 8080`), then check the feature in the browser pane with real clicks/keys where possible and look at `__errs`/console errors. `node --check data/www/app-*.js` (one file at a time) catches syntax errors (template literals break easily). The browser pane often clicks in the wrong place by coordinates: click by `ref` from `find`/`read_page`.
+- **The user often has the mock open in his own browser and saves real work into `data/show/project.json`.** Don't save test edits over it: reload without saving (`S.dirty = false; location.reload()`), or test on a copy (copy `tools/` + `data/` to the scratchpad and run the copy on another port). Saving reloads the project, which fires the Startup trigger (which starts "Inloop" after 5 s and releases group A timelines) - wait for that when testing playback.
+- Keep the README up to date with every user-visible change.
+
+## Style
+
+- Comments explain *why*; match the surrounding density. UI text and README in plain English, short.
+- Vanilla JS: `$`/`$$` helpers, `render()` rebuilds the current view from `views[S.view]()` and runs `views[S.view].after()`; data binding through `data-p="path"` (+ `data-t` type, `data-r` re-render on change); state in `S`; project via `P()`; `markDirty()` after edits.
+- Page keyboard shortcuts go in `views.<page>.keys = (e) => …` (one global handler calls it when not typing; Ctrl+S is global). Animations/polls use `pageAnimation(name, frame)` / `pagePoll(name, fn, ms)` so `render()` stops them. Links to another item use `data-goto-trigger|timeline|effect="<id>"` (handled globally, no per-page wiring).
+- The UI files share one global scope: code that runs at load time may only use what earlier files define; everything else is called later and can live in any file.
