@@ -9,7 +9,7 @@
 #include "Util.h"
 
 namespace {
-struct Label { String name, text, color; };
+struct Label { String name, text, color, flash, value; bool disabled; };
 struct Device { String name; IPAddress ip; uint16_t port; };
 struct Group { String name; std::vector<String> states; String current; };
 struct DeviceGroup { String name; std::vector<int> members; };   // indexes into devices
@@ -36,7 +36,7 @@ void persist() {
 
 Label& label(const String& name) {
   for (auto& l : labels) if (l.name.equalsIgnoreCase(name)) return l;
-  labels.push_back({name, "", ""});
+  labels.push_back({name, "", "", "", "", false});
   return labels.back();
 }
 }  // namespace
@@ -158,16 +158,15 @@ bool setMode(int g, int s, String& msg) {
   return true;
 }
 
-void setLabel(const String& name, const String& text) {
+void setControl(const String& name, const String& what, const String& value) {
   mtx.lock();
-  label(name).text = text;
-  ver++;
-  mtx.unlock();
-}
-
-void setLabelColor(const String& name, const String& color) {
-  mtx.lock();
-  label(name).color = color;
+  Label& l = label(name);
+  if (what == "text") l.text = value;
+  else if (what == "color") l.color = value;
+  else if (what == "flash") l.flash = value;
+  else if (what == "value") l.value = value;
+  else if (what == "disabled") l.disabled = value.length() > 0;
+  else if (what == "reset") { l.text = l.color = l.flash = ""; l.disabled = false; }   // the value stays: it is where the slider is
   ver++;
   mtx.unlock();
 }
@@ -200,6 +199,9 @@ void statusJson(JsonObject o) {
     JsonObject x = lj[l.name].to<JsonObject>();
     if (l.text.length()) x["text"] = l.text;
     if (l.color.length()) x["color"] = l.color;
+    if (l.flash.length()) x["flash"] = l.flash;
+    if (l.value.length()) x["value"] = l.value;
+    if (l.disabled) x["disabled"] = true;
   }
   mtx.unlock();
 }

@@ -74,6 +74,7 @@ bool releaseScene(int idx, uint32_t fadeMs, String& msg);
 void releaseAll(uint32_t fadeMs);
 void setOverride(int uIndex, int ch, int value);   // value < 0 clears
 void clearOverrides();
+bool isOverride(int uIndex, int ch);               // for the DMX monitor
 void setOutput(Output o, bool on);                 // runtime switch, not saved
 bool setFps(Output o, int fps, String& msg);       // runtime, not saved
 uint32_t engineHz();                               // engine rate: max(40, network fps), <= 60

@@ -6,7 +6,7 @@
 #endif
 
 // ---- Engine ----------------------------------------------------------------
-#define KD_MAX_UNIVERSES 4        // internal universes (each 512 channels)
+#define KD_MAX_UNIVERSES 8        // internal universes (each 512 channels, ~20 KB RAM each)
 #define KD_MAX_PLAYBACKS 8        // concurrently running timelines/scenes
 #define KD_MAX_TRACKS 16          // tracks per timeline, each with its own fade
 // The engine runs at 40 Hz, or faster (max 60) when an Art-Net/sACN fps above 40 is set.

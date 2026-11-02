@@ -3672,24 +3672,32 @@
       "type": "label",
       "name": "lbl_show",
       "text": "Showstatus: -",
-      "span": 2
+      "span": 2,
+      "col": 1,
+      "row": 1
      },
      {
-      "type": "clock"
+      "type": "clock",
+      "col": 3,
+      "row": 1
      },
      {
       "type": "button",
       "name": "Start show",
       "text": "START SHOW",
       "color": "#2e7d32",
-      "span": 2
+      "span": 2,
+      "col": 1,
+      "row": 2
      },
      {
       "type": "button",
       "name": "Inloop",
       "text": "Inloop",
       "color": "#3a4a6b",
-      "confirm": "Weet je zeker dat je direct naar de inloopstand wilt?"
+      "confirm": "Weet je zeker dat je direct naar de inloopstand wilt?",
+      "col": 3,
+      "row": 2
      },
      {
       "type": "button",
@@ -3697,25 +3705,47 @@
       "text": "STOP!",
       "color": "#b71c1c",
       "confirm": "Weet je zeker dat je alle shows wilt stoppen?",
-      "span": 3
+      "span": 3,
+      "col": 1,
+      "row": 3
      },
      {
       "type": "label",
       "name": "lbl_audio",
-      "text": "Audio: -"
+      "text": "Audio: -",
+      "col": 1,
+      "row": 4
      },
      {
       "type": "button",
       "name": "Audio mute",
       "text": "Audio mute",
-      "color": "#5d4037"
+      "color": "#5d4037",
+      "col": 2,
+      "row": 4
      },
      {
       "type": "button",
       "name": "Systeem",
       "text": "Systeem…",
       "color": "#424242",
-      "goto": 2
+      "goto": 2,
+      "col": 3,
+      "row": 4
+     },
+     {
+      "type": "xy",
+      "name": "xy1",
+      "text": "Pan / tilt",
+      "min": 0,
+      "max": 100,
+      "ymin": 0,
+      "ymax": 100,
+      "links": {},
+      "span": 3,
+      "col": 1,
+      "row": 5,
+      "rows": 2
      }
     ]
    },
@@ -3759,7 +3789,8 @@
      }
     ]
    }
-  ]
+  ],
+  "theme": {}
  },
  "triggers": [
   {
@@ -4361,53 +4392,7 @@
    "enabled": true,
    "conditions": [],
    "actions": [
-    "sleep  1",
-    "fire trigger 42",
-    "sleep 2",
-    "fire trigger 42",
-    "sleep 1",
-    "log test",
-    "sleep 1",
-    "log test2"
-   ]
-  },
-  {
-   "id": 42,
-   "name": "Turn on all relays",
-   "type": "manual",
-   "enabled": true,
-   "conditions": [],
-   "actions": [
-    "netio rack output 1 on",
-    "netio rack output 2 on",
-    "netio rack2 output 1 on",
-    "netio rack2 output 2 on",
-    "netio rack3 output 1 on",
-    "netio rack3 output 1 on",
-    "netio rack4 output 1 on",
-    "netio rack4 output 1 on",
-    "netio rack5 output 1 on",
-    "netio rack5 output 1 on"
-   ]
-  },
-  {
-   "id": 43,
-   "name": "Trigger 43",
-   "type": "manual",
-   "enabled": true,
-   "conditions": [],
-   "actions": [
-    "repeat \"Trigger 44\" 10 times every 0.5"
-   ]
-  },
-  {
-   "id": 44,
-   "name": "Trigger 44",
-   "type": "manual",
-   "enabled": true,
-   "conditions": [],
-   "actions": [
-    "log test"
+    "io out0 toggle "
    ]
   }
  ],
@@ -4456,7 +4441,23 @@
    "persist": false
   }
  ],
- "calendar": [],
+ "calendar": [
+  {
+   "name": "Closed",
+   "from": "12-25",
+   "to": "12-26"
+  },
+  {
+   "name": "Closed",
+   "from": "01-01",
+   "to": "01-01"
+  },
+  {
+   "name": "Summer",
+   "from": "07-01",
+   "to": "08-31"
+  }
+ ],
  "tcp": [
   {
    "name": "watchout",
@@ -5225,107 +5226,6 @@
    "name": "lpc",
    "ip": "192.168.1.128",
    "port": 80,
-   "vars": {}
-  },
-  {
-   "id": 9,
-   "type": "netio",
-   "name": "rack2",
-   "ip": "192.168.1.129",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
-   "vars": {},
-   "model": "2PZ",
-   "outputs": 2
-  },
-  {
-   "id": 10,
-   "type": "netio",
-   "name": "rack3",
-   "ip": "192.168.1.130",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
-   "vars": {}
-  },
-  {
-   "id": 11,
-   "type": "netio",
-   "name": "rack4",
-   "ip": "192.168.1.131",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
-   "vars": {}
-  },
-  {
-   "id": 12,
-   "type": "netio",
-   "name": "rack5",
-   "ip": "192.168.1.132",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
-   "vars": {}
-  },
-  {
-   "id": 13,
-   "type": "netio",
-   "name": "rack6",
-   "ip": "192.168.1.133",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
-   "vars": {}
-  },
-  {
-   "id": 14,
-   "type": "netio",
-   "name": "rack7",
-   "ip": "192.168.1.134",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
-   "vars": {}
-  },
-  {
-   "id": 15,
-   "type": "netio",
-   "name": "rack8",
-   "ip": "192.168.1.135",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
-   "vars": {}
-  },
-  {
-   "id": 16,
-   "type": "netio",
-   "name": "rack9",
-   "ip": "192.168.1.136",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
-   "vars": {}
-  },
-  {
-   "id": 17,
-   "type": "netio",
-   "name": "rack10",
-   "ip": "192.168.1.137",
-   "port": 80,
-   "user": "netio",
-   "password": "netio",
-   "live": false,
    "vars": {}
   }
  ],

@@ -986,10 +986,24 @@ bool stopRepeat(int id, String& msg) {
   return true;
 }
 
-bool panelEvent(const String& control, const String& event, String& msg) {
+bool panelEvent(const String& control, const String& event, const String& value, String& msg) {
   Vars vars;
   vars.set("control", control);
   vars.set("event", event);
+  if (value.length()) {
+    vars.set("value", value);
+    if (value.length() == 7 && value[0] == '#') {   // colour wheel
+      long c = strtol(value.c_str() + 1, nullptr, 16);
+      vars.set("r", String((c >> 16) & 255));
+      vars.set("g", String((c >> 8) & 255));
+      vars.set("b", String(c & 255));
+    }
+    int comma = value.indexOf(',');
+    if (comma > 0) {   // XY pad: "x,y"
+      vars.set("x", value.substring(0, comma));
+      vars.set("y", value.substring(comma + 1));
+    }
+  }
   int n = 0;
   uint32_t now = millis();
   for (auto& t : triggers) {

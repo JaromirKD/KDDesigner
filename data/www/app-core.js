@@ -28,7 +28,7 @@ const pmcUnit = (k) => (/^ao/.test(k) ? 'V' : /^ai/.test(k) ? PMC_AI_MODES.find(
 const pmcFind = (tok) => pmcKeys().find((k) => k === String(tok).toLowerCase() || (pmcCfg(k).name || '').toLowerCase() === String(tok).toLowerCase());
 const PHAROS_PROTOCOLS = ['dmx', 'art-net', 'sacn', 'pathport', 'kinet', 'rio-dmx', 'edn', 'edn-spi'];
 const TRIGGER_TYPES = [
-  ['startup', 'Startup'], ['time', 'Time of day'], ['interval', 'Interval'], ['udp', 'UDP message'], ['osc', 'OSC message'],
+  ['startup', 'Startup'], ['time', 'Time of day / sunrise / sunset'], ['interval', 'Interval'], ['udp', 'UDP message'], ['osc', 'OSC message'],
   ['input', 'Input (pin / Machine Control)'], ['timeline_end', 'Timeline end'], ['mode', 'Mode change'], ['panel', 'Panel button'],
   ['dmx_change', 'DMX channel change'], ['device', 'Device online/offline'], ['projector', 'Projector alarm (errors, lamp hours)'], ['variable', 'Variable change'],
   ['tcp', 'TCP message received'], ['http', 'HTTP response'], ['dmx_in', 'DMX input (Art-Net / sACN in)'], ['sequence', 'Sequence (other triggers in order)'],
@@ -38,7 +38,7 @@ const TRIGGER_TYPES = [
 const TRIGGER_VARS = {
   udp: ['message', '1 (text after a prefix*)', 'sender_ip', 'sender_port'],
   osc: ['address', '1 … n (arguments)', 'sender_ip', 'sender_port'],
-  mode: ['group', 'mode'], panel: ['control', 'event'], device: ['device', 'kind', 'state'],
+  mode: ['group', 'mode'], panel: ['control', 'event', 'value (slider, dial, toggle 1/0, wheel #rrggbb, XY pad x,y)', 'r', 'g', 'b (colour wheel, 0-255)', 'x', 'y (XY pad)'], device: ['device', 'kind', 'state'],
   projector: ['projector', 'alarm', 'state', 'lamp (hours)', 'hours (the limit)'],
   variable: ['variable', 'value', 'old'], tcp: ['device', 'message', '1 (text after a prefix*)'], http: ['url', 'method', 'status', 'body'],
   dmx_change: ['channel', 'index', 'value', '+ your table names'], input: ['input', 'value'], dmx_in: ['channel', 'index', 'value', 'old'],
@@ -53,10 +53,10 @@ const trigColor = (c) => (c ? TRIGGER_COLORS[c] || (/^#[0-9a-f]{6}$/i.test(c) ? 
 const CURVES = [['linear', 'Linear'], ['square', 'Square law'], ['nondim', 'Non-dim (switch)'], ['preheat5', '5% preheat'], ['preheat10', '10% preheat']];
 const PATHS = [['linear', 'Linear'], ['accelerated', 'Accelerated'], ['braked', 'Braked'], ['damped', 'Damped (S-curve)'], ['overshoot', 'Overshoot']];
 const TL_GROUPS = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
-const PANEL_TYPES = ['button', 'label', 'clock', 'spacer'];
+const PANEL_TYPES = ['button', 'toggle', 'slider', 'dial', 'color', 'xy', 'label', 'clock', 'spacer'];
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PLACEHOLDER = {
-  '{mode}': '<mode>', '{mgroup}': '<mode group>', '{mstate}': '<state>', '{label}': '<label>', '{color}': '<colour>', '{trig}': '<trigger name or #>', '{count}': '<count>',
+  '{mode}': '<mode>', '{mgroup}': '<mode group>', '{mstate}': '<state>', '{label}': '<label>', '{pctl}': '<panel control>', '{flash}': 'on|off|<colour>', '{pval}': '<value | #rrggbb | x,y>', '{color}': '<colour>', '{trig}': '<trigger name or #>', '{count}': '<count>',
   '{email}': '<to address>', '{device}': '<device>', '{oscaddr}': '</osc/address>', '{hhmm}': '<HH:MM>', '{days}': '<mon,tue,…>',
   '{tl}': '<timeline>', '{sc}': '<scene>', '{sec}': '<seconds>', '{pct}': '<0-100>', '{dmx}': '<0-255>',
   '{chan}': '<universe>.<ch>[-<ch>]', '{ip}': '<ip address>', '{port}': '<port>', '{text...}': '<text>',
@@ -111,6 +111,7 @@ function normalize(p) {
   p.panel = p.panel || { pages: [] };
   p.panel.pages = p.panel.pages || [];
   p.panel.pages.forEach((pg) => (pg.controls = pg.controls || []));
+  p.panel.theme = p.panel.theme || {};   // panel-ui.js PANEL_THEME: only what differs from the default
   p.email = Object.assign(e.email, p.email);
   p.triggers.forEach((t) => (t.conditions = t.conditions || []));
   p.groups.forEach((g) => (g.fixtures = g.fixtures || []));
@@ -536,11 +537,17 @@ function render() {
   const main = $('#main');
   const scroll = main.scrollTop;
   main.innerHTML = views[S.view]();
-  main.scrollTop = scroll;
+  // Splitters first: adding one changes the layout, and the browser's scroll anchoring then moved
+  // the page (it jumped up after every colour pick in Scenes).
   $$('.split', main).forEach((el, i) => addSplitter(el, `kd.split.${S.view}.${i}`));
+  main.scrollTop = scroll;
+  const capped = main.scrollTop;
   $$('input.cmd', main).forEach((el) => acs.push(attachAC(el, { onEnter: el.id === 'consoleIn' ? runConsole : null })));
   $$('input.cond', main).forEach((el) => acs.push(attachAC(el, { grammar: COND_GRAMMAR })));
   views[S.view].after?.();
+  // Again if after() added height the first restore was capped by; not when after() scrolled on
+  // purpose (revealing an item).
+  if (capped !== scroll && main.scrollTop === capped) main.scrollTop = scroll;
 }
 
 // ---------------------------------------------------------------------------
@@ -561,11 +568,11 @@ function dragResize(handle, { key, min, max, startWidth, apply }) {
   handle.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     handle.setPointerCapture(e.pointerId);
-    const x0 = e.clientX, w0 = startWidth();
+    const z = uiZoom(), x0 = e.clientX, w0 = startWidth() / z;
     let w = w0;
     handle.classList.add('drag');
     document.body.classList.add('resizing');
-    const move = (ev) => { w = Math.max(min, Math.min(max(), w0 + ev.clientX - x0)); apply(w); };
+    const move = (ev) => { w = Math.max(min, Math.min(max(), w0 + (ev.clientX - x0) / z)); apply(w); };
     const up = () => {
       handle.removeEventListener('pointermove', move);
       handle.classList.remove('drag');
@@ -602,3 +609,41 @@ function addNavSplitter() {
     apply: (w) => (w ? document.body.style.setProperty('--nav-w', w + 'px') : document.body.style.removeProperty('--nav-w')),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Display: colour theme and size, per browser (localStorage), like the pane widths.
+// The size is CSS zoom on <html>, so everything scales, layout included. Mouse
+// positions (clientX) and getBoundingClientRect() stay in screen pixels: code that
+// turns them into CSS pixels (style.left, widths) divides by uiZoom().
+// ---------------------------------------------------------------------------
+const THEMES = [
+  ['dark', 'Dark', 'the classic'], ['midnight', 'Midnight', 'deep blue, cyan accent'], ['graphite', 'Graphite', 'neutral grey, soft contrast'],
+  ['light', 'Light', 'for bright rooms and daylight'], ['contrast', 'High contrast', 'black and white, big edges'], ['stage', 'Stage red', 'dim red, keeps your night vision backstage'],
+];
+const uiPref = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+function setUiPref(k, v) {
+  try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, String(v)); } catch { /* private mode */ }
+  applyUi();
+}
+let uiZoomNow = 1;
+const uiZoom = () => uiZoomNow;
+// Auto size: as big as the window allows while a 1600 x 900 working area still fits
+// (1920 x 1080 -> 120 %, a 1366 x 768 laptop -> 85 %).
+const autoScale = () => Math.max(0.85, Math.min(1.75, Math.round(Math.min(innerWidth / 1600, innerHeight / 900) * 20) / 20));
+const uiScalePref = () => uiPref('kd.scale', 'auto');
+function applyUi() {
+  const html = document.documentElement, s = uiScalePref();
+  uiZoomNow = s === 'auto' ? autoScale() : Math.max(0.5, Math.min(2.5, +s || 1));
+  html.style.zoom = uiZoomNow === 1 ? '' : uiZoomNow;
+  html.style.setProperty('--zoom', uiZoomNow);   // style.css: --vh = a real 1 % of the window height
+  const th = uiPref('kd.theme', 'dark');
+  html.dataset.theme = THEMES.some(([k]) => k === th) ? th : 'dark';
+  // The compact (phone) layout follows the width the page really has after zooming;
+  // a media query would only see the window.
+  document.body.classList.toggle('narrow', innerWidth / uiZoomNow < 760);
+}
+applyUi();
+window.addEventListener('resize', applyUi);
+// The page area's height (window minus the top bar, which wraps on small screens), for lists
+// that should end at the bottom of the window (style.css --main-h).
+new ResizeObserver(() => document.documentElement.style.setProperty('--main-h', $('#main').clientHeight + 'px')).observe($('#main'));

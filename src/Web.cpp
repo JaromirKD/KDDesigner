@@ -343,9 +343,22 @@ void handle(EthernetClient& c) {
     g_engine.unlock();
     sendText(c, 200, "application/json", out);
   } else if (p == "/api/panel" && req.method == "POST") {
-    String msg;
+    String msg, control = queryParam(req.query, "control"), value = queryParam(req.query, "value"), links = queryParam(req.query, "vars");
     g_engine.lock();
-    bool ok = Triggers::panelEvent(queryParam(req.query, "control"), queryParam(req.query, "event"), msg);
+    // A slider / dial / wheel / toggle / XY pad keeps its value (other panels follow) and sets its
+    // linked variables: vars=<name>=<value>;<name>=<value> (the panel works out each part).
+    if (value.length()) {
+      State::setControl(control, "value", value);
+      for (int i = 0; i < (int)links.length();) {
+        int end = links.indexOf(';', i);
+        if (end < 0) end = links.length();
+        String pair = links.substring(i, end), vm;
+        int eq = pair.indexOf('=');
+        if (eq > 0 && !Globals::set(pair.substring(0, eq), pair.substring(eq + 1), vm)) LOGW(Web, "Panel %s: %s", control.c_str(), vm.c_str());
+        i = end + 1;
+      }
+    }
+    bool ok = Triggers::panelEvent(control, queryParam(req.query, "event"), value, msg);
     g_engine.unlock();
     sendResult(c, ok, msg);
   } else if (p == "/api/log") {
@@ -376,15 +389,23 @@ void handle(EthernetClient& c) {
     for (int i = 0; i < (int)Cat::COUNT; i++) d[Log::catName((Cat)i)] = Log::lvlName(Log::level((Cat)i));
     sendJson(c, d);
   } else if (p == "/api/dmx") {
-    String out = "[";
+    // ?o=1 (DMX monitor): {"v":[512 values],"o":[overridden channel numbers]}; without it the plain array.
+    const bool withOvr = queryParam(req.query, "o") == "1";
+    String out = withOvr ? "{\"v\":[" : "[";
     g_engine.lock();
     int u = Show::universeIndex(queryParam(req.query, "u").toInt());
     if (u >= 0) {
       const uint8_t* d = Show::output(u);
       for (int i = 0; i < 512; i++) { if (i) out += ','; out += d[i]; }
+      if (withOvr) {
+        out += "],\"o\":[";
+        bool first = true;
+        for (int i = 0; i < 512; i++)
+          if (Show::isOverride(u, i)) { if (!first) out += ','; out += i + 1; first = false; }
+      }
     }
     g_engine.unlock();
-    out += "]";
+    out += withOvr ? "]}" : "]";
     sendText(c, u >= 0 ? 200 : 404, "application/json", out);
   } else if (p == "/api/time" && req.method == "POST") {
     String body;

@@ -1009,7 +1009,9 @@ function anyState(sref) {
 }
 const pcLast = {};
 let projectVersion = 0;   // like Show::parse: bumps on every load
-const labels = {};
+const labels = {};   // live state of panel controls by name (State.cpp "labels"): text color flash value disabled
+// A control's state, by name in any case (the first spelling is kept, like State::label).
+const ctl = (name) => labels[Object.keys(labels).find((k) => k.toLowerCase() === String(name).toLowerCase()) ?? name] ??= {};
 let scheduled = [];   // {id, due, every, remaining, count, vars}
 // Trigger by number or name (separators excluded), like Triggers::findId
 function trigRef(ref) {
@@ -1100,13 +1102,15 @@ function exec(line, src, vars) {
   } else if (w[0] === 'scene') { const x = sc(1); const f = fadeAt(t, 2); fire(newPb('scene', x.id, 0), absLevels(x), f, Date.now()); r = `Scene ${x.id} '${x.name}'`; }
   else if (w[0] === 'release' && w[1] === 'scene') { const x = sc(2); release(running('scene', x.id), fadeAt(t, 3)); r = `Released scene ${x.id}`; }
   else if (w[0] === 'release' && w[1] === 'all') { const f = fadeAt(t, 2); pbs.forEach((p) => release(p, f)); r = 'Released all'; }
-  else if (w[0] === 'set' && t.length === 3) {
-    const m = /^(\d+)\.(\d+)(?:-(\d+))?$/.exec(t[1]);
+  else if ((w[0] === 'set' || (w[0] === 'clear' && w[1] === 'override')) && t.length === 3) {
+    const setCh = w[0] === 'set', spec = t[setCh ? 1 : 2];
+    const m = /^(\d+)\.(\d+)(?:-(\d+))?$/.exec(spec);
     if (!m || !project.universes.find((u) => u.id === +m[1])) throw new Error('expected <universe>.<channel>');
+    if (+m[2] < 1 || +(m[3] || m[2]) > 512 || +(m[3] || m[2]) < +m[2]) throw new Error('channel out of range (1-512)');
     const v = +t[2];
-    if (!(v >= 0 && v <= 255)) throw new Error('value out of range (0-255)');
-    for (let c = +m[2]; c <= +(m[3] || m[2]); c++) overrides.set(`${m[1]}.${c}`, v);
-    r = `Set ${t[1]} = ${v}`;
+    if (setCh && !(v >= 0 && v <= 255)) throw new Error('value out of range (0-255)');
+    for (let c = +m[2]; c <= +(m[3] || m[2]); c++) setCh ? overrides.set(`${m[1]}.${c}`, v) : overrides.delete(`${m[1]}.${c}`);
+    r = setCh ? `Set ${spec} = ${v}` : `Override cleared ${spec}`;
   } else if (w[0] === 'clear' && w[1] === 'overrides') { overrides.clear(); r = 'Overrides cleared'; }
   else if (w[0] === 'grandmaster' && t.length === 2) { gm = Math.max(0, Math.min(1, +t[1] / 100)); log(1, 'SHOW', `Grand master ${t[1]}%`); r = `Grand master ${t[1]}%`; }
   else if (w[0] === 'blackout' && (w[1] === 'on' || w[1] === 'off')) { blackout = w[1] === 'on'; log(2, 'SHOW', `Blackout ${blackout ? 'ON' : 'off'}`); r = `Blackout ${w[1]}`; }
@@ -1130,9 +1134,19 @@ function exec(line, src, vars) {
     r = `${w[1]} ${t[3]} fps`;
     log(1, 'SHOW', r);
   } else if (w[0] === 'label' && t.length >= 3) {
-    labels[t[1]] = labels[t[1]] || {};
-    if (w[2] === 'color' && t.length === 4) { labels[t[1]].color = t[3]; r = `Label ${t[1]} colour ${t[3]}`; }
-    else { labels[t[1]].text = t.slice(2).join(' '); r = `Label ${t[1]} = ${labels[t[1]].text}`; }
+    if (w[2] === 'color' && t.length === 4) { ctl(t[1]).color = t[3]; r = `Label ${t[1]} colour ${t[3]}`; }
+    else { ctl(t[1]).text = t.slice(2).join(' '); r = `Label ${t[1]} = ${ctl(t[1]).text}`; }
+    pushStatus();
+  } else if (w[0] === 'panel' && t.length >= 3) {
+    // Like Cmd.cpp: panel <control> text|color|flash|value|enable|disable|reset
+    const c = ctl(t[1]), n = t[1];
+    if (w[2] === 'text' && t.length >= 4) { c.text = t.slice(3).join(' '); r = `Panel ${n} text ${c.text}`; }
+    else if (w[2] === 'color' && t.length === 4) { c.color = t[3]; r = `Panel ${n} colour ${t[3]}`; }
+    else if (w[2] === 'flash' && t.length === 4) { if (w[3] === 'off') delete c.flash; else c.flash = w[3] === 'on' ? 'on' : t[3]; r = `Panel ${n} flash ${t[3]}`; }
+    else if (w[2] === 'value' && t.length === 4) { c.value = t[3]; r = `Panel ${n} = ${t[3]}`; }
+    else if ((w[2] === 'enable' || w[2] === 'disable') && t.length === 3) { if (w[2] === 'disable') c.disabled = true; else delete c.disabled; r = `Panel ${n} ${w[2]}d`; }
+    else if (w[2] === 'reset' && t.length === 3) { for (const k of ['text', 'color', 'flash', 'disabled']) delete c[k]; r = `Panel ${n} reset`; }
+    else throw new Error('expected: panel <control> text|color|flash|value|enable|disable|reset');
     pushStatus();
   } else if (w[0] === 'fire' && w[1] === 'trigger' && (t.length === 3 || (t.length === 5 && w[3] === 'after'))) {
     const tr = trigRef(t[2]);
@@ -1706,8 +1720,23 @@ http.createServer(async (req, res) => {
   if (p === '/api/trighistory') return json(res, 200, { now: Date.now() - bootAt, h: trigHistory });
   if (p === '/api/panel') {
     const control = url.searchParams.get('control'), event = url.searchParams.get('event');
+    const value = url.searchParams.get('value') || '', links = url.searchParams.get('vars') || '';
     let n = 0;
     const now = Date.now();
+    const vars = { control, event };
+    // Slider / dial / wheel / toggle / XY pad: keep the value for other panels, set the linked
+    // variables (vars=<name>=<value>;…, like Web.cpp).
+    if (value) {
+      ctl(control).value = value;
+      vars.value = value;
+      if (/^#[0-9a-f]{6}$/i.test(value)) { const c = parseInt(value.slice(1), 16); Object.assign(vars, { r: String(c >> 16 & 255), g: String(c >> 8 & 255), b: String(c & 255) }); }
+      if (value.indexOf(',') > 0) [vars.x, vars.y] = [value.slice(0, value.indexOf(',')), value.slice(value.indexOf(',') + 1)];
+      for (const pair of links.split(';')) {
+        const eq = pair.indexOf('=');
+        if (eq > 0) try { setVar(pair.slice(0, eq), pair.slice(eq + 1)); } catch (e) { log(2, 'WEB', `Panel ${control}: ${e.message}`); }
+      }
+      pushStatus();
+    }
     for (const t of project.triggers) {
       if (t.enabled === false || t.type !== 'panel' || (t.control || '').toLowerCase() !== (control || '').toLowerCase()) continue;
       const ev = t.event || 'click', r = rt(t);
@@ -1717,12 +1746,12 @@ http.createServer(async (req, res) => {
         if (event !== 'click') continue;
         if (!r.lastPress || now - r.lastPress > secs(t.within, 0.5)) { r.lastPress = now; continue; }
         r.lastPress = 0;
-        runTrigger(t, 'panel double', { control, event: 'double' });
+        runTrigger(t, 'panel double', { ...vars, event: 'double' });
         n++;
         continue;
       }
       if (ev !== event) continue;
-      runTrigger(t, 'panel', { control, event });
+      runTrigger(t, 'panel', vars);
       n++;
     }
     log(0, 'TRIG', `Panel ${control} ${event} (${n} trigger(s))`);
@@ -1732,7 +1761,15 @@ http.createServer(async (req, res) => {
   if (p === '/api/history') return json(res, 200, historyLines(url.searchParams.get('name') || '', +url.searchParams.get('from') || 0, +url.searchParams.get('to') || 0));
   if (p === '/api/devlog') return json(res, 200, logSearch(url.searchParams.get('name') || '', url.searchParams.get('ip') || '', +url.searchParams.get('from') || 0, +url.searchParams.get('to') || 0, 300));
   if (p === '/api/loglevels') return json(res, 200, Object.fromEntries(CATS.map((c) => [c, LVLS[levels[c]]])));
-  if (p === '/api/dmx') { const u = out[url.searchParams.get('u')]; return u ? json(res, 200, [...u]) : json(res, 404, []); }
+  if (p === '/api/dmx') {
+    // ?o=1 (DMX monitor): values plus the overridden channel numbers, like Web.cpp
+    const id = url.searchParams.get('u'), u = out[id];
+    if (url.searchParams.get('o') === '1') {
+      const o = [...overrides.keys()].filter((k) => k.split('.')[0] === id).map((k) => +k.split('.')[1]).sort((a, b) => a - b);
+      return u ? json(res, 200, { v: [...u], o }) : json(res, 404, { v: [] });
+    }
+    return u ? json(res, 200, [...u]) : json(res, 404, []);
+  }
   if (p === '/api/time') { clock = +(await body(req)); log(1, 'SYS', 'Clock set from browser'); return json(res, 200, { ok: true, reply: 'Clock set' }); }
   // Uploaded images (map backgrounds), like /api/media + /media/ on the controller.
   const okName = (n) => /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$/.test(n || '') && /\.(png|jpe?g|webp|gif|svg)$/i.test(n);

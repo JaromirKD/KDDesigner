@@ -21,6 +21,7 @@ const GRAMMAR = [
   ['release all', 'Release every timeline and scene'],
   ['release all fade {sec}', 'Release everything with a fade'],
   ['set {chan} {dmx}', 'Override channel(s), e.g. set 1.10-12 255'],
+  ['clear override {chan}', 'Remove the override on channel(s) only, e.g. clear override 1.10-12'],
   ['clear overrides', 'Remove all channel overrides'],
   ['grandmaster {pct}', 'Set the grand master'],
   ['blackout {onoff}', 'Blackout on or off'],
@@ -28,6 +29,13 @@ const GRAMMAR = [
   ['mode {mode}', 'Set a mode by state name (must be unique across groups)', { hidden: true }],
   ['label {label} {text...}', 'Set the text of a panel label'],
   ['label {label} color {color}', 'Set the colour of a panel label'],
+  ['panel {pctl} text {text...}', 'Change the text of a panel control (button, label, slider…)'],
+  ['panel {pctl} color {color}', 'Change the colour of a panel control'],
+  ['panel {pctl} flash {flash}', 'Make a panel control flash (on, or a colour to flash in) or stop (off)'],
+  ['panel {pctl} value {pval}', 'Move a slider or dial, switch a toggle (1/0), set a colour wheel (#rrggbb) or an XY pad (x,y)'],
+  ['panel {pctl} disable', 'Grey out a panel control so it can’t be used'],
+  ['panel {pctl} enable', 'Make a disabled panel control usable again'],
+  ['panel {pctl} reset', 'Back to the text and colour set on the Panel page, flashing and disabled off'],
   ['fire trigger {trig}', 'Run another trigger now (nested task list)'],
   ['fire trigger {trig} after {sec}', 'Run another trigger after a delay (Wait)'],
   ['cancel trigger {trig}', 'Cancel delayed fires of a trigger'],
@@ -200,7 +208,11 @@ const drvList = (type) => P().drivers.filter((d) => d.type === type);
 const drvStatusOf = (d) => S.status?.drivers?.find((x) => x.id === d?.id && x.type === d?.type);
 const ctxDrv = (type) => findRef(drvList(type), CTX[1] ?? '');
 const knxAddr = (tok) => (ctxDrv('knx')?.addresses || []).find((a) => a.ga === tok || (a.name || '').toLowerCase() === String(tok).toLowerCase());
-const panelButtons = () => [...new Set(P().panel.pages.flatMap((pg) => pg.controls).filter((c) => c.type === 'button' && c.name).map((c) => c.name))];
+// Panel controls that fire Panel triggers (everything with a name except labels).
+const panelButtons = () => [...new Set(P().panel.pages.flatMap((pg) => pg.controls).filter((c) => c.name && ['button', ...PANEL_VALUE_TYPES].includes(c.type)).map((c) => c.name))];
+// Every named control, for "panel <name> …" actions.
+const panelControls = () => [...new Set(P().panel.pages.flatMap((pg) => pg.controls).filter((c) => c.name && c.type !== 'clock' && c.type !== 'spacer').map((c) => c.name))];
+const panelControlType = (name) => P().panel.pages.flatMap((pg) => pg.controls).find((c) => (c.name || '').toLowerCase() === String(name || '').toLowerCase())?.type;
 function matchPart(part, tok) {
   const p = P();
   // {var} / {=expr} are filled in when the trigger fires, so accept them anywhere.
@@ -210,6 +222,9 @@ function matchPart(part, tok) {
     case '{mgroup}': return !!findGroup(tok);
     case '{mstate}': return !!findState(findGroup(CTX[1] ?? ''), tok);
     case '{label}': return tok.length > 0;
+    case '{pctl}': return panelControls().some((n) => n.toLowerCase() === tok.toLowerCase());
+    case '{flash}': return tok.length > 0;
+    case '{pval}': return /^-?\d+(\.\d+)?(,-?\d+(\.\d+)?)?$/.test(tok) || /^#[0-9a-f]{6}$/i.test(tok);
     case '{color}': return tok.length > 0;
     case '{trig}': return findTrigs(tok).length === 1;
     case '{count}': return /^\d+$/.test(tok) && +tok > 0;
@@ -277,6 +292,15 @@ function candidates(part, partial) {
   const objs = (list, kind) =>
     list.filter((o) => !pl || String(o.id).startsWith(pl) || (o.name || '').toLowerCase().includes(pl))
       .map((o) => ({ insert: String(o.id), label: String(o.id), desc: `${kind} · ${o.name || ''}`, key: kind + o.id }));
+  // Projectors/PCs: offer the name (clearer, survives reordering); the number when typing digits or the name is ambiguous.
+  const named = (list, kind) => {
+    const byNumber = /^\d+$/.test(pl);
+    const dup = (n) => list.filter((o) => (o.name || '').toLowerCase() === n.toLowerCase()).length > 1;
+    return list.filter((o) => !pl || String(o.id).startsWith(pl) || (o.name || '').toLowerCase().includes(pl))
+      .map((o) => byNumber || !o.name || dup(o.name) || /^\d+$/.test(o.name)
+        ? { insert: String(o.id), label: String(o.id), desc: `${kind} · ${o.name || ''}`, key: kind + o.id }
+        : { insert: quote(o.name), label: o.name, desc: `${kind} #${o.id}${o.ip ? ' · ' + o.ip : ''}`, key: kind + o.id });
+  };
   const names = (list, desc, k) => list.filter((n) => n.toLowerCase().includes(pl)).map((n) => ({ insert: quote(n), label: n, desc, key: k + n }));
   switch (part) {
     case '{mode}': return p.modes.flatMap((g) => g.states.map((s) => ({ g, s }))).filter(({ s }) => s.toLowerCase().includes(pl))
@@ -290,6 +314,13 @@ function candidates(part, partial) {
         .map((s) => ({ insert: quote(s), label: s, desc: s === cur ? 'current' : g.name, key: 'ms' + s }));
     }
     case '{label}': return [...names(panelLabels(), 'panel label', 'lb'), ...hint('<label name>')];
+    case '{pctl}': return names(panelControls(), 'panel control', 'pc').map((x) => ({ ...x, desc: panelControlType(x.label) }));
+    case '{flash}': return [...[['on', 'flash'], ['off', 'stop flashing'], ['red', 'flash red'], ['orange', 'flash orange']].filter(([v]) => v.startsWith(pl))
+      .map(([v, d]) => ({ insert: v, label: v, desc: d, key: 'fl' + v })), ...hint('or #rrggbb')];
+    case '{pval}': {
+      const ty = panelControlType(CTX[1]);
+      return ty === 'color' ? presets(['#ff0000', '#00ff00', '#0000ff', '#ffffff', '#000000'], '#rrggbb') : ty === 'xy' ? presets(['50,50', '0,0'], 'x,y') : ty === 'toggle' ? presets(['1', '0'], '1 = on, 0 = off') : presets(['0', '50', '100'], '<value>');
+    }
     case '{color}': return [...names(['green', 'red', 'orange', 'yellow', 'white', 'grey'], 'colour', 'co'), ...hint('or #rrggbb')];
     case '{trig}': {
       // By name (keeps working when triggers move); typing digits refers by number instead.
@@ -331,8 +362,8 @@ function candidates(part, partial) {
     case '{logcat}': return ['all', ...LOG_CATS.map((c) => c.toLowerCase())].filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'c' + v }));
     case '{loglvl}': return LOG_LVLS.map((c) => c.toLowerCase()).filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'l' + v }));
     case '{proto}': return PROTOCOLS.filter(([v]) => v.startsWith(pl)).map(([v, n]) => ({ insert: v, label: v, desc: n, key: 'p' + v }));
-    case '{pj}': return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every projector', key: 'pjall' }] : []), ...objs(p.projectors, 'projector')];
-    case '{pc}': return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every PC', key: 'pcall' }] : []), ...objs(p.pcs, 'pc')];
+    case '{pj}': return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every projector', key: 'pjall' }] : []), ...named(p.projectors, 'projector')];
+    case '{pc}': return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every PC', key: 'pcall' }] : []), ...named(p.pcs, 'pc')];
     case '{devname}': return names(monitoredNames(), 'monitored', 'mn');
     case '{updown}': return ['online', 'offline'].filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'ud' + v }));
     case '{pcaction}': return PC_ACTIONS.filter(([v]) => v.startsWith(pl)).map(([v, d]) => ({ insert: v, label: v, desc: d, key: 'pa' + v }));
@@ -698,6 +729,29 @@ function classify(line, grammar) {
   return out;
 }
 
+// Typing "{name" (or a name inside "{=maths"): offer the project's variables, what the
+// selected trigger provides ({message}, {value}…) and {i} in a repeat loop. Null otherwise.
+function completeVar(text) {
+  const brace = /\{([A-Za-z_]\w*)?$/.exec(text);
+  const maths = !brace && /\{=[^}]*?([A-Za-z_]\w*)$/.exec(text);
+  if (!brace && !maths) return null;
+  const partial = brace ? brace[0] : maths[1], pl = (brace ? brace[1] || '' : maths[1]).toLowerCase();
+  const wrap = (n) => (brace ? `{${n}}` : n);
+  const t = S.view === 'triggers' ? P().triggers[S.sel.trigger] : null;
+  const own = (TRIGGER_VARS[t?.type] || []).map((v) => v.split(' ')[0]).filter((n) => /^[A-Za-z_]\w*$/.test(n));
+  const vals = S.status?.vars || {};
+  const list = [
+    ...(/^\s*repeat\s+\d+\s+times\b/i.test(text) ? [['i', 'counts 1, 2, 3… in this repeat']] : []),
+    ...own.map((n) => [n, `from this ${t.type} trigger`]),
+    ...P().variables.map((v) => [v.name, `${v.type}${vals[v.name] != null ? ' = ' + vals[v.name] : ''}`]),
+  ];
+  const seen = new Set();
+  const items = list.filter(([n]) => n.toLowerCase().includes(pl) && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()))
+    .map(([n, desc]) => ({ insert: wrap(n), label: wrap(n), desc, key: 'vv' + n, noSpace: true, varRef: true }));
+  if (brace && !pl) items.push({ insert: '{=', label: '{=…}', desc: 'maths, e.g. {=visitors*2}', key: 'vvmath', noSpace: true, varRef: true });
+  return { items, partial, sigs: [] };
+}
+
 // Autocomplete dropdown for a command <input>.
 function attachAC(input, { onEnter, grammar = GRAMMAR } = {}) {
   const box = document.createElement('div');
@@ -716,7 +770,8 @@ function attachAC(input, { onEnter, grammar = GRAMMAR } = {}) {
   function update() {
     check();
     if (document.activeElement !== input) return hide();
-    res = complete(input.value.slice(0, input.selectionStart), grammar);
+    const upto = input.value.slice(0, input.selectionStart);
+    res = completeVar(upto) || complete(upto, grammar);
     items = res.items;
     // Nothing useful to offer once the token is complete and exact.
     if (items.length === 1 && !items[0].hint && items[0].insert === res.partial) items = [];
@@ -726,12 +781,14 @@ function attachAC(input, { onEnter, grammar = GRAMMAR } = {}) {
     box.innerHTML = items.slice(0, 50).map((it, i) =>
       `<div class="opt${it.hint ? ' hint' : ''}${i === idx ? ' on' : ''}" data-i="${i}"><span>${esc(it.label)}</span><span class="d">${esc(it.desc || (i === 0 || items[i - 1].doc !== it.doc ? '' : ''))}</span></div>`).join('') +
       (sig ? `<div class="sig">${sig}</div>` : '');
-    const r = input.getBoundingClientRect();
+    // In CSS pixels (the page may be zoomed; see applyUi).
+    const z = uiZoom(), sr = input.getBoundingClientRect(), vh = innerHeight / z;
+    const r = { left: sr.left / z, top: sr.top / z, bottom: sr.bottom / z, width: sr.width / z };
     box.style.display = 'block';
     box.style.left = r.left + 'px';
     box.style.width = Math.max(r.width, 260) + 'px';
-    const below = window.innerHeight - r.bottom;
-    if (below < 200 && r.top > below) { box.style.top = ''; box.style.bottom = window.innerHeight - r.top + 2 + 'px'; }
+    const below = vh - r.bottom;
+    if (below < 200 && r.top > below) { box.style.top = ''; box.style.bottom = vh - r.top + 2 + 'px'; }
     else { box.style.bottom = ''; box.style.top = r.bottom + 2 + 'px'; }
   }
   function accept(i) {
@@ -739,9 +796,10 @@ function attachAC(input, { onEnter, grammar = GRAMMAR } = {}) {
     if (!it || it.hint) return false;
     const caret = input.selectionStart;
     const before = input.value.slice(0, caret - res.partial.length);
-    const after = input.value.slice(caret).replace(/^\S*/, '');
+    // A {variable} sits inside other text (often quoted): replace only the rest of its name.
+    const after = it.varRef ? input.value.slice(caret).replace(it.insert.endsWith('}') ? /^\w*\}?/ : /^\w*/, '') : input.value.slice(caret).replace(/^\S*/, '').replace(/^\s+/, '');
     const ins = it.insert + (it.noSpace ? '' : ' ');
-    input.value = before + ins + after.replace(/^\s+/, '');
+    input.value = before + ins + after;
     const pos = (before + ins).length;
     input.setSelectionRange(pos, pos);
     input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -809,7 +867,10 @@ const KEYWORD_HELP = {
   grandmaster: 'Overall intensity of everything (position channels excluded).',
   blackout: 'All intensity to zero (position channels excluded).',
   mode: 'The management mode (one active at a time, survives a reboot).',
-  label: 'A text label on the touch panel.', color: 'Text colour of the label.',
+  label: 'A text label on the touch panel.', color: 'A colour: a name like red, or #rrggbb.',
+  panel: 'A control on the touch panel (button, toggle, slider, dial, colour wheel, label), by its name.',
+  flash: 'Blink: on, off, or a colour to blink in.', value: 'The position of a slider or dial, a toggle (1/0) or a colour wheel (#rrggbb).',
+  disable: 'Greyed out: can’t be touched.', enable: 'Usable again.',
   fire: 'Run another trigger’s actions.', trigger: 'A trigger from the trigger list.',
   after: 'Delay before it runs, in seconds (Pharos “Wait”).',
   cancel: 'Cancel pending delayed fires.',
@@ -838,16 +899,16 @@ const KEYWORD_HELP = {
   digidot: 'A DiGidot C4 LED pixel controller (Devices page).', netio: 'NETIO switchable power sockets (Devices page).',
   pharos: 'A Pharos lighting controller (LPC/TPC) via its HTTP API (Devices page).',
   read: 'Ask the device for its current value.', reboot: 'Restart the device.', api: 'Raw API call: any endpoint of the device.',
-  playlist: 'A DiGidot playlist.', speed: 'Playback speed in percent.', reset: 'Restart the controller.',
+  playlist: 'A DiGidot playlist.', speed: 'Playback speed in percent.', reset: 'DiGidot: restart the controller. Panel: back to how it is set on the Panel page.',
   rate: 'Timeline speed: 1 = normal, 0.5 = half speed.', position: 'Jump to a point in the timeline (percent of its length).',
-  group: 'A Pharos group.', override: 'Pharos override: set intensity or colour directly.', intensity: 'Brightness 0-100 %.',
-  text: 'A Pharos text slot.', beacon: 'Blink the controller’s LEDs so you can find it.',
+  group: 'A Pharos group.', override: 'An override: a value set directly, on top of what is playing (Pharos: intensity or colour).', intensity: 'Brightness 0-100 %.',
+  text: 'Pharos: a text slot. Panel: the text shown on the control.', beacon: 'Blink the controller’s LEDs so you can find it.',
   restart: 'Off for a moment, then on again (NETIO short off; the time is set on the NETIO or given in seconds).',
   pulse: 'On for a moment, then off again (NETIO short on; Machine Control: for the seconds given).',
   io: 'An input or output of the Portenta Machine Control (Devices → Machine Control): in0-7, out0-7, io0-11, ai0-2, ao0-3 or the name you gave it.',
 };
 const PART_CLASS = {
-  '{tl}': 'ref', '{sc}': 'ref', '{trig}': 'ref', '{mode}': 'ref', '{mgroup}': 'ref', '{mstate}': 'ref', '{device}': 'ref', '{pj}': 'ref', '{label}': 'ref', '{logcat}': 'ref', '{proto}': 'kw',
+  '{tl}': 'ref', '{sc}': 'ref', '{trig}': 'ref', '{mode}': 'ref', '{mgroup}': 'ref', '{mstate}': 'ref', '{device}': 'ref', '{pj}': 'ref', '{label}': 'ref', '{pctl}': 'ref', '{flash}': 'kw', '{pval}': 'num', '{logcat}': 'ref', '{proto}': 'kw',
   '{sec}': 'num', '{pct}': 'num', '{dmx}': 'num', '{port}': 'num', '{count}': 'num', '{pjinput}': 'num',
   '{ip}': 'addr', '{chan}': 'addr', '{oscaddr}': 'addr', '{email}': 'addr', '{hhmm}': 'addr', '{days}': 'addr', '{color}': 'addr',
   '{onoff}': 'kw', '{loglvl}': 'kw', '{text...}': 'str', '{pc}': 'ref', '{pcaction}': 'kw', '{devname}': 'ref', '{updown}': 'kw',
@@ -885,6 +946,7 @@ function partHelp(part, tok, g) {
     }
     case '{pj}': return tok.toLowerCase() === 'all' ? 'All projectors' : ref(p.projectors, 'Projector', (o) => ` · ${o.ip}`);
     case '{label}': return `Panel label “${tok}”`;
+    case '{pctl}': { const ty = panelControlType(tok); return ty ? `Panel ${{ color: 'colour wheel', xy: 'XY pad' }[ty] || ty} “${tok}”` : `No panel control named '${tok}' (Panel page)`; }
     case '{var}': {
       const v = p.variables.find((x) => x.name.toLowerCase() === tok.toLowerCase());
       if (!v) return `Unknown variable '${tok}' (Variables page)`;
@@ -1044,9 +1106,9 @@ function attachHighlight(input, grammar) {
     tipBox.textContent = tip;
     tipBox.className = 'hltip-' + hit.className.split(' ')[0].replace('hl-', '');
     tipBox.style.display = 'block';
-    const r = input.getBoundingClientRect();
-    tipBox.style.left = Math.min(e.clientX, innerWidth - 340) + 'px';
-    tipBox.style.top = r.bottom + 6 + 'px';
+    const r = input.getBoundingClientRect(), z = uiZoom();
+    tipBox.style.left = Math.min(e.clientX / z, innerWidth / z - 340) + 'px';
+    tipBox.style.top = r.bottom / z + 6 + 'px';
   });
   input.addEventListener('mouseleave', hideTip);
   input.addEventListener('keydown', hideTip);
@@ -1078,6 +1140,13 @@ const DEFAULTS = { '{sec}': '2', '{pct}': '100', '{dmx}': '255', '{port}': '7000
 function builderField(part, val, i) {
   const p = P();
   const sel = (list) => `<select data-bi="${i}">${list.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  // Projector/PC by name (by number when the name is ambiguous); an existing number or name selects the same one.
+  const refSel = (list, all) => {
+    const cur = findRef(list, String(val ?? '').replace(/^"|"$/g, ''));
+    const v = (o) => (o.name && !/^\d+$/.test(o.name) && list.filter((x) => (x.name || '').toLowerCase() === o.name.toLowerCase()).length === 1 ? quote(o.name) : o.id);
+    if (cur) val = v(cur);
+    return sel([['all', all], ...list.map((x) => [v(x), `${x.name} (#${x.id})`])]);
+  };
   const num = (min, max, step = 1) => `<input type="number" data-bi="${i}" min="${min}" max="${max}" step="${step}" value="${esc(val)}" style="width:90px">`;
   switch (part) {
     case '{tl}': return sel(p.timelines.map((t) => [t.id, `${t.id} · ${t.name}`]));
@@ -1091,13 +1160,13 @@ function builderField(part, val, i) {
     }
     case '{device}': return sel([...p.devices.map((d) => [quote(d.name), `${d.name} (${d.ip}:${d.port})`]),
       ...p.deviceGroups.map((g) => [quote(g.name), `group ${g.name} (${g.devices.length} devices)`])]);
-    case '{pj}': return sel([['all', 'all projectors'], ...p.projectors.map((x) => [x.id, `${x.id} · ${x.name}`])]);
+    case '{pj}': return refSel(p.projectors, 'all projectors');
     case '{proto}': return sel(PROTOCOLS);
     case '{onoff}': return sel([['on', 'on'], ['off', 'off']]);
     case '{logcat}': return sel([['all', 'all'], ...LOG_CATS.map((c) => [c.toLowerCase(), c])]);
     case '{loglvl}': return sel(LOG_LVLS.map((c) => [c.toLowerCase(), c]));
     case '{pjinput}': return sel(PJ_INPUTS.map(([v, n]) => [v, `${v} · ${n}`]));
-    case '{pc}': return sel([['all', 'all PCs'], ...p.pcs.map((x) => [x.id, `${x.id} · ${x.name}`])]);
+    case '{pc}': return refSel(p.pcs, 'all PCs');
     case '{pcaction}': return sel(PC_ACTIONS.map(([v, d]) => [v, `${v} · ${d}`]));
     case '{devname}': return sel(monitoredNames().map((n) => [quote(n), n]));
     case '{var}': return sel(p.variables.map((v) => [quote(v.name), `${v.name} (${v.type})`]));
@@ -1123,6 +1192,8 @@ function builderField(part, val, i) {
     case '{ioval}': return `<input data-bi="${i}" value="${esc(val)}" list="bIoVals" placeholder="on|off|toggle|volts" style="width:110px"><datalist id="bIoVals">${['on', 'off', 'toggle', '5', '10'].map((v) => `<option value="${v}">`).join('')}</datalist>`;
     case '{dpt}': return sel([['1', '1 on/off'], ['3', '3 dim'], ['5.001', '5.001 percent'], ['5.010', '5.010 0-255'], ['7', '7 0-65535'], ['9', '9 float'], ['14', '14 float'], ['17', '17 scene'], ['232', '232 RGB']]);
     case '{label}': return `<input data-bi="${i}" value="${esc(val)}" list="bLabels" placeholder="label name" style="width:140px"><datalist id="bLabels">${panelLabels().map((l) => `<option value="${esc(l)}">`).join('')}</datalist>`;
+    case '{pctl}': return sel([['', '— control —'], ...panelControls().map((n) => [quote(n), `${n} (${panelControlType(n)})`])]);
+    case '{flash}': return `<input data-bi="${i}" value="${esc(val)}" list="bFlash" placeholder="on|off|colour" style="width:110px"><datalist id="bFlash">${['on', 'off', 'red', '#ff8800'].map((v) => `<option value="${v}">`).join('')}</datalist>`;
     case '{sec}': return num(0, 3600, 0.1);
     case '{pct}': return num(0, 100);
     case '{dmx}': return num(0, 255);

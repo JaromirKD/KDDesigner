@@ -47,7 +47,7 @@ function homeValue(f, ch) {
 }
 
 // ---- Adding fixtures from a type ----------------------------------------------------
-S.addFx = { q: '', key: null, mode: '', count: 1, cells: 0, name: '', universe: 0, address: 0, place: true };
+S.addFx = { q: '', key: null, mode: '', count: 1, cells: 0, name: '', universe: 0, address: 0, place: false };
 function uniqueFixtureName(base, made) {
   const taken = new Set([...P().fixtures, ...made].map((f) => f.name));
   if (!taken.has(base)) return base;
@@ -59,9 +59,11 @@ function uniqueFixtureName(base, made) {
 function planFixtures(t, md, o) {
   const p = P(), made = [], groups = [];
   const cells = md.cells ? Math.max(1, o.cells || md.cells) : 0;
-  let addr = o.address, id = nextId(p.fixtures);
-  const base = { universe: o.universe, type: t.key, mode: md.name, ...(t.curve ? { curve: t.curve } : {}) };
-  const add = (name, channels) => { const f = { id: id++, name, ...base, address: addr, channels }; made.push(f); addr += footprint(f); return f; };
+  let id = nextId(p.fixtures);
+  const base = { type: t.key, mode: md.name, ...(t.curve ? { curve: t.curve } : {}) };
+  // Past channel 512 the rest goes on in the next universe (see patcher).
+  const pt = patcher(o.universe, o.address, (u) => nextAddress(u, made));
+  const add = (name, channels) => { const f = { id: id++, name, ...base, channels }; Object.assign(f, pt.place(footprint(f))); made.push(f); return f; };
   for (let k = 1; k <= o.count; k++) {
     const name = uniqueFixtureName(o.count > 1 ? `${o.name} ${k}` : o.name, made);
     if (!cells) { add(name, KDLib.channelNames(md.head)); continue; }
@@ -70,13 +72,14 @@ function planFixtures(t, md, o) {
     for (let c = 1; c <= cells; c++) ids.push(add(`${name} ${c}`, KDLib.channelNames(md.cell)).id);
     groups.push({ name, fixtures: ids });
   }
-  return { made, groups, end: addr - 1 };
+  return { made, groups, newU: pt.newU, error: pt.error, fit: pt.fit };
 }
 function addFixturesFromType(t, md) {
   const p = P(), a = S.addFx;
-  const { made, groups, end } = planFixtures(t, md, a);
+  const { made, groups, newU, error } = planFixtures(t, md, a);
   if (!made.length) return;
-  if (end > 512) return toast(`Doesn't fit: that would go up to channel ${end} of universe ${a.universe}`, true);
+  if (error) return toast(`Doesn't fit: ${error}`, true);
+  p.universes.push(...newU.map(newUniverse));
   p.fixtures.push(...made);
   for (const g of groups) p.groups.push({ id: nextId(p.groups), ...g });
   const m = a.place && p.maps[S.sel.map];
@@ -85,11 +88,12 @@ function addFixturesFromType(t, md) {
     const y = Math.min(0.9, m.items.reduce((mx, it) => Math.max(mx, it.y), 0) + 0.08);
     made.forEach((f, i) => m.items.push({ fixture: f.id, x: (i + 1) / (made.length + 1), y: m.items.length ? y : 0.5 }));
   }
+  a.place = false;   // the next add doesn't place unless asked again
   S.fxSel = new Set(made.map((f) => f.id));
   S.fxGroup = null;
   S.fxPanel = '';
   S.revealFx = true;
-  toast(`Added ${made.length} fixture(s)${groups.length ? ` and ${groups.length} group(s)` : ''}${m ? ` · placed on map '${m.name}'` : ''}`);
+  toast(`Added ${made.length} fixture(s)${groups.length ? ` and ${groups.length} group(s)` : ''}${newU.length ? ` · new universe(s) ${newU.join(', ')}` : ''}${m ? ` · placed on map '${m.name}'` : ''}`);
   markDirty();
   render();
 }
@@ -184,19 +188,20 @@ function addFixturesHtml() {
   } else if (t) {
     const md = t.modes.find((m) => m.name === a.mode) || t.modes[0];
     a.mode = md.name;
-    const plan = planFixtures(t, md, a), bad = plan.end > 512;
+    const plan = planFixtures(t, md, a), bad = !!plan.error;
     const clash = !bad && P().fixtures.some((f) => plan.made.some((n) => n.universe === f.universe && n.address < f.address + footprint(f) && f.address < n.address + footprint(n)));
     form = `<div class="row"><span class="fx-ic big">${KDLib.iconSvg(t.icon || 'generic')}</span><div><b>${esc(t.model)}</b><br><span class="muted">${esc(t.maker)}${t.source === 'library' ? ' · from the Open Fixture Library' : t.source === 'custom' ? ' · your own type' : ''}</span></div></div>
       ${t.note ? `<p class="muted">${esc(t.note)}</p>` : ''}
       <div class="form" style="margin-top:10px">
         <label>Mode</label><select id="afMode">${t.modes.map((m) => `<option value="${esc(m.name)}"${m === md ? ' selected' : ''}>${esc(modeLabel(m))}</option>`).join('')}</select>
         <label>Channels</label><span class="mono small-text">${esc(KDLib.modeText(md))}</span>
-        ${md.cells ? `<label>Cells</label><div class="row nowrap"><input type="number" id="afCells" min="1" max="512" value="${a.cells || md.cells}" style="width:80px"><span class="muted">one fixture per cell, plus a group</span></div>` : ''}
+        ${md.cells ? `<label>Cells</label><div class="row nowrap"><input type="number" id="afCells" min="1" max="4096" value="${a.cells || md.cells}" style="width:80px"><span class="muted">one fixture per cell, plus a group</span></div>` : ''}
         <label>How many</label><input type="number" id="afCount" min="1" max="512" value="${a.count}" style="width:80px">
         <label>Name</label><input id="afName" value="${esc(a.name)}">
         <label>Universe</label><select id="afU">${opts(p.universes, a.universe, (u) => `${u.id} · ${u.name}`)}</select>
         <label>Start address</label><div class="row nowrap"><input type="number" id="afAddr" min="1" max="512" value="${a.address}" style="width:80px">
-          <span class="${bad ? 'bad' : 'muted'}">${plan.made.length} fixture(s), ${a.universe}.${a.address}–${plan.end}${bad ? ' - past 512!' : ''}</span>${clash ? '<span class="bad">overlaps fixtures already patched</span>' : ''}</div>
+          ${bad ? `<span class="bad">${plan.made.length} fixtures don't fit: ${esc(plan.error)}. Only ${plan.fit} fit from ${a.universe}.${a.address}.</span>`
+            : `<span class="muted">${plan.made.length} fixture(s), ${patchRange(plan.made)}${plan.newU.length ? ` · adds universe ${plan.newU.join(', ')}` : ''}</span>`}${clash ? '<span class="bad">overlaps fixtures already patched</span>' : ''}</div>
         ${p.maps.length ? `<label>Map</label><label class="chk"><input type="checkbox" id="afPlace"${a.place ? ' checked' : ''}> Place on map '${esc(p.maps[Math.min(S.sel.map, p.maps.length - 1)].name)}'</label>` : ''}
       </div>
       <div class="row" style="margin-top:10px"><button class="btn primary" id="afGo"${bad ? ' disabled' : ''}>Add ${plan.made.length} fixture(s)</button>
@@ -244,8 +249,8 @@ function wireAddFixtures() {
     $('#afChange')?.addEventListener('click', () => changeFixtureTypes(a.change, t, t.modes.find((m) => m.name === a.mode)));
     return;
   }
-  const num = (id, key, min = 1) => $(id)?.addEventListener('change', (e) => { a[key] = Math.max(min, Math.min(512, +e.target.value || min)); render(); });
-  num('#afCells', 'cells');
+  const num = (id, key, max = 512) => $(id)?.addEventListener('change', (e) => { a[key] = Math.max(1, Math.min(max, +e.target.value || 1)); render(); });
+  num('#afCells', 'cells', 4096);
   num('#afCount', 'count');
   num('#afAddr', 'address');
   $('#afName').addEventListener('change', (e) => { a.name = e.target.value.trim() || t.model; });

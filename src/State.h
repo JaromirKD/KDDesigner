@@ -9,7 +9,8 @@
 //              Curtains: Open | Closed,  Museum: Closed | Open | Starting up.
 //              Like the Pharos "Management Mode" module, but several at once.
 //              Each group's state survives a reboot (/usb/show/state.json).
-//  * Labels  - text/colour of touch-panel labels, set by actions.
+//  * Panel   - live state of touch-panel controls by name (labels, buttons, sliders...):
+//              text/colour/flash/disabled set by actions, value set by actions or the panel.
 //  * Devices - named network endpoints (media servers, PLCs...) for send udp/osc,
 //              and device groups to send to several at once.
 // All calls need g_engine held, except statusJson/version (own mutex).
@@ -28,8 +29,8 @@ const String& current(int g);                  // "" when none set
 const String& stateName(int g, int s);
 bool setMode(int g, int s, String& msg);        // false if already in that state
 
-void setLabel(const String& name, const String& text);
-void setLabelColor(const String& name, const String& color);
+// what: text | color | flash ("" off, "on", or a colour) | value | disabled ("1"/"") | reset (back to the project).
+void setControl(const String& name, const String& what, const String& value);
 
 bool findDevice(const String& name, IPAddress& ip, uint16_t& port);
 // Device group by name: the address of each of its devices (send udp/osc <group> ...).

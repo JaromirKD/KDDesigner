@@ -1,0 +1,73 @@
+/* Touch-panel controls (panel-ui.js): the panel itself (panel.html) and the Panel page preview.
+   Colours and sizes come from the panel theme: --p-* variables set on .pgrid by panelThemeVars
+   (the fallbacks here are the default dark theme). A control's own colour is an inline style. */
+.pgrid { position: relative; display: grid; gap: var(--p-gap, 12px); grid-auto-rows: minmax(var(--p-row, 84px), auto); max-width: var(--p-width, 1100px); margin: 0 auto;
+  font: var(--p-font, 18px)/1.3 system-ui, "Segoe UI", sans-serif; color: var(--p-text, #e6e8ee); }
+.pbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; min-height: var(--p-row, 84px); border: 0; border-radius: var(--p-radius, 12px);
+  background: var(--p-button, #2a3140); color: var(--p-buttonText, #fff); font: 600 1em system-ui, "Segoe UI", sans-serif; cursor: pointer; padding: 8px; box-shadow: inset 0 -4px 0 #0005; position: relative; }
+.pbtn.down { transform: translateY(2px); filter: brightness(1.25); box-shadow: inset 0 -1px 0 #0005; }
+.plabel { position: relative; display: flex; align-items: center; min-width: 0; min-height: 44px; padding: 0 4px; color: var(--p-label, #d8dbe2); }
+.pclock { font-size: 1.9em; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Toggle: a latching button with a light on top */
+.ptoggle::before { content: ''; display: block; width: 28px; height: 6px; margin: 0 auto 8px; border-radius: 3px; background: #0007; }
+.ptoggle.p-on::before { background: #fff; box-shadow: 0 0 8px #fff; }
+
+/* Slider, dial, colour wheel: a card with the title on top */
+.pctl { --v: 0; --c: var(--p-accent, #4c8dff); position: relative; display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; padding: 10px 12px;
+  border: 1px solid var(--p-border, #2c313d); border-radius: var(--p-radius, 12px); background: var(--p-card, #171a21); touch-action: none; user-select: none; }
+.pctl.p-active { border-color: var(--p-accent, #4c8dff); }
+.pctl .ptitle { font-weight: 600; font-size: .83em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phead { display: flex; align-items: baseline; gap: 8px; }
+.phead .ptitle { flex: 1; }
+.pval { font-weight: 600; font-size: .83em; font-variant-numeric: tabular-nums; color: var(--p-muted, #8a90a0); }
+.pslider .ptrack { position: relative; flex: 1; min-height: 36px; border-radius: calc(var(--p-radius, 12px) * .8); background: var(--p-track, #0b0c10); overflow: hidden; cursor: pointer; }
+.pslider .pfill { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--v) * 100%); background: var(--c); box-shadow: 3px 0 0 #fff; }
+.pslider.pvert .ptrack { min-height: 80px; }
+.pslider.pvert .pfill { top: auto; right: 0; width: auto; height: calc(var(--v) * 100%); box-shadow: 0 -3px 0 #fff; }
+.pdial .pknob { position: relative; flex: 1; min-height: 70px; display: flex; align-items: center; justify-content: center; cursor: ns-resize; }
+.pdial svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.parc0, .parc { fill: none; stroke-width: 10; stroke-linecap: round; }
+.parc0 { stroke: var(--p-track, #0b0c10); }
+.parc { stroke: var(--c); }
+.pdial .pval { font-size: 1.1em; color: var(--p-text, #e6e8ee); }
+/* XY pad: the dot is where you touch, up = the Y maximum */
+.pxy { --x: .5; --y: .5; }
+.pxy .pxybox { position: relative; flex: 1; min-height: 90px; }
+.pxy .pxypad { position: absolute; inset: 0; overflow: hidden; border-radius: calc(var(--p-radius, 12px) * .8); background: var(--p-track, #0b0c10); cursor: crosshair;
+  background-image: linear-gradient(90deg, transparent calc(50% - .5px), var(--p-border, #2c313d) calc(50% - .5px), var(--p-border, #2c313d) calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(transparent calc(50% - .5px), var(--p-border, #2c313d) calc(50% - .5px), var(--p-border, #2c313d) calc(50% + .5px), transparent calc(50% + .5px)); }
+.pxy .pxyh, .pxy .pxyv { position: absolute; background: var(--c); opacity: .5; }
+.pxy .pxyh { left: 0; right: 0; height: 1px; top: calc((1 - var(--y)) * 100%); }
+.pxy .pxyv { top: 0; bottom: 0; width: 1px; left: calc(var(--x) * 100%); }
+.pxy .pdot { position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; left: calc(var(--x) * 100%); top: calc((1 - var(--y)) * 100%);
+  border: 3px solid #fff; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px #000a; }
+/* The wheel is as big as fits in its box, and always round. */
+.pcolor .pwbox { flex: 1; min-height: 90px; container-type: size; display: flex; align-items: center; justify-content: center; }
+.pcolor .pwheel { position: relative; width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); border-radius: 50%; cursor: crosshair;
+  background: radial-gradient(closest-side, #fff, #fff0), conic-gradient(red, #ff0, lime, cyan, blue, #f0f, red); }
+.pcolor .pwheel::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: #000; opacity: var(--dark, 0); pointer-events: none; }
+.pcolor .pdot { position: absolute; z-index: 1; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000a; }
+.pcolor .pbright { position: relative; flex: none; height: 26px; border-radius: 8px; background: linear-gradient(90deg, #000, var(--hue, #fff)); cursor: pointer; }
+.pcolor .pbknob { position: absolute; top: -3px; bottom: -3px; left: calc(var(--v) * 100%); width: 8px; margin-left: -4px; border-radius: 4px; background: #fff; box-shadow: 0 0 0 1px #000a; }
+
+/* Set by actions: panel <name> disable / flash on|<colour> */
+.p-dis { opacity: .35; filter: grayscale(.6); pointer-events: none; }
+.p-flash { animation: p-flash 1s steps(1, end) infinite; }
+.p-flash.p-fcol { animation-name: p-flash-col; }
+.plabel.p-flash { animation-name: p-blink; }
+.plabel.p-flash.p-fcol { animation-name: p-flash-text; }
+@keyframes p-flash { 50% { filter: brightness(1.8); box-shadow: 0 0 0 3px #fff, 0 0 22px #fff8; } }
+@keyframes p-flash-col { 50% { background: var(--flash); box-shadow: 0 0 0 3px var(--flash), 0 0 22px var(--flash); } }
+@keyframes p-blink { 50% { opacity: .2; } }
+@keyframes p-flash-text { 50% { color: var(--flash); } }
+
+/* Editor preview: drag a control to move it, the corner grip to resize it */
+.preview [data-i] { cursor: move; touch-action: none; user-select: none; }
+.preview .p-dis { pointer-events: auto; }
+.preview .pspacer { border: 1px dashed var(--p-border, #2c313d); border-radius: var(--p-radius, 12px); }
+.preview .pgrip { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize; z-index: 2; opacity: .55;
+  background: linear-gradient(135deg, transparent 50%, var(--p-text, #e6e8ee) 50%, var(--p-text, #e6e8ee) 60%, transparent 60%, transparent 72%, var(--p-text, #e6e8ee) 72%, var(--p-text, #e6e8ee) 82%, transparent 82%); }
+.preview [data-i]:hover > .pgrip { opacity: 1; }
+.preview .p-moving { outline: 2px solid var(--p-accent, #4c8dff); outline-offset: 2px; z-index: 3; opacity: .85; }
+.preview .p-picked { outline: 2px dashed var(--p-accent, #4c8dff); outline-offset: 2px; }

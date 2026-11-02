@@ -6,6 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>KD Panel</title>
+<link rel="stylesheet" href="panel.css">
 <style>
   :root { --bg: #0b0c10; --text: #e6e8ee; --muted: #8a90a0; --panel: #171a21; --border: #2c313d; --err: #ff5c5c; --ok: #3ecf8e; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -17,11 +18,9 @@
   header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
   header .dot.ok { background: var(--ok); }
   main { flex: 1; overflow: auto; padding: 16px; }
-  .pgrid { display: grid; gap: 12px; max-width: 1100px; margin: 0 auto; }
-  .pbtn { min-height: 84px; border: 0; border-radius: 12px; color: #fff; font: 600 18px system-ui, sans-serif; cursor: pointer; padding: 8px; box-shadow: inset 0 -4px 0 #0005; }
-  .pbtn.down { transform: translateY(2px); filter: brightness(1.25); box-shadow: inset 0 -1px 0 #0005; }
-  .plabel { display: flex; align-items: center; min-height: 44px; font-size: 18px; padding: 0 4px; }
-  .pclock { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  /* The panel theme (--p-*, set on body by render) wins over these defaults. */
+  body { background: var(--p-bg, var(--bg)); color: var(--p-text, var(--text)); }
+  header { border-color: var(--p-border, var(--border)); }
   .overlay { position: fixed; inset: 0; background: #000c; display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
   .dialog { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px; width: min(420px, 100%); text-align: center; }
   .dialog p { font-size: 20px; margin: 0 0 20px; }
@@ -38,35 +37,50 @@
 <body>
 <header><h1 id="title">KD Panel</h1><span class="mode" id="mode" hidden></span><span class="dot" id="conn" title="connection"></span></header>
 <main id="main"><p class="empty">Loading…</p></main>
+<script src="panel-ui.js"></script>
 <script>
 'use strict';
-// Touch panel: pages/buttons/labels defined in the project ("panel" section).
+// Touch panel: pages and controls defined in the project ("panel" section); the controls
+// themselves (markup, live state, dragging) are in panel-ui.js.
 let project = null, status = null, pageId = null, unlocked = new Set(), lastStatusAt = 0, projectVersion = null;
 const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = pEsc;
 const pages = () => project?.panel?.pages || [];
 const page = () => pages().find((p) => p.id === pageId) || pages()[0];
+const showing = () => page() && (!page().pin || unlocked.has(page().id));
 
-function send(control, event) {
-  fetch(`/api/panel?control=${encodeURIComponent(control)}&event=${event}`, { method: 'POST' }).catch(() => {});
+// Events go out one at a time, in order. A change still waiting is replaced by a newer one
+// of the same control, so a slow network never queues up old slider positions.
+const queue = [];
+let sending = false;
+function send(c, event, value) {
+  const last = queue[queue.length - 1];
+  if (event === 'change' && last?.event === 'change' && last.c === c) { last.value = value; return; }
+  queue.push({ c, event, value });
+  if (!sending) pump();
+}
+async function pump() {
+  sending = true;
+  while (queue.length) {
+    const { c, event, value } = queue.shift();
+    const q = new URLSearchParams({ control: c.name || '', event });
+    if (value != null) {
+      q.set('value', value);
+      const links = panelLinkValues(c, value, panelLocal[String(c.name || '').toLowerCase()]?.hsv);
+      if (links.length) q.set('vars', links.map(([n, v]) => `${n}=${v}`).join(';'));
+    }
+    try { await fetch(`/api/panel?${q}`, { method: 'POST' }); } catch { /* offline: the dot shows it */ }
+  }
+  sending = false;
 }
 
 function render() {
   const pg = page();
+  document.body.style.cssText = panelThemeVars(project?.panel?.theme);
   if (!pg) { $('#main').innerHTML = '<p class="empty">No panel pages yet - add them on the Panel page of KD Designer.</p>'; return; }
   if (pg.pin && !unlocked.has(pg.id)) return askPin(pg);
-  const labels = status?.labels || {};
-  const cols = pg.columns || 3;
-  $('#main').innerHTML = `<div class="pgrid" style="grid-template-columns:repeat(${cols},1fr)">${pg.controls.map((c, i) => {
-    const span = `grid-column:span ${Math.min(c.span || 1, cols)}`;
-    if (c.type === 'spacer') return `<div style="${span}"></div>`;
-    if (c.type === 'clock') return `<div class="plabel pclock" data-clock style="${span};color:${esc(c.color || '')}"></div>`;
-    if (c.type === 'label') {
-      const l = labels[c.name] || {};
-      return `<div class="plabel" style="${span};color:${esc(l.color || c.color || '')}">${esc(l.text ?? c.text ?? '')}</div>`;
-    }
-    return `<button class="pbtn" data-i="${i}" style="${span};background:${esc(c.color || '#2a3140')}">${esc(c.text || c.name || '')}</button>`;
-  }).join('')}</div>`;
+  $('#main').innerHTML = panelPageHtml(pg, status, false, project.panel.theme);
+  panelUpdate($('#main'), pg, status);
   tickClock();
 }
 
@@ -110,22 +124,28 @@ function askPin(pg) {
 }
 
 // press / release fire immediately; click fires on release over the button,
-// after the confirm question (if any) is answered "Ja".
+// after the confirm question (if any) is answered "Ja". A toggle then flips and sends "change".
 $('#main').addEventListener('pointerdown', (e) => {
   const b = e.target.closest('.pbtn[data-i]');
-  if (!b) return;
+  if (!b || b.classList.contains('p-dis')) return;
   const c = page().controls[+b.dataset.i];
   b.classList.add('down');
   b.setPointerCapture(e.pointerId);
-  send(c.name, 'press');
+  send(c, 'press');
   const up = async (ev) => {
     b.classList.remove('down');
-    send(c.name, 'release');
+    send(c, 'release');
     const r = b.getBoundingClientRect();
     const inside = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
     if (ev.type !== 'pointerup' || !inside) return;
     if (c.confirm && !(await confirmDialog(c.confirm))) return;
-    send(c.name, 'click');
+    send(c, 'click');
+    if (c.type === 'toggle') {
+      const v = +panelCtlState(c, status).value > 0 ? 0 : 1;
+      panelLocal[String(c.name || '').toLowerCase()] = { value: v, until: Date.now() + 1500 };
+      panelUpdate($('#main'), page(), status);
+      send(c, 'change', v);
+    }
     if (c.goto) {
       // Leaving a PIN page "logs out" of it.
       unlocked.delete(page().id);
@@ -136,9 +156,10 @@ $('#main').addEventListener('pointerdown', (e) => {
   b.addEventListener('pointerup', up, { once: true });
   b.addEventListener('pointercancel', up, { once: true });
 });
+panelDrag($('#main'), () => (showing() ? page() : null), () => status, send);
 
 function tickClock() {
-  const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const t = panelTime();
   document.querySelectorAll('[data-clock]').forEach((el) => (el.textContent = t));
 }
 setInterval(tickClock, 1000);
@@ -164,7 +185,6 @@ async function reloadProject() {
 function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('status', (e) => {
-    const prev = JSON.stringify([status?.labels, status?.modes]);
     status = JSON.parse(e.data);
     lastStatusAt = Date.now();
     if (status.projectVersion != null && status.projectVersion !== projectVersion) {
@@ -176,9 +196,8 @@ function connect() {
     const modes = Object.entries(status.modes || {}).filter(([, v]) => v);
     $('#mode').hidden = !modes.length;
     $('#mode').textContent = modes.map(([g, v]) => (modes.length > 1 ? `${g}: ${v}` : v)).join(' · ');
-    if (JSON.stringify([status.labels, status.modes]) !== prev && !document.querySelector('.overlay:not([style])')) {
-      if (!page()?.pin || unlocked.has(page().id)) render();
-    }
+    // Patched in place, so a slider being dragged or an open confirm question stays.
+    if (showing()) panelUpdate($('#main'), page(), status);
   });
   es.onerror = () => { es.close(); setTimeout(connect, 2000); };
 }

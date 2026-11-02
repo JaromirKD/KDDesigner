@@ -56,12 +56,15 @@ views.triggers = () => {
       }
       case 'panel': {
         const btns = panelButtons(), ev = t.event || 'click';
-        const evs = [['click', 'click'], ['press', 'press'], ['release', 'release'], ['hold', 'hold (long press)'], ['double', 'double click']];
-        params = `<label>Control</label><select data-p="${base}.control"><option value="">— choose —</option>${btns.map((b) => `<option${t.control === b ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select>
+        const evs = [['click', 'click'], ['press', 'press'], ['release', 'release'], ['hold', 'hold (long press)'], ['double', 'double click'], ['change', 'change (slider, dial, colour, XY pad, toggle)']];
+        const kind = panelControlType(t.control);
+        params = `<label>Control</label><select data-p="${base}.control" data-r><option value="">— choose —</option>${btns.map((b) => `<option${t.control === b ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select>
           <label>Event</label><select data-p="${base}.event" data-r>${evs.map(([e, n]) => `<option value="${e}"${ev === e ? ' selected' : ''}>${n}</option>`).join('')}</select>
           ${holdDoubleFields(t, base, ev)}
-          <label></label><span class="muted">${!btns.length ? 'Add buttons on the Panel page first.' : ev === 'hold' ? 'Fires once the button is held down this long; letting go earlier does nothing.'
-            : ev === 'double' ? 'Fires on the second click. A click trigger on the same button still fires on every click.' : 'Click = released over the button (after any confirm dialog). Press/release fire immediately.'}</span>`;
+          <label></label><span class="muted">${!btns.length ? 'Add controls on the Panel page first.' : ev === 'hold' ? 'Fires once the button is held down this long; letting go earlier does nothing.'
+            : ev === 'double' ? 'Fires on the second click. A click trigger on the same button still fires on every click.'
+            : ev === 'change' ? `Fires while the control moves (up to about 12 times a second) and once more when it is let go. <code>{value}</code> is the new value${kind === 'color' ? ' (#rrggbb); <code>{r} {g} {b}</code> are 0-255' : kind === 'xy' ? ' (x,y); <code>{x}</code> and <code>{y}</code> are the two parts' : kind === 'toggle' ? ' (1 = on, 0 = off)' : ''}.`
+            : 'Click = released over the button (after any confirm dialog). Press/release fire immediately; on a slider, dial or wheel they are touching and letting go.'}</span>`;
         break;
       }
       case 'sequence': {
@@ -171,7 +174,7 @@ views.triggers = () => {
     const probs = triggerProblems(x);
     const bang = probs.length ? `<span class="trig-err" title="${esc(probs.join('\n'))}">!</span>` : '';
     return `<div class="item${sel}${x.enabled === false ? ' disabled' : ''}${col ? ' tinted' : ''}${linkCls}${probs.length ? ' has-err' : ''}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col}` : ''}">
-      <span class="id">${x.id}</span>${bang}<span style="flex:1">${esc(x.name)}</span>${note}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type)}</span></div>`;
+      <span class="id">${x.id}</span>${bang}<span style="flex:1">${esc(x.name)}</span>${note}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
   };
   const custom = t && t.color && !TRIGGER_COLORS[t.color] ? t.color : '';
   const vars = t && TRIGGER_VARS[t.type];
@@ -368,7 +371,7 @@ function initTriggerDrag(list) {
   const clear = () => $$('.drop-before,.drop-after', list).forEach((el) => el.classList.remove('drop-before', 'drop-after'));
   list.addEventListener('pointerdown', (e) => {
     const src = e.target.closest('[data-drag]');
-    if (!src || e.button !== 0) return;
+    if (!src || e.button !== 0 || e.target.closest('[data-fire]')) return;
     const from = +src.dataset.drag, x0 = e.clientX, y0 = e.clientY;
     let ghost = null, target = null, after = false, timer = null, lastY = y0;
     const autoScroll = () => {
@@ -396,14 +399,14 @@ function initTriggerDrag(list) {
         if (Math.abs(ev.clientY - y0) < 5 && Math.abs(ev.clientX - x0) < 5) return;  // still a click
         ghost = src.cloneNode(true);
         ghost.classList.add('drag-ghost');
-        ghost.style.width = src.getBoundingClientRect().width + 'px';
+        ghost.style.width = src.offsetWidth + 'px';
         document.body.appendChild(ghost);
         src.classList.add('dragging');
         document.body.classList.add('dragging-item');
         timer = setInterval(autoScroll, 30);
       }
-      ghost.style.left = ev.clientX + 12 + 'px';
-      ghost.style.top = ev.clientY - 12 + 'px';
+      ghost.style.left = ev.clientX / uiZoom() + 12 + 'px';
+      ghost.style.top = ev.clientY / uiZoom() - 12 + 'px';
       pick(ev.clientY);
     };
     const up = () => {
@@ -451,13 +454,13 @@ function initActionDrag(box, t) {
       if (!ghost) {
         ghost = src.cloneNode(true);
         ghost.classList.add('drag-ghost');
-        ghost.style.width = src.getBoundingClientRect().width + 'px';
+        ghost.style.width = src.offsetWidth + 'px';
         document.body.appendChild(ghost);
         src.classList.add('dragging');
         document.body.classList.add('dragging-item');
       }
-      ghost.style.left = ev.clientX + 12 + 'px';
-      ghost.style.top = ev.clientY - 12 + 'px';
+      ghost.style.left = ev.clientX / uiZoom() + 12 + 'px';
+      ghost.style.top = ev.clientY / uiZoom() - 12 + 'px';
       clear();
       target = null;
       for (const it of $$('[data-act]', box)) {
@@ -598,12 +601,16 @@ function triggerProblems(t) {
   if (!(t.actions || []).some((a) => a.trim() && !a.trim().startsWith('#')) && !sequencesOf(t).length) out.push('No actions: it does nothing');
   if (t.cooldown != null && !(t.cooldown >= 0)) out.push('The cooldown must be 0 or more seconds');
   if (dupName(t)) out.push(`Another trigger is also called '${t.name}': fire trigger by name can't tell them apart`);
+  const loop = triggerLoop(t);
+  if (loop) out.push(loop);
   switch (t.type) {
     case 'udp': if (!t.match) out.push('No message to react to'); break;
     case 'osc': if (!t.address) out.push('No OSC address to react to'); break;
     case 'panel':
       if (!t.control) out.push('No panel control chosen');
       else if (!has(panelButtons(), t.control)) out.push(`Panel control '${t.control}' doesn't exist`);
+      else if (t.event === 'change' && panelControlType(t.control) === 'button') out.push(`'${t.control}' is a button: it has no value to change (use click, or make it a toggle)`);
+      else if (/^(click|hold|double)$/.test(t.event || 'click') && ['slider', 'dial', 'color', 'xy'].includes(panelControlType(t.control))) out.push(`'${t.control}' is a ${{ color: 'colour wheel', xy: 'XY pad' }[panelControlType(t.control)] || panelControlType(t.control)}: it sends change, press and release, not ${t.event || 'click'}`);
       break;
     case 'timeline_end': if (!p.timelines.some((x) => x.id === t.timeline)) out.push('The timeline it waits for doesn\'t exist'); break;
     case 'mode':
@@ -698,7 +705,7 @@ function triggerEffects(t) {
         else { const m = findMode(w[1]); if (m) { g = findGroup(m.group); s = m.state; } }
         if (g && s) fx.push({ kind: 'mode', group: g.name, state: s });
       } else if (l[0] === 'var' && ['=', '+', '-', 'toggle'].includes(l[2])) {
-        fx.push({ kind: 'var', name: w[1] });
+        fx.push({ kind: 'var', name: w[1], op: l[2] });
       } else if (l[0] === 'start' && l[1] === 'timeline') {
         const tl = findRef(P().timelines, w[2] || '');
         if (tl) fx.push({ kind: 'timeline', id: tl.id, name: tl.name });
@@ -723,6 +730,53 @@ function setsOff(fx, dst) {
   }
   return null;
 }
+// ---- Loops: a trigger that sets itself off again (directly or through others) ----
+// Only links that fire again every time count: fire/repeat trigger, and a variable trigger
+// whose variable keeps changing (+ - toggle). Mode changes and "var = x" settle (the second
+// time nothing changes); timelines that restart each other are usually a deliberate show loop.
+function loopEdges(t) {
+  const out = [];
+  for (const f of triggerEffects(t)) {
+    if (f.kind === 'fire' && !/^(cancel|stop)/.test(f.why) && f.t.enabled !== false) out.push({ t: f.t, why: f.why });
+    if (f.kind === 'var' && f.op !== '=')
+      for (const x of P().triggers)
+        if (x.type === 'variable' && x.enabled !== false && (!x.variable || x.variable.toLowerCase() === f.name.toLowerCase())) out.push({ t: x, why: `var ${f.name} ${f.op}` });
+  }
+  return out;
+}
+// The trigger list asks for every row: build the graph once per render (it's dropped
+// as soon as the current task ends, so an edit is always seen), not once per row.
+let loopCache = null;
+function loopGraph() {
+  if (loopCache) return loopCache;
+  loopCache = new Map(P().triggers.filter((x) => x.type !== 'comment' && x.enabled !== false).map((x) => [x, loopEdges(x)]));
+  Promise.resolve().then(() => { loopCache = null; });   // (not queueMicrotask: tools/check-project.js runs this without it)
+  return loopCache;
+}
+// The shortest way t sets itself off again, as a problem text, or null.
+function triggerLoop(t) {
+  if (t.type === 'comment' || t.enabled === false) return null;
+  const g = loopGraph(), from = new Map(), queue = [t];
+  let found = null;
+  while (queue.length && !found) {
+    const x = queue.shift();
+    for (const e of g.get(x) || []) {
+      if (e.t === t) { found = { prev: x, why: e.why }; break; }
+      if (!from.has(e.t)) { from.set(e.t, { prev: x, why: e.why }); queue.push(e.t); }
+    }
+  }
+  if (!found) return null;
+  const between = [];
+  for (let x = found.prev; x !== t; x = from.get(x).prev) between.unshift(x);
+  const path = [t, ...between];   // the triggers in the loop, in firing order
+  // A condition (on a trigger in the loop, or an if in its actions) may stop it in time.
+  const guarded = path.some((x) => x.conditions?.some((c) => c.trim()) || (x.actions || []).some((a) => /^\s*if\s/i.test(a)));
+  // With a sleep/wait/every in it, it's a slow loop that never ends rather than a burst.
+  const pause = path.some((x) => (x.actions || []).some((a) => /^\s*(sleep|wait\s+until)\b|\bevery\b/i.test(a)));
+  const what = path.length === 1 ? `It fires itself (${found.why})` : `It sets itself off again: ${[...path, t].map((x) => `#${x.id}`).join(' → ')}`;
+  return `${what}, so it ${pause ? 'runs forever' : 'loops endlessly (the controller pauses it after 100 fires a second)'}${guarded ? ', unless a condition stops it' : ''}. ${pause ? 'For something that repeats, use an interval trigger or repeat … times every' : 'Remove the loop'}`;
+}
+
 // {out: triggers t sets off, in: triggers that set t off}, each {t, why}.
 function triggerLinks(t) {
   const out = [], inc = [], mine = triggerEffects(t);

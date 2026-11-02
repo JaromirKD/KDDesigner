@@ -55,7 +55,7 @@ function fxPreviewColor(prog, base, outs, i, n, x, y, t, level = 1) {
 }
 function fxPreviewHtml(src) {
   const p = P(), fx = fxPreviewFixtures(src), m = src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
-  if (m) return `<div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, '50vh')}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
+  if (m) return `<div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, 'calc(50 * var(--vh))')}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
     ${fx.map((o, k) => `<div class="mfx" style="left:${o.x * 100}%;top:${o.y * 100}%" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div>`;
   if (src?.startsWith('grid:')) return `<div class="fx-prev grid" style="grid-template-columns:repeat(${Math.round(Math.sqrt(fx.length))},1fr)">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
   return `<div class="fx-prev strip">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
@@ -278,10 +278,16 @@ function sceneProgrammerHtml(sc) {
   for (const f of sel) for (const s of slots(f)) if (!chans.some((c) => c.name === s.name)) chans.push(s);
   const nIn = sel.filter((f) => sc.levels.some((l) => l.fixture === f.id)).length;
   const rgb = sel.filter((f) => { const r = channelRoles(f); return r.r && r.g && r.b; });
-  let wheel = '';
+  // Colour wheel and position pad on the right; they show the first fixture that has them.
+  let side = '';
   if (rgb.length) {
-    const f = rgb[0], ro = channelRoles(f), v8 = (s) => { const v = lev(f, s.name)?.v ?? homeValue(f, s.name); return s.wide ? v >> 8 : v; };
-    wheel = `<div>${colorWheelHtml('sc', rgbToHex(v8(ro.r), v8(ro.g), v8(ro.b)))}</div>`;
+    const f = rgb[0], v8 = (s) => { const v = lev(f, s.name)?.v ?? homeValue(f, s.name); return s.wide ? v >> 8 : v; };
+    side += colorWheelHtml('sc', rgbToHex(...mixedRgb(f, v8))) + mixToggleHtml(rgb);
+  }
+  const pt = sel.find((f) => { const q = posSlots(f); return q.pan && q.tilt; });
+  if (pt) {
+    const q = posSlots(pt), frac = (s) => (lev(pt, s.name)?.v ?? homeValue(pt, s.name)) / (s.wide ? 65535 : 255);
+    side += xyPadHtml('sc', frac(q.pan), frac(q.tilt));
   }
   const rows = chans.map((c) => {
     const has = sel.filter((f) => slots(f).some((s) => s.name === c.name));
@@ -300,7 +306,7 @@ function sceneProgrammerHtml(sc) {
       ${sel.some((f) => channelRoles(f).dim) ? '<button class="btn small" data-scdim="255">Full</button><button class="btn small" data-scdim="128">50%</button><button class="btn small" data-scdim="0">Off</button>' : ''}
       <button class="btn small" id="scAddAll" title="Put every channel of these fixtures in the scene (at their home values where not set)">All channels</button>
       <button class="btn small ghost" id="scRemove"${nIn ? '' : ' disabled'}>Remove from scene</button></div>
-    <div class="sc-body">${wheel}<div class="sc-chs">${rows}</div></div>
+    <div class="sc-body"><div class="sc-chs">${rows}</div>${side ? `<div class="sc-side">${side}</div>` : ''}</div>
     ${one ? `<details class="sc-fix"${S.scFixOpen ? ' open' : ''}><summary>Fixture settings · ${one.universe}.${one.address}–${one.address + footprint(one) - 1} · ${esc(fixtureType(one))}</summary>
       <div class="form" style="margin-top:8px"><label>Name</label><input data-p="fixtures.${p.fixtures.indexOf(one)}.name" value="${esc(one.name)}" data-r>${fixtureFieldsHtml(one)}</div>
       <button class="btn small ghost" id="scOpenFx" style="margin-top:6px">Open on the Fixtures page →</button></details>` : ''}
@@ -319,7 +325,7 @@ views.scenes = () => {
     if (m) {
       const placed = new Set(m.items.map((it) => it.fixture)), rest = p.fixtures.filter((f) => !placed.has(f.id));
       // Not taller than ~60 % of the screen until you drag it bigger, so the controls stay in view.
-      look = `<div class="map-wrap"><div class="map-canvas sc-map${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="scCanvas" style="${mapSizeStyle('kd.mapH.scenes', m.aspect, '60vh')}">
+      look = `<div class="map-wrap"><div class="map-canvas sc-map${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="scCanvas" style="${mapSizeStyle('kd.mapH.scenes', m.aspect, 'calc(60 * var(--vh))')}">
         ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}
         ${m.items.map((it) => { const f = fixture(it.fixture); return f ? mapDotHtml(f, it, S.scSel.has(f.id) ? ' sel' : '', m.labels !== false, 'data-scfx') : ''; }).join('')}<div class="band" hidden></div>${mapResizeHtml('kd.mapH.scenes')}</div></div>
         ${rest.length ? `<div class="sc-chips"><span class="muted">Not on this map:</span>${rest.map(chip).join('')}</div>` : ''}`;
@@ -479,14 +485,33 @@ function wireSceneLook(sc) {
       if (!(ro.r && ro.g && ro.b)) continue;
       // Picking a colour should give light: a dimmer that isn't in the scene yet goes to full.
       if (ro.dim && !sc.levels.some((l) => l.fixture === f.id && l.ch === ro.dim.name)) setSceneLevel(sc, [f], ro.dim.name, ro.dim.wide ? 65535 : 255);
-      [ro.r, ro.g, ro.b].forEach((s, k) => {
-        const v = s.wide ? rgb[k] * 257 : rgb[k];
+      // r, g, b, and with "Auto white / amber" also w and amber.
+      const mx = mixColor(f, rgb), m = mixRoles(f);
+      for (const k in mx) {
+        const s = m[k], v = s.wide ? mx[k] * 257 : mx[k];
         setSceneLevel(sc, [f], s.name, v);
         if (!shown && !done) show(s.name, v);   // the sliders follow the first fixture
-      });
+      }
       shown = true;
     }
     paintSceneLook(sc);
+    if (done) render();
+  });
+  wireMixToggle(render);
+  // Position pad: sets pan and tilt of every selected moving head.
+  const xy = $('[data-xy="sc"]');
+  if (xy) attachXyPad(xy, +xy.dataset.x, +xy.dataset.y, (x, y, done) => {
+    let shown = false;
+    for (const f of sel) {
+      const q = posSlots(f);
+      if (!(q.pan && q.tilt)) continue;
+      [[q.pan, x], [q.tilt, y]].forEach(([s, fr]) => {
+        const v = Math.round(fr * (s.wide ? 65535 : 255));
+        setSceneLevel(sc, [f], s.name, v);
+        if (!shown && !done) show(s.name, v);
+      });
+      shown = true;
+    }
     if (done) render();
   });
   $('#scOpenFx')?.addEventListener('click', () => { S.fxSel = new Set([sel[0].id]); S.fxGroup = null; S.fxPanel = ''; S.revealFx = true; S.view = 'fixtures'; render(); });
@@ -892,7 +917,7 @@ views.timelines.after = () => {
           x.t = ox.t + dt;
           if (isLight(x)) x.track = ox.track + dl;
           b.style.left = pctOf(x.t);
-          b.style.transform = isLight(x) && dl ? `translateY(${laneEl(x).getBoundingClientRect().top - laneEl({ track: ox.track }).getBoundingClientRect().top}px)` : '';
+          b.style.transform = isLight(x) && dl ? `translateY(${laneEl(x).offsetTop - laneEl({ track: ox.track }).offsetTop}px)` : '';
         }
         lanes.forEach((x) => x.classList.toggle('drop', !!dl && group.some((g) => isLight(g) && x.dataset.lane === String(g.track))));
         info(`${(c.t / 1000).toFixed(2)} s${dt ? ` (${dt > 0 ? '+' : ''}${(dt / 1000).toFixed(2)} s)` : ''}${ev.ctrlKey || ev.metaKey ? ' · copy' : ''}`);
@@ -974,7 +999,8 @@ views.timelines.after = () => {
       moved = true;
       const x0 = Math.min(e.clientX, ev.clientX), x1 = Math.max(e.clientX, ev.clientX);
       const y0 = Math.min(e.clientY, ev.clientY), y1 = Math.max(e.clientY, ev.clientY);
-      Object.assign(box.style, { left: x0 - g0.left + 'px', top: y0 - g0.top + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px' });
+      const z = uiZoom();
+      Object.assign(box.style, { left: (x0 - g0.left) / z + 'px', top: (y0 - g0.top) / z + 'px', width: (x1 - x0) / z + 'px', height: (y1 - y0) / z + 'px' });
       box.hidden = false;
       const a = msAt(x0), b = msAt(x1);
       const inLanes = new Set(lanes.filter((l) => { const r = l.getBoundingClientRect(); return r.bottom >= y0 && r.top <= y1; }).map((l) => l.dataset.lane));
@@ -1030,10 +1056,10 @@ views.timelines.after = () => {
   });
   // Zoom: Ctrl+wheel around the mouse, or the buttons (around the middle).
   const zoomTo = (z, clientX) => {
-    const r = sc.getBoundingClientRect(), x = clientX ?? r.left + TL_HEAD + (r.width - TL_HEAD) / 2;
+    const r = sc.getBoundingClientRect(), uz = uiZoom(), x = clientX ?? r.left + (TL_HEAD + (r.width / uz - TL_HEAD) / 2) * uz;
     const ms = msAt(x);
     S.tlZoom = Math.max(0.5, Math.min(800, z));
-    S.tlScroll = Math.max(0, (ms / 1000) * S.tlZoom - (x - r.left - TL_HEAD));
+    S.tlScroll = Math.max(0, (ms / 1000) * S.tlZoom - ((x - r.left) / uz - TL_HEAD));
     render();
   };
   sc.addEventListener('wheel', (e) => {

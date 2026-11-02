@@ -2,15 +2,18 @@
 
 State on 1 Nov 2026: all features in the README are built and tested in the mock. The firmware
 compiles (default build RAM 45 %, flash 67 %; Machine Control RAM 46 %, flash 72 %) but has
-**never run on the Portenta**. No version control yet; `backup-before-tidy.zip` in the project
-folder is the state before the first tidy-up.
+**never run on the Portenta**. `backup-before-tidy.zip` in the project folder is the state
+before the first tidy-up.
 
-## 1. First: Git
+## 1. Git - done 2 Nov 2026
 
-Git isn't installed, so there is no history and no way back from a bad edit. Install it
-(git-scm.com), then `git init` and commit everything as it is now. `.gitignore` already skips
-`.pio/`, `.vscode/`, `project.bak` and the backup zip. Decide whether `inspiration/`
-(a third-party .pd2 project) and `data/show/media/` (the user's floor plan) belong in the repo.
+The project is a Git repository, committed from Sourcetree. Git is Sourcetree's own copy
+(`%LOCALAPPDATA%\Atlassian\SourceTree\git_local\bin\git.exe`), not on the PATH, so `git` doesn't
+work in a terminal unless Git is installed from git-scm.com. `.gitignore` skips build output
+(`.pio/`, `updates/`), what the mock writes (`project.bak`, `data/show/logs/`), the nested
+`inspiration/PharosGuiCreator/` repository and the backup zip. The show (`project.json`, `media/`)
+is in the repo, so every commit is also a version of the show. The Pharos `.pd2` in
+`inspiration/` is someone else's project: take it out before the repo goes anywhere public.
 
 ## 2. Tidy-up - done 31 Oct 2026
 
@@ -76,9 +79,12 @@ smaller (default env 528,152 -> 527,808 bytes, Machine Control 568,072 -> 567,73
   rewriting it would only risk small differences in error messages.
 - `check-project.js` checks that effects run, not their exact output values. Known-value tests
   would be a good guard for `Fx.cpp` once it can be compared on the real board.
-- RAM: the big blocks are the 8 playbacks (73 KB, by design: 4 universes x 512 x from/to/cur/track)
+- RAM: the big blocks are the 8 playbacks (146 KB, by design: 8 universes x 512 x from/to/cur/track)
   and the 512-line log in RAM (68 KB). Making the log ring smaller would save RAM but show fewer
   log lines in the web UI, so it is left as it is until RAM is actually short.
+- More than 8 universes (e.g. a 2048-pixel grid = 12): move the playback buffers to the Portenta's
+  8 MB SDRAM (the Machine Control's H7 has it) once the firmware has run on the board, then raise
+  `MAX_UNIVERSES` in app-rig.js with `KD_MAX_UNIVERSES`.
 
 ## 5. Things noticed in the project data (not code)
 - Trigger **#39 "Trigger 39"** now has `knx knx write 1/1/1 on` and an empty second action;

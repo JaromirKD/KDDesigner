@@ -148,6 +148,37 @@ const fixtureType = (f) => {
 };
 // Next free address in a universe after everything already patched there.
 const nextAddress = (u, extra = []) => [...P().fixtures, ...extra].filter((f) => f.universe === u).reduce((m, f) => Math.max(m, f.address + footprint(f)), 1);
+const MAX_UNIVERSES = 8;   // KD_MAX_UNIVERSES in src/Config.h
+const newUniverse = (id) => ({ id, name: 'Universe ' + id, dmxPort: 0, artnet: id - 1, sacn: id, useDmx: false, useArtnet: true, useSacn: true });
+// Auto-patch: hands out addresses one after the other from u.addr. A fixture that doesn't fit
+// before channel 512 goes to the next universe in the list, at freeFrom(u) - a fixture is never
+// split over two universes. Past the last universe it plans new ones (newU), up to MAX_UNIVERSES.
+function patcher(u, addr, freeFrom) {
+  const ids = P().universes.map((x) => x.id), st = { u, addr, newU: [], error: '', fit: 0 };
+  let ui = ids.indexOf(u);
+  st.place = (w) => {
+    if (st.addr + w - 1 > 512 && !st.error) {
+      if (w > 512) st.error = 'a fixture has more than 512 channels';
+      else if (++ui >= ids.length && ids.length >= MAX_UNIVERSES) st.error = `needs more than ${MAX_UNIVERSES} universes (the controller's maximum)`;
+      else {
+        if (ui >= ids.length) { ids.push(Math.max(0, ...ids) + 1); st.newU.push(ids[ui]); }
+        st.u = ids[ui];
+        st.addr = freeFrom(st.u);
+      }
+    }
+    const at = { universe: st.u, address: st.addr };
+    if (!st.error) st.fit++;
+    st.addr += w;
+    return at;
+  };
+  return st;
+}
+// "1.1–510 · 2.1–48" for fixtures in patch order.
+const patchRange = (fs) => {
+  const by = new Map();
+  for (const f of fs) { const r = by.get(f.universe) || [f.address, 0]; by.set(f.universe, [Math.min(r[0], f.address), Math.max(r[1], f.address + footprint(f) - 1)]); }
+  return [...by].map(([u, [a, b]]) => `${u}.${a}–${b}`).join(' · ');
+};
 // Where a fixture is used (for delete warnings and the editor).
 function fixtureUse(id) {
   const p = P();
@@ -194,20 +225,137 @@ function copyFixtures(src) {
   render();
   return made;
 }
+// ---- Patch grid (like the Patch view in Pharos Designer): the 512 channels of a universe with the
+// fixtures as outlined blocks; drag a block to give the fixture another address.
+// S.patchU = universe shown; it follows the selection when you pick a fixture of another universe.
+function patchGridHtml(grp) {
+  const p = P(), key = [...S.fxSel].join();
+  if (key !== S.patchKey) {
+    S.patchKey = key;
+    const f = fixture([...S.fxSel][0]);
+    if (f && ![...S.fxSel].some((id) => fixture(id)?.universe === S.patchU)) S.patchU = f.universe;
+  }
+  if (!p.universes.some((u) => u.id === S.patchU)) S.patchU = p.universes[0]?.id || 1;
+  const u = S.patchU, bad = conflicts(), at = {}, n = {};
+  dmxFixtures(u).forEach((f, k) => dmxChannelsOf(f).forEach((c, i) => { n[c.ch] = (n[c.ch] || 0) + 1; if (!at[c.ch]) at[c.ch] = { f, name: c.name, first: i === 0, odd: k % 2 }; }));
+  const on = (id) => S.fxSel.has(id) || !!grp?.fixtures.includes(id);
+  const used = Object.keys(at).length;
+  return `<div class="patch"><div class="row map-tools"><label class="muted">Universe</label><select id="patchU">${opts(p.universes, u, (x) => `${x.id} · ${x.name}`)}</select>
+      <span class="muted" id="patchInfo">Drag a fixture to another address · selected fixtures move together</span><span class="spacer"></span><span class="muted">${used} of 512 used</span></div>
+    <div class="dmx patch-grid" id="patchGrid">${Array.from({ length: 512 }, (_, i) => {
+      const ch = i + 1, a = at[ch];
+      if (!a) return `<div data-ch="${ch}" title="${u}.${ch} free"><b>${ch}</b><em></em></div>`;
+      const cls = `fx f${a.odd}${a.first ? ' fs' : ''}${on(a.f.id) ? ' sel' : ''}${n[ch] > 1 || bad.has(a.f.id) ? ' bad' : ''}`;
+      return `<div data-ch="${ch}" data-f="${a.f.id}" class="${cls}" title="${esc(`${a.f.name} · ${a.name} (${u}.${ch})${n[ch] > 1 ? ' - overlaps another fixture!' : ''}`)}"><b>${ch}</b><em>${esc(a.first ? a.f.name : a.name)}</em></div>`;
+    }).join('')}</div></div>`;
+}
+function wirePatchGrid() {
+  const grid = $('#patchGrid');
+  if (!grid) return;
+  const p = P(), u = S.patchU;
+  outlineFixtures(grid);
+  $('#patchU').addEventListener('change', (e) => { S.patchU = +e.target.value; render(); });
+  const cellAt = (ch) => grid.children[ch - 1];
+  const info = $('#patchInfo');
+  grid.addEventListener('pointerdown', (e) => {
+    const cell = e.target.closest('[data-f]');
+    if (!cell || e.button !== 0) return;
+    e.preventDefault();
+    const id = +cell.dataset.f;
+    // Shift/Ctrl+click adds or removes a fixture, like in the list.
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      S.fxSel.has(id) ? S.fxSel.delete(id) : S.fxSel.add(id);
+      S.fxGroup = null;
+      return render();
+    }
+    // Dragging a selected fixture takes the other selected fixtures of this universe along.
+    const moving = (S.fxSel.has(id) ? [...S.fxSel] : [id]).map(fixture).filter((f) => f && f.universe === u);
+    const movingIds = new Set(moving.map((f) => f.id)), from = +cell.dataset.ch;
+    const others = p.fixtures.filter((f) => f.universe === u && !movingIds.has(f.id));
+    grid.setPointerCapture(e.pointerId);
+    let shift = 0, ok = false, marked = [];
+    const show = (to) => {
+      marked.forEach((el) => el.classList.remove('drop', 'clash'));
+      marked = [];
+      shift = to - from;
+      ok = true;
+      let clash = null;
+      for (const f of moving) {
+        const a = f.address + shift, w = footprint(f);
+        if (a < 1 || a + w - 1 > 512) ok = false;
+        const hit = others.find((o) => a < o.address + footprint(o) && o.address < a + w);
+        if (hit) { ok = false; clash = clash || hit; }
+        for (let c = Math.max(1, a); c < Math.min(513, a + w); c++) marked.push(cellAt(c));
+      }
+      marked.forEach((el) => el.classList.add('drop', ...(ok ? [] : ['clash'])));
+      const one = moving.length === 1 ? moving[0] : null;
+      info.textContent = !ok ? (clash ? `Taken by ${clash.name} (${u}.${clash.address})` : 'Past channel 512')
+        : one ? `${one.name} → ${u}.${one.address + shift}–${one.address + shift + footprint(one) - 1}` : `${moving.length} fixtures, ${shift > 0 ? '+' : ''}${shift} channels`;
+    };
+    const move = (ev) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('#patchGrid > [data-ch]');
+      if (!el || (!shift && +el.dataset.ch === from && !marked.length)) return;
+      if (!marked.length) grid.classList.add('dragging');
+      show(+el.dataset.ch);
+    };
+    grid.addEventListener('pointermove', move);
+    grid.addEventListener('pointerup', () => {
+      grid.removeEventListener('pointermove', move);
+      grid.classList.remove('dragging');
+      if (!marked.length) {   // a click: select this fixture
+        S.fxSel = new Set([id]);
+        S.fxGroup = null;
+        S.fxPanel = '';
+        S.revealFx = true;
+        return render();
+      }
+      if (!shift) return render();
+      if (!ok) { toast(info.textContent + ' - not moved', true); return render(); }
+      for (const f of moving) f.address += shift;
+      S.fxSel = movingIds;
+      markDirty();
+      render();
+    }, { once: true });
+  });
+}
 views.fixtures = () => {
   const p = P(), f = S.fxFilter || '', bad = conflicts();
   const grp = p.groups.find((g) => g.id === S.fxGroup);
   const sel = p.fixtures.filter((x) => S.fxSel.has(x.id));
-  const inGroup = (x) => p.groups.filter((g) => g.fixtures.includes(x.id));
-  const items = p.fixtures.map((x, i) => {
+  const groupsOf = new Map(), inGrp = new Set(grp?.fixtures);
+  p.groups.forEach((g) => g.fixtures.forEach((id) => (groupsOf.get(id) || groupsOf.set(id, []).get(id)).push(g)));
+  const inGroup = (x) => groupsOf.get(x.id) || [];
+  const row = (x, i) => {
     if (f && !`${x.id} ${x.name} ${x.universe}.${x.address} ${fixtureType(x)} ${inGroup(x).map((g) => g.name).join(' ')}`.toLowerCase().includes(f.toLowerCase())) return '';
     const gs = inGroup(x);
-    return `<div class="item${S.fxSel.has(x.id) ? ' sel' : ''}${grp && grp.fixtures.includes(x.id) ? ' in-grp' : ''}" data-fxi="${i}">
+    return `<div class="item${S.fxSel.has(x.id) ? ' sel' : ''}${inGrp.has(x.id) ? ' in-grp' : ''}" data-fxi="${i}">
       <span class="id">${x.id}</span><span class="fx-ic">${fxIcon(x)}</span><span class="nm">${esc(x.name)}</span>
       ${gs.map((g) => `<span class="tag grp-tag" title="Group ${esc(g.name)}">${esc(g.name)}</span>`).join('')}
       <span class="tag mono${bad.has(x.id) ? ' mon-warn' : ''}" title="${bad.has(x.id) ? 'Address overlaps another fixture' : 'universe.address'}">${x.universe}.${x.address}</span>
       <span class="tag tt" title="${esc(x.type ? `${x.type} · ${x.mode || 'own channels'}` : (x.channels || []).join(', '))}">${esc(fixtureType(x))}</span></div>`;
-  }).join('');
+  };
+  // Big rigs: FOLD or more fixtures in a row of the list that share their smallest group (the cells
+  // of a pixel bar, a row of pars) show as one row; ▸ opens it (S.fxOpen = open group ids).
+  // Not while filtering, so a search always shows the fixtures themselves.
+  const FOLD = 8, home = (x) => inGroup(x).reduce((m, g) => (!m || g.fixtures.length < m.fixtures.length ? g : m), null);
+  S.fxOpen ||= new Set();
+  let items = '';
+  for (let i = 0; i < p.fixtures.length; i++) {
+    const g = !f && home(p.fixtures[i]);
+    let j = i;
+    if (g) while (j + 1 < p.fixtures.length && home(p.fixtures[j + 1]) === g) j++;
+    if (j - i + 1 < FOLD) { items += row(p.fixtures[i], i); continue; }
+    const run = p.fixtures.slice(i, j + 1), nSel = run.filter((x) => S.fxSel.has(x.id)).length, open = S.fxOpen.has(g.id);
+    const ends = run.map((x) => [x.universe, x.address, x.address + footprint(x) - 1]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const [u0, a0] = ends[0], [u1, , e1] = ends.reduce((m, e) => (e[0] > m[0] || (e[0] === m[0] && e[2] > m[2]) ? e : m));
+    items += `<div class="item fold${open ? ' open' : ''}${nSel === run.length ? ' sel' : nSel ? ' part' : ''}${run.some((x) => inGrp.has(x.id)) ? ' in-grp' : ''}" data-fold="${i}-${j}">
+      <button class="fold-tw" data-foldtw="${g.id}" title="${open ? 'Fold' : 'Show the fixtures'}">${open ? '▾' : '▸'}</button><span class="fx-ic">${fxIcon(run[0])}</span><span class="nm">${esc(g.name)}</span>
+      <span class="tag">${run.length} fixtures${nSel && nSel < run.length ? ` · ${nSel} selected` : ''}</span>
+      <span class="tag mono${run.some((x) => bad.has(x.id)) ? ' mon-warn' : ''}" title="universe.address of the first and last channel">${u0}.${a0}–${u1 !== u0 ? u1 + '.' : ''}${e1}</span>
+      <span class="tag tt">${esc(fixtureType(run[0]))}</span></div>`;
+    if (open) run.forEach((x, k) => (items += row(x, i + k)));
+    i = j;
+  }
   let editor;
   if (S.fxPanel === 'add') editor = addFixturesHtml();
   else if (S.fxPanel === 'types') editor = fixtureTypesHtml();
@@ -233,11 +381,14 @@ views.fixtures = () => {
         <label>Type</label><div class="row"><button class="btn small" id="fxBulkType" title="Make them all another fixture type">Change type…</button></div>
         <label>Universe</label><select id="fxBulkU"><option value="">— keep —</option>${p.universes.map((u) => `<option value="${u.id}">${u.id} · ${esc(u.name)}</option>`).join('')}</select>
         <label>Curve</label><select id="fxBulkCurve"><option value="">— keep —</option>${CURVES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select>
-        <label>Addresses</label><div class="row nowrap"><span class="muted">one after the other from</span><input type="number" id="fxBulkAddr" min="1" max="512" value="${Math.min(...sel.map((x) => x.address))}" style="width:80px"><button class="btn small" id="fxBulkAddrGo">Number them</button></div>
+        <label>Addresses</label><div class="row nowrap"><span class="muted">one after the other from</span><select id="fxBulkFromU">${opts(p.universes, sel[0].universe, (u) => u.id)}</select><span>.</span><input type="number" id="fxBulkAddr" min="1" max="512" value="${Math.min(...sel.filter((x) => x.universe === sel[0].universe).map((x) => x.address))}" style="width:80px"><button class="btn small" id="fxBulkAddrGo" title="In list order; past channel 512 they go on in the next universe">Number them</button></div>
         <label>Groups</label><div class="row"><button class="btn small" id="fxNewGroup">New group from these</button>
           ${p.groups.length ? `<select id="fxAddGroup"><option value="">Add to group…</option>${p.groups.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>` : ''}</div>
       </div>`;
   } else editor = '<p class="muted">Select a fixture or a group. Ctrl/Shift+click selects several.</p>';
+  // The patch: the universe's 512 channels with the fixtures on them, above the details
+  // (not while adding fixtures or editing types: those need the room).
+  if (!S.fxPanel) editor = patchGridHtml(grp) + editor;
   return `<h2>Fixtures</h2><div class="split">
     <div><input id="fxFilter" placeholder="Filter fixtures…" value="${esc(f)}" style="width:100%;margin-bottom:6px">
       <div class="list fx-list">${items || '<span class="muted">No fixtures yet.</span>'}</div>
@@ -268,10 +419,32 @@ views.fixtures.after = () => {
     S.addFx.change = null;
     render();
   }));
+  // A folded row stands for all its fixtures: click selects them, Ctrl adds/removes them, Shift extends.
+  $$('[data-fold]', list).forEach((el) => el.addEventListener('click', (e) => {
+    const [i, j] = el.dataset.fold.split('-').map(Number), ids = p.fixtures.slice(i, j + 1).map((x) => x.id);
+    if (e.target.closest('[data-foldtw]')) {
+      const g = +e.target.closest('[data-foldtw]').dataset.foldtw;
+      S.fxOpen.has(g) ? S.fxOpen.delete(g) : S.fxOpen.add(g);
+      return render();
+    }
+    if (e.shiftKey) S.fxSel = new Set(p.fixtures.slice(Math.min(fxAnchor, i), Math.max(fxAnchor, j) + 1).map((x) => x.id));
+    else if (e.ctrlKey || e.metaKey) {
+      const all = ids.every((id) => S.fxSel.has(id));
+      ids.forEach((id) => (all ? S.fxSel.delete(id) : S.fxSel.add(id)));
+      fxAnchor = i;
+    } else { S.fxSel = new Set(ids); fxAnchor = i; }
+    S.fxGroup = null;
+    S.fxPanel = '';
+    S.addFx.change = null;
+    render();
+  }));
+  wirePatchGrid();
   // Fixtures of a library type need the library for their mode list and icon.
   if (!LIB.list && p.fixtures.some((x) => x.type && !findType(x.type))) loadLibrary(() => S.view === 'fixtures' && render());
   const openPanel = (name) => {
     if (name === 'add' && !S.addFx.universe) S.addFx.universe = p.universes[0]?.id || 1;
+    // Only "+ Add fixtures…" on the Map page places new fixtures on the map; here it's a tick box.
+    if (name === 'add') S.addFx.place = false;
     S.addFx.change = null;
     S.fxPanel = S.fxPanel === name ? '' : name;
     render();
@@ -325,9 +498,16 @@ views.fixtures.after = () => {
   $('#fxBulkU')?.addEventListener('change', (e) => { if (!e.target.value) return; sel().forEach((x) => (x.universe = +e.target.value)); markDirty(); render(); });
   $('#fxBulkCurve')?.addEventListener('change', (e) => { if (!e.target.value) return; sel().forEach((x) => (x.curve = e.target.value)); markDirty(); render(); });
   $('#fxBulkAddrGo')?.addEventListener('click', () => {
-    let a = +$('#fxBulkAddr').value || 1;
-    for (const x of sel()) { x.address = a; a += footprint(x); }
-    if (a - 1 > 512) toast('The last fixtures go past channel 512', true);
+    // In a universe they wrap into, they start after the fixtures that stay there.
+    const list = sel(), moving = new Set(list), done = [];
+    const free = (u) => p.fixtures.filter((f) => f.universe === u && !moving.has(f)).concat(done).filter((f) => f.universe === u)
+      .reduce((m, f) => Math.max(m, f.address + footprint(f)), 1);
+    const pt = patcher(+$('#fxBulkFromU').value, Math.max(1, Math.min(512, +$('#fxBulkAddr').value || 1)), free);
+    for (const x of list) done.push({ ...x, ...pt.place(footprint(x)) });
+    if (pt.error) return toast(`Not numbered: ${pt.error}`, true);
+    p.universes.push(...pt.newU.map(newUniverse));
+    list.forEach((x, i) => Object.assign(x, { universe: done[i].universe, address: done[i].address }));
+    toast(`${list.length} fixtures: ${patchRange(list)}${pt.newU.length ? ` · new universe(s) ${pt.newU.join(', ')}` : ''}`);
     markDirty();
     render();
   });
@@ -364,9 +544,10 @@ function fixtureLook(f, dmx) {
   const at = (s) => (s ? d[f.address - 1 + s.offset] ?? 0 : null);
   const ro = channelRoles(f);
   const dim = at(ro.dim), r = at(ro.r), g = at(ro.g), b = at(ro.b), w = at(ro.w) || 0;
+  const am = at(slots(f).find((s) => /^(a|amber)$/i.test(s.name))) || 0;   // amber ≈ r 255, g 170
   const k = dim == null ? 1 : dim / 255;
   if (r != null && g != null && b != null) {
-    const c = [r + w, g + w, b + w].map((x) => Math.round(Math.min(255, x) * k));
+    const c = [r + w + am, g + w + am * 0.67, b + w].map((x) => Math.round(Math.min(255, x) * k));
     return { color: `rgb(${c.join(',')})`, level: Math.max(...c) / 255 };
   }
   if (dim != null) return { color: `rgba(255,214,150,${(0.12 + k * 0.88).toFixed(2)})`, level: k };
@@ -400,15 +581,15 @@ function attachMapResize(canvas, aspect) {
     e.preventDefault();
     e.stopPropagation();   // not an area selection on the map
     bar.setPointerCapture(e.pointerId);
-    const y0 = e.clientY, h0 = canvas.getBoundingClientRect().height;
+    const z = uiZoom(), y0 = e.clientY, h0 = canvas.getBoundingClientRect().height / z;
     let h = h0;
     bar.classList.add('drag');
-    const move = (ev) => { h = Math.max(120, Math.min(3000, h0 + ev.clientY - y0)); canvas.style.width = `min(100%, ${h * aspect}px)`; };
+    const move = (ev) => { h = Math.max(120, Math.min(3000, h0 + (ev.clientY - y0) / z)); canvas.style.width = `min(100%, ${h * aspect}px)`; };
     const up = () => {
       bar.removeEventListener('pointermove', move);
       bar.classList.remove('drag');
       // Store the height it really got (it can't get wider than the page).
-      if (h !== h0) saveWidth(key, canvas.getBoundingClientRect().height);
+      if (h !== h0) saveWidth(key, canvas.offsetHeight);
     };
     bar.addEventListener('pointermove', move);
     bar.addEventListener('pointerup', up, { once: true });
@@ -724,8 +905,8 @@ views.map.after = () => {
         ghost.textContent = drag.length > 1 ? `${drag.length} fixtures` : fixture(id).name;
         document.body.appendChild(ghost);
       }
-      ghost.style.left = ev.clientX + 'px';
-      ghost.style.top = ev.clientY + 'px';
+      ghost.style.left = ev.clientX / uiZoom() + 'px';
+      ghost.style.top = ev.clientY / uiZoom() + 'px';
     };
     const up = (ev) => {
       document.removeEventListener('pointermove', move);
@@ -912,14 +1093,21 @@ views.map.keys = (e) => {
 // Keyboard (when focused): ←/→ hue, ↑/↓ saturation (Shift = bigger steps), PgUp/PgDn
 // brightness, 1-9 and 0 the palette, Home = white. Colour maths is in app-core.js.
 const PALETTE = ['#ffffff', '#ffb347', '#ff3b30', '#ff9500', '#ffd60a', '#34c759', '#00c7be', '#0a84ff', '#5e5ce6', '#ff2d92'];
+// The sliders under the wheel as R G B (0-255) or H S V (0-360, 0-100 %); the choice is kept per browser.
+// Each slider's track shows the colour you get along it (painted in attachColorWheel).
+const cwMode = () => { try { return localStorage.getItem('kd.cwMode') || 'rgb'; } catch { return 'rgb'; } };
+const cwSliders = (cls, parts) => `<div class="cw-sls ${cls}">${parts.map(([c, mx, tip], k) => `<div class="cw-sl" title="${tip}"><span class="muted">${c}</span>
+  <input type="range" class="cw-grad" min="0" max="${mx}" data-k="${k}"><input type="number" min="0" max="${mx}" data-k="${k}"></div>`).join('')}</div>`;
 function colorWheelHtml(id, hex) {
-  const [r, g, b] = hexToRgb(hex);
-  return `<div class="cw" data-cw="${id}" tabindex="0" title="←/→ hue · ↑/↓ saturation · PgUp/PgDn brightness · 1-9, 0 palette · Home white">
+  const [r, g, b] = hexToRgb(hex), mode = cwMode();
+  return `<div class="cw${mode === 'hsv' ? ' hsv' : ''}" data-cw="${id}" tabindex="0" title="←/→ hue · ↑/↓ saturation · PgUp/PgDn brightness · 1-9, 0 palette · Home white">
     <div class="cw-disc"><canvas width="150" height="150"></canvas><i class="cw-dot"></i></div>
     <div class="cw-side">
-      <div class="row nowrap"><span class="cw-sw" style="background:${hex}"></span><input class="cw-hex mono" value="${hex}" maxlength="7" spellcheck="false"></div>
+      <div class="row nowrap"><span class="cw-sw" style="background:${hex}"></span><input class="cw-hex mono" value="${hex}" maxlength="7" spellcheck="false">
+        <div class="seg cw-mode">${['rgb', 'hsv'].map((m) => `<button type="button" class="${mode === m ? 'on' : ''}" data-cwmode="${m}" title="Show the colour as ${m.toUpperCase()}">${m.toUpperCase()}</button>`).join('')}</div></div>
       <label class="muted cw-lbl">Brightness <input type="range" class="cw-v" min="0" max="100" value="${Math.round(rgbToHsv(r, g, b)[2] * 100)}"></label>
-      <div class="row nowrap cw-rgb">${['R', 'G', 'B'].map((c, k) => `<label class="muted">${c}<input type="number" min="0" max="255" data-k="${k}" value="${[r, g, b][k]}"></label>`).join('')}</div>
+      ${cwSliders('cw-rgb', [['R', 255, 'Red 0-255'], ['G', 255, 'Green 0-255'], ['B', 255, 'Blue 0-255']])}
+      ${cwSliders('cw-hsv', [['H', 360, 'Hue 0-360°'], ['S', 100, 'Saturation 0-100 %'], ['V', 100, 'Value (brightness) 0-100 %']])}
       <div class="cw-pal">${PALETTE.map((c, k) => `<button class="swatch" data-pal="${c}" style="background:${c}" title="${c} (key ${(k + 1) % 10})"></button>`).join('')}</div>
     </div></div>`;
 }
@@ -951,6 +1139,13 @@ function attachColorWheel(el, hex, onChange) {
     if (document.activeElement !== el.querySelector('.cw-hex')) el.querySelector('.cw-hex').value = hx;
     el.querySelector('.cw-v').value = Math.round(v * 100);
     el.querySelectorAll('.cw-rgb input').forEach((i) => { if (document.activeElement !== i) i.value = [r, g, b][+i.dataset.k]; });
+    el.querySelectorAll('.cw-hsv input').forEach((i) => { if (document.activeElement !== i) i.value = Math.round([h, s * 100, v * 100][+i.dataset.k]); });
+    // Track gradients: what each slider gives with the other two as they are now.
+    const grad = (cols) => `linear-gradient(to right, ${cols.join(', ')})`;
+    const rgbG = [0, 1, 2].map((k) => grad([0, 255].map((x) => { const c = [r, g, b]; c[k] = x; return `rgb(${c.join(',')})`; })));
+    const hsvG = [grad([0, 60, 120, 180, 240, 300, 360].map((x) => hsvToHex(x, 1, 1))), grad([hsvToHex(h, 0, v), hsvToHex(h, 1, v)]), grad(['#000', hsvToHex(h, s, 1)])];
+    el.querySelectorAll('.cw-rgb .cw-grad').forEach((i) => (i.style.background = rgbG[+i.dataset.k]));
+    el.querySelectorAll('.cw-hsv .cw-grad').forEach((i) => (i.style.background = hsvG[+i.dataset.k]));
     if (done != null) onChange(hx, done);
   };
   const setHex = (hx, done) => { if (!/^#[0-9a-f]{6}$/i.test(hx)) return; [h, s, v] = rgbToHsv(...hexToRgb(hx)); paint(done); };
@@ -963,7 +1158,7 @@ function attachColorWheel(el, hex, onChange) {
   };
   cv.addEventListener('pointerdown', (e) => {
     cv.setPointerCapture(e.pointerId);
-    el.focus();
+    el.focus({ preventScroll: true });
     pick(e, false);
     const mv = (ev) => pick(ev, false);
     cv.addEventListener('pointermove', mv);
@@ -972,9 +1167,24 @@ function attachColorWheel(el, hex, onChange) {
   el.querySelector('.cw-v').addEventListener('input', (e) => { v = e.target.value / 100; paint(false); });
   el.querySelector('.cw-v').addEventListener('change', () => paint(true));
   el.querySelector('.cw-hex').addEventListener('change', (e) => setHex(e.target.value.trim().toLowerCase(), true));
-  el.querySelectorAll('.cw-rgb input').forEach((i) => i.addEventListener('change', () => {
-    const c = [...el.querySelectorAll('.cw-rgb input')].map((x) => +x.value);
-    setHex(rgbToHex(...c), true);
+  // Slider and number of one row move together: dragging = live, letting go / typing = settled.
+  const sliderRows = (cls, apply) => el.querySelectorAll(`.${cls} input`).forEach((i) => {
+    const read = () => [0, 1, 2].map((k) => +(i.dataset.k == k ? i.value : el.querySelector(`.${cls} input[type=number][data-k="${k}"]`).value) || 0);
+    if (i.type === 'range') i.addEventListener('input', () => apply(read(), false));
+    i.addEventListener('change', () => apply(read(), true));
+  });
+  sliderRows('cw-rgb', (c, done) => { [h, s, v] = rgbToHsv(...c.map((x) => Math.max(0, Math.min(255, x)))); paint(done); });
+  sliderRows('cw-hsv', ([hh, ss, vv], done) => {
+    h = ((hh % 360) + 360) % 360; s = Math.max(0, Math.min(1, ss / 100)); v = Math.max(0, Math.min(1, vv / 100));
+    paint(done);
+  });
+  el.querySelectorAll('[data-cwmode]').forEach((b) => b.addEventListener('click', () => {
+    try { localStorage.setItem('kd.cwMode', b.dataset.cwmode); } catch { /* private window */ }
+    // Every wheel on the page follows.
+    for (const w of $$('.cw')) {
+      w.classList.toggle('hsv', b.dataset.cwmode === 'hsv');
+      w.querySelectorAll('[data-cwmode]').forEach((x) => x.classList.toggle('on', x.dataset.cwmode === b.dataset.cwmode));
+    }
   }));
   el.querySelectorAll('[data-pal]').forEach((b) => b.addEventListener('click', () => setHex(b.dataset.pal, true)));
   let keyTimer = 0;
@@ -994,5 +1204,117 @@ function attachColorWheel(el, hex, onChange) {
     clearTimeout(keyTimer);
     keyTimer = setTimeout(() => paint(true), 400);   // settle (re-render) once the keys stop
   });
+  // Lets a caller show another colour without firing onChange (live values from a poll); not while in use.
+  el.setHex = (hx) => {
+    if (el.contains(document.activeElement) || el.matches(':active') || hx === hsvToHex(h, s, v)) return;
+    [h, s, v] = rgbToHsv(...hexToRgb(hx));
+    paint();
+  };
+  paint();
+}
+
+// ---- Colour mixing for fixtures with white and/or amber LEDs. With "Auto white / amber" on (kept
+// per browser) a picked colour is split: the part all three of r, g, b share goes to white, then
+// the warm part (amber is about r 255, g 170) to amber, the rest stays on r, g, b. Off = only
+// r, g, b change, white and amber stay as they are.
+const AMBER_G = 170 / 255;
+const cwMix = () => { try { return localStorage.getItem('kd.cwMix') === '1'; } catch { return false; } };
+function mixRoles(f) {
+  const ro = channelRoles(f);
+  return { r: ro.r, g: ro.g, b: ro.b, w: ro.w, a: slots(f).find((s) => /^(a|amber)$/i.test(s.name)) };
+}
+// { r, g, b[, w][, a] } (0-255) to send for a picked colour.
+function mixColor(f, [r, g, b]) {
+  const m = mixRoles(f), out = {};
+  if (cwMix() && m.w) { const w = Math.min(r, g, b); r -= w; g -= w; b -= w; out.w = w; }
+  if (cwMix() && m.a) { const a = Math.min(r, g / AMBER_G, 255); r -= a; g -= a * AMBER_G; out.a = a; }
+  Object.assign(out, { r, g, b });
+  for (const k in out) out[k] = Math.max(0, Math.min(255, Math.round(out[k])));
+  return out;
+}
+// The colour a fixture shows, for the wheel; get(slot) = its 8-bit value. White and amber count when mixing.
+function mixedRgb(f, get) {
+  const m = mixRoles(f), v = (s) => (s ? get(s) || 0 : 0);
+  const c = [v(m.r), v(m.g), v(m.b)];
+  if (cwMix()) {
+    const w = v(m.w), a = v(m.a);
+    c[0] += w + a; c[1] += w + a * AMBER_G; c[2] += w;
+  }
+  return c.map((x) => Math.min(255, Math.round(x)));
+}
+// The switch under the wheel, only when a selected fixture has white or amber besides r, g, b.
+function mixToggleHtml(fixtures) {
+  if (!fixtures.some((f) => { const m = mixRoles(f); return m.r && m.g && m.b && (m.w || m.a); })) return '';
+  return `<label class="row muted cw-mix" title="On: the colour you pick also sets white and amber (whites go to the W LED, warm tones to amber). Off: only red, green and blue change.">
+    <input type="checkbox" data-cwmix${cwMix() ? ' checked' : ''}> Auto white / amber</label>`;
+}
+function wireMixToggle(after) {
+  $('[data-cwmix]')?.addEventListener('change', (e) => {
+    try { localStorage.setItem('kd.cwMix', e.target.checked ? '1' : '0'); } catch { /* private window */ }
+    after();
+  });
+}
+
+// ---- Position pad: pan = left/right, tilt = up/down (both 0-1, top = 0). For fixtures with
+// channels named pan and tilt (16-bit or not). Keys when focused: arrows (Shift = bigger), Home = centre.
+function posSlots(f) {
+  const ss = slots(f);
+  return { pan: ss.find((s) => /^pan$/i.test(s.name)), tilt: ss.find((s) => /^tilt$/i.test(s.name)) };
+}
+function xyPadHtml(id, x, y) {
+  return `<div class="xy" data-xy="${id}" data-x="${x}" data-y="${y}" tabindex="0" title="Drag to aim · arrows move (Shift = more) · Home = centre">
+    <div class="xy-pad"><i class="xy-dot"></i></div>
+    <div class="row nowrap xy-num"><label class="muted">Pan<input type="number" min="0" max="100" step="0.1" data-xyk="x"></label>
+      <label class="muted">Tilt<input type="number" min="0" max="100" step="0.1" data-xyk="y"></label><span class="muted">%</span>
+      <button type="button" class="btn small ghost" data-xyc title="Centre (Home)">Centre</button></div></div>`;
+}
+// onChange(x, y, done) like attachColorWheel.
+function attachXyPad(el, x, y, onChange) {
+  const pad = el.querySelector('.xy-pad'), dot = el.querySelector('.xy-dot');
+  const clamp = (v) => Math.max(0, Math.min(1, v));
+  const paint = (done) => {
+    dot.style.left = x * 100 + '%';
+    dot.style.top = y * 100 + '%';
+    el.querySelectorAll('[data-xyk]').forEach((i) => { if (document.activeElement !== i) i.value = ((i.dataset.xyk === 'x' ? x : y) * 100).toFixed(1); });
+    if (done != null) onChange(x, y, done);
+  };
+  const pick = (e, done) => {
+    const r = pad.getBoundingClientRect();
+    x = clamp((e.clientX - r.left) / r.width);
+    y = clamp((e.clientY - r.top) / r.height);
+    paint(done);
+  };
+  let dragging = false;
+  pad.addEventListener('pointerdown', (e) => {
+    pad.setPointerCapture(e.pointerId);
+    el.focus({ preventScroll: true });
+    dragging = true;
+    pick(e, false);
+    const mv = (ev) => pick(ev, false);
+    pad.addEventListener('pointermove', mv);
+    pad.addEventListener('pointerup', (ev) => { dragging = false; pad.removeEventListener('pointermove', mv); pick(ev, true); }, { once: true });
+  });
+  el.querySelectorAll('[data-xyk]').forEach((i) => i.addEventListener('change', () => {
+    const v = clamp((+i.value || 0) / 100);
+    if (i.dataset.xyk === 'x') x = v; else y = v;
+    paint(true);
+  }));
+  el.querySelector('[data-xyc]').addEventListener('click', () => { x = y = 0.5; paint(true); });
+  let keyTimer = 0;
+  el.addEventListener('keydown', (e) => {
+    if (e.target !== el) return;
+    const st = e.shiftKey ? 0.05 : 0.005, k = e.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') x = clamp(x + (k === 'ArrowLeft' ? -st : st));
+    else if (k === 'ArrowUp' || k === 'ArrowDown') y = clamp(y + (k === 'ArrowUp' ? -st : st));
+    else if (k === 'Home') x = y = 0.5;
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+    paint(false);
+    clearTimeout(keyTimer);
+    keyTimer = setTimeout(() => paint(true), 400);
+  });
+  // Lets a caller move the dot without firing onChange (live values from a poll).
+  el.setXY = (nx, ny) => { if (dragging || el.contains(document.activeElement)) return; x = nx; y = ny; paint(); };
   paint();
 }

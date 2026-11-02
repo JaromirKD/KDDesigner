@@ -136,19 +136,22 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     r = "Released all";
     return true;
   }
-  if (is(0, "set") && t.size() == 3) {
-    int dot = t[1].indexOf('.');
+  // set <u>.<ch>[-<ch>] <v>  /  clear override <u>.<ch>[-<ch>] (one channel or one fixture back to the show)
+  const bool setCh = is(0, "set") && t.size() == 3, clearCh = is(0, "clear") && is(1, "override") && t.size() == 3;
+  if (setCh || clearCh) {
+    const String& spec = t[setCh ? 1 : 2];
+    int dot = spec.indexOf('.');
     if (dot < 0) { r = "expected <universe>.<channel>"; return false; }
-    int u = Show::universeIndex(t[1].substring(0, dot).toInt());
-    String chs = t[1].substring(dot + 1);
+    int u = Show::universeIndex(spec.substring(0, dot).toInt());
+    String chs = spec.substring(dot + 1);
     int dash = chs.indexOf('-');
     int c1 = chs.toInt(), c2 = dash > 0 ? chs.substring(dash + 1).toInt() : c1;
-    int v = t[2].toInt();
+    int v = setCh ? t[2].toInt() : -1;
     if (u < 0) { r = "unknown universe"; return false; }
     if (c1 < 1 || c2 > 512 || c2 < c1) { r = "channel out of range (1-512)"; return false; }
-    if (v < 0 || v > 255) { r = "value out of range (0-255)"; return false; }
+    if (setCh && (v < 0 || v > 255)) { r = "value out of range (0-255)"; return false; }
     for (int c = c1; c <= c2; c++) Show::setOverride(u, c - 1, v);
-    r = "Set " + t[1] + " = " + v;
+    r = setCh ? "Set " + spec + " = " + v : "Override cleared " + spec;
     return true;
   }
   if (is(0, "clear") && is(1, "overrides")) { Show::clearOverrides(); r = "Overrides cleared"; return true; }
@@ -169,9 +172,29 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     return true;
   }
   if (is(0, "label") && t.size() >= 3) {
-    if (is(2, "color") && t.size() == 4) { State::setLabelColor(t[1], t[3]); r = "Label " + t[1] + " colour " + t[3]; }
-    else { State::setLabel(t[1], rest(t, 2)); r = "Label " + t[1] + " = " + rest(t, 2); }
+    if (is(2, "color") && t.size() == 4) { State::setControl(t[1], "color", t[3]); r = "Label " + t[1] + " colour " + t[3]; }
+    else { State::setControl(t[1], "text", rest(t, 2)); r = "Label " + t[1] + " = " + rest(t, 2); }
     return true;
+  }
+  // panel <control> text <text> | color <c> | flash on|off|<colour> | value <v> | enable | disable | reset
+  if (is(0, "panel") && t.size() >= 3) {
+    const String& n = t[1];
+    if (is(2, "text") && t.size() >= 4) { State::setControl(n, "text", rest(t, 3)); r = "Panel " + n + " text " + rest(t, 3); return true; }
+    if (is(2, "color") && t.size() == 4) { State::setControl(n, "color", t[3]); r = "Panel " + n + " colour " + t[3]; return true; }
+    if (is(2, "flash") && t.size() == 4) {
+      State::setControl(n, "flash", is(3, "off") ? String("") : is(3, "on") ? String("on") : t[3]);
+      r = "Panel " + n + " flash " + t[3];
+      return true;
+    }
+    if (is(2, "value") && t.size() == 4) { State::setControl(n, "value", t[3]); r = "Panel " + n + " = " + t[3]; return true; }
+    if ((is(2, "enable") || is(2, "disable")) && t.size() == 3) {
+      State::setControl(n, "disabled", is(2, "disable") ? "1" : "");
+      r = "Panel " + n + (is(2, "disable") ? " disabled" : " enabled");
+      return true;
+    }
+    if (is(2, "reset") && t.size() == 3) { State::setControl(n, "reset", ""); r = "Panel " + n + " reset"; return true; }
+    r = "expected: panel <control> text|color|flash|value|enable|disable|reset";
+    return false;
   }
   if (is(0, "fire") && is(1, "trigger") && (t.size() == 3 || (t.size() == 5 && is(3, "after")))) {
     int id = Triggers::findId(t[2], r);

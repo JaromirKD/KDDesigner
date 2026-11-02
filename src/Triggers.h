@@ -20,7 +20,9 @@
 //   timeline_end   a non-looping timeline reaches its end
 //   mode           a mode group changes ("group" and/or "mode" = state; empty = any).
 //                  vars {group} {mode}
-//   panel          a touch-panel control is pressed/released/clicked
+//   panel          a touch-panel control is pressed/released/clicked, or a slider / dial /
+//                  colour wheel / toggle "change"s: vars {control} {event} {value}
+//                  ({r} {g} {b} 0-255 for a colour wheel's #rrggbb, {x} {y} for an XY pad's "x,y")
 //   device         a monitored PC / device / projector goes "offline" or "online"
 //                  ("device" = name or empty for any; "state" offline|online|any)
 //   projector      a projector's PJLink error status or lamp hours ("projector" = name or
@@ -73,7 +75,7 @@ bool fire(int triggerId, String& msg, const Vars* vars = nullptr, uint32_t delay
 bool cancel(int triggerId, String& msg);
 bool repeat(int triggerId, uint32_t everyMs, int times, String& msg);  // times 0 = forever
 bool stopRepeat(int triggerId, String& msg);
-bool panelEvent(const String& control, const String& event, String& msg);
+bool panelEvent(const String& control, const String& event, const String& value, String& msg);
 
 // text supports escapes: \r \n \t \\ \xNN
 void sendUdp(const IPAddress& ip, uint16_t port, const String& text);

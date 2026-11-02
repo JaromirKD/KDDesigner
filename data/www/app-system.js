@@ -175,11 +175,13 @@ views.panel = () => {
   const pageOpts = (sel) => `<option value="">—</option>${pages.map((x) => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}`;
   return `<h2>Touch panel <a class="btn small" href="/panel" target="_blank" style="margin-left:8px;text-decoration:none">Open panel ↗</a></h2>
   <p class="muted" style="margin-top:-6px">A full-screen control page for a tablet or touchscreen at <code>http://&lt;controller&gt;/panel</code>.
-    Buttons fire <b>Panel button</b> triggers; labels are changed by actions with <code>label &lt;name&gt; &lt;text&gt;</code>.</p>
+    Buttons, toggles, sliders, dials, colour wheels and XY pads fire <b>Panel button</b> triggers (sliders and co. with <code>{value}</code>); they can also set variables directly (a colour wheel or XY pad one per part).
+    Actions change any control by its name: <code>panel &lt;name&gt; flash on</code>, <code>panel &lt;name&gt; text …</code>, <code>color</code>, <code>value</code>, <code>disable</code>, <code>reset</code>.</p>
   <div class="form" style="margin-bottom:12px">
     <label>Title</label><input data-p="panel.title" value="${esc(p.panel.title || '')}" placeholder="${esc(p.name)}">
     <label>Start page</label><select data-p="panel.start" data-t="num">${pageOpts(p.panel.start)}</select>
   </div>
+  ${panelThemeHtml(p.panel.theme)}
   <div class="split">
     <div><div class="list">${pages.map((x, i) => `<div class="item${i === pi ? ' sel' : ''}" data-sel="page:${i}"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span>${x.pin ? '<span class="tag">PIN</span>' : ''}</div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="page">+ Page</button></div></div>
@@ -187,41 +189,184 @@ views.panel = () => {
       <div class="row"><input data-p="${base}.name" value="${esc(pg.name)}" style="font-size:16px;flex:1">
         <button class="btn small ghost" data-del="${base}">Delete page</button></div>
       <div class="row" style="margin-top:10px">
-        <label class="muted">Columns</label><input type="number" min="1" max="6" style="width:70px" data-p="${base}.columns" data-t="num" value="${pg.columns || 3}" data-r>
+        <label class="muted">Columns</label><input type="number" min="1" max="12" style="width:70px" data-p="${base}.columns" data-t="num" value="${pg.columns || 3}" data-r>
         <label class="muted" title="Ask for this PIN before showing the page">PIN</label><input style="width:110px" data-p="${base}.pin" value="${esc(pg.pin || '')}" placeholder="none" inputmode="numeric">
+        ${pg.controls.some((c) => c.col) ? '<button class="btn small ghost" data-pauto title="Forget where controls were dragged to: they fill the page in list order again">Auto layout</button>' : ''}
       </div>
-      <table style="margin-top:10px"><tr><th style="width:96px">Type</th><th>Name (for triggers/labels)</th><th>Text</th><th class="narrow">Colour</th><th>Confirm question</th><th class="narrow">Go to page</th><th class="narrow">Width</th><th></th></tr>
+      <table style="margin-top:10px"><tr><th style="width:96px">Type</th><th>Name (for triggers/labels)</th><th>Text</th><th class="narrow" title="Empty = the theme colour">Colour</th><th>Confirm question</th><th class="narrow">Go to page</th><th class="narrow" title="Columns wide × rows high">Size</th><th></th></tr>
       ${pg.controls.map((c, i) => {
         const cb = `${base}.controls.${i}`;
-        const btn = c.type === 'button';
-        return `<tr>
+        const btn = c.type === 'button' || c.type === 'toggle', named = c.type !== 'spacer' && c.type !== 'clock';
+        const own = c.type !== 'spacer' && c.type !== 'color';
+        return `<tr data-ci="${i}">
         <td><select data-p="${cb}.type" data-r>${PANEL_TYPES.map((t) => `<option${c.type === t ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
-        <td>${btn || c.type === 'label' ? `<input data-p="${cb}.name" value="${esc(c.name || '')}" data-r>` : ''}</td>
-        <td>${c.type === 'spacer' || c.type === 'clock' ? '' : `<input data-p="${cb}.text" value="${esc(c.text || '')}" data-r>`}</td>
-        <td>${c.type === 'spacer' ? '' : `<input type="color" data-p="${cb}.color" value="${esc(c.color || (btn ? '#2a3140' : '#d8dbe2'))}" data-r>`}</td>
+        <td>${named ? `<input data-p="${cb}.name" value="${esc(c.name || '')}" data-r>` : ''}</td>
+        <td>${named ? `<input data-p="${cb}.text" value="${esc(c.text || '')}" data-r>` : ''}</td>
+        <td>${own ? `<div class="row nowrap"><input type="color" data-p="${cb}.color" value="${esc(c.color || panelThemeColor(p.panel.theme, c.type))}" data-r>${c.color
+          ? `<button class="btn small ghost" data-pclr="${i}" title="Use the theme colour again">✕</button>` : '<span class="muted" style="font-size:11px" title="Comes from the theme; pick a colour to override it">theme</span>'}</div>` : ''}</td>
         <td>${btn ? `<input data-p="${cb}.confirm" value="${esc(c.confirm || '')}" placeholder="none" data-r>` : ''}</td>
         <td>${btn ? `<select data-p="${cb}.goto" data-t="num" data-r>${pageOpts(c.goto)}</select>` : ''}</td>
-        <td><input type="number" min="1" max="6" data-p="${cb}.span" data-t="num" value="${c.span || 1}" data-r></td>
-        <td><div class="row nowrap"><button class="btn small ghost" data-pmove="${i}:-1">▲</button><button class="btn small ghost" data-pmove="${i}:1">▼</button><button class="btn small ghost" data-del="${cb}">✕</button></div></td></tr>`;
+        <td><div class="row nowrap psize"><input type="number" min="1" max="12" data-p="${cb}.span" data-t="num" value="${c.span || 1}" title="Columns wide" data-r><span class="muted">×</span><input type="number" min="1" max="20" data-p="${cb}.rows" data-t="num" value="${c.rows || ''}" placeholder="${panelRows(c)}" title="Rows high" data-r></div></td>
+        <td><div class="row nowrap"><button class="btn small ghost" data-pmove="${i}:-1">▲</button><button class="btn small ghost" data-pmove="${i}:1">▼</button><button class="btn small ghost" data-del="${cb}">✕</button></div></td></tr>
+        ${named || c.col ? `<tr class="psub"><td></td><td colspan="7">${panelCtlDetails(c, cb, i)}</td></tr>` : ''}`;
       }).join('')}</table>
-      <div class="row" style="margin-top:8px">${PANEL_TYPES.map((t) => `<button class="btn small" data-add="pc-${t}">+ ${t}</button>`).join('')}</div>
-      <h3>Preview</h3>
-      <div class="panel-preview">${panelPageHtml(pg, S.status, true)}</div>`
+      <div class="row" style="margin-top:8px">${PANEL_TYPES.map((t) => `<button class="btn small" data-add="pc-${t}">+ ${t === 'color' ? 'colour wheel' : t === 'xy' ? 'XY pad' : t}</button>`).join('')}</div>
+      <h3>Preview <span class="muted" style="font-weight:normal;font-size:12px;text-transform:none">live (shows what actions set) · drag a control to move it, its corner to resize it</span></h3>
+      <div class="panel-preview" style="${panelThemeVars(p.panel.theme)}">${panelPageHtml(pg, S.status, true, p.panel.theme)}</div>`
     : '<span class="muted">Add a page to start.</span>'}</div></div>`;
 };
-// Shared with panel.html (same markup and CSS there).
-function panelPageHtml(pg, st, preview) {
-  const labels = st?.labels || {};
-  return `<div class="pgrid" style="grid-template-columns:repeat(${pg.columns || 3},1fr)">${pg.controls.map((c) => {
-    const span = `grid-column:span ${Math.min(c.span || 1, pg.columns || 3)}`;
-    if (c.type === 'spacer') return `<div style="${span}"></div>`;
-    if (c.type === 'clock') return `<div class="plabel pclock" style="${span};color:${esc(c.color || '')}">${new Date().toLocaleTimeString().slice(0, 5)}</div>`;
-    if (c.type === 'label') {
-      const l = labels[c.name] || {};
-      return `<div class="plabel" style="${span};color:${esc(l.color || c.color || '')}">${esc(l.text ?? c.text ?? '')}</div>`;
-    }
-    return `<button class="pbtn" style="${span};background:${esc(c.color || '#2a3140')}"${preview ? ' disabled' : ''}>${esc(c.text || c.name || '')}</button>`;
-  }).join('')}</div>`;
+views.panel.after = () => {
+  const p = P(), box = $('.panel-preview'), pg = p.panel.pages[S.sel.page || 0];
+  if (box && pg) {
+    pagePoll('panelPreview', () => panelUpdate(box, pg, S.status), 500);
+    panelEditor(box, pg);
+  }
+  const det = $('details.ptheme');
+  det?.addEventListener('toggle', () => (S.panelThemeOpen = det.open));
+  $$('[data-ptheme]').forEach((b) => b.addEventListener('click', () => {
+    // A preset sets the colours and keeps the sizes.
+    const keep = Object.fromEntries(['radius', 'gap', 'row', 'font', 'width'].filter((k) => p.panel.theme[k] != null).map((k) => [k, p.panel.theme[k]]));
+    p.panel.theme = b.dataset.ptheme === 'reset' ? {} : { ...PANEL_THEMES[b.dataset.ptheme], ...keep };
+    markDirty();
+    render();
+  }));
+  $$('[data-pclr]').forEach((b) => b.addEventListener('click', () => { delete pg.controls[+b.dataset.pclr].color; markDirty(); render(); }));
+  $('[data-pauto]')?.addEventListener('click', () => { pg.controls.forEach((c) => { delete c.col; delete c.row; }); markDirty(); render(); });
+};
+// The panel theme: what every control looks like unless it has its own colour.
+function panelThemeHtml(theme) {
+  const th = panelTheme(theme);
+  const colors = [['bg', 'Background'], ['button', 'Buttons'], ['buttonText', 'Button text'], ['toggle', 'Toggle when on'], ['accent', 'Sliders and dials'],
+    ['label', 'Labels and clock'], ['card', 'Cards (slider, dial, wheel)'], ['border', 'Card border'], ['text', 'Card text'], ['muted', 'Values'], ['track', 'Slider and dial track']];
+  const sizes = [['font', 'Text size', 'px'], ['row', 'Row height', 'px'], ['gap', 'Space between', 'px'], ['radius', 'Rounded corners', 'px'], ['width', 'Page width', 'px, 0 = whole screen']];
+  return `<details class="ptheme"${S.panelThemeOpen ? ' open' : ''}><summary>Theme <span class="muted">· how all controls look, unless a control has its own colour${Object.keys(theme || {}).length ? '' : ' (default)'}</span></summary>
+    <div class="row" style="margin:8px 0">${Object.keys(PANEL_THEMES).map((n) => `<button class="btn small" data-ptheme="${n}">${n}</button>`).join('')}
+      <button class="btn small ghost" data-ptheme="reset" title="Back to the default theme, sizes too">Reset</button></div>
+    <div class="ptheme-grid">${colors.map(([k, l]) => `<label><input type="color" data-p="panel.theme.${k}" value="${esc(th[k])}" data-r> ${l}</label>`).join('')}
+      ${sizes.map(([k, l, u]) => `<label><input type="number" min="0" data-p="panel.theme.${k}" data-t="num" value="${theme?.[k] ?? ''}" placeholder="${PANEL_THEME[k]}" data-r> ${l} <span class="muted">${u}</span></label>`).join('')}</div>
+  </details>`;
+}
+// Dragging in the preview: a control moves to another place in the grid, its corner grip
+// resizes it (columns × rows). The first move pins every control on the page where it is now
+// (col/row), so the others stay put; "Auto layout" forgets that again.
+function panelEditor(box, pg) {
+  const grid = box.querySelector('.pgrid');
+  grid.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('[data-i]');
+    if (!el || e.button !== 0) return;
+    e.preventDefault();
+    const i = +el.dataset.i, c = pg.controls[i], cols = pg.columns || 3, resize = !!e.target.closest('.pgrip');
+    const cs = getComputedStyle(grid), gx = parseFloat(cs.columnGap) || 0, gy = parseFloat(cs.rowGap) || 0;
+    const colW = cs.gridTemplateColumns.split(' ').map(parseFloat), rowH = cs.gridTemplateRows.split(' ').map(parseFloat);
+    const rowDef = +panelTheme(P().panel.theme).row || 84;
+    // Track number (1-based) at a position in CSS px; below the last row the rows go on.
+    const track = (sizes, gap, pos, more) => {
+      let x = 0;
+      for (let k = 0; k < sizes.length; k++) { if (pos < x + sizes[k] + gap / 2) return k + 1; x += sizes[k] + gap; }
+      return sizes.length + 1 + (more ? Math.max(0, Math.floor((pos - x) / (more + gap))) : 0);
+    };
+    const at = (ev) => {
+      const r = grid.getBoundingClientRect(), z = uiZoom();
+      return { col: Math.min(cols, track(colW, gx, (ev.clientX - r.left) / z)), row: track(rowH, gy, (ev.clientY - r.top) / z, rowDef) };
+    };
+    // Where everything is now, pinned so moving one control doesn't shuffle the rest.
+    const pos = [...grid.querySelectorAll('[data-i]')].map((x) => {
+      const k = +x.dataset.i, cc = pg.controls[k];
+      const p = { k, el: x, col: track(colW, gx, x.offsetLeft + 1), row: track(rowH, gy, x.offsetTop + 1), span: Math.min(cc.span || 1, cols), rows: Math.max(1, cc.rows || panelRows(cc)),
+        was: [x.style.gridColumn, x.style.gridRow] };
+      x.style.gridColumn = `${p.col} / span ${p.span}`;
+      x.style.gridRow = `${p.row} / span ${p.rows}`;
+      return p;
+    });
+    const me = pos.find((x) => x.k === i), start = at(e), now = { ...me };
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('p-moving');
+    const move = (ev) => {
+      const a = at(ev);
+      if (resize) {
+        now.span = Math.max(1, Math.min(cols - me.col + 1, a.col - me.col + 1));
+        now.rows = Math.max(1, a.row - me.row + 1);
+      } else {
+        now.col = Math.max(1, Math.min(cols - me.span + 1, me.col + a.col - start.col));
+        now.row = Math.max(1, me.row + a.row - start.row);
+      }
+      el.style.gridColumn = `${now.col} / span ${now.span}`;
+      el.style.gridRow = `${now.row} / span ${now.rows}`;
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.classList.remove('p-moving');
+      if (now.col === me.col && now.row === me.row && now.span === me.span && now.rows === me.rows) {
+        // Just a click: put every control back as it was (its own size and place) and mark its
+        // rows in the table - without scrolling, so the preview stays where it is.
+        pos.forEach((x) => { [x.el.style.gridColumn, x.el.style.gridRow] = x.was; });
+        $$('tr.p-row').forEach((x) => x.classList.remove('p-row'));
+        const tr = $(`tr[data-ci="${i}"]`);
+        tr?.classList.add('p-row');
+        if (tr?.nextElementSibling?.classList.contains('psub')) tr.nextElementSibling.classList.add('p-row');
+        $$('.p-picked', grid).forEach((x) => x.classList.remove('p-picked'));
+        el.classList.add('p-picked');
+        return;
+      }
+      // Controls it now covers move down, top to bottom, until they are free again.
+      const hit = (a, b) => a.col < b.col + b.span && b.col < a.col + a.span && a.row < b.row + b.rows && b.row < a.row + a.rows;
+      const placed = [now];
+      for (const x of pos.filter((x) => x.k !== i).sort((a, b) => a.row - b.row || a.col - b.col)) {
+        while (placed.some((q) => hit(q, x))) x.row++;
+        placed.push(x);
+        Object.assign(pg.controls[x.k], { col: x.col, row: x.row });
+      }
+      Object.assign(c, { col: now.col, row: now.row, span: now.span });
+      if (resize) c.rows = now.rows;
+      markDirty();
+      render();
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up, { once: true });
+  });
+}
+// The second line under a control: range / variable / height, and the triggers it fires and
+// the ones whose actions change it ("link knobs to triggers").
+function panelCtlDetails(c, cb, i) {
+  const p = P(), name = (c.name || '').toLowerCase();
+  const num = (k, ph, title) => `<input type="number" step="any" data-p="${cb}.${k}" data-t="num" value="${c[k] ?? ''}" placeholder="${ph}" title="${title}" data-r>`;
+  const parts = [];
+  if (c.type === 'color' || c.type === 'xy') c.links = c.links || {};   // so the link selects can bind
+  // A variable to link to; "Moving the control sets it; when it changes, the control follows".
+  const varSel = (path, val, label, title) => `<span class="muted" title="${esc(title || 'Moving the control sets this variable; when the variable changes, the control follows')}">${label}</span>
+    <select data-p="${cb}.${path}" data-r><option value="">—</option>${p.variables.map((v) => `<option${val === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`;
+  const step = `<span class="muted">step</span>${num('step', 1, 'Steps the value moves in, e.g. 0.1 or 0.01 for decimals (0 = smooth)')}
+      <span class="muted">unit</span><input data-p="${cb}.unit" value="${esc(c.unit || '')}" placeholder="%" style="width:44px" data-r>`;
+  if (c.type === 'slider' || c.type === 'dial') {
+    parts.push(`<span class="muted">Range</span>${num('min', 0, 'Lowest value')}<span class="muted">to</span>${num('max', 100, 'Highest value')} ${step}`);
+    if (c.type === 'slider') parts.push(`<label class="chk"><input type="checkbox" data-p="${cb}.vertical" data-t="bool"${c.vertical ? ' checked' : ''} data-r> vertical</label>`);
+  }
+  if (c.type === 'xy') {
+    parts.push(`<span class="muted">X</span>${num('min', 0, 'Left')}<span class="muted">to</span>${num('max', 100, 'Right')}
+      <span class="muted">Y</span>${num('ymin', 0, 'Bottom')}<span class="muted">to</span>${num('ymax', 100, 'Top')} ${step}`);
+    parts.push(`${varSel('links.x', c.links.x, 'X variable')} ${varSel('links.y', c.links.y, 'Y variable')}`);
+  }
+  if (c.type === 'toggle' || c.type === 'slider' || c.type === 'dial') parts.push(varSel('var', c.var, 'Variable'));
+  if (c.type === 'color') {
+    const L = c.links;
+    parts.push(`${varSel('links.r', L.r, 'Red')} ${varSel('links.g', L.g, 'Green')} ${varSel('links.b', L.b, 'Blue')}
+      <select data-p="${cb}.rgbScale" data-t="num" title="Range of the red, green and blue variables" data-r><option value="">0-255</option><option value="100"${c.rgbScale === 100 ? ' selected' : ''}>0-100 %</option></select>`);
+    parts.push(`${varSel('links.h', L.h, 'Hue', 'Colour on the wheel, 0-360°')} ${varSel('links.s', L.s, 'Saturation', '0 = white, 100 = full colour')} ${varSel('links.v', L.v, 'Brightness', '0-100 (the bar under the wheel)')}`);
+    parts.push(varSel('var', c.var, 'Whole colour', 'A text variable that gets #rrggbb'));
+  }
+  if (c.col) parts.push(`<span class="muted" title="Column and row it was dragged to in the preview; empty = the next free place">Place</span>${num('col', 'auto', 'Column')}${num('row', 'auto', 'Row')}`);
+  const fires = name ? p.triggers.filter((t) => t.type === 'panel' && (t.control || '').toLowerCase() === name) : [];
+  // Actions "panel <name> …" / "label <name> …" (quoted or not).
+  const rx = name.replace(/[.*+?^$()|[\]\\{}]/g, '\\$&');
+  const re = name && new RegExp(`(^|\\bthen\\s+|\\belse\\s+)(panel|label)\\s+("${rx}"|${rx})(\\s|$)`, 'i');
+  const sets = re ? p.triggers.filter((t) => (t.actions || []).some((a) => re.test(a.trim()))) : [];
+  const link = (t, extra) => `<a href="#" data-goto-trigger="${t.id}">#${t.id} ${esc(t.name || '')}</a>${extra ? ` <span class="muted">(${extra})</span>` : ''}`;
+  if (['button', ...PANEL_VALUE_TYPES].includes(c.type)) {
+    parts.push(`<span class="muted">Fires</span>${fires.map((t) => link(t, t.event || 'click')).join(', ') || '<span class="muted">nothing yet</span>'}
+      ${c.name ? `<button class="btn small ghost" data-add="ptrig-${i}" title="New Panel trigger for this control">+ trigger</button>` : ''}`);
+  }
+  if (sets.length) parts.push(`<span class="muted">Changed by</span>${sets.map((t) => link(t)).join(', ')}`);
+  return `<div class="row">${parts.join('<span class="muted">·</span>')}</div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -916,34 +1061,275 @@ views.log.after = () => {
   }).catch(() => { if ($('#levels')) $('#levels').innerHTML = '<span class="muted">unavailable</span>'; });
 };
 
-views.dmx = () => `<h2>DMX monitor</h2>
+// DMX monitor: the live output of one universe, overridden channels in pink. "Channels" shows the
+// 512 slots with the patched fixtures marked on them, "Fixtures" one card per fixture. Clicking
+// either opens the override panel, laid out like the Scenes programmer: a fader per channel for the
+// selected fixtures (Shift/Ctrl+click for more), colour wheel and position pad on the right.
+// S.dmxSel = { fxs: [fixture ids] } or { ch: n } (a channel without a fixture) or null.
+const dmxSelFx = () => (S.dmxSel?.fxs || []).map(fixture).filter((f) => f && f.universe === S.dmxU);
+const dmxFixtures = (u) => P().fixtures.filter((f) => f.universe === u).sort((a, b) => a.address - b.address);
+// The DMX channels of a fixture, a 16-bit channel as "<name>" + "<name> fine".
+function dmxChannelsOf(f) {
+  const out = [];
+  for (const s of slots(f)) {
+    out.push({ ch: f.address + s.offset, name: s.name });
+    if (s.wide) out.push({ ch: f.address + s.offset + 1, name: s.name + ' fine' });
+  }
+  return out.filter((c) => c.ch >= 1 && c.ch <= 512);
+}
+// A 512-channel grid (DMX monitor, patch on the Fixtures page): one outline round all channels of a
+// fixture (cells with the same data-f). A fixture that wraps onto the next row gets a box per row,
+// so the joins depend on how many columns fit (redone on resize).
+function outlineFixtures(grid) {
+  const join = () => {
+    const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length, cs = grid.children;
+    for (let i = 0; i < cs.length; i++) {
+      const f = cs[i].dataset.f;
+      cs[i].classList.toggle('jr', !!f && (i + 1) % cols !== 0 && cs[i + 1]?.dataset.f === f);
+      cs[i].classList.toggle('jl', !!f && i % cols !== 0 && cs[i - 1]?.dataset.f === f);
+    }
+  };
+  join();
+  new ResizeObserver(join).observe(grid);
+}
+const dmxRange = (chs) => (chs.length > 1 ? `${chs[0].ch}-${chs[chs.length - 1].ch}` : `${chs[0].ch}`);
+// Fader moves: at most one command every 40 ms, newest value per channel wins (like previewLevels).
+const dmxPending = new Map();
+let dmxTimer = null;
+function dmxSend(key, line) {
+  dmxPending.set(key, line);
+  if (dmxTimer) return;
+  dmxTimer = setTimeout(async () => {
+    dmxTimer = null;
+    const lines = [...dmxPending.values()];
+    dmxPending.clear();
+    const r = await cmd(lines.join('\n'));
+    if (!r.ok) toast(r.reply, true);
+    S.dmxRefresh?.();
+  }, 40);
+}
+
+views.dmx = () => {
+  const fxs = dmxFixtures(S.dmxU), at = {}, selIds = new Set(S.dmxSel?.fxs || []);
+  fxs.forEach((f, k) => dmxChannelsOf(f).forEach((c, i) => (at[c.ch] = { f, name: c.name, first: i === 0, odd: k % 2 })));
+  const mode = S.dmxMode || 'ch';
+  const grid = `<div class="dmx" id="dmxGrid">${Array.from({ length: 512 }, (_, i) => {
+    const ch = i + 1, a = at[ch];
+    const cls = a ? `fx f${a.odd}${a.first ? ' fs' : ''}${selIds.has(a.f.id) ? ' sel' : ''}` : S.dmxSel?.ch === ch ? 'sel' : '';
+    const tip = a ? `${a.f.name} · ${a.name} (${S.dmxU}.${ch})` : `channel ${S.dmxU}.${ch} (no fixture)`;
+    return `<div data-ch="${ch}"${a ? ` data-f="${a.f.id}"` : ''} class="${cls}" title="${esc(tip)}"><i></i><b>${ch}</b><em>${a ? esc(a.first ? a.f.name : a.name) : ''}</em><span>0</span></div>`;
+  }).join('')}</div>`;
+  // A card: live colour (with the icon), intensity, a little position square for moving heads, a bar per channel.
+  const cards = fxs.length ? `<div class="dmx-fxs" id="dmxGrid">${fxs.map((f) => {
+    const chs = dmxChannelsOf(f), q = posSlots(f);
+    return `<div class="dmx-fx${selIds.has(f.id) ? ' sel' : ''}" data-dmxfx="${f.id}">
+      <div class="hd"><span class="dot">${fxIcon(f)}</span><div class="nm"><b title="${esc(f.name)}">${esc(f.name)}</b><small>${chs.length ? `${S.dmxU}.${dmxRange(chs)}` : ''}${f.type ? ' · ' + esc(f.type) : ''}</small></div>
+        <span class="lvl" title="Intensity"></span>${q.pan && q.tilt ? '<span class="mini-xy" title="Pan / tilt"><i></i></span>' : ''}</div>
+      <div class="bars">${chs.map((c) => `<div data-ch="${c.ch}" title="${esc(c.name)} (${S.dmxU}.${c.ch})"><i></i><span>0</span><em>${esc(c.name)}</em></div>`).join('')}</div></div>`;
+  }).join('')}</div>` : '<p class="muted">No fixtures patched in this universe.</p>';
+  return `<h2>DMX monitor</h2>
   <div class="row" style="margin-bottom:10px"><label class="muted">Universe</label>
     <select id="dmxU">${opts(P().universes, S.dmxU)}</select>
-    <span class="muted">Click a channel to set an override. Live output after grand master.</span>
-    <button class="btn small" data-cmd="clear overrides">Clear overrides</button></div>
-  <div class="dmx" id="dmxGrid">${Array.from({ length: 512 }, (_, i) => `<div data-ch="${i + 1}"><i></i><b>${i + 1}</b><span>0</span></div>`).join('')}</div>`;
-views.dmx.after = () => {
-  const fxAt = {};
-  for (const f of P().fixtures) if (f.universe === S.dmxU) (f.channels || []).forEach((c, i) => (fxAt[f.address + i] = `${f.name} · ${c}`));
-  $$('#dmxGrid > div').forEach((d) => (d.title = fxAt[d.dataset.ch] || `channel ${d.dataset.ch}`));
-  $('#dmxU').addEventListener('change', (e) => { S.dmxU = +e.target.value; render(); });
-  $('#dmxGrid').addEventListener('click', async (e) => {
-    const d = e.target.closest('[data-ch]');
-    if (!d) return;
-    const v = prompt(`Override ${S.dmxU}.${d.dataset.ch} (0-255)`, d.querySelector('span').textContent);
-    if (v !== null) { const r = await cmd(`set ${S.dmxU}.${d.dataset.ch} ${v}`); if (!r.ok) toast(r.reply, true); }
-  });
-  const cells = $$('#dmxGrid > div');
-  pagePoll('dmx', async () => {
-    try {
-      const vals = await api('/api/dmx?u=' + S.dmxU);
-      vals.forEach((v, i) => {
-        cells[i].lastChild.textContent = v;
-        cells[i].firstChild.style.height = (v / 255) * 100 + '%';
-      });
-    } catch { /* offline */ }
-  }, 250);
+    <div class="seg">${[['ch', 'Channels'], ['fx', 'Fixtures']].map(([k, n]) => `<button class="${mode === k ? 'on' : ''}" data-dmxmode="${k}">${n}</button>`).join('')}</div>
+    <span class="dmx-key"><i></i> show output <i class="ovr"></i> override</span>
+    <span class="muted">Click a channel or fixture to override it (Shift/Ctrl+click for more). Live output after grand master.</span>
+    <button class="btn small" data-cmd="clear overrides" style="margin-left:auto">Clear all overrides</button></div>
+  <div id="dmxPanel"></div>
+  ${mode === 'ch' ? grid : cards}`;
 };
+// The panel's faders: one per channel name of the selected fixtures (like the Scenes programmer),
+// each with the DMX channels it drives ({ ch, wide }); a channel without a fixture is one fader.
+function dmxRows() {
+  const sel = dmxSelFx();
+  if (!sel.length) return S.dmxSel?.ch ? [{ name: 'channel ' + S.dmxSel.ch, wide: false, to: [{ ch: S.dmxSel.ch, wide: false }] }] : [];
+  const rows = [];
+  for (const f of sel)
+    for (const s of slots(f)) {
+      const ch = f.address + s.offset;
+      if (ch < 1 || ch + (s.wide ? 1 : 0) > 512) continue;
+      let r = rows.find((x) => x.name === s.name);
+      if (!r) rows.push((r = { name: s.name, wide: s.wide, to: [] }));
+      r.to.push({ ch, wide: s.wide });
+    }
+  return rows;
+}
+const dmxRgbFx = (sel) => sel.filter((f) => { const r = channelRoles(f); return r.r && r.g && r.b; });
+const dmxPosFx = (sel) => sel.filter((f) => { const q = posSlots(f); return q.pan && q.tilt; });
+function dmxPanelHtml(rows) {
+  if (!rows.length) return '';
+  const sel = dmxSelFx(), one = sel.length === 1 ? sel[0] : null, u = S.dmxU;
+  const title = one ? esc(one.name) : sel.length ? sel.length + ' fixtures' : 'Channel ' + S.dmxSel.ch;
+  const where = one ? `${u}.${dmxRange(dmxChannelsOf(one))}${one.type ? ' · ' + esc(one.type) : ''}` : sel.length ? '' : `${u}.${S.dmxSel.ch} · no fixture`;
+  const side = (dmxRgbFx(sel).length ? colorWheelHtml('dmx', '#000000') + mixToggleHtml(dmxRgbFx(sel)) : '') + (dmxPosFx(sel).length ? xyPadHtml('dmx', 0.5, 0.5) : '');
+  return `<div class="sc-prog dmx-panel">
+    <div class="row"><span class="fx-ic">${one ? fxIcon(one) : ''}</span><b>${title}</b><span class="muted">${where}</span><span class="spacer"></span>
+      ${sel.some((f) => channelRoles(f).dim) ? '<button class="btn small" data-dmxdim="255">Full</button><button class="btn small" data-dmxdim="128">50%</button><button class="btn small" data-dmxdim="0">Off</button>' : ''}
+      <button class="btn small" data-dmxall="255" title="Override every channel at full">All full</button>
+      <button class="btn small" data-dmxall="0" title="Override every channel at zero">All zero</button>
+      <button class="btn small" data-dmxrel title="Let the show drive ${sel.length ? 'these fixtures' : 'this channel'} again">Release</button>
+      <button class="btn small ghost" data-dmxclose title="Close (Esc); the overrides stay">✕</button></div>
+    <div class="sc-body"><div class="sc-chs">${rows.map((r, i) => {
+      const max = r.wide ? 65535 : 255;
+      return `<div class="sc-ch dmx-row" data-row="${i}"><span class="sc-chn" title="${esc(r.name)}${r.wide ? ' (16-bit)' : ''} · ${r.to.map((t) => `${u}.${t.ch}`).join(', ')}">${esc(r.name)}</span>
+        <input type="range" min="0" max="${max}" value="0"><input type="number" min="0" max="${max}" value="0">
+        <span class="muted sc-pct">0%</span><span class="sc-note"></span>
+        <button class="btn small ghost" data-dmxrelrow="${i}" title="Release this channel (back to the show)">↺</button></div>`;
+    }).join('')}</div>${side ? `<div class="sc-side">${side}</div>` : ''}</div>
+  </div>`;
+}
+views.dmx.after = () => {
+  const u = S.dmxU;
+  let rows = [], live = null;   // live: the last poll, { v: values, o: Set of overridden channels }
+  // A target's value in the row's resolution (a 16-bit fader on an 8-bit channel and the other way).
+  const valOf = (t, wide) => {
+    const v = live?.v || [], raw = t.wide ? ((v[t.ch - 1] ?? 0) << 8) | (v[t.ch] ?? 0) : v[t.ch - 1] ?? 0;
+    return wide === t.wide ? raw : wide ? raw * 257 : raw >> 8;
+  };
+  const chansOf = (t) => (t.wide ? [t.ch, t.ch + 1] : [t.ch]);
+  const send = (t, v, wide) => {
+    const x = Math.max(0, Math.round(wide === t.wide ? v : wide ? v / 257 : v * 257));
+    if (t.wide) { dmxSend(t.ch, `set ${u}.${t.ch} ${Math.min(65535, x) >> 8}`); dmxSend(t.ch + 1, `set ${u}.${t.ch + 1} ${Math.min(65535, x) & 255}`); }
+    else dmxSend(t.ch, `set ${u}.${t.ch} ${Math.min(255, x)}`);
+  };
+  const slotTarget = (f, s) => ({ ch: f.address + s.offset, wide: s.wide });
+  const run = async (lines) => {
+    if (!lines.length) return;
+    const r = await cmd(lines.join('\n'));
+    if (!r.ok) toast(r.reply, true);
+    refresh();
+  };
+  const ranges = () => { const sel = dmxSelFx(); return sel.length ? sel.map((f) => `${u}.${dmxRange(dmxChannelsOf(f))}`) : S.dmxSel?.ch ? [`${u}.${S.dmxSel.ch}`] : []; };
+
+  const showPanel = () => {
+    rows = dmxRows();
+    $('#dmxPanel').innerHTML = dmxPanelHtml(rows);
+    $$('.dmx-row').forEach((el) => {
+      const r = rows[+el.dataset.row], [rng, num] = el.querySelectorAll('input'), max = r.wide ? 65535 : 255;
+      const set = (v) => {
+        v = Math.max(0, Math.min(max, Math.round(v) || 0));
+        rng.value = num.value = v;
+        el.querySelector('.sc-pct').textContent = Math.round((v / max) * 100) + '%';
+        el.classList.add('ovr');
+        for (const t of r.to) send(t, v, r.wide);
+      };
+      rng.addEventListener('input', () => set(+rng.value));
+      num.addEventListener('change', () => set(+num.value));
+      // Don't let the poll move a fader you are holding or a number you are typing.
+      rng.addEventListener('pointerdown', () => (rng.dataset.busy = 1));
+      rng.addEventListener('pointerup', () => delete rng.dataset.busy);
+      num.addEventListener('focus', () => (num.dataset.busy = 1));
+      num.addEventListener('blur', () => delete num.dataset.busy);
+    });
+    const sel = dmxSelFx();
+    // Colour wheel: r, g, b of every selected colour fixture; a dimmer the show has at zero and
+    // that isn't overridden goes to full, so the colour shows (like picking a colour in a scene).
+    const cw = $('[data-cw="dmx"]');
+    if (cw) attachColorWheel(cw, '#000000', (hex) => {
+      const rgb = hexToRgb(hex);
+      for (const f of dmxRgbFx(sel)) {
+        const ro = channelRoles(f);
+        if (ro.dim) { const t = slotTarget(f, ro.dim); if (!chansOf(t).some((c) => live?.o.has(c)) && !valOf(t, false)) send(t, 255, false); }
+        const mx = mixColor(f, rgb), m = mixRoles(f);
+        for (const k in mx) send(slotTarget(f, m[k]), mx[k], false);
+      }
+    });
+    wireMixToggle(showPanel);
+    const xy = $('[data-xy="dmx"]');
+    if (xy) attachXyPad(xy, 0.5, 0.5, (x, y) => {
+      for (const f of dmxPosFx(sel)) { const q = posSlots(f); send(slotTarget(f, q.pan), x * 65535, true); send(slotTarget(f, q.tilt), y * 65535, true); }
+    });
+    refresh();
+  };
+  const markSel = () => {
+    $$('#dmxGrid .sel').forEach((el) => el.classList.remove('sel'));
+    for (const f of dmxSelFx()) {
+      $(`#dmxGrid [data-dmxfx="${f.id}"]`)?.classList.add('sel');
+      for (const c of dmxChannelsOf(f)) $(`#dmxGrid > [data-ch="${c.ch}"]`)?.classList.add('sel');
+    }
+    if (S.dmxSel?.ch) $(`#dmxGrid > [data-ch="${S.dmxSel.ch}"]`)?.classList.add('sel');
+  };
+  const select = (sel) => { S.dmxSel = sel; markSel(); showPanel(); };
+  $('#dmxU').addEventListener('change', (e) => { S.dmxU = +e.target.value; S.dmxSel = null; render(); });
+  $$('[data-dmxmode]').forEach((b) => b.addEventListener('click', () => { S.dmxMode = b.dataset.dmxmode; render(); }));
+  if ($('#dmxGrid.dmx')) outlineFixtures($('#dmxGrid'));
+  $('#dmxGrid')?.addEventListener('click', (e) => {
+    const card = e.target.closest('[data-dmxfx]'), d = e.target.closest('[data-ch]');
+    if (!card && !d) return;
+    const id = card ? +card.dataset.dmxfx : dmxFixtures(u).find((f) => dmxChannelsOf(f).some((c) => c.ch === +d.dataset.ch))?.id;
+    if (id == null) return select({ ch: +d.dataset.ch });
+    // Shift/Ctrl+click adds or removes a fixture, like on the Scenes page.
+    if ((e.shiftKey || e.ctrlKey || e.metaKey) && S.dmxSel?.fxs) {
+      const ids = S.dmxSel.fxs.includes(id) ? S.dmxSel.fxs.filter((x) => x !== id) : [...S.dmxSel.fxs, id];
+      return select(ids.length ? { fxs: ids } : null);
+    }
+    select({ fxs: [id] });
+  });
+  $('#dmxPanel').addEventListener('click', (e) => {
+    const b = e.target.closest('button'), d = b?.dataset;
+    if (!b) return;
+    if (b.hasAttribute('data-dmxclose')) return select(null);
+    if (d.dmxall != null) return run(ranges().map((r) => `set ${r} ${d.dmxall}`));
+    if (b.hasAttribute('data-dmxrel')) return run(ranges().map((r) => `clear override ${r}`));
+    if (d.dmxrelrow != null) return run(rows[+d.dmxrelrow].to.map((t) => `clear override ${u}.${chansOf(t).join('-')}`));
+    if (d.dmxdim != null) {
+      for (const f of dmxSelFx()) { const s = channelRoles(f).dim; if (s) send(slotTarget(f, s), +d.dmxdim, false); }
+    }
+  });
+
+  // One poll paints the grid or cards and the panel.
+  const cells = $$('#dmxGrid [data-ch]').map((el) => ({ el, ch: +el.dataset.ch, bar: el.querySelector('i'), val: el.querySelector('span') }));
+  const cards = $$('#dmxGrid [data-dmxfx]').map((el) => ({ el, f: fixture(+el.dataset.dmxfx), lvl: el.querySelector('.lvl'), xy: el.querySelector('.mini-xy i') }));
+  let busy = false;
+  async function refresh() {
+    if (busy) return;
+    busy = true;
+    try {
+      const d = await api(`/api/dmx?u=${u}&o=1`);
+      if (S.view !== 'dmx' || S.dmxU !== u) return;
+      live = { v: d.v || [], o: new Set(d.o || []) };
+      const v = live.v, ovr = live.o, dmx = { [u]: v };
+      for (const c of cells) {
+        const x = v[c.ch - 1] ?? 0;
+        c.val.textContent = x;
+        c.bar.style.height = (x / 255) * 100 + '%';
+        c.el.classList.toggle('ovr', ovr.has(c.ch));
+      }
+      for (const c of cards) {
+        if (!c.f) continue;
+        c.el.classList.toggle('ovr', dmxChannelsOf(c.f).some((x) => ovr.has(x.ch)));
+        const look = fixtureLook(c.f, dmx);
+        paintDot(c.el.querySelector('.dot'), look, cards.length <= 40);
+        c.lvl.textContent = look ? Math.round(look.level * 100) + '%' : '';
+        if (c.xy) {
+          const q = posSlots(c.f);
+          c.xy.style.left = (valOf(slotTarget(c.f, q.pan), true) / 65535) * 100 + '%';
+          c.xy.style.top = (valOf(slotTarget(c.f, q.tilt), true) / 65535) * 100 + '%';
+        }
+      }
+      const pending = (t) => chansOf(t).some((c) => dmxPending.has(c));
+      for (const el of $$('.dmx-row')) {
+        const r = rows[+el.dataset.row], max = r.wide ? 65535 : 255, vs = r.to.map((t) => valOf(t, r.wide));
+        const n = r.to.filter((t) => chansOf(t).some((c) => ovr.has(c))).length;
+        el.classList.toggle('ovr', n > 0);
+        el.querySelector('.sc-note').textContent = n ? (n < r.to.length ? `override ${n} of ${r.to.length}` : 'override') : new Set(vs).size > 1 ? 'mixed' : '';
+        if (r.to.some(pending)) continue;
+        for (const i of el.querySelectorAll('input')) if (!i.dataset.busy) i.value = vs[0];
+        if (!el.querySelector('[data-busy]')) el.querySelector('.sc-pct').textContent = Math.round((vs[0] / max) * 100) + '%';
+      }
+      // The wheel and the pad follow the first fixture (not while you use them).
+      const sel = dmxSelFx(), rf = dmxRgbFx(sel)[0], pf = dmxPosFx(sel)[0];
+      if (rf) {
+        const m = mixRoles(rf), ts = Object.values(m).filter(Boolean).map((s) => slotTarget(rf, s));
+        if (!ts.some(pending)) $('[data-cw="dmx"]')?.setHex?.(rgbToHex(...mixedRgb(rf, (s) => valOf(slotTarget(rf, s), false))));
+      }
+      if (pf) { const q = posSlots(pf), tp = slotTarget(pf, q.pan), tt = slotTarget(pf, q.tilt); if (!pending(tp) && !pending(tt)) $('[data-xy="dmx"]')?.setXY?.(valOf(tp, true) / 65535, valOf(tt, true) / 65535); }
+    } catch { /* offline */ } finally { busy = false; }
+  }
+  S.dmxRefresh = refresh;
+  if (S.dmxSel) { markSel(); showPanel(); } else refresh();
+  pagePoll('dmx', refresh, 250);
+};
+views.dmx.keys = (e) => { if (e.key === 'Escape' && S.dmxSel) { S.dmxSel = null; render(); } };
 
 views.settings = () => {
   const p = P();
@@ -954,6 +1340,7 @@ views.settings = () => {
     <label>UDP trigger port</label><input type="number" data-p="settings.udpPort" data-t="num" value="${p.settings.udpPort}">
     <label>sACN priority</label><input type="number" min="0" max="200" data-p="settings.sacnPriority" data-t="num" value="${p.settings.sacnPriority}">
   </div>
+  ${displaySettingsHtml()}
   <h3>Project file</h3>
   <div class="row"><button class="btn" id="showExport" title="The project and its map images in one file, to keep or to edit on a PC">Export show file…</button>
     <label class="btn" title="A .kdshow file (or a plain project.json)">Open show file…<input type="file" id="showOpen" accept=".kdshow,.json" hidden></label>
@@ -1002,6 +1389,7 @@ views.settings.after = () => {
   $('#applyRaw').addEventListener('click', () => {
     try { replaceProject(JSON.parse($('#raw').value)); toast('Project applied - press Save to store it'); } catch (e) { toast('Invalid JSON: ' + e.message, true); }
   });
+  attachDisplaySettings();
   $('#showExport').addEventListener('click', exportShow);
   $('#showOpen').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) openShow(f); });
   $('#showNew').addEventListener('click', () => {
@@ -1012,6 +1400,40 @@ views.settings.after = () => {
     toast('New project - press Save to put it on the controller');
   });
 };
+
+// ---- Display: theme and size of this browser's UI (applyUi in app-core.js) ----
+function displaySettingsHtml() {
+  const th = document.documentElement.dataset.theme, auto = uiScalePref() === 'auto', pct = Math.round(uiZoom() * 100);
+  return `<h3>Display <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· this browser only</span></h3>
+  <div class="themes">${THEMES.map(([k, name, about]) => `<button class="theme-card${k === th ? ' on' : ''}" data-theme="${k}" data-uitheme="${k}">
+    <div class="tp"><i></i><span><b class="a"></b><b></b><b class="o"></b></span></div><b>${name}</b><small>${about}</small></button>`).join('')}</div>
+  <div class="row scale-row" style="margin-top:12px">
+    <span class="muted" style="min-width:60px">Size</span>
+    <button class="toggle${auto ? ' on' : ''}" id="uiAuto" title="Fit the window: bigger on large screens, smaller on laptops">Auto</button>
+    <button class="btn small" data-uistep="-1" title="Smaller">A−</button>
+    <input type="range" id="uiScale" min="70" max="175" step="5" value="${pct}">
+    <button class="btn small" data-uistep="1" title="Bigger">A+</button>
+    <b id="uiScaleVal" style="min-width:48px">${pct} %</b>
+  </div>
+  <p class="muted">Auto fits the window (it changes when you resize it); pick a size yourself to keep it fixed. The touch panel has its own layout.</p>`;
+}
+function attachDisplaySettings() {
+  $$('[data-uitheme]').forEach((b) => b.addEventListener('click', () => { setUiPref('kd.theme', b.dataset.uitheme); render(); }));
+  $('#uiAuto').addEventListener('click', () => {
+    // Off: keep the size it has now, so switching Auto off changes nothing on screen.
+    setUiPref('kd.scale', uiScalePref() === 'auto' ? uiZoom() : null);
+    render();
+  });
+  const sl = $('#uiScale');
+  // Applied on release: zooming while dragging would move the slider under the mouse.
+  sl.addEventListener('input', () => ($('#uiScaleVal').textContent = sl.value + ' %'));
+  sl.addEventListener('change', () => { setUiPref('kd.scale', +sl.value / 100); render(); });
+  $$('[data-uistep]').forEach((b) => b.addEventListener('click', () => {
+    const z = Math.max(70, Math.min(175, Math.round(uiZoom() * 20 + +b.dataset.uistep) * 5));
+    setUiPref('kd.scale', z / 100);
+    render();
+  }));
+}
 
 // ---- Software update (.kdupdate, tools/make_update.py; installed by src/Update.cpp) ----
 function updInfoHtml() {

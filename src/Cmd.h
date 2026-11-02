@@ -11,10 +11,12 @@
 //   master timeline <tl> <pct> [fade <s>]
 //   scene <sc> [fade <s>]          release scene <sc> [fade <s>]
 //   release all [fade <s>]
-//   set <universe>.<ch>[-<ch>] <0-255>     clear overrides
+//   set <universe>.<ch>[-<ch>] <0-255>     clear override <universe>.<ch>[-<ch>]     clear overrides
 //   grandmaster <pct>              blackout on|off
 //   mode <group> <state>           (old form "mode <state>" if the state is unique)
 //   label <name> <text>            label <name> color <color>
+//   panel <control> text <text>    panel <control> color <color>    panel <control> flash on|off|<colour>
+//   panel <control> value <v>      panel <control> enable|disable|reset
 //   fire trigger <id|"name"> [after <s>]  cancel trigger <id|"name">
 //   repeat trigger <id> every <s> [times <n>]   stop repeat <id>
 //   log <text>                     email <to> <subject> <body>

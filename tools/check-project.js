@@ -24,12 +24,13 @@ const dummy = new Proxy(function () {}, {
 const ctx = { console, setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {}, requestAnimationFrame: () => 0,
   document: dummy, localStorage: { getItem: () => null, setItem() {} }, location: dummy, navigator: dummy, EventSource: function () {},
   fetch: () => new Promise(() => {}), alert() {}, confirm: () => false, prompt: () => null, getComputedStyle: () => dummy,
-  matchMedia: () => dummy, ResizeObserver: function () { return dummy; }, addEventListener() {}, removeEventListener() {} };
+  matchMedia: () => dummy, ResizeObserver: function () { return dummy; }, addEventListener() {}, removeEventListener() {},
+  innerWidth: 1600, innerHeight: 900 };
 ctx.window = ctx;
 ctx.globalThis = ctx;
 vm.createContext(ctx);
 // Same files and order as index.html, without app-main.js (that one boots the page).
-const files = ['fx.js', 'model.js', 'fixture-lib.js', 'app-core.js', 'app-grammar.js', 'app-rig.js', 'app-library.js',
+const files = ['fx.js', 'model.js', 'fixture-lib.js', 'panel-ui.js', 'app-core.js', 'app-grammar.js', 'app-rig.js', 'app-library.js',
   'app-show.js', 'app-triggers.js', 'app-trigger-tools.js', 'app-system.js', 'app-drivers.js'];
 // The scripts share one scope through top-level const/let, so they run as one script.
 vm.runInContext(files.map((f) => fs.readFileSync(path.join(WWW, f), 'utf8')).join('\n;\n'), ctx, { filename: 'ui.js' });

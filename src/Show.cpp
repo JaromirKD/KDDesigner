@@ -548,6 +548,7 @@ void setOverride(int u, int ch, int value) {
 }
 
 void clearOverrides() { memset(ovrMask, 0, sizeof(ovrMask)); }
+bool isOverride(int u, int ch) { return u >= 0 && u < U && ch >= 0 && ch < 512 && testBit(ovrMask[u], ch); }
 void setOutput(Output o, bool on) {
   if (o == Output::Dmx) { cfg.outDmx = on; Dmx::setEnabled(on); }
   else if (o == Output::ArtNet) cfg.outArtnet = on;

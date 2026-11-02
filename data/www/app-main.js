@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 function addItem(kind) {
   const p = P();
+  if (kind.startsWith('ptrig-')) return addPanelTrigger(p.panel.pages[S.sel.page || 0].controls[+kind.slice(6)]);
   const fx = (name, channels, type, mode) => {
     const u = p.universes[0]?.id || 1;
     const end = p.fixtures.filter((f) => f.universe === u).reduce((m, f) => Math.max(m, f.address + footprint(f)), 1);
@@ -22,7 +23,10 @@ function addItem(kind) {
     }
   };
   switch (kind) {
-    case 'universe': { const id = nextId(p.universes); p.universes.push({ id, name: 'Universe ' + id, dmxPort: 0, artnet: id - 1, sacn: id, useDmx: false, useArtnet: true, useSacn: true }); break; }
+    case 'universe':
+      if (p.universes.length >= MAX_UNIVERSES) return toast(`The controller has at most ${MAX_UNIVERSES} universes`, true);
+      p.universes.push(newUniverse(nextId(p.universes)));
+      break;
     case 'pc': { const id = nextId(p.pcs); p.pcs.push({ id, name: 'PC ' + id, ip: '192.168.1.' + (40 + id), mac: '', port: 7, startup: 'startup', shutdown: 'shutdown', reboot: 'reboot' }); break; }
     case 'projector': { const id = nextId(p.projectors); p.projectors.push({ id, name: 'Projector ' + id, ip: '192.168.1.' + (100 + id), port: 4352, password: '' }); break; }
     case 'drv-kissbox': case 'drv-knx': case 'drv-brightsign': case 'drv-digidot': case 'drv-netio': case 'drv-pharos': {
@@ -72,11 +76,15 @@ function addItem(kind) {
       S.sel.page = p.panel.pages.length - 1;
       break;
     }
-    case 'pc-button': case 'pc-label': case 'pc-clock': case 'pc-spacer': {
+    case 'pc-button': case 'pc-toggle': case 'pc-slider': case 'pc-dial': case 'pc-color': case 'pc-xy': case 'pc-label': case 'pc-clock': case 'pc-spacer': {
       const pg = p.panel.pages[S.sel.page || 0];
       const type = kind.slice(3), n = pg.controls.filter((c) => c.type === type).length + 1;
-      pg.controls.push(type === 'button' ? { type, name: 'Button ' + n, text: 'Button ' + n }
-        : type === 'label' ? { type, name: 'label' + n, text: 'Status' } : { type });
+      pg.controls.push({
+        button: { type, name: 'Button ' + n, text: 'Button ' + n }, toggle: { type, name: 'Toggle ' + n, text: 'Toggle ' + n },
+        slider: { type, name: 'slider' + n, text: 'Level', min: 0, max: 100, unit: '%' }, dial: { type, name: 'dial' + n, text: 'Volume', min: 0, max: 100 },
+        color: { type, name: 'colour' + n, text: 'Colour', value: '#ffffff', links: {} },
+        xy: { type, name: 'xy' + n, text: 'Pan / tilt', min: 0, max: 100, ymin: 0, ymax: 100, links: {}, span: 2 }, label: { type, name: 'label' + n, text: 'Status' },
+      }[type] || { type });
       break;
     }
     case 'separator': {
@@ -136,6 +144,20 @@ function addItem(kind) {
     name?.select();
     name?.scrollIntoView({ block: 'nearest' });
   }
+}
+// "+ trigger" next to a panel control: a Panel trigger for it, opened on the Triggers page.
+function addPanelTrigger(c) {
+  const p = P();
+  const event = PANEL_VALUE_TYPES.includes(c.type) ? 'change' : 'click';
+  const t = { id: nextId(p.triggers), name: '', type: 'panel', control: c.name, event, enabled: true, conditions: [], actions: [''] };
+  p.triggers.push(t);
+  renumberTriggers(p);
+  t.name = uniqueTrigName(`${c.text || c.name} ${event}`);
+  S.view = 'triggers';
+  selectTriggers([p.triggers.length - 1]);
+  markDirty();
+  render();
+  $$('input.cmd').pop()?.focus();
 }
 function moveItem(list, i, d) {
   const j = i + d;
