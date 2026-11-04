@@ -103,6 +103,7 @@ main { overflow: auto; padding: 18px 22px; }
 .muted { color: var(--muted); }
 .mono { font-family: var(--mono); }
 .split { display: grid; grid-template-columns: var(--left, 220px) 14px minmax(0, 1fr); column-gap: 2px; align-items: start; }
+.split.trig-split { grid-template-columns: var(--left, 300px) 14px minmax(0, 1fr); }   /* room for the device icons */
 .split > :first-child { min-width: 0; }
 .list .item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -270,6 +271,10 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .trig-list { max-height: calc(var(--main-h, 100 * var(--vh)) - 200px); overflow-y: auto; }
 .list .item.sep { font-weight: 600; font-size: 12px; letter-spacing: .04em; color: var(--muted); background: var(--bg); padding: 10px 12px 4px; border-bottom: 2px solid var(--tc, var(--border)); }
 .list .item.disabled { opacity: .45; }
+.trig-search { gap: 6px; margin-bottom: 6px; }
+.trig-list .item mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 2px; }
+.trig-hits { display: block; font-size: 11px; color: var(--muted); }
+.trig-hits .fr-hit { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, monospace); }
 .list .item.tinted { box-shadow: inset 4px 0 var(--tc); background: color-mix(in srgb, var(--tc) 9%, transparent); }
 .list .item.tinted.sel { box-shadow: inset 4px 0 var(--tc), inset 0 0 0 1px color-mix(in srgb, var(--tc) 60%, transparent); background: color-mix(in srgb, var(--tc) 18%, var(--panel2)); }
 .list .item[data-drag] { cursor: grab; touch-action: none; user-select: none; }
@@ -283,8 +288,20 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 
 /* trigger flow view (show flow) */
 .flow-toggle { font-size: 13px; font-weight: 400; margin-left: 14px; cursor: pointer; }
+.trig-flow-wrap { position: relative; }
 .trig-flow { overflow: auto; resize: vertical; min-height: 80px; max-height: calc(80 * var(--vh)); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
-.trig-flow svg { display: block; font-size: 12px; }
+.trig-flow svg { display: block; font-size: 12px; margin: 0 auto; }
+.flow-tools { position: absolute; top: 6px; right: 18px; z-index: 2; display: flex; gap: 2px; background: color-mix(in srgb, var(--panel) 85%, transparent); border-radius: 6px; padding: 2px; }
+.flow-tools .btn { min-width: 28px; }
+.flow-cols { align-items: center; font-size: 12px; }
+.fl-node.dim { opacity: .4; }
+.flow-only { font-size: 12px; display: flex; align-items: center; gap: 4px; margin-right: 8px; padding: 0 6px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.flow-only.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.trig-flow-wrap.big { position: fixed; inset: 0; z-index: 60; background: var(--bg); padding: 12px 16px; display: flex; flex-direction: column; }
+.trig-flow-wrap.big h3 { margin: 0 0 8px; }
+.trig-flow-wrap.big .flow-tools { top: 10px; right: 16px; }
+.trig-flow-wrap.big .trig-flow { flex: 1; resize: none; max-height: none; }
+.trig-flow-wrap.big .flow-help { margin-bottom: 0; }
 .flow-help { font-size: 12px; margin: 4px 0 12px; }
 .fl-node { cursor: pointer; }
 .fl-node rect { fill: var(--panel2); stroke: var(--border); transition: fill 1.2s, stroke 1.2s; }
@@ -292,7 +309,29 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .fl-node text { fill: var(--text); pointer-events: none; }
 .fl-node .fl-id, .fl-node .fl-type { fill: var(--muted); font-size: 11px; }
 .fl-node.tl rect { fill: color-mix(in srgb, var(--blue) 14%, var(--panel2)); stroke: color-mix(in srgb, var(--blue) 55%, transparent); }
+.fl-node polygon { fill: color-mix(in srgb, var(--warn) 12%, var(--panel2)); stroke: color-mix(in srgb, var(--warn) 55%, transparent); transition: fill 1.2s, stroke 1.2s; }
+.fl-node.if text { font-size: 11px; }
+.fl-node.src, .fl-node.fb, .fl-node.hub, .fl-node.out { cursor: default; }
+.fl-node.out rect { fill: color-mix(in srgb, var(--blue) 6%, var(--panel2)); stroke: var(--border2); }
+.fl-node.out text { font-size: 11.5px; }
+.fl-node.hub rect { fill: color-mix(in srgb, var(--blue) 8%, var(--panel)); stroke: color-mix(in srgb, var(--blue) 40%, transparent); stroke-dasharray: 2 2; }
+.fl-node.hub text { fill: var(--muted); font-size: 11.5px; }
+.fl-node.src rect { fill: var(--panel); stroke-dasharray: 3 2; }
+.fl-node.src text { fill: var(--muted); font-size: 11.5px; }
+.fl-node.fb rect { fill: color-mix(in srgb, var(--ok) 12%, var(--panel2)); stroke: color-mix(in srgb, var(--ok) 50%, transparent); }
+.fl-node.fb text { font-size: 11.5px; }
+.fl-node .fl-if { fill: var(--warn); font-weight: 600; }
+.fl-node.looping rect:not(.fl-col) { stroke: var(--err); stroke-width: 1.6; }
 .fl-node.disabled { opacity: .45; }
+.fl-node.if.sel polygon { stroke: var(--accent); stroke-width: 2; }
+.fl-node.if:hover polygon { stroke: var(--text); }
+.fl-node.if.fire polygon { fill: color-mix(in srgb, var(--accent) 55%, var(--panel2)); stroke: var(--accent); transition: none; }
+.fl-br { font-size: 10.5px; font-weight: 600; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.fl-br.yes { fill: var(--ok); }
+.fl-br.no { fill: var(--err); }
+.fl-br.yes-no, .fl-br.no-yes { fill: var(--muted); }
+.fl-edge.loop path:not(.hit) { stroke: var(--err); stroke-opacity: .9; marker-end: url(#flArrowLoop); }
+#flArrowLoop path { fill: var(--err); }
 .fl-node.sel rect:not(.fl-col) { stroke: var(--accent); stroke-width: 2; }
 .fl-node:hover rect:not(.fl-col) { stroke: var(--text); }
 .fl-node.fire rect:not(.fl-col) { fill: color-mix(in srgb, var(--accent) 55%, var(--panel2)); stroke: var(--accent); transition: none; }
@@ -304,6 +343,7 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .fl-edge:hover path { stroke-opacity: 1; stroke-width: 2.4; }
 .fl-edge path.hit { stroke: transparent; stroke-width: 10; stroke-dasharray: none; marker-end: none; transition: none; }
 .fl-why { fill: var(--text); font-size: 11px; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.fl-when { fill: var(--blue); font-size: 10px; }
 #flArrow path { fill: var(--muted); }
 #flArrowHot path { fill: var(--accent); }
 
@@ -343,6 +383,13 @@ h2.trig-head .btn { margin-left: 6px; }
 body.dragging-item, body.dragging-item * { cursor: grabbing !important; user-select: none !important; }
 .list .item.drop-before { box-shadow: inset 0 3px 0 var(--accent) !important; }
 .list .item.drop-after { box-shadow: inset 0 -3px 0 var(--accent) !important; }
+/* trigger list: a bar between the rows where the dragged trigger(s) will land */
+.trig-list { position: relative; }
+.drop-bar { position: absolute; left: 0; right: 0; height: 4px; background: var(--accent); border-radius: 2px; pointer-events: none; z-index: 5; box-shadow: 0 0 6px var(--accent); }
+.drop-bar::before { content: ''; position: absolute; left: -1px; top: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.trig-grip { margin: 0 -4px 0 -6px; opacity: .45; }
+.trig-list .item:hover .trig-grip { opacity: 1; }
+.drag-count { margin-left: auto; background: var(--accent); color: var(--bg); border-radius: 10px; padding: 0 8px; font-size: 12px; font-weight: 600; white-space: nowrap; align-self: center; }
 /* trigger action lines: drag by the grip to change the order */
 .act-grip { cursor: grab; touch-action: none; user-select: none; color: var(--muted); padding: 0 2px; font-size: 16px; }
 .act-grip:hover { color: var(--text); }
@@ -494,6 +541,20 @@ input[type=range].cw-grad::-moz-range-track { background: transparent; }
 .list .item:hover .list-fire, .list .item.sel .list-fire { opacity: 1; }
 .list-fire:hover { color: var(--text, inherit); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--panel)); }
 .link-mark { font-weight: 700; width: 14px; text-align: center; }
+/* Device icons (DEVICE_ICONS); in the trigger list: what sets it off (blue box) → what it controls (green box). */
+.dev-ico { width: 15px; height: 15px; vertical-align: -3px; flex: none; }
+.devtabs .dev-ico { margin-right: 5px; }
+.trig-io { display: inline-flex; align-items: center; flex: none; margin: 0 2px; }
+.trig-io .io-arr { color: var(--muted); font-size: 11px; margin: 0 2px; }
+.io-grp { display: inline-flex; align-items: center; gap: 2px; flex: none; margin: 0 1px; padding: 1px 3px; border-radius: 6px; }
+.io-grp.in { color: var(--blue); border: 1px solid color-mix(in srgb, var(--blue) 55%, transparent); background: color-mix(in srgb, var(--blue) 12%, transparent); }
+.io-grp.out { color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.io-ic { display: inline-flex; cursor: help; }
+.io-more { font-size: 10px; font-weight: 600; cursor: help; padding: 0 1px; }
+.io-ic.in { color: var(--blue); } .io-ic.out { color: var(--ok); }
+.io-ic .dev-ico { width: 14px; height: 14px; }
+.chip-link.dev .dev-ico { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
+.chip-link.in.dev .dev-ico { color: var(--blue); } .chip-link.out.dev .dev-ico { color: var(--ok); }
 .link-mark.out { color: var(--ok); } .link-mark.in { color: var(--blue); }
 .links { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
 .links .link-head { min-width: 76px; font-size: 12px; }
@@ -530,6 +591,9 @@ table.sched td:first-child { white-space: nowrap; }
 .drv-pts { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 6px; font-size: 13px; }
 .drv-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; padding: 2px 0; }
 .drv-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Machine Control in a small card: a fixed label column, so 12 I/O buttons can't squeeze the label away */
+.pmc-row { grid-template-columns: 6.5em minmax(0, 1fr); align-items: start; }
+.pmc-row .drv-name { white-space: normal; line-height: 1.25; padding-top: 2px; }
 .drv-row .btn.small { padding: 1px 7px; }
 .kiss { display: inline-block; min-width: 20px; text-align: center; border-radius: 3px; background: var(--panel2); color: var(--muted); font-size: 11px; padding: 1px 3px; }
 .kiss.on { background: var(--ok); color: #111; }
@@ -620,6 +684,11 @@ span.mem-ok { color: var(--ok); } span.mem-warn { color: var(--warn); } span.mem
 .panel-preview .pgrip { pointer-events: auto; }
 .psize input { width: 52px; }
 tr.p-row td { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.pmenu { position: fixed; z-index: 1000; display: flex; flex-direction: column; min-width: 160px; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px #0006; }
+.pmenu a { padding: 7px 10px; border-radius: 5px; color: var(--text); text-decoration: none; }
+.pmenu a:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.ptable .psel { width: 28px; text-align: center; color: var(--muted); cursor: pointer; user-select: none; }
+.ptable tr.p-row .psel { color: var(--accent); font-weight: 600; }
 details.ptheme { margin-bottom: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
 details.ptheme summary { cursor: pointer; font-weight: 600; }
 details.ptheme summary .muted { font-weight: normal; font-size: 12px; }

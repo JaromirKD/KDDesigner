@@ -84,9 +84,12 @@ const ptVal = (j, k) => (j.points || []).find((p) => p.k === k)?.v ?? '';
 const liveChip = (j) => (j.live ? `<span class="tag ${j.live === 'live' ? 'mon-ok' : 'mon-warn'}" title="${esc(j.liveNote || (j.live === 'live' ? 'Changes are pushed by the device' : 'Waiting for the device to connect'))}">${j.live === 'live' ? '⚡ live' : '⚡ waiting'}</span>` : '');
 
 // ---- tabs ----------------------------------------------------------------------
+// Devices / Monitoring tab -> its icon (DEVICE_ICONS).
+const TAB_ICON = { network: 'network', tcp: 'tcp', pcs: 'pc', projectors: 'projector', email: 'email', board: 'io' };
+const tabIcon = (k) => (TAB_ICON[k] || DRIVERS[k] ? devIcon(TAB_ICON[k] || k) : '');
 function deviceTabs(tab) {
   const p = P(), n = (t) => p.drivers.filter((d) => d.type === t).length;
-  const btn = (k, label, count) => `<button class="${tab === k ? 'on' : ''}" data-devtab="${k}">${label}${count ? ` <small>${count}</small>` : ''}</button>`;
+  const btn = (k, label, count) => `<button class="${tab === k ? 'on' : ''}" data-devtab="${k}">${tabIcon(k)}${label}${count ? ` <small>${count}</small>` : ''}</button>`;
   return `<div class="seg devtabs">${DEVICE_TABS.map(([k, l]) => btn(k, l, DEVICE_TAB_COUNT[k]?.(p))).join('')}</div>
     <div class="seg devtabs">${Object.entries(DRIVERS).map(([k, v]) => btn(k, v.label, n(k))).join('')}</div>`;
 }
@@ -102,7 +105,7 @@ function monTabs() {
   const tabs = monTabList();
   if (tabs.length < 3) return '';
   const tab = tabs.some(([k]) => k === S.monTab) ? S.monTab : 'all';
-  return `<div class="seg devtabs">${tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-montab="${k}">${l}</button>`).join('')}</div>`;
+  return `<div class="seg devtabs">${tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-montab="${k}">${tabIcon(k)}${l}</button>`).join('')}</div>`;
 }
 
 // ---- small building blocks ---------------------------------------------------------
@@ -259,10 +262,23 @@ function drvPanel(x, j, mode, i) {
     case 'brightsign': {
       const msg = ptVal(j, 'msg'), at = +ptVal(j, 'msgAt') || 0;
       const says = `${liveText(id, 'msg', msg)} <span class="muted">${at ? ago(at) : ''}</span>`;
-      if (mode === 'compact') return `<div class="drv-row"><span class="drv-name">Player says</span><span>${says}</span><span></span></div>`;
+      // From the kdlink plugin: zones z<n> (state) + z<n>.file, user variables var.<name>.
+      const zones = pts.filter((p) => /^z\d+$/.test(p.k)), uvars = pts.filter((p) => p.k.startsWith('var.'));
+      const zname = (p) => p.n.replace(/^Zone \d+ ?/, '') || p.k.slice(1);
+      const zref = (p) => quote(zname(p));
+      if (mode === 'compact') return zones.map((p) => `<div class="drv-row"><span class="drv-name">${esc(zname(p))}</span><span>${liveText(id, p.k, p.v)}</span><span></span></div>`).join('') +
+        `<div class="drv-row"><span class="drv-name">Player says</span><span>${says}</span><span></span></div>`;
       const cmds = x.commands || [];
-      return `<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th></tr>
-          <tr><td title="The last UDP message the presentation sent to the controller">Player says</td><td>${says}</td>${vcell('msg')}</tr></table>
+      const plugin = !x.plugin ? '' : `<h4>Zones</h4>${zones.length ? `<table class="drv-tbl"><tr><th>#</th><th>Zone</th><th>Playing (state)</th><th>File</th><th>Variable</th><th>Control</th></tr>
+          ${zones.map((p) => `<tr><td>${p.k.slice(1)}</td><td>${esc(zname(p))}</td><td>${liveText(id, p.k, p.v)}</td><td class="mono">${liveText(id, p.k + '.file', ptVal(j, p.k + '.file'))}</td>${vcell(p.k)}
+            <td><div class="row nowrap">${cmdSet(`brightsign ${ref} play ${zref(p)} {v}`, 'file.mp4')}${cmdBtn(`brightsign ${ref} stop ${zref(p)}`, '■', '', 'Stop the video/audio of this zone')}</div></td></tr>`).join('')}</table>`
+          : '<p class="muted">No zones reported yet: the plugin answers at the next status check (check it is in the presentation, named <code>kdlink</code>).</p>'}
+        <div class="row" style="margin-top:6px"><span class="muted" title="A Plugin Message event (plugin kdlink) in the presentation: use it on a transition to go to any state in any zone">Plugin message:</span>${cmdSet(`brightsign ${ref} event {v}`, 'e.g. video_intro', true)}</div>
+        <h4>User variables</h4>${uvars.length ? `<table class="drv-tbl"><tr><th>Name</th><th>Value</th><th>Variable</th><th>Set</th></tr>
+          ${uvars.map((p) => `<tr><td>${esc(p.n || p.k.slice(4))}</td><td>${liveText(id, p.k, p.v)}</td>${vcell(p.k)}<td>${cmdSet(`brightsign ${ref} var ${quote(p.n || p.k.slice(4))} {v}`, 'value', true)}</td></tr>`).join('')}</table>`
+          : '<p class="muted">No user variables reported (the presentation has none, or the plugin hasn\'t answered yet).</p>'}`;
+      return `${plugin}<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th></tr>
+          <tr><td title="The last UDP message the presentation sent to the controller (or a Send Plugin Message to kdlink)">Player says</td><td>${says}</td>${vcell('msg')}</tr></table>
         <h4>Commands</h4>
         <table class="drv-tbl"><tr><th>Button</th><th>UDP text sent to the player</th><th></th>${edit ? '<th></th>' : ''}</tr>
           ${cmds.map((c, k) => `<tr><td>${edit ? `<input data-p="drivers.${i}.commands.${k}.name" value="${esc(c.name || '')}" placeholder="e.g. Play intro" style="width:130px">` : esc(c.name || '')}</td>
@@ -322,7 +338,9 @@ const DRV_HELP = {
     They are read once when the tunnel opens and then follow every telegram on the bus live - no polling.
     Commands: <code>knx gw write "Hall light" on</code>, <code>knx gw write 1/2/1 40</code>, <code>knx gw read "Hall temp"</code>.`,
   brightsign: `BrightSign players: commands go as <b>UDP</b> to the presentation (BrightAuthor: UDP input on the port below). Status and reboot use the player's local DWS (port 80, user <code>admin</code>, the DWS password; on newer BrightSignOS only over https, which isn't supported yet).
-    <b>What's playing:</b> let the presentation send a UDP message to this controller (port ${'${port}'}) on every state, e.g. <code>playing Intro</code>: it shows as <b>Player says</b>.`,
+    <b>What's playing:</b> let the presentation send a UDP message to this controller (port ${'${port}'}) on every state, e.g. <code>playing Intro</code>: it shows as <b>Player says</b>.<br>
+    <b>KD plugin</b> (live zones, user variables and control): download <code>kdlink.brs</code>, add it in BrightAuthor:connected under Presentation Settings → Support Content → Script Plugins with the name <code>kdlink</code>, publish, and tick KD plugin below.
+    It works without the DWS. Commands: <code>brightsign player event video_intro</code> (a <b>Plugin Message</b> event in the presentation: put it on a transition to go to any state), <code>var mode night</code> (a user variable), <code>play Video clip.mp4</code> / <code>stop Video</code> (directly in a zone).`,
   digidot: `DiGidot C4 pixel controllers (JSON API, default user/password <code>admin</code>/<code>admin</code>). The C4 has no push option: it is polled.
     Commands: <code>digidot c4 scene "Rainbow" fade 2</code>, <code>digidot c4 master 50</code>, <code>digidot c4 stop</code>, any API call with <code>digidot c4 send {…}</code>.`,
   netio: `NETIO power sockets (JSON API: enable it on the NETIO under M2M API Protocols → JSON API, read/write, default <code>netio</code>/<code>netio</code>).
@@ -360,7 +378,12 @@ function driverPage(type) {
     if (type === 'kissbox') extra = field('Frame', `<select data-kissframe="${i}">${KISS_FRAMES.map(([f, l]) => `<option value="${f}"${f === d.frame ? ' selected' : ''}>${l}</option>`).join('')}</select>`) +
       field('Listen port', num('listenPort', 9813, 1, 65535) + '<span class="muted">UDP port the box sends input changes to (all Kiss-Boxes share the first one\'s)</span>');
     if (type === 'knx') extra = field('Re-read every', num('readEvery', 0, 0, 86400) + '<span class="muted">s · 0 = only when the tunnel opens (the bus pushes every change)</span>');
-    if (type === 'brightsign') extra = field('UDP port', num('udpPort', 5000, 1, 65535) + '<span class="muted">the presentation\'s UDP input</span>');
+    if (type === 'brightsign') {
+      extra = field('UDP port', num('udpPort', 5000, 1, 65535) + '<span class="muted">the presentation\'s UDP input</span>') +
+        field('KD plugin', `<label class="chk"><input type="checkbox" data-p="${b}.plugin" data-t="bool" data-r${d.plugin ? ' checked' : ''}>
+          zones, what's playing, user variables, control</label> ${liveChip(j)} <a href="brightsign/kdlink.brs" download="kdlink.brs" class="btn small">Download kdlink.brs</a>`);
+      if (d.plugin) extra += field('Plugin port', num('pluginPort', 5010, 1, 65535) + '<span class="muted">UDP port of the plugin on the player (5010, or a user variable <code>kdPort</code>)</span>');
+    }
     if (type === 'netio') {
       const m = netioModel(d, j), rep = String(j.info?.Model || '').split(' ')[0];
       extra = field('Model', `<select data-netiomodel="${i}">${NETIO_MODELS.map(([c, l, o, n, met]) => `<option value="${c}"${c === (d.model || '') ? ' selected' : ''}>${esc(l)}${c ? ` · ${o} out${n ? `, ${n} in` : ''}${met ? ', metering' : ''}` : ''}</option>`).join('')}</select>
@@ -419,7 +442,8 @@ function pmcPanel(mode) {
         if (pmcIsOut(k)) return `<button class="btn small kiss ${v === '1' ? 'on' : ''}" data-cmd="io ${k} ${v === '1' ? 'off' : 'on'}" title="${esc(nm)}: ${v === '1' ? 'on - click for off' : 'off - click for on'}">${c}</button>`;
         return `<span class="kiss ${v === '1' ? 'on' : ''}" title="${esc(nm)}: ${v === '1' ? 'on' : 'off'}${/^io/.test(k) ? ' (input)' : ''}">${c}</span>`;
       }).join('');
-      return `<div class="drv-row"><span class="drv-name">${name}</span><span class="row nowrap" style="gap:3px;flex-wrap:wrap">${cells}</span><span></span></div>`;
+      const short = { in: 'Inputs', out: 'Outputs', io: 'Prog. I/O', ai: 'Analog in', ao: 'Analog out' }[g];
+      return `<div class="drv-row pmc-row"><span class="drv-name" title="${name}">${short}</span><span class="row" style="gap:3px">${cells}</span></div>`;
     }).join('');
   }
   const vars = P().variables;

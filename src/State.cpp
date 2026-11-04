@@ -9,7 +9,9 @@
 #include "Util.h"
 
 namespace {
-struct Label { String name, text, color, flash, value; bool disabled; };
+// disabled / locked: "" = as the Panel page sets it ("disabled" / "display only"),
+// "1" / "0" = set by panel disable/enable, lock/unlock.
+struct Label { String name, text, color, flash, value, disabled, locked; };
 struct Device { String name; IPAddress ip; uint16_t port; };
 struct Group { String name; std::vector<String> states; String current; };
 struct DeviceGroup { String name; std::vector<int> members; };   // indexes into devices
@@ -36,7 +38,7 @@ void persist() {
 
 Label& label(const String& name) {
   for (auto& l : labels) if (l.name.equalsIgnoreCase(name)) return l;
-  labels.push_back({name, "", "", "", "", false});
+  labels.push_back({name, "", "", "", "", "", ""});
   return labels.back();
 }
 }  // namespace
@@ -165,8 +167,9 @@ void setControl(const String& name, const String& what, const String& value) {
   else if (what == "color") l.color = value;
   else if (what == "flash") l.flash = value;
   else if (what == "value") l.value = value;
-  else if (what == "disabled") l.disabled = value.length() > 0;
-  else if (what == "reset") { l.text = l.color = l.flash = ""; l.disabled = false; }   // the value stays: it is where the slider is
+  else if (what == "disabled") l.disabled = value;
+  else if (what == "locked") l.locked = value;
+  else if (what == "reset") l.text = l.color = l.flash = l.disabled = l.locked = "";   // the value stays: it is where the slider is
   ver++;
   mtx.unlock();
 }
@@ -201,7 +204,8 @@ void statusJson(JsonObject o) {
     if (l.color.length()) x["color"] = l.color;
     if (l.flash.length()) x["flash"] = l.flash;
     if (l.value.length()) x["value"] = l.value;
-    if (l.disabled) x["disabled"] = true;
+    if (l.disabled.length()) x["disabled"] = l.disabled == "1";
+    if (l.locked.length()) x["locked"] = l.locked == "1";
   }
   mtx.unlock();
 }

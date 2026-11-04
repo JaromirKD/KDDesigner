@@ -45,7 +45,10 @@
 let project = null, status = null, pageId = null, unlocked = new Set(), lastStatusAt = 0, projectVersion = null;
 const $ = (s) => document.querySelector(s);
 const esc = pEsc;
-const pages = () => project?.panel?.pages || [];
+// Which panel this is: ?p=<id or name>, else the first.
+const wanted = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
+const panelNow = () => { const l = panelList(project); return l.find((x) => String(x.id) === wanted || (x.name || '').toLowerCase() === wanted) || l[0]; };
+const pages = () => (project ? panelPagesOf(project, panelNow().id) : []);
 const page = () => pages().find((p) => p.id === pageId) || pages()[0];
 const showing = () => page() && (!page().pin || unlocked.has(page().id));
 
@@ -105,12 +108,12 @@ function askPin(pg) {
   $('#main').innerHTML = `<div class="overlay" style="position:static;background:none;min-height:70vh"><div class="dialog" id="pinbox">
     <p>${esc(pg.name)}</p><div class="pin" id="pin">&nbsp;</div>
     <div class="keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9, '⌫', 0, 'OK'].map((k) => `<button class="pbtn" data-k="${k}">${k}</button>`).join('')}</div>
-    ${pages().length > 1 && pg.id !== project.panel.start ? '<div class="row" style="margin-top:12px"><button class="pbtn" data-k="back" style="background:#333">Terug</button></div>' : ''}
+    ${pages().length > 1 && pg.id !== panelNow().start ? '<div class="row" style="margin-top:12px"><button class="pbtn" data-k="back" style="background:#333">Terug</button></div>' : ''}
   </div></div>`;
   $('#pinbox').addEventListener('click', (e) => {
     const k = e.target.closest('[data-k]')?.dataset.k;
     if (k == null) return;
-    if (k === 'back') { pageId = project.panel.start; render(); return; }
+    if (k === 'back') { pageId = panelNow().start; render(); return; }
     if (k === '⌫') entered = entered.slice(0, -1);
     else if (k === 'OK') {
       if (entered === String(pg.pin)) { unlocked.add(pg.id); render(); return; }
@@ -127,7 +130,7 @@ function askPin(pg) {
 // after the confirm question (if any) is answered "Ja". A toggle then flips and sends "change".
 $('#main').addEventListener('pointerdown', (e) => {
   const b = e.target.closest('.pbtn[data-i]');
-  if (!b || b.classList.contains('p-dis')) return;
+  if (!b || b.classList.contains('p-dis') || b.classList.contains('p-lock')) return;
   const c = page().controls[+b.dataset.i];
   b.classList.add('down');
   b.setPointerCapture(e.pointerId);
@@ -163,6 +166,8 @@ function tickClock() {
   document.querySelectorAll('[data-clock]').forEach((el) => (el.textContent = t));
 }
 setInterval(tickClock, 1000);
+// Controls that follow a timeline move between statuses too.
+setInterval(() => { if (showing() && status && page().controls.some((c) => c.follow)) panelUpdate($('#main'), page(), status); }, 200);
 setInterval(() => $('#conn').classList.toggle('ok', Date.now() - lastStatusAt < 4000), 1000);
 
 // The project was saved/reloaded on the controller: fetch the new pages, PINs and
@@ -176,8 +181,8 @@ async function reloadProject() {
       const p = pages().find((x) => x.id === id);
       if (!p || String(p.pin || '') !== oldPins.get(id)) unlocked.delete(id);
     }
-    if (!pages().some((p) => p.id === pageId)) pageId = project.panel?.start ?? pages()[0]?.id;
-    document.title = $('#title').textContent = project.panel?.title || project.name || 'KD Panel';
+    if (!pages().some((p) => p.id === pageId)) pageId = panelNow().start ?? pages()[0]?.id;
+    document.title = $('#title').textContent = panelNow().title || project.name || 'KD Panel';
     render();
   } catch { projectVersion = -1; /* mismatch: retried on the next status */ }
 }
@@ -186,7 +191,7 @@ function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('status', (e) => {
     status = JSON.parse(e.data);
-    lastStatusAt = Date.now();
+    lastStatusAt = status._at = Date.now();   // _at: controls that follow a timeline move on from here
     if (status.projectVersion != null && status.projectVersion !== projectVersion) {
       const first = projectVersion === null;
       projectVersion = status.projectVersion;
@@ -205,8 +210,8 @@ function connect() {
 (async () => {
   try {
     project = await (await fetch('/api/project')).json();
-    document.title = $('#title').textContent = project.panel?.title || project.name || 'KD Panel';
-    pageId = project.panel?.start ?? pages()[0]?.id;
+    document.title = $('#title').textContent = panelNow().title || project.name || 'KD Panel';
+    pageId = panelNow().start ?? pages()[0]?.id;
   } catch {
     $('#main').innerHTML = '<p class="empty">Cannot load the project.</p>';
     return;

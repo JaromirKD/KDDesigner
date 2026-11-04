@@ -534,7 +534,7 @@ views.timelines = () => {
     <div><div class="list">${p.timelines.map((x, i) => `<div class="item${i === ti ? ' sel' : ''}" data-sel="timeline:${i}"><span class="id">${x.id}</span>${esc(x.name)}</div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="timeline">+ Timeline</button></div></div>
     <div>${t ? `
-      <div class="row"><input data-p="timelines.${ti}.name" value="${esc(t.name)}" style="font-size:16px;flex:1">
+      <div class="row"><input data-p="timelines.${ti}.name" value="${esc(t.name)}" data-orig="${esc(t.name)}" style="font-size:16px;flex:1">
         <button class="btn" data-cmd="start timeline ${t.id}">▶ Start</button>
         ${S.tlCursor ? `<button class="btn" data-tlplay title="Play from the cursor (Space)">▶ from ${(S.tlCursor / 1000).toFixed(1)} s</button>` : ''}
         <button class="btn" data-tlpause title="Pause / carry on (Space, Shift+Space)">❚❚</button>

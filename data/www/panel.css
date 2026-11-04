@@ -9,6 +9,20 @@
 .plabel { position: relative; display: flex; align-items: center; min-width: 0; min-height: 44px; padding: 0 4px; color: var(--p-label, #d8dbe2); }
 .pclock { font-size: 1.9em; font-weight: 600; font-variant-numeric: tabular-nums; }
 
+/* Group: a frame behind the controls placed inside it. It fills its own grid cells exactly (so
+   the editor measures it like any control) and draws the frame half a gap further out, around
+   them; the title sits in the top edge. --g = its own colour. */
+.pgroup { position: relative; z-index: 0; min-width: 0; pointer-events: none; }
+.pgroup::before { content: ''; position: absolute; inset: calc(var(--p-gap, 12px) / -2); border: 1px solid var(--g, var(--p-border, #2c313d));
+  border-radius: var(--p-radius, 12px); background: color-mix(in srgb, var(--g, var(--p-border, #2c313d)) 14%, transparent); }
+/* The title: a rounded tag on the frame line, in the group's colour (opaque, so the line stops at it) */
+.pgroup .ptitle { position: absolute; left: 14px; top: calc(var(--p-gap, 12px) / -2); transform: translateY(-50%); z-index: 1; max-width: calc(100% - 28px);
+  padding: 3px 11px; border: 1px solid var(--g, var(--p-border, #2c313d)); border-radius: 999px; line-height: 1.2;
+  background: color-mix(in srgb, var(--g, var(--p-border, #2c313d)) 32%, var(--p-bg, #0b0c10)); box-shadow: 0 1px 4px #0005;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--p-label, #d8dbe2); font-size: .78em; font-weight: 600; letter-spacing: .03em; }
+.pgroup .ptitle:empty, .pgroup.p-notitle .ptitle { display: none; }
+.pgrid > :not(.pgroup) { z-index: 20; }   /* above any group frame (a nested group's z-index = its depth) */
+
 /* Toggle: a latching button with a light on top */
 .ptoggle::before { content: ''; display: block; width: 28px; height: 6px; margin: 0 auto 8px; border-radius: 3px; background: #0007; }
 .ptoggle.p-on::before { background: #fff; box-shadow: 0 0 8px #fff; }
@@ -61,13 +75,21 @@
 @keyframes p-flash-col { 50% { background: var(--flash); box-shadow: 0 0 0 3px var(--flash), 0 0 22px var(--flash); } }
 @keyframes p-blink { 50% { opacity: .2; } }
 @keyframes p-flash-text { 50% { color: var(--flash); } }
+/* "Display only" (Panel page) or panel <name> lock: looks normal, can't be touched */
+.p-lock { pointer-events: none; }
+.p-lock .ptrack, .p-lock .pknob, .p-lock .pwheel, .p-lock .pbright, .p-lock.pbtn { cursor: default; }
+.preview .p-lock { pointer-events: auto; }
+/* The editor marks it, so you can tell it from a normal control */
+.preview .p-lock::after { content: '🔒'; position: absolute; top: 4px; left: 4px; z-index: 2; pointer-events: none;
+  font-size: 13px; line-height: 1; padding: 3px 4px; border-radius: 6px; background: #000a; }
 
 /* Editor preview: drag a control to move it, the corner grip to resize it */
 .preview [data-i] { cursor: move; touch-action: none; user-select: none; }
 .preview .p-dis { pointer-events: auto; }
+.preview .pgroup { pointer-events: auto; }
 .preview .pspacer { border: 1px dashed var(--p-border, #2c313d); border-radius: var(--p-radius, 12px); }
 .preview .pgrip { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize; z-index: 2; opacity: .55;
   background: linear-gradient(135deg, transparent 50%, var(--p-text, #e6e8ee) 50%, var(--p-text, #e6e8ee) 60%, transparent 60%, transparent 72%, var(--p-text, #e6e8ee) 72%, var(--p-text, #e6e8ee) 82%, transparent 82%); }
 .preview [data-i]:hover > .pgrip { opacity: 1; }
-.preview .p-moving { outline: 2px solid var(--p-accent, #4c8dff); outline-offset: 2px; z-index: 3; opacity: .85; }
+.preview .p-moving { outline: 2px solid var(--p-accent, #4c8dff); outline-offset: 2px; z-index: 30 !important; opacity: .85; }
 .preview .p-picked { outline: 2px dashed var(--p-accent, #4c8dff); outline-offset: 2px; }

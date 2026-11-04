@@ -163,12 +163,14 @@ bool set(const String& name, const String& value, String& msg, bool fromDevice) 
   return true;
 }
 
-bool add(const String& name, double delta, String& msg) {
+bool calc(const String& name, char op, double n, String& msg) {
   String cur;
   if (!get(name, cur)) { msg = "unknown variable '" + name + "'"; return false; }
   double d;
   if (!isNumber(cur, d)) { msg = name + " is not a number"; return false; }
-  return set(name, formatNumber(d + delta), msg);
+  if (op == '/' && n == 0) { msg = "can't divide by 0"; return false; }
+  double v = op == '+' ? d + n : op == '-' ? d - n : op == '*' ? d * n : d / n;
+  return set(name, formatNumber(v), msg);
 }
 
 bool toggle(const String& name, String& msg) {

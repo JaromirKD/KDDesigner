@@ -168,22 +168,32 @@ function renderProjectorStates() {
   updateDrvLive();
 }
 
+// The panel being edited (S.sel.panel) - there can be several, e.g. technician and operator.
+const curPanel = () => { const l = P().panel.panels; return l[Math.min(S.sel.panel || 0, l.length - 1)]; };
 views.panel = () => {
-  const p = P(), pages = p.panel.pages;
-  const pi = Math.min(S.sel.page || 0, Math.max(0, pages.length - 1)), pg = pages[pi];
+  const p = P(), all = p.panel.pages, pn = curPanel(), si = p.panel.panels.indexOf(pn);
+  // Pages of this panel, with their index in panel.pages (paths and S.sel.page use that).
+  const pages = all.map((x, i) => ({ x, i })).filter(({ x }) => x.panel === pn.id);
+  if (!pages.some(({ i }) => i === S.sel.page)) S.sel.page = pages[0]?.i ?? 0;
+  const pi = S.sel.page, pg = pages.length ? all[pi] : null;
   const base = `panel.pages.${pi}`;
-  const pageOpts = (sel) => `<option value="">—</option>${pages.map((x) => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}`;
-  return `<h2>Touch panel <a class="btn small" href="/panel" target="_blank" style="margin-left:8px;text-decoration:none">Open panel ↗</a></h2>
-  <p class="muted" style="margin-top:-6px">A full-screen control page for a tablet or touchscreen at <code>http://&lt;controller&gt;/panel</code>.
+  const pageOpts = (sel) => `<option value="">—</option>${pages.map(({ x }) => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}`;
+  return `<h2>Touch panels</h2>
+  <div class="row ptabs">${p.panel.panels.map((x, k) => `<button class="btn small${k === si ? ' primary' : ''}" data-sel="panel:${k}">${esc(x.name || 'Panel ' + x.id)}</button>`).join('')}
+    <button class="btn small ghost" data-add="panelset" title="Another panel, e.g. one for the operator and one for the technician">+ Panel</button></div>
+  <p class="muted">A full-screen control page for a tablet or touchscreen at <code>http://&lt;controller&gt;${panelUrl(pn)}</code>${si === 0 ? ' (or just <code>/panel</code>)' : ''}.
     Buttons, toggles, sliders, dials, colour wheels and XY pads fire <b>Panel button</b> triggers (sliders and co. with <code>{value}</code>); they can also set variables directly (a colour wheel or XY pad one per part).
-    Actions change any control by its name: <code>panel &lt;name&gt; flash on</code>, <code>panel &lt;name&gt; text …</code>, <code>color</code>, <code>value</code>, <code>disable</code>, <code>reset</code>.</p>
+    Actions change any control by its name: <code>panel &lt;name&gt; flash on</code>, <code>panel &lt;name&gt; text …</code>, <code>color</code>, <code>value</code>, <code>disable</code>, <code>lock</code> / <code>unlock</code> (can't be touched, still looks normal), <code>reset</code>.</p>
   <div class="form" style="margin-bottom:12px">
-    <label>Title</label><input data-p="panel.title" value="${esc(p.panel.title || '')}" placeholder="${esc(p.name)}">
-    <label>Start page</label><select data-p="panel.start" data-t="num">${pageOpts(p.panel.start)}</select>
+    <label>Panel name</label><div class="row"><input data-p="panel.panels.${si}.name" value="${esc(pn.name || '')}" placeholder="Panel ${pn.id}" data-r>
+      <a class="btn small" href="${panelUrl(pn)}" target="_blank" style="text-decoration:none">Open panel ↗</a>
+      ${p.panel.panels.length > 1 ? `<button class="btn small ghost" data-pdel="${si}" title="Delete this panel and its pages">Delete panel</button>` : ''}</div>
+    <label>Title</label><input data-p="panel.panels.${si}.title" value="${esc(pn.title || '')}" placeholder="${esc(p.name)}" title="Shown at the top of the panel">
+    <label>Start page</label><select data-p="panel.panels.${si}.start" data-t="num">${pageOpts(pn.start)}</select>
   </div>
   ${panelThemeHtml(p.panel.theme)}
   <div class="split">
-    <div><div class="list">${pages.map((x, i) => `<div class="item${i === pi ? ' sel' : ''}" data-sel="page:${i}"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span>${x.pin ? '<span class="tag">PIN</span>' : ''}</div>`).join('')}</div>
+    <div><div class="list">${pages.map(({ x, i }) => `<div class="item${i === pi ? ' sel' : ''}" data-sel="page:${i}"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span>${x.pin ? '<span class="tag">PIN</span>' : ''}</div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="page">+ Page</button></div></div>
     <div>${pg ? `
       <div class="row"><input data-p="${base}.name" value="${esc(pg.name)}" style="font-size:16px;flex:1">
@@ -191,14 +201,16 @@ views.panel = () => {
       <div class="row" style="margin-top:10px">
         <label class="muted">Columns</label><input type="number" min="1" max="12" style="width:70px" data-p="${base}.columns" data-t="num" value="${pg.columns || 3}" data-r>
         <label class="muted" title="Ask for this PIN before showing the page">PIN</label><input style="width:110px" data-p="${base}.pin" value="${esc(pg.pin || '')}" placeholder="none" inputmode="numeric">
+        ${p.panel.panels.length > 1 ? `<label class="muted" title="Move this page to another panel">Panel</label><select data-p="${base}.panel" data-t="num" data-r>${p.panel.panels.map((x) => `<option value="${x.id}"${x.id === pg.panel ? ' selected' : ''}>${esc(x.name || 'Panel ' + x.id)}</option>`).join('')}</select>` : ''}
         ${pg.controls.some((c) => c.col) ? '<button class="btn small ghost" data-pauto title="Forget where controls were dragged to: they fill the page in list order again">Auto layout</button>' : ''}
       </div>
-      <table style="margin-top:10px"><tr><th style="width:96px">Type</th><th>Name (for triggers/labels)</th><th>Text</th><th class="narrow" title="Empty = the theme colour">Colour</th><th>Confirm question</th><th class="narrow">Go to page</th><th class="narrow" title="Columns wide × rows high">Size</th><th></th></tr>
+      <table class="ptable" style="margin-top:10px"><tr><th class="psel" title="Click a number to select (Ctrl+click: add one, Shift+click: a range)">#</th><th style="width:96px">Type</th><th>Name (for triggers/labels)</th><th>Text</th><th class="narrow" title="Empty = the theme colour">Colour</th><th>Confirm question</th><th class="narrow">Go to page</th><th class="narrow" title="Columns wide × rows high">Size</th><th></th></tr>
       ${pg.controls.map((c, i) => {
         const cb = `${base}.controls.${i}`;
         const btn = c.type === 'button' || c.type === 'toggle', named = c.type !== 'spacer' && c.type !== 'clock';
-        const own = c.type !== 'spacer' && c.type !== 'color';
-        return `<tr data-ci="${i}">
+        const own = c.type !== 'spacer' && c.type !== 'color', picked = pSel().has(c) ? ' class="p-row"' : '';
+        return `<tr data-ci="${i}"${picked}>
+        <td class="psel" title="Click to select (Ctrl+click: add one, Shift+click: a range)">${i + 1}</td>
         <td><select data-p="${cb}.type" data-r>${PANEL_TYPES.map((t) => `<option${c.type === t ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
         <td>${named ? `<input data-p="${cb}.name" value="${esc(c.name || '')}" data-r>` : ''}</td>
         <td>${named ? `<input data-p="${cb}.text" value="${esc(c.text || '')}" data-r>` : ''}</td>
@@ -208,19 +220,72 @@ views.panel = () => {
         <td>${btn ? `<select data-p="${cb}.goto" data-t="num" data-r>${pageOpts(c.goto)}</select>` : ''}</td>
         <td><div class="row nowrap psize"><input type="number" min="1" max="12" data-p="${cb}.span" data-t="num" value="${c.span || 1}" title="Columns wide" data-r><span class="muted">×</span><input type="number" min="1" max="20" data-p="${cb}.rows" data-t="num" value="${c.rows || ''}" placeholder="${panelRows(c)}" title="Rows high" data-r></div></td>
         <td><div class="row nowrap"><button class="btn small ghost" data-pmove="${i}:-1">▲</button><button class="btn small ghost" data-pmove="${i}:1">▼</button><button class="btn small ghost" data-del="${cb}">✕</button></div></td></tr>
-        ${named || c.col ? `<tr class="psub"><td></td><td colspan="7">${panelCtlDetails(c, cb, i)}</td></tr>` : ''}`;
+        ${named || c.col ? `<tr class="psub${picked ? ' p-row' : ''}"><td></td><td></td><td colspan="7">${panelCtlDetails(c, cb, i)}</td></tr>` : ''}`;
       }).join('')}</table>
       <div class="row" style="margin-top:8px">${PANEL_TYPES.map((t) => `<button class="btn small" data-add="pc-${t}">+ ${t === 'color' ? 'colour wheel' : t === 'xy' ? 'XY pad' : t}</button>`).join('')}</div>
-      <h3>Preview <span class="muted" style="font-weight:normal;font-size:12px;text-transform:none">live (shows what actions set) · drag a control to move it, its corner to resize it</span></h3>
+      <h3>Preview <span class="muted" style="font-weight:normal;font-size:12px;text-transform:none">live (shows what actions set) · drag a control to move it, its corner to resize it · drag a group to move it with everything in it · click to select, Ctrl+click for more, then drag them together (Delete removes, Esc deselects, Ctrl+A all)</span></h3>
       <div class="panel-preview" style="${panelThemeVars(p.panel.theme)}">${panelPageHtml(pg, S.status, true, p.panel.theme)}</div>`
     : '<span class="muted">Add a page to start.</span>'}</div></div>`;
 };
+// Selected panel controls: the control objects themselves, so they stay selected when the list
+// is reordered (a deleted one simply isn't on the page any more).
+const pSel = () => (S.pSel ||= new Set());
+// Marks the selection in the list and the preview, without a render (keeps the scroll).
+function pSelShow(pg) {
+  $$('tr[data-ci]').forEach((tr) => {
+    const on = pSel().has(pg.controls[+tr.dataset.ci]);
+    tr.classList.toggle('p-row', on);
+    if (tr.nextElementSibling?.classList.contains('psub')) tr.nextElementSibling.classList.toggle('p-row', on);
+  });
+  $$('.panel-preview [data-i]').forEach((el) => el.classList.toggle('p-picked', pSel().has(pg.controls[+el.dataset.i])));
+}
+// Click on control i: only it; Ctrl: add/remove it; Shift (in the list): the range from the last click.
+function pSelect(pg, i, e, list) {
+  const c = pg.controls[i];
+  if (list && e.shiftKey && pg.controls[S.pAnchor]) {
+    const [a, b] = [S.pAnchor, i].sort((x, y) => x - y);
+    for (let k = a; k <= b; k++) pSel().add(pg.controls[k]);
+  } else {
+    if (e.ctrlKey || e.metaKey || e.shiftKey) { if (!pSel().delete(c)) pSel().add(c); } else S.pSel = new Set([c]);
+    S.pAnchor = i;
+  }
+  pSelShow(pg);
+}
+views.panel.keys = (e) => {
+  const pg = P().panel.pages[S.sel.page || 0];
+  if (!pg || pg.panel !== curPanel().id) return;   // this panel has no pages yet
+  const sel = pg.controls.filter((c) => pSel().has(c));
+  if (e.key === 'Escape' && pSel().size) { pSel().clear(); pSelShow(pg); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); S.pSel = new Set(pg.controls); pSelShow(pg); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && sel.length) {
+    e.preventDefault();
+    pg.controls = pg.controls.filter((c) => !pSel().has(c));
+    pSel().clear();
+    markDirty();
+    render();
+  }
+};
 views.panel.after = () => {
   const p = P(), box = $('.panel-preview'), pg = p.panel.pages[S.sel.page || 0];
-  if (box && pg) {
-    pagePoll('panelPreview', () => panelUpdate(box, pg, S.status), 500);
+  if (box && pg && pg.panel === curPanel().id) {
+    // Faster when a control follows a timeline, so its bar runs smoothly.
+    pagePoll('panelPreview', () => panelUpdate(box, pg, S.status), pg.controls.some((c) => c.follow) ? 200 : 500);
     panelEditor(box, pg);
+    pSelShow(pg);
   }
+  // The list: a click on the number or an empty part of a row selects it; going into one of its
+  // fields selects it too (unless it already is).
+  const tbl = $('table.ptable');
+  const rowOf = (el) => { const tr = el.closest('tr'); return tr?.classList.contains('psub') ? tr.previousElementSibling : tr; };
+  tbl?.addEventListener('click', (e) => {
+    if (e.target.closest('input,select,button,a,textarea,label')) return;
+    const tr = rowOf(e.target);
+    if (tr?.dataset.ci) pSelect(pg, +tr.dataset.ci, e, true);
+  });
+  tbl?.addEventListener('focusin', (e) => {
+    const tr = rowOf(e.target), c = tr?.dataset.ci && pg.controls[+tr.dataset.ci];
+    if (c && !pSel().has(c)) { S.pSel = new Set([c]); S.pAnchor = +tr.dataset.ci; pSelShow(pg); }
+  });
   const det = $('details.ptheme');
   det?.addEventListener('toggle', () => (S.panelThemeOpen = det.open));
   $$('[data-ptheme]').forEach((b) => b.addEventListener('click', () => {
@@ -231,6 +296,15 @@ views.panel.after = () => {
     render();
   }));
   $$('[data-pclr]').forEach((b) => b.addEventListener('click', () => { delete pg.controls[+b.dataset.pclr].color; markDirty(); render(); }));
+  $('[data-pdel]')?.addEventListener('click', (e) => {
+    const k = +e.currentTarget.dataset.pdel, pn = p.panel.panels[k], n = p.panel.pages.filter((x) => x.panel === pn.id).length;
+    if (!confirm(`Delete panel '${pn.name}'${n ? ` and its ${n} page(s)` : ''}?`)) return;
+    p.panel.pages = p.panel.pages.filter((x) => x.panel !== pn.id);
+    p.panel.panels.splice(k, 1);
+    S.sel.panel = 0;
+    markDirty();
+    render();
+  });
   $('[data-pauto]')?.addEventListener('click', () => { pg.controls.forEach((c) => { delete c.col; delete c.row; }); markDirty(); render(); });
 };
 // The panel theme: what every control looks like unless it has its own colour.
@@ -279,6 +353,23 @@ function panelEditor(box, pg) {
       return p;
     });
     const me = pos.find((x) => x.k === i), start = at(e), now = { ...me };
+    // Groups: whatever lies wholly inside a group's frame belongs to it (panelParents: the smallest
+    // group; groups can hold groups) and moves along when the group is dragged. For a dragged
+    // control groups are background: they don't push it away and aren't pushed, so a control can
+    // be dropped into one.
+    const isGroup = (x) => pg.controls[x.k].type === 'group';
+    const inside = (x, g) => x.col >= g.col && x.col + x.span <= g.col + g.span && x.row >= g.row && x.row + x.rows <= g.row + g.rows;
+    for (const x of pos) x.group = isGroup(x);
+    const owner = panelParents(pos);
+    const within = (x, g) => { for (let p = owner.get(x.k); p; p = owner.get(p.k)) if (p === g) return true; return false; };
+    const members = (g) => pos.filter((x) => within(x, g));   // everything in it, also in groups in it
+    // Dragging a selected control moves the whole selection; the rest of what moves along (other
+    // selected controls, what's in selected groups) is the crew.
+    const sel = !resize && pSel().has(c) ? pos.filter((x) => pSel().has(pg.controls[x.k])) : [me];
+    const crew = resize ? [] : [...new Set([...sel, ...sel.filter(isGroup).flatMap(members)])].filter((x) => x !== me);
+    const movers = [me, ...crew];
+    // How far they can go together: all stay within the columns and below the top.
+    const loC = Math.max(...movers.map((x) => 1 - x.col)), hiC = Math.min(...movers.map((x) => cols - x.span + 1 - x.col)), loR = Math.max(...movers.map((x) => 1 - x.row));
     el.setPointerCapture(e.pointerId);
     el.classList.add('p-moving');
     const move = (ev) => {
@@ -287,35 +378,52 @@ function panelEditor(box, pg) {
         now.span = Math.max(1, Math.min(cols - me.col + 1, a.col - me.col + 1));
         now.rows = Math.max(1, a.row - me.row + 1);
       } else {
-        now.col = Math.max(1, Math.min(cols - me.span + 1, me.col + a.col - start.col));
-        now.row = Math.max(1, me.row + a.row - start.row);
+        now.col = me.col + Math.max(loC, Math.min(hiC, a.col - start.col));
+        now.row = me.row + Math.max(loR, a.row - start.row);
       }
       el.style.gridColumn = `${now.col} / span ${now.span}`;
       el.style.gridRow = `${now.row} / span ${now.rows}`;
+      for (const x of crew) {
+        x.el.style.gridColumn = `${x.col + now.col - me.col} / span ${x.span}`;
+        x.el.style.gridRow = `${x.row + now.row - me.row} / span ${x.rows}`;
+      }
     };
     const up = () => {
       el.removeEventListener('pointermove', move);
       el.classList.remove('p-moving');
       if (now.col === me.col && now.row === me.row && now.span === me.span && now.rows === me.rows) {
-        // Just a click: put every control back as it was (its own size and place) and mark its
-        // rows in the table - without scrolling, so the preview stays where it is.
+        // Just a click: put every control back as it was (its own size and place) and select it
+        // (Ctrl: add/remove it) - without a render, so the preview stays where it is.
         pos.forEach((x) => { [x.el.style.gridColumn, x.el.style.gridRow] = x.was; });
-        $$('tr.p-row').forEach((x) => x.classList.remove('p-row'));
-        const tr = $(`tr[data-ci="${i}"]`);
-        tr?.classList.add('p-row');
-        if (tr?.nextElementSibling?.classList.contains('psub')) tr.nextElementSibling.classList.add('p-row');
-        $$('.p-picked', grid).forEach((x) => x.classList.remove('p-picked'));
-        el.classList.add('p-picked');
+        pSelect(pg, i, e);
         return;
       }
+      if (!resize && !pSel().has(c)) S.pSel = new Set([c]);   // dragging an unselected control selects it
       // Controls it now covers move down, top to bottom, until they are free again.
       const hit = (a, b) => a.col < b.col + b.span && b.col < a.col + a.span && a.row < b.row + b.rows && b.row < a.row + a.rows;
-      const placed = [now];
-      for (const x of pos.filter((x) => x.k !== i).sort((a, b) => a.row - b.row || a.col - b.col)) {
-        while (placed.some((q) => hit(q, x))) x.row++;
-        placed.push(x);
-        Object.assign(pg.controls[x.k], { col: x.col, row: x.row });
+      const dc = now.col - me.col, dr = now.row - me.row;
+      for (const x of crew) { x.col += dc; x.row += dr; }
+      const moving = new Set(movers), landed = [now, ...crew];
+      // What can be pushed, each as one block: moved groups push what they land on (a group with
+      // all that's in it), but not the groups they land inside; moved controls push only other
+      // controls; a resized group nothing.
+      let blocks;
+      if (resize && isGroup(me)) blocks = [];
+      else if (!movers.some(isGroup)) blocks = pos.filter((x) => !moving.has(x) && !isGroup(x)).map((x) => ({ box: x, items: [x] }));
+      else {
+        const free = pos.filter((x) => !moving.has(x) && !(isGroup(x) && landed.some((m) => inside(m, x))));
+        const top = free.filter((x) => !free.some((g) => g !== x && within(x, g)));   // not inside another free one
+        // (A group something was dragged out of keeps only the rest.)
+        blocks = top.map((x) => ({ box: x, items: isGroup(x) ? [x, ...members(x).filter((y) => !moving.has(y))] : [x] }));
       }
+      const placed = [...landed];
+      for (const b of blocks.sort((a, b2) => a.box.row - b2.box.row || a.box.col - b2.box.col)) {
+        let d = 0;
+        while (placed.some((q) => hit(q, { ...b.box, row: b.box.row + d }))) d++;
+        for (const x of new Set(b.items)) x.row += d;
+        placed.push(b.box);
+      }
+      for (const x of pos) if (x.k !== i) Object.assign(pg.controls[x.k], { col: x.col, row: x.row });
       Object.assign(c, { col: now.col, row: now.row, span: now.span });
       if (resize) c.rows = now.rows;
       markDirty();
@@ -337,22 +445,40 @@ function panelCtlDetails(c, cb, i) {
     <select data-p="${cb}.${path}" data-r><option value="">—</option>${p.variables.map((v) => `<option${val === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`;
   const step = `<span class="muted">step</span>${num('step', 1, 'Steps the value moves in, e.g. 0.1 or 0.01 for decimals (0 = smooth)')}
       <span class="muted">unit</span><input data-p="${cb}.unit" value="${esc(c.unit || '')}" placeholder="%" style="width:44px" data-r>`;
+  const followSel = (title) => `<span class="muted" title="${esc(title)}">Follow timeline</span>
+      <select data-p="${cb}.follow" data-t="num" data-r><option value="">—</option>${p.timelines.map((t) => `<option value="${t.id}"${+c.follow === t.id ? ' selected' : ''}>${t.id} ${esc(t.name || '')}</option>`).join('')}</select>`;
+  const timeSel = () => `<select data-p="${cb}.timeShow" data-r title="How the time is shown">${[['', '1:23 / 5:00'], ['elapsed', '1:23 (played)'], ['left', '-3:37 (left)']]
+    .map(([v, t]) => `<option value="${v}"${(c.timeShow || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
   if (c.type === 'slider' || c.type === 'dial') {
     parts.push(`<span class="muted">Range</span>${num('min', 0, 'Lowest value')}<span class="muted">to</span>${num('max', 100, 'Highest value')} ${step}`);
     if (c.type === 'slider') parts.push(`<label class="chk"><input type="checkbox" data-p="${cb}.vertical" data-t="bool"${c.vertical ? ' checked' : ''} data-r> vertical</label>`);
+    parts.push(followSel("Show how far this timeline is: start of the range at its start, end of the range at its end. Without a unit it shows the time (1:23 / 5:00). It can't be touched then.")
+      + (c.follow && !c.unit ? ' ' + timeSel() : ''));
+  }
+  if (c.type === 'group') {
+    parts.push(`<label class="chk" style="white-space:nowrap" title="Show the group's text as a title in the top of its frame"><input type="checkbox" data-p="${cb}.showTitle" data-t="bool"${c.showTitle !== false ? ' checked' : ''} data-r> title</label>`);
+  }
+  if (c.type === 'label') {
+    parts.push(followSel('Show the time of this timeline, after the label text (e.g. "Main show 1:23 / 5:00")') + (c.follow ? ' ' + timeSel() : ''));
+    if (!c.follow) parts.push(varSel('var', c.var, 'Variable', 'Show the value of this variable, after the label text (e.g. "Visitors: 42")'));
   }
   if (c.type === 'xy') {
     parts.push(`<span class="muted">X</span>${num('min', 0, 'Left')}<span class="muted">to</span>${num('max', 100, 'Right')}
       <span class="muted">Y</span>${num('ymin', 0, 'Bottom')}<span class="muted">to</span>${num('ymax', 100, 'Top')} ${step}`);
     parts.push(`${varSel('links.x', c.links.x, 'X variable')} ${varSel('links.y', c.links.y, 'Y variable')}`);
   }
-  if (c.type === 'toggle' || c.type === 'slider' || c.type === 'dial') parts.push(varSel('var', c.var, 'Variable'));
+  const following = c.follow && (c.type === 'slider' || c.type === 'dial');   // then no variable and always display only (labels: above)
+  if ((c.type === 'toggle' || c.type === 'slider' || c.type === 'dial') && !following) parts.push(varSel('var', c.var, 'Variable'));
   if (c.type === 'color') {
     const L = c.links;
     parts.push(`${varSel('links.r', L.r, 'Red')} ${varSel('links.g', L.g, 'Green')} ${varSel('links.b', L.b, 'Blue')}
       <select data-p="${cb}.rgbScale" data-t="num" title="Range of the red, green and blue variables" data-r><option value="">0-255</option><option value="100"${c.rgbScale === 100 ? ' selected' : ''}>0-100 %</option></select>`);
     parts.push(`${varSel('links.h', L.h, 'Hue', 'Colour on the wheel, 0-360°')} ${varSel('links.s', L.s, 'Saturation', '0 = white, 100 = full colour')} ${varSel('links.v', L.v, 'Brightness', '0-100 (the bar under the wheel)')}`);
     parts.push(varSel('var', c.var, 'Whole colour', 'A text variable that gets #rrggbb'));
+  }
+  if (['button', ...PANEL_VALUE_TYPES].includes(c.type)) {
+    if (!following) parts.push(`<label class="chk" style="white-space:nowrap" title="Shown as normal but can't be touched, e.g. a slider used as a progress bar (🔒 in the preview). Triggers can still move it (panel … value) and switch this with panel … lock / unlock"><input type="checkbox" data-p="${cb}.readonly" data-t="bool"${c.readonly ? ' checked' : ''} data-r> display only</label>`);
+    parts.push(`<label class="chk" style="white-space:nowrap" title="Greyed out and can't be touched. Triggers switch this with panel … enable / disable"><input type="checkbox" data-p="${cb}.disabled" data-t="bool"${c.disabled ? ' checked' : ''} data-r> disabled</label>`);
   }
   if (c.col) parts.push(`<span class="muted" title="Column and row it was dragged to in the preview; empty = the next free place">Place</span>${num('col', 'auto', 'Column')}${num('row', 'auto', 'Row')}`);
   const fires = name ? p.triggers.filter((t) => t.type === 'panel' && (t.control || '').toLowerCase() === name) : [];

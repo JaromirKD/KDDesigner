@@ -22,7 +22,7 @@
 //   "vars":{"out1":"rackPower"}                             point -> variable, same as "links"
 //   "live":true                                             Pharos: WebSocket; NETIO: MQTT-flex to our broker
 //   kissbox:    "frame":"IO8", "cards":["DO4PR","DI8DC",""], "listenPort":9813   (or "slots":"out,in,ain")
-//   brightsign: "udpPort":5000
+//   brightsign: "udpPort":5000, "plugin":true, "pluginPort":5010   (kdlink plugin: zones, user variables, control)
 //   knx:        "addresses":[{"ga":"1/1/1","name":"Hall light","dpt":"1","var":"hall"}], "readEvery":0
 namespace Drivers {
 void begin();                                             // starts the worker threads
@@ -32,7 +32,8 @@ bool command(const std::vector<String>& t, String& msg);  // t[0] is the device 
 void statusJson(JsonArray arr);
 void pollNow();
 // A UDP message arrived on a trigger port: from a BrightSign it becomes its "Player says"
-// reading (let the presentation send e.g. "playing Intro" on every state).
-void onUdp(const IPAddress& from, const String& text);
+// reading (let the presentation send e.g. "playing Intro" on every state). Returns true for a
+// packet of the kdlink plugin (zones, variables), which then fires no UDP triggers.
+bool onUdp(const IPAddress& from, const String& text);
 bool state(const String& name, bool& online, bool& known);  // false if no driver has this name
 }  // namespace Drivers

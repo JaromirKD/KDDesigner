@@ -70,13 +70,19 @@ function addItem(kind) {
     case 'tcpdev': p.tcp.push({ name: 'tcp' + (p.tcp.length + 1), ip: '192.168.1.60', port: 23, eol: '\\r\\n' }); break;
     case 'mbdev': p.modbus.push({ name: 'plc' + (p.modbus.length || ''), ip: '192.168.1.80', port: 502, unit: 1, pollMs: 500 }); break;
     case 'page': {
-      const id = nextId(p.panel.pages);
-      p.panel.pages.push({ id, name: 'Page ' + id, columns: 3, controls: [] });
-      p.panel.start ??= id;
+      const id = nextId(p.panel.pages), pn = curPanel();
+      p.panel.pages.push({ id, name: 'Page ' + id, panel: pn.id, columns: 3, controls: [] });
+      pn.start ??= id;
       S.sel.page = p.panel.pages.length - 1;
       break;
     }
-    case 'pc-button': case 'pc-toggle': case 'pc-slider': case 'pc-dial': case 'pc-color': case 'pc-xy': case 'pc-label': case 'pc-clock': case 'pc-spacer': {
+    case 'panelset': {
+      const id = nextId(p.panel.panels);
+      p.panel.panels.push({ id, name: 'Panel ' + id, title: '' });
+      S.sel.panel = p.panel.panels.length - 1;
+      break;
+    }
+    case 'pc-button': case 'pc-toggle': case 'pc-slider': case 'pc-dial': case 'pc-color': case 'pc-xy': case 'pc-label': case 'pc-clock': case 'pc-spacer': case 'pc-group': {
       const pg = p.panel.pages[S.sel.page || 0];
       const type = kind.slice(3), n = pg.controls.filter((c) => c.type === type).length + 1;
       pg.controls.push({
@@ -84,6 +90,7 @@ function addItem(kind) {
         slider: { type, name: 'slider' + n, text: 'Level', min: 0, max: 100, unit: '%' }, dial: { type, name: 'dial' + n, text: 'Volume', min: 0, max: 100 },
         color: { type, name: 'colour' + n, text: 'Colour', value: '#ffffff', links: {} },
         xy: { type, name: 'xy' + n, text: 'Pan / tilt', min: 0, max: 100, ymin: 0, ymax: 100, links: {}, span: 2 }, label: { type, name: 'label' + n, text: 'Status' },
+        group: { type, name: 'group' + n, text: 'Group ' + n, span: 2 },
       }[type] || { type });
       break;
     }
@@ -193,14 +200,15 @@ function goTo(e, link) {
   if (d.gotoTrigger) { S.view = 'triggers'; selectTriggers([p.triggers.findIndex((t) => t.id === +d.gotoTrigger)]); }
   else if (d.gotoTimeline) { S.view = 'timelines'; S.sel.timeline = Math.max(0, p.timelines.findIndex((tl) => tl.id === +d.gotoTimeline)); S.sel.cue = -1; S.trackEdit = null; }
   else if (d.gotoEffect) { S.view = 'effects'; S.sel.effect = Math.max(0, p.effects.findIndex((x) => x.id === +d.gotoEffect)); }
+  else if (d.gotoDevices) { S.view = 'devices'; S.devTab = d.gotoDevices; }
   render();
 }
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-view],[data-cmd],[data-add],[data-del],[data-sel],[data-test],[data-fire],[data-sort],[data-move],[data-pmove],[data-build],[data-goto-trigger],[data-goto-timeline],[data-goto-effect],#save,#bo');
+  const t = e.target.closest('[data-view],[data-cmd],[data-add],[data-del],[data-sel],[data-test],[data-fire],[data-sort],[data-move],[data-pmove],[data-build],[data-goto-trigger],[data-goto-timeline],[data-goto-effect],[data-goto-devices],#save,#bo');
   if (!t) return;
   if (t.dataset.view) { S.view = t.dataset.view; render(); }
-  else if (t.dataset.gotoTrigger || t.dataset.gotoTimeline || t.dataset.gotoEffect) goTo(e, t);
-  else if (t.dataset.move) { const i = moveItem(P().triggers, S.sel.trigger, +t.dataset.move); renumberTriggers(); selectTriggers([i]); render(); }
+  else if (t.dataset.gotoTrigger || t.dataset.gotoTimeline || t.dataset.gotoEffect || t.dataset.gotoDevices) goTo(e, t);
+  else if (t.dataset.move) moveTriggers(+t.dataset.move);
   else if (t.dataset.build) openBuilder(t.dataset.build, t.dataset.grammar === 'cond' ? COND_GRAMMAR : GRAMMAR);
   else if (t.dataset.pmove) {
     const [i, d] = t.dataset.pmove.split(':').map(Number);
@@ -246,7 +254,25 @@ document.addEventListener('keydown', (e) => {
 });
 $('#undoBtn').addEventListener('click', () => undoStep(-1));
 $('#redoBtn').addEventListener('click', () => undoStep(1));
-window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+$('#winBtn').addEventListener('click', openWindow);
+// Panel ↗: opens the touch panel; with several panels a small menu asks which one.
+$('#panelBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const list = P() ? P().panel.panels : [{ id: 1, name: 'Panel' }];
+  $('#panelMenu')?.remove();
+  if (list.length === 1) { window.open(panelUrl(list[0]), '_blank'); return; }
+  const m = document.createElement('div');
+  m.id = 'panelMenu';
+  m.className = 'pmenu';
+  m.innerHTML = list.map((x) => `<a href="${panelUrl(x)}" target="_blank">${esc(x.name || 'Panel ' + x.id)} ↗</a>`).join('');
+  const r = e.currentTarget.getBoundingClientRect(), z = uiZoom();
+  Object.assign(m.style, { top: r.bottom / z + 4 + 'px', left: r.left / z + 'px' });
+  document.body.appendChild(m);
+  const close = () => { m.remove(); document.removeEventListener('click', close); };
+  setTimeout(() => document.addEventListener('click', close));
+});
+// Closing one of several windows loses nothing: the others still have the changes.
+window.addEventListener('beforeunload', (e) => { if (S.dirty && !win.peers.size) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('resize', () => acs.forEach((a) => a.hide()));
 
 // ---------------------------------------------------------------------------
@@ -260,11 +286,14 @@ window.addEventListener('resize', () => acs.forEach((a) => a.hide()));
   }
   catch (e) { S.project = emptyProject(); toast('No project on the controller (' + e.message + ') - starting a new one', true); }
   undoReset(!S.dirty);
+  const page = location.hash.slice(1);
+  if (views[page]) S.view = page;
   // Datalist of common channel names for the patch editor.
   document.body.insertAdjacentHTML('beforeend', `<datalist id="chNames">${['dim', 'r', 'g', 'b', 'w', 'a', 'uv', 'lime', 'warm', 'cool', 'cct', 'pan', 'pan:16', 'tilt', 'tilt:16', 'speed_pt', 'shutter', 'strobe', 'zoom', 'focus', 'gobo', 'color_wheel', 'prism', 'cto', 'macro', 'fx', 'ctrl', 'pos:16', 'speed', 'enable', 'fog', 'haze', 'fan'].map((c) => `<option value="${c}">`).join('')}</datalist>`);
   updateHeader();
   addNavSplitter();
   render();
+  winStart();
   try { const lines = await api('/api/log'); lines.forEach(addLog); } catch { /* SSE will catch up */ }
   connectEvents();
 })();

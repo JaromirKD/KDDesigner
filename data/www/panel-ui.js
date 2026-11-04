@@ -3,10 +3,26 @@
 // KD Designer: theme (panelThemeVars), markup (panelPageHtml), live state (panelUpdate) and
 // dragging sliders, dials and colour wheels (panelDrag). Styles are in panel.css.
 // The live state per control name is the status "labels" (State.cpp): text / colour / flash /
-// disabled set by panel and label actions, and the value a panel sent or "panel X value" set.
+// disabled / locked set by panel and label actions, and the value a panel sent or "panel X value" set.
+// locked (true/false from panel lock/unlock) wins over the control's own "display only" (c.readonly),
+// disabled (true/false from panel disable/enable) over its own "disabled" (c.disabled).
 // A control linked to a variable shows that variable instead.
 
 const PANEL_VALUE_TYPES = ['toggle', 'slider', 'dial', 'color', 'xy'];   // these send "change" with a value
+
+// Several panels (e.g. one for the technician, one for the operator): project.panel.panels
+// [{id, name, title, start}], each page belongs to one (page.panel; none = the first). They share
+// the theme, and controls are known by name across all of them (same name = same live state).
+// Old projects (panel.title / panel.start, no panels) are one panel. Opened as /panel?p=<id or name>.
+function panelList(proj) {
+  const pp = proj?.panel || {};
+  return pp.panels?.length ? pp.panels : [{ id: 1, name: 'Panel', title: pp.title, start: pp.start }];
+}
+function panelPagesOf(proj, id) {
+  const first = panelList(proj)[0].id;
+  return (proj?.panel?.pages || []).filter((pg) => (pg.panel ?? first) === id);
+}
+const panelUrl = (pn) => `/panel?p=${encodeURIComponent(pn.id)}`;
 // The panel theme (project.panel.theme holds only what differs). Colours of controls come from
 // here unless a control has its own colour. Sizes in px; width 0 = the whole screen.
 const PANEL_THEME = {
@@ -20,7 +36,7 @@ const PANEL_THEMES = {
   Contrast: { bg: '#000000', card: '#000000', border: '#ffffff', text: '#ffffff', muted: '#dddddd', track: '#333333', button: '#1a1a1a', toggle: '#00b050', accent: '#ffd400', label: '#ffffff' },
 };
 // The theme setting a control type takes its colour from.
-const PANEL_TYPE_COLOR = { button: 'button', toggle: 'toggle', slider: 'accent', dial: 'accent', xy: 'accent', label: 'label', clock: 'label' };
+const PANEL_TYPE_COLOR = { button: 'button', toggle: 'toggle', slider: 'accent', dial: 'accent', xy: 'accent', label: 'label', clock: 'label', group: 'border' };
 const panelTheme = (t) => ({ ...PANEL_THEME, ...(t || {}) });
 const panelThemeColor = (t, type) => panelTheme(t)[PANEL_TYPE_COLOR[type]] || '';
 function panelThemeVars(t) {
@@ -64,7 +80,7 @@ function panelXY(c, value) {
 }
 const panelXYText = (c, x, y) => `${panelFmt(c, x)},${panelFmt(c, y, panelRangeY(c))}`;
 // Grid rows a control takes when the project doesn't say.
-const panelRows = (c) => (c.type === 'slider' && c.vertical ? 3 : c.type === 'dial' ? 2 : c.type === 'color' || c.type === 'xy' ? 3 : 1);
+const panelRows = (c) => (c.type === 'slider' && c.vertical ? 3 : c.type === 'dial' || c.type === 'group' ? 2 : c.type === 'color' || c.type === 'xy' ? 3 : 1);
 
 // #rrggbb <-> [hue 0-360, saturation 0-1, brightness 0-1]
 function pHsv(hex) {
@@ -80,15 +96,42 @@ function pHex(h, s, v) {
   return '#' + [f(5), f(3), f(1)].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+// "Follow timeline" (sliders and dials, c.follow = timeline id): where that timeline is, from
+// the status playbacks (pos / length in ms), moved on by the time since the status came in
+// (st._at) while it plays, so the bar runs smoothly between statuses. Not running = 0.
+function panelFollow(c, st) {
+  const pb = (st?.playbacks || []).find((x) => x.kind === 'timeline' && x.id === +c.follow);
+  if (!pb || !pb.length) return { f: 0, pos: 0, len: pb?.length || 0 };
+  const pos = Math.min(pb.length, Math.max(0, pb.pos + (pb.paused || pb.ended || !st._at ? 0 : Date.now() - st._at)));
+  return { f: pos / pb.length, pos, len: pb.length };
+}
+const panelMinSec = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// The time of a followed timeline. c.timeShow: '' = "1:23 / 5:00", 'elapsed' = "1:23", 'left' = "-3:37".
+function panelTimeText(c, fo) {
+  if (c.timeShow === 'left') return fo.len ? '-' + panelMinSec(fo.len - fo.pos + 999) : '-0:00';   // rounds up, like a countdown
+  if (c.timeShow === 'elapsed' || !fo.len) return panelMinSec(fo.pos);
+  return `${panelMinSec(fo.pos)} / ${panelMinSec(fo.len)}`;
+}
+
 // color '' = the theme's colour (CSS variables in panel.css).
 function panelCtlState(c, st) {
   const labels = st?.labels || {}, name = String(c.name || '').toLowerCase();
   const l = (name && labels[Object.keys(labels).find((k) => k.toLowerCase() === name)]) || {};
   const loc = panelLocal[name];
   const mine = loc && loc.until > Date.now();
+  // A control that follows a timeline can't be touched: dragging it would only fight the timeline.
+  const follow = c.follow && ['slider', 'dial', 'label'].includes(c.type) ? panelFollow(c, st) : null;
+  const { min, max } = panelRange(c);
+  let text = l.text ?? (c.text || (c.type === 'label' ? '' : c.name || ''));
+  // A label linked to a timeline or a variable: its text (also one set by "panel X text") goes in front.
+  if (c.type === 'label' && (follow || c.var)) {
+    const v = follow ? panelTimeText(c, follow) : st?.vars?.[c.var] ?? '';
+    text = text ? `${text} ${v}` : String(v);
+  }
   return {
-    text: l.text ?? (c.text || (c.type === 'label' ? '' : c.name || '')), color: l.color || c.color || '',
-    flash: l.flash || '', disabled: !!l.disabled, value: mine ? loc.value : panelLinkedValue(c, st?.vars || {}, l.value ?? c.value), hsv: mine ? loc.hsv : null,
+    text, color: l.color || c.color || '',
+    flash: l.flash || '', disabled: l.disabled ?? !!c.disabled, locked: follow ? true : l.locked ?? !!c.readonly, follow,
+    value: follow ? min + follow.f * (max - min) : mine ? loc.value : panelLinkedValue(c, st?.vars || {}, l.value ?? c.value), hsv: mine ? loc.hsv : null,
   };
 }
 
@@ -143,14 +186,74 @@ function panelPlace(c, cols) {
   const col = c.col > 0 ? Math.min(c.col, cols - span + 1) : 0;
   return `grid-column:${col ? col + ' / ' : ''}span ${span};grid-row:${col && c.row > 0 ? c.row + ' / ' : ''}span ${rows}`;
 }
+// Which group holds what. boxes: {k, col, row, span, rows, group} (grid cells). Something wholly
+// inside a group belongs to the smallest such group (groups can sit in groups); of two groups
+// with the same cells the one earlier in the list holds the other. Returns Map k -> parent box.
+// Used by the panel (places from the project) and the editor (places measured in the preview).
+function panelParents(boxes) {
+  const inside = (x, g) => x.col >= g.col && x.col + x.span <= g.col + g.span && x.row >= g.row && x.row + x.rows <= g.row + g.rows;
+  const area = (b) => b.span * b.rows;
+  const groups = boxes.filter((b) => b.group), out = new Map();
+  for (const x of boxes) {
+    let best = null;
+    for (const g of groups) {
+      if (g === x || !inside(x, g) || (area(g) === area(x) && !(g.k < x.k))) continue;
+      if (!best || area(g) < area(best) || (area(g) === area(best) && g.k > best.k)) best = g;
+    }
+    if (best) out.set(x.k, best);
+  }
+  return out;
+}
+
+// Space inside group frames, for controls and groups with a place (col/row): something on an
+// edge of its group gets a margin on that side, on top of the group's own margin there. A
+// control sits a full gap from the frame (drawn half a gap out) and below the title; a group in
+// a group half a gap in, and below the outer title. Groups also get their depth
+// as z-index, so an inner frame is drawn over the outer one. Between controls nothing changes.
+function panelGroupMargins(controls, cols) {
+  const boxes = [];
+  controls.forEach((c, k) => {
+    if (!(c.col > 0 && c.row > 0) || c.type === 'spacer') return;
+    const span = Math.min(c.span || 1, cols);
+    boxes.push({ k, col: Math.min(c.col, cols - span + 1), row: c.row, span, rows: Math.max(1, c.rows || panelRows(c)), group: c.type === 'group',
+      titled: c.type === 'group' && c.showTitle !== false && !!c.text });
+  });
+  const parent = panelParents(boxes), memo = new Map();
+  // [top, right, bottom, left] extra px on top of [half gap, …] steps; depth of nesting.
+  const m = (x) => {
+    if (memo.has(x.k)) return memo.get(x.k);
+    const g = parent.get(x.k);
+    let r = { h: [0, 0, 0, 0], px: [0, 0, 0, 0], depth: 0 };
+    if (g) {
+      const pg = m(g), on = [x.row === g.row, x.col + x.span === g.col + g.span, x.row + x.rows === g.row + g.rows, x.col === g.col];
+      // Half a gap per level (nested frames sit half a gap apart, a control a full gap from its
+      // frame, which is drawn half a gap out); extra px under the title, if it has one. Kept
+      // small, as it adds up with every level.
+      const h = 1, top = !g.titled ? 0 : x.group ? 16 : 8;
+      r = { h: pg.h.map((v, s) => v + (on[s] ? h : 0)), px: pg.px.map((v, s) => v + (on[s] && s === 0 ? top : 0)), depth: pg.depth + 1 };
+    }
+    memo.set(x.k, r);
+    return r;
+  };
+  const out = controls.map(() => '');
+  for (const x of boxes) {
+    const r = m(x), z = x.group ? `;z-index:${r.depth}` : '';
+    if (!r.h.some((v) => v)) { out[x.k] = z; continue; }
+    out[x.k] = `;margin:${r.h.map((v, s) => (v ? `calc(var(--p-gap, 12px) * ${v / 2} + ${r.px[s]}px)` : '0')).join(' ')}${z}`;
+  }
+  return out;
+}
+
 // preview: the editor's copy - divs instead of buttons and a resize grip on each control.
 function panelPageHtml(pg, st, preview, theme) {
-  const cols = pg.columns || 3;
+  const cols = pg.columns || 3, inGroup = panelGroupMargins(pg.controls, cols);
   const grip = preview ? '<span class="pgrip" title="Drag to resize"></span>' : '';
   return `<div class="pgrid${preview ? ' preview' : ''}" style="${panelThemeVars(theme)};grid-template-columns:repeat(${cols},minmax(0,1fr))">${pg.controls.map((c, i) => {
-    const at = `data-i="${i}" style="${panelPlace(c, cols)}"`;
+    const at = `data-i="${i}" style="${panelPlace(c, cols)}${inGroup[i]}"`;
     switch (c.type) {
       case 'spacer': return `<div class="pspacer" ${at}>${grip}</div>`;
+      // A frame with a title behind the controls placed inside it (only a look: the editor moves them together).
+      case 'group': return `<div class="pgroup${c.showTitle === false ? ' p-notitle' : ''}" ${at}><span class="ptitle"></span>${grip}</div>`;
       case 'clock': return `<div class="plabel pclock" data-clock ${at}>${panelTime()}${grip}</div>`;
       case 'label': return `<div class="plabel" ${at}><span class="ptitle"></span>${grip}</div>`;
       case 'slider': return `<div class="pctl pslider${c.vertical ? ' pvert' : ''}" ${at}><div class="phead"><span class="ptitle"></span><span class="pval"></span></div><div class="ptrack"><div class="pfill"></div></div>${grip}</div>`;
@@ -173,6 +276,7 @@ function panelUpdate(root, pg, st) {
     if (c.type === 'clock') { el.style.color = c.color || ''; continue; }
     const s = panelCtlState(c, st), fcol = s.flash && s.flash !== 'on';
     el.classList.toggle('p-dis', s.disabled);
+    el.classList.toggle('p-lock', s.locked);
     el.classList.toggle('p-flash', !!s.flash);
     el.classList.toggle('p-fcol', !!fcol);
     if (fcol) el.style.setProperty('--flash', s.flash);
@@ -185,6 +289,7 @@ function panelPaint(el, c, s) {
   const q = (sel) => el.querySelector(sel);
   switch (c.type) {
     case 'label': el.style.color = s.color; break;
+    case 'group': if (s.color) el.style.setProperty('--g', s.color); else el.style.removeProperty('--g'); break;
     case 'button': el.style.background = s.color; break;
     case 'toggle': {
       const on = +s.value > 0;
@@ -193,11 +298,13 @@ function panelPaint(el, c, s) {
       break;
     }
     case 'slider': case 'dial': {
-      const { min, max } = panelRange(c), v = panelSnap(c, pNum(s.value, min)), f = (v - min) / (max - min);
+      // Following a timeline: smooth (no step), and without a unit the time "1:23 / 5:00".
+      const { min, max } = panelRange(c), v = s.follow ? pNum(s.value, min) : panelSnap(c, pNum(s.value, min)), f = (v - min) / (max - min);
       el.style.setProperty('--v', f);
       if (s.color) el.style.setProperty('--c', s.color); else el.style.removeProperty('--c');
       if (c.type === 'dial') q('.parc').style.strokeDasharray = `${f * 100} 100`;
-      q('.pval').textContent = panelFmt(c, v) + (c.unit || '');
+      q('.pval').textContent = s.follow && !c.unit ? panelTimeText(c, s.follow)
+        : panelFmt(c, s.follow ? panelSnap(c, v) : v) + (c.unit || '');
       break;
     }
     case 'xy': {
@@ -229,7 +336,7 @@ function panelDrag(root, getPage, getStatus, send) {
   root.addEventListener('pointerdown', (e) => {
     const el = e.target.closest('.pslider[data-i],.pdial[data-i],.pcolor[data-i],.pxy[data-i]');
     const c = el && getPage()?.controls[+el.dataset.i];
-    if (!c || el.classList.contains('p-dis')) return;
+    if (!c || el.classList.contains('p-dis') || el.classList.contains('p-lock')) return;
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     el.classList.add('p-active');

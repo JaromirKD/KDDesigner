@@ -16,6 +16,51 @@ const DRIVERS = {
   netio: { label: 'NETIO', port: 80, about: 'power sockets · JSON API' },
   pharos: { label: 'Pharos', port: 80, about: 'LPC / TPC · HTTP API' },
 };
+// Icons per kind of device (24 x 24 line drawings in currentColor, like the fixture icons):
+// key -> [name, svg, Devices tab]. Used on the Devices / Monitoring tabs and in the trigger list.
+const DEVICE_ICONS = {
+  network: ['Network device (UDP / OSC)', '<rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 16.5h.01M10.5 16.5h.01"/><path d="M8.5 9.5a5 5 0 0 1 7 0M5.8 6.8a9 9 0 0 1 12.4 0"/>', 'network'],
+  tcp: ['TCP device', '<path d="M4 8h15M15.5 4.5 19 8l-3.5 3.5M20 16H5M8.5 12.5 5 16l3.5 3.5"/>', 'tcp'],
+  modbus: ['Modbus device (PLC)', '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2"/>', 'tcp'],
+  http: ['HTTP request', '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>', ''],
+  pc: ['PC', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', 'pcs'],
+  projector: ['Projector (PJLink)', '<rect x="2.5" y="7" width="19" height="10" rx="2"/><circle cx="15.5" cy="12" r="2.5"/><path d="M5.5 10h4M6 17v2M18 17v2"/>', 'projectors'],
+  email: ['Email', '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5 12 13l8.5-6.5"/>', 'email'],
+  io: ['Machine Control I/O', '<rect x="3" y="7" width="18" height="11" rx="1.5"/><circle cx="7.5" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/><circle cx="16.5" cy="12.5" r="1.5"/><path d="M7.5 3.5V7M12 3.5V7M16.5 3.5V7"/>', 'board'],
+  // Show devices: simplified versions of the makers' logos, in their own colours.
+  kissbox: ['Kiss-Box', '<rect x="2" y="2" width="20" height="20" rx="1.5" fill="#e30613" stroke="none"/><text x="8.8" y="17.6" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15" fill="#fff" stroke="none">K</text><rect x="15.4" y="12.4" width="5" height="5.2" fill="#fff" stroke="none"/>', 'kissbox'],
+  knx: ['KNX', '<g stroke-width="2.2" stroke-linecap="butt" stroke-linejoin="miter"><path d="M2.5 8.5Q7 3 12 3" stroke="#2bae4a"/><path d="M12 3Q17 3 21.5 8.5" stroke="#1b75bc"/>'
+    + '<path d="M3.2 12v8M7.6 12 4 16l3.6 4" stroke="#2bae4a"/><path d="M9.6 20v-8l4.6 8v-8" stroke="#8c9399"/><path d="M16.2 12l5 8M21.2 12l-5 8" stroke="#1b75bc"/></g>', 'knx'],
+  brightsign: ['BrightSign player', '<rect x="2" y="2" width="20" height="20" rx="1.5" fill="#3c2f8f" stroke="none"/><text x="12.3" y="17.6" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15.5" fill="#fff" stroke="none">B</text>', 'brightsign'],
+  digidot: ['DiGidot pixel controller', `<g fill="#1e8fd8" stroke="none">${[[6, 4], [10, 4], [14, 4], [6, 8], [18, 8], [6, 12], [10, 12], [14, 12], [18, 12], [6, 16], [10, 16], [14, 16], [18, 16], [6, 20], [10, 20], [14, 20]]
+    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.65"/>`).join('')}</g>`, 'digidot'],
+  netio: ['NETIO power sockets', '<path fill="#00794c" stroke="none" fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 0 1 3.5 2h17A1.5 1.5 0 0 1 22 3.5v17a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 20.5zM6.5 19V6.5h7.6a4.4 4.4 0 0 1 4.4 4.4V19h-3.3v-7.6a1.7 1.7 0 0 0-1.7-1.7H9.8V19z"/>', 'netio'],
+  pharos: ['Pharos controller', `<g fill="#0080ff" stroke="none"><circle cx="12.13" cy="12.37" r="2.25"/>${[
+    [15.34, 9.65, 1.5], [16.08, 13.12, 1.5], [13.86, 15.84, 1.5], [10.39, 15.84, 1.5], [8.17, 13.12, 1.5], [8.91, 9.65, 1.5], [12.13, 8.17, 1.5],
+    [12.13, 5.2, 1.25], [17.82, 7.67, 1.25], [18.81, 14.35, 1.25], [15.1, 18.56, 1.25], [8.91, 18.56, 1.25], [5.2, 13.86, 1.25], [6.43, 7.92, 1.25],
+    [12.13, 2.72, 1], [19.8, 6.19, 1], [21.28, 15.34, 1], [16.08, 20.79, 1], [7.67, 20.79, 1], [2.72, 14.35, 1], [4.45, 6.43, 1],
+  ].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}"/>`).join('')}</g>`, 'pharos'],
+  // A finger tapping (shape after the Lucide "pointer" icon).
+  panel: ['Touch panel', '<path d="M22 14a8 8 0 0 1-8 8M18 11v-1a2 2 0 0 0-4 0M14 10V9a2 2 0 0 0-4 0v1M10 9.5V4a2 2 0 0 0-4 0v10"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>', ''],
+  trigger: ['Another trigger (fire / repeat trigger)', '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>', ''],
+  timeline: ['Timeline', '<path d="M2 12h20"/><path d="M8 8.5 11.5 12 8 15.5 4.5 12zM16 9.5l2.5 2.5-2.5 2.5-2.5-2.5z"/>', ''],
+  dmx: ['DMX input', '<circle cx="12" cy="12" r="8.5"/><path d="M8 10.5h.01M16 10.5h.01M12 8h.01M9.5 15h.01M14.5 15h.01"/>', ''],
+  device: ['Device', '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 15h.01M12 15h.01"/>', ''],
+};
+const devIcon = (key, cls = 'dev-ico') =>
+  `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(DEVICE_ICONS[key] || DEVICE_ICONS.device)[1]}</svg>`;
+// Which kind of device a name is (monitored devices, TCP / Modbus, show devices), or ''.
+function deviceKind(name) {
+  const p = S.project, n = String(name || '').toLowerCase();
+  if (!p || !n) return '';
+  const has = (list) => (list || []).some((x) => (x.name || '').toLowerCase() === n);
+  if (has(p.projectors)) return 'projector';
+  if (has(p.pcs)) return 'pc';
+  if (has(p.devices) || has(p.deviceGroups)) return 'network';
+  if (has(p.tcp)) return 'tcp';
+  if (has(p.modbus)) return 'modbus';
+  return (p.drivers || []).find((d) => (d.name || '').toLowerCase() === n)?.type || '';
+}
 // Portenta Machine Control I/O (src/Board.cpp): point prefix, count, name, rating. Keys match the labels on the case (in0, io11, ao3).
 const PMC_GROUPS = [['in', 8, 'Digital inputs', '24 V'], ['out', 8, 'Digital outputs', '24 V · 0.5 A each'],
   ['io', 12, 'Programmable I/O', '24 V · each one an input or an output'], ['ai', 3, 'Analog inputs', '0-10 V, 4-20 mA or NTC'], ['ao', 4, 'Analog outputs', '0-10 V']];
@@ -53,7 +98,7 @@ const trigColor = (c) => (c ? TRIGGER_COLORS[c] || (/^#[0-9a-f]{6}$/i.test(c) ? 
 const CURVES = [['linear', 'Linear'], ['square', 'Square law'], ['nondim', 'Non-dim (switch)'], ['preheat5', '5% preheat'], ['preheat10', '10% preheat']];
 const PATHS = [['linear', 'Linear'], ['accelerated', 'Accelerated'], ['braked', 'Braked'], ['damped', 'Damped (S-curve)'], ['overshoot', 'Overshoot']];
 const TL_GROUPS = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
-const PANEL_TYPES = ['button', 'toggle', 'slider', 'dial', 'color', 'xy', 'label', 'clock', 'spacer'];
+const PANEL_TYPES = ['button', 'toggle', 'slider', 'dial', 'color', 'xy', 'label', 'clock', 'spacer', 'group'];
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PLACEHOLDER = {
   '{mode}': '<mode>', '{mgroup}': '<mode group>', '{mstate}': '<state>', '{label}': '<label>', '{pctl}': '<panel control>', '{flash}': 'on|off|<colour>', '{pval}': '<value | #rrggbb | x,y>', '{color}': '<colour>', '{trig}': '<trigger name or #>', '{count}': '<count>',
@@ -70,7 +115,7 @@ const PLACEHOLDER = {
   '{kisspoint}': '<slot>.<channel>', '{kissval}': 'on|off|0-255', '{slot}': '<slot 1-8>', '{knxga}': '<group address or name>', '{knxval}': '<value>',
   '{dpt}': '<dpt, e.g. 1 / 5.001 / 9>', '{path}': '<path>', '{digiscene}': '<scene name or #>', '{netioout}': '<output|all>',
   '{netioact}': 'on|off|toggle|restart|pulse', '{pharostl}': 'start|release|toggle|pause|resume', '{pharossc}': 'start|release|toggle',
-  '{fixgrp}': 'fixture|group', '{pharosproto}': '<protocol>', '{word}': '<name>',
+  '{fixgrp}': 'fixture|group', '{pharosproto}': '<protocol>', '{word}': '<name>', '{bszone}': '<zone>', '{bsvar}': '<user variable>', '{bsfile}': '<file>',
   '{iopoint}': '<point, e.g. out3, or its name>', '{ioval}': 'on|off|toggle|<volts>',
 };
 
@@ -112,6 +157,14 @@ function normalize(p) {
   p.panel.pages = p.panel.pages || [];
   p.panel.pages.forEach((pg) => (pg.controls = pg.controls || []));
   p.panel.theme = p.panel.theme || {};   // panel-ui.js PANEL_THEME: only what differs from the default
+  // Several panels (panelList in panel-ui.js): an old project's title / start page become its
+  // first panel, and every page gets the panel it belongs to.
+  if (!p.panel.panels?.length) {
+    p.panel.panels = [{ id: 1, name: 'Panel', title: p.panel.title || '', start: p.panel.start }];
+    delete p.panel.title;
+    delete p.panel.start;
+  }
+  p.panel.pages.forEach((pg) => (pg.panel = p.panel.panels.some((x) => x.id === pg.panel) ? pg.panel : p.panel.panels[0].id));
   p.email = Object.assign(e.email, p.email);
   p.triggers.forEach((t) => (t.conditions = t.conditions || []));
   p.groups.forEach((g) => (g.fixtures = g.fixtures || []));
@@ -177,6 +230,7 @@ async function save() {
     S.mediaTrash.clear();
     updateHeader();
     toast(r.reply || 'Saved');
+    winSend('saved');
   } catch (e) {
     toast('Save failed: ' + e.message, true);
   }
@@ -221,6 +275,12 @@ function undoSnap() {
   if (undo.stack.length > UNDO_MAX) { undo.stack.shift(); undo.saved--; }
   undo.at = undo.stack.length - 1;
   updateUndoButtons();
+  winSend('project');
+}
+// Selections may point at things that are gone after the project was swapped.
+function clampSel() {
+  for (const k of ['scene', 'timeline', 'trigger', 'map', 'effect']) S.sel[k] = Math.min(S.sel[k] || 0, Math.max(0, (P()[k + 's'] || []).length - 1));
+  S.sel.cue = -1;
 }
 function undoStep(d) {
   if (undo.timer) undoSnap();   // the change still being made counts first
@@ -229,13 +289,84 @@ function undoStep(d) {
   undo.at = to;
   S.project = normalize(JSON.parse(undo.stack[to]));
   S.dirty = to !== undo.saved;
-  // Selections may point at things that are gone now.
-  for (const k of ['scene', 'timeline', 'trigger', 'map', 'effect']) S.sel[k] = Math.min(S.sel[k] || 0, Math.max(0, (P()[k + 's'] || []).length - 1));
-  S.sel.cue = -1;
+  clampSel();
   updateHeader();
   updateUndoButtons();
   render();
   toast(d < 0 ? 'Undone' : 'Redone');
+  winSend('project');
+}
+
+// ---------------------------------------------------------------------------
+// More windows (a second screen): every editor window of this browser works on the same
+// project. A change goes to the other windows (BroadcastChannel) once the edits pause, as the
+// undo copy; each window keeps its own page, selection and undo list. A new window asks
+// the others for the project, so it starts with their unsaved changes.
+// ---------------------------------------------------------------------------
+const win = { id: Math.random().toString(36).slice(2), ch: null, peers: new Set(), joining: false };
+function winSend(t, extra) {
+  if (!win.ch || !win.peers.size && t !== 'hello') return;
+  const m = { t, id: win.id, ...extra };
+  if (t === 'project' || t === 'saved') Object.assign(m, { json: undo.stack[undo.at], dirty: S.dirty, trash: [...S.mediaTrash] });
+  win.ch.postMessage(m);
+}
+function winStart() {
+  if (!window.BroadcastChannel) return;
+  win.ch = new BroadcastChannel('kd-editor');
+  win.ch.onmessage = ({ data: m }) => {
+    if (m.t === 'hello' || m.t === 'here') {
+      win.peers.add(m.id);
+      if (m.t === 'hello') { win.ch.postMessage({ t: 'here', id: win.id }); winSend('project'); }
+    } else if (m.t === 'bye') win.peers.delete(m.id);
+    else if (m.t === 'project') winApply(m);
+    else if (m.t === 'saved' && m.json === undo.stack[undo.at]) {
+      S.dirty = false;
+      undo.saved = undo.at;
+      S.mediaTrash.clear();   // the saving window deleted them
+      updateHeader();
+    }
+  };
+  window.addEventListener('pagehide', () => win.ch.postMessage({ t: 'bye', id: win.id }));
+  // Answers come at once; after that a copy from another window is an edit made there.
+  win.joining = true;
+  setTimeout(() => (win.joining = false), 1500);
+  winSend('hello');
+}
+function winApply(m) {
+  win.peers.add(m.id);
+  m.trash.forEach((n) => S.mediaTrash.add(n));
+  const first = win.joining;
+  win.joining = false;
+  if (m.json === undo.stack[undo.at]) { S.dirty = m.dirty; updateHeader(); return; }
+  S.project = normalize(JSON.parse(m.json));
+  S.dirty = m.dirty;
+  // The first copy (this window just opened) replaces what it loaded; later ones are undo steps.
+  if (first) { undoReset(!m.dirty); undo.stack[0] = m.json; }
+  else {
+    clearTimeout(undo.timer);
+    undo.timer = 0;
+    undo.stack.length = undo.at + 1;
+    undo.stack.push(m.json);
+    if (undo.stack.length > UNDO_MAX) { undo.stack.shift(); undo.saved--; }
+    undo.at = undo.stack.length - 1;
+    updateUndoButtons();
+  }
+  clampSel();
+  updateHeader();
+  render();
+}
+// Opens another editor window on the page shown now, next to this one, then moves it to the
+// other screen when the browser can tell where that is (Chrome on localhost or https, after
+// asking once). Opened first: waiting for that question would make the browser block the window.
+async function openWindow() {
+  const w = window.open(location.pathname + '#' + S.view, '_blank', `popup,left=${screenX + 60},top=${screenY + 60},width=${outerWidth},height=${outerHeight}`);
+  if (!w) return toast('The browser blocked the new window: allow pop-ups for this page', true);
+  try {
+    if (!window.getScreenDetails) return;
+    const sd = await getScreenDetails();
+    const o = sd.screens.find((s) => s !== sd.currentScreen);
+    if (o && !w.closed) { w.moveTo(o.availLeft, o.availTop); w.resizeTo(o.availWidth, o.availHeight); }
+  } catch { /* not allowed: it stays next to this window */ }
 }
 function updateUndoButtons() {
   const u = $('#undoBtn'), r = $('#redoBtn');
@@ -293,6 +424,28 @@ function renameTriggerRefs(oldName, newName) {
     if (t.type === 'sequence') t.steps = (t.steps || []).map((s) => (String(s).toLowerCase() === oldName.toLowerCase() ? (n++, newName) : s));
   return n;
 }
+// Renaming a timeline: "start timeline Inloop", "timeline Inloop running", … follow.
+// A reference is the word after "timeline" (not in pharos commands: those are Pharos numbers).
+function renameTimelineRefs(oldName, newName) {
+  if (!oldName || !newName || /^\d+$/.test(oldName) || oldName.toLowerCase() === newName.toLowerCase()) return 0;
+  let n = 0;
+  const fix = (line) => {
+    const toks = tokenize(line);
+    if (toks[0]?.v.toLowerCase() === 'pharos') return line;
+    let out = line;
+    for (let i = toks.length - 1; i >= 1; i--)
+      if (toks[i - 1].v.toLowerCase() === 'timeline' && toks[i].v.toLowerCase() === oldName.toLowerCase()) {
+        out = out.slice(0, toks[i].start) + quote(newName) + out.slice(toks[i].end);
+        n++;
+      }
+    return out;
+  };
+  for (const t of P().triggers) {
+    t.actions = (t.actions || []).map(fix);
+    t.conditions = (t.conditions || []).map(fix);
+  }
+  return n;
+}
 const timelineTrigCues = (p = P()) => p.timelines.flatMap((tl) => tl.cues.filter((c) => c.trigger != null));
 function onBound(e) {
   const el = e.target;
@@ -309,6 +462,16 @@ function onBound(e) {
   setPath(P(), el.dataset.p, readInput(el));
   if (devOld && devOld !== el.value)
     P().deviceGroups.forEach((g) => (g.devices = g.devices.map((n) => (n === devOld ? el.value : n))));
+  // Renaming a timeline: references by name follow (the name before editing is on the field).
+  const tlRename = /^timelines\.(\d+)\.name$/.exec(el.dataset.p);
+  if (tlRename && e.type === 'change' && el.dataset.orig != null) {
+    const old = el.dataset.orig, tls = P().timelines;
+    el.dataset.orig = el.value;
+    if (el.value && !tls.some((x, i) => i !== +tlRename[1] && [old, el.value].some((n) => (x.name || '').toLowerCase() === n.toLowerCase()))) {
+      const n = renameTimelineRefs(old, el.value);
+      if (n) toast(`Updated ${n} reference${n > 1 ? 's' : ''} to the new name`);
+    }
+  }
   if (before && e.type === 'change') {
     const t = P().triggers[+rename[1]];
     if (!dupName(t)) { const n = renameTriggerRefs(before, t.name); if (n) toast(`Updated ${n} reference${n > 1 ? 's' : ''} to the new name`); }
@@ -440,7 +603,7 @@ function updateHeader() {
 }
 function onStatus(st) {
   S.status = st;
-  S.statusAt = Date.now();
+  S.statusAt = st._at = Date.now();   // st._at: panel controls that follow a timeline move on from here
   if (st.time < 1600000000) {
     api('/api/time', { method: 'POST', body: String(Math.floor(Date.now() / 1000)) }).catch(() => {});
   }
@@ -534,6 +697,10 @@ function render() {
   acs = [];
   [...pageLoops.keys()].forEach(stopPageLoop);
   $$('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.view === S.view));
+  // The page in the address (#timelines) and the title: a reload stays there, and two windows
+  // can be told apart in the taskbar.
+  if (location.hash !== '#' + S.view) history.replaceState(null, '', '#' + S.view);
+  document.title = `${$(`#nav button[data-view="${S.view}"]`)?.textContent.trim() || S.view} - KD Designer`;
   const main = $('#main');
   const scroll = main.scrollTop;
   main.innerHTML = views[S.view]();

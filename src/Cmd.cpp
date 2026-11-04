@@ -176,7 +176,7 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     else { State::setControl(t[1], "text", rest(t, 2)); r = "Label " + t[1] + " = " + rest(t, 2); }
     return true;
   }
-  // panel <control> text <text> | color <c> | flash on|off|<colour> | value <v> | enable | disable | reset
+  // panel <control> text <text> | color <c> | flash on|off|<colour> | value <v> | enable | disable | lock | unlock | reset
   if (is(0, "panel") && t.size() >= 3) {
     const String& n = t[1];
     if (is(2, "text") && t.size() >= 4) { State::setControl(n, "text", rest(t, 3)); r = "Panel " + n + " text " + rest(t, 3); return true; }
@@ -188,12 +188,18 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     }
     if (is(2, "value") && t.size() == 4) { State::setControl(n, "value", t[3]); r = "Panel " + n + " = " + t[3]; return true; }
     if ((is(2, "enable") || is(2, "disable")) && t.size() == 3) {
-      State::setControl(n, "disabled", is(2, "disable") ? "1" : "");
+      State::setControl(n, "disabled", is(2, "disable") ? "1" : "0");   // "0": enable also frees one ticked "disabled"
       r = "Panel " + n + (is(2, "disable") ? " disabled" : " enabled");
       return true;
     }
+    // lock = shown normally but can't be touched (a progress bar); unlock = touchable again.
+    if ((is(2, "lock") || is(2, "unlock")) && t.size() == 3) {
+      State::setControl(n, "locked", is(2, "lock") ? "1" : "0");
+      r = "Panel " + n + (is(2, "lock") ? " locked" : " unlocked");
+      return true;
+    }
     if (is(2, "reset") && t.size() == 3) { State::setControl(n, "reset", ""); r = "Panel " + n + " reset"; return true; }
-    r = "expected: panel <control> text|color|flash|value|enable|disable|reset";
+    r = "expected: panel <control> text|color|flash|value|enable|disable|lock|unlock|reset";
     return false;
   }
   if (is(0, "fire") && is(1, "trigger") && (t.size() == 3 || (t.size() == 5 && is(3, "after")))) {
@@ -288,12 +294,20 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     }
     return Pcs::run(idx, t[2], r);
   }
-  // var <name> = <value...> | var <name> + <n> | var <name> - <n> | var <name> toggle
+  // var <name> = <value...> | + - * / <n> (or += -= *= /=) | ++ | -- | toggle
   if (is(0, "var") && t.size() >= 3) {
     if (is(2, "=") && t.size() >= 4) return Globals::set(t[1], rest(t, 3), r);
-    if ((is(2, "+") || is(2, "-")) && t.size() == 4) return Globals::add(t[1], (is(2, "+") ? 1 : -1) * t[3].toDouble(), r);
+    if ((is(2, "++") || is(2, "--")) && t.size() == 3) return Globals::calc(t[1], t[2][0], 1, r);
+    String op = t[2];
+    if (op.length() == 2 && op[1] == '=') op = op.substring(0, 1);
+    if ((op == "+" || op == "-" || op == "*" || op == "/") && t.size() == 4) {
+      char* end;
+      double n = strtod(t[3].c_str(), &end);
+      if (!t[3].length() || *end) { r = "'" + t[3] + "' is not a number"; return false; }
+      return Globals::calc(t[1], op[0], n, r);
+    }
     if (is(2, "toggle") && t.size() == 3) return Globals::toggle(t[1], r);
-    r = "expected: var <name> = <value> | + <n> | - <n> | toggle";
+    r = "expected: var <name> = <value> | + - * / <n> | ++ | -- | toggle";
     return false;
   }
   if (is(0, "send") && is(1, "tcp") && t.size() >= 4) return Tcp::send(t[2], rest(t, 3), r);

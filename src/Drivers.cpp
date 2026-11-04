@@ -68,6 +68,10 @@ struct Drv {
   bool push = false;
   uint8_t pushState = 0;          // 0 off, 1 waiting / connecting, 2 live
   String pushNote;
+  // BrightSign: the kdlink plugin in the presentation (data/www/brightsign/kdlink.brs) on its own UDP port.
+  bool plugin = false;
+  uint16_t pluginPort = 5010;
+  uint32_t pluginSeen = 0;        // epoch of its last packet
 };
 
 struct Job { int id; String method, path, body, label; };          // HTTP (method "POLL" = status poll)
@@ -619,6 +623,12 @@ void execHttp(const Job& job) {
   if (dp) {
     dp->token = c.token;
     dp->nonce = c.nonce;
+    // A BrightSign whose DWS can't be reached (off, or https only) is still online while its plugin answers.
+    if (isPoll && !ok && dp->plugin && dp->pluginSeen && epochNow() - dp->pluginSeen <= 2 * Monitor::intervalMs() / 1000 + 10) {
+      setInfo(*dp, "DWS", err);
+      ok = true;
+      err = "";
+    }
     changed = markCheck(*dp, ok, isPoll, err);
     if (isPoll) {
       dp->polls++;
@@ -640,6 +650,8 @@ void runHttp() {
     mtx.lock();
     bool have = !jobs.empty();
     Job job;
+    IPAddress helloIp;
+    uint16_t helloPort = 0;
     if (have) { job = jobs.front(); jobs.pop_front(); }
     if (!have) {
       uint32_t now = millis();
@@ -648,10 +660,18 @@ void runHttp() {
           d.nextPoll = now + Monitor::intervalMs();
           job = {d.id, "POLL", "", "", ""};
           have = true;
+          if (d.plugin) { helloIp = d.ip; helloPort = d.pluginPort; }
           break;
         }
     }
     mtx.unlock();
+    // The plugin answers a hello with everything (and keeps sending changes for 10 minutes).
+    // Sent from the trigger port, so its packets come back through Drivers::onUdp.
+    if (helloPort) {
+      g_engine.lock();
+      Triggers::sendRaw(helloIp, helloPort, (const uint8_t*)"kd\thello", 8);
+      g_engine.unlock();
+    }
     if (have) execHttp(job);
     else rtos::ThisThread::sleep_for(100ms);
   }
@@ -1324,7 +1344,24 @@ bool knxCmd(Drv& d, const std::vector<String>& t, String& msg) {
   return queueUdp(d, knxFrame(ga, true, data, small), "write " + key + " = " + t[4] + " (DPT " + dpt + ")", msg);
 }
 
+// To the kdlink plugin: fields separated by tabs, so zone names and values may contain spaces.
+bool pluginSend(Drv& d, const String& what, const String& a, const String& b, String& msg) {
+  if (!d.plugin) { msg = "BrightSign " + d.name + ": switch on the KD plugin for this player first (Devices > BrightSign)"; return false; }
+  String text = "kd\t" + what + "\t" + a + (b.length() ? "\t" + b : String(""));
+  Triggers::sendRaw(d.ip, d.pluginPort, (const uint8_t*)text.c_str(), text.length());
+  String label = what + " " + a + (b.length() ? " " + b : String(""));
+  d.last = label;
+  msg = "BrightSign " + d.name + ": " + label;
+  return true;
+}
+
 bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
+  auto is = [&](const char* w) { return t[2].equalsIgnoreCase(w); };
+  // Through the plugin: a Plugin Message event, a user variable, a file in a zone.
+  if (is("event") && t.size() >= 4) return pluginSend(d, "event", rest(t, 3), "", msg);
+  if (is("var") && t.size() >= 5) return pluginSend(d, "var", t[3], rest(t, 4), msg);
+  if (is("play") && t.size() == 5) return pluginSend(d, "play", t[3], t[4], msg);
+  if (is("stop") && t.size() == 4) return pluginSend(d, "stop", t[3], "", msg);
   if (t.size() >= 4 && t[2].equalsIgnoreCase("send")) {
     Triggers::sendUdp(d.ip, d.udpPort, rest(t, 3));
     d.last = "UDP '" + rest(t, 3) + "'";
@@ -1333,7 +1370,7 @@ bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
   }
   if (t.size() == 3 && t[2].equalsIgnoreCase("reboot")) return queueHttp(d, "PUT", "/api/v1/control/reboot", "", "reboot", msg);
   if (t.size() >= 3 && t[2].equalsIgnoreCase("api")) return apiCmd(d, t, 3, "/api/v1/", msg);
-  msg = "expected: send <text>, reboot or api get|put|post|delete <path> [body]";
+  msg = "expected: event <text>, var <name> <value>, play <zone> <file>, stop <zone>, send <text>, reboot or api get|put|post|delete <path> [body]";
   return false;
 }
 
@@ -1507,19 +1544,52 @@ void begin() {
   pushThread.start(runPush);
 }
 
-void onUdp(const IPAddress& from, const String& text) {
+// Readings from the kdlink plugin: zones as z<n> (state) + z<n>.file, user variables as var.<name>.
+void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
+  String kind = j["kd"] | "";
+  d.pluginSeen = epochNow();
+  if (kind == "hello") {
+    setInfo(d, "KD plugin", "kdlink v" + String(j["v"] | 1) + " · " + String(j["zones"] | 0) + " zones · " + String(j["vars"] | 0) + " user variables");
+    setPoint(d, "zones", String(j["zones"] | 0), "Zones", vars);
+  } else if (kind == "zone") {
+    String k = "z" + String(j["i"] | 0), name = "Zone " + String(j["i"] | 0) + " " + (j["name"] | "");
+    setPoint(d, k, j["state"] | "", name, vars);
+    setPoint(d, k + ".file", j["file"] | "", name + " file", vars);
+  } else if (kind == "var") {
+    String name = j["name"] | "";
+    if (name.length()) setPoint(d, "var." + name, j["value"] | "", name, vars);
+  } else if (kind == "msg") {
+    setPoint(d, "msg", j["text"] | "", "Player says", vars);
+    setPoint(d, "msgAt", String(epochNow()), "", vars);
+  } else if (kind == "reply") {
+    d.last = String("plugin: ") + (j["text"] | "");
+    if (j["ok"] | false) LOGI(Sys, "BrightSign %s: %s", d.name.c_str(), d.last.c_str());
+    else LOGW(Sys, "BrightSign %s: %s", d.name.c_str(), d.last.c_str());
+  }
+}
+
+bool onUdp(const IPAddress& from, const String& text) {
   mtx.lock();
   for (auto& d : list)
     if (d.type == Bsign && d.ip == from) {
       VarSets vars;
-      setPoint(d, "msg", text, "Player says", vars);
-      setPoint(d, "msgAt", String(epochNow()), "", vars);
+      bool mine = false;
+      if (text.startsWith("{\"kd\"")) {
+        JsonDocument j;
+        mine = !deserializeJson(j, text);
+        if (mine) pluginPacket(d, j, vars);
+      }
+      if (!mine) {
+        setPoint(d, "msg", text, "Player says", vars);
+        setPoint(d, "msgAt", String(epochNow()), "", vars);
+      }
       d.lastSeen = epochNow();
       mtx.unlock();
       applyVars(vars);
-      return;
+      return mine;
     }
   mtx.unlock();
+  return false;
 }
 
 void load() {
@@ -1551,6 +1621,8 @@ void load() {
       }
     }
     d.push = o["live"] | false;
+    d.plugin = ty == Bsign && (o["plugin"] | false);
+    d.pluginPort = o["pluginPort"] | 5010;
     d.outputs = o["outputs"] | 0;
     d.readEvery = o["readEvery"] | 0;
     for (JsonPairConst kv : o["vars"].as<JsonObjectConst>()) {
@@ -1583,6 +1655,7 @@ void load() {
         d.uptime = old.uptime; d.lastError = old.lastError; d.lastErrorAt = old.lastErrorAt;
         d.pushState = d.push ? old.pushState : 0; d.pushNote = old.pushNote; d.lastRead = old.lastRead;
         d.nonce = old.nonce; d.session = old.session; d.up = old.up; d.channel = old.channel; d.seq = old.seq; d.aliveAt = old.aliveAt;
+        d.pluginSeen = old.pluginSeen;
         for (auto& p : old.points)
           if (ty != Knx) d.points.push_back(p);
           else for (auto& np : d.points) if (np.key == p.key) np.value = p.value;
@@ -1653,7 +1726,10 @@ void statusJson(JsonArray arr) {
     if (d.type == Knx) o["tunnel"] = d.up;
     // Live updates: KNX (bus telegrams) and Kiss-Box inputs are always pushed; Pharos/NETIO when switched on.
     uint8_t ps = d.type == Knx ? (d.up ? 2 : 1) : d.pushState;
+    // BrightSign plugin: live while it answered the last hellos.
+    if (d.plugin) ps = d.pluginSeen && epochNow() - d.pluginSeen <= 2 * Monitor::intervalMs() / 1000 + 10 ? 2 : 1;
     if (ps) o["live"] = ps == 2 ? "live" : "waiting";
+    if (d.plugin && ps == 1) o["liveNote"] = "No answer from the kdlink plugin on UDP port " + String(d.pluginPort);
     if (d.pushNote.length()) o["liveNote"] = d.pushNote;
     JsonObject info = o["info"].to<JsonObject>();
     for (auto& i : d.info) info[i.first] = i.second;

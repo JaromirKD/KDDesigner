@@ -19,7 +19,7 @@ bool exists(const String& name);
 bool get(const String& name, String& value);       // thread-safe
 // fromDevice = value read from a PLC (no write-back).
 bool set(const String& name, const String& value, String& msg, bool fromDevice = false);
-bool add(const String& name, double delta, String& msg);
+bool calc(const String& name, char op, double n, String& msg);   // op: + - * /
 bool toggle(const String& name, String& msg);
 // op: = != > < >= <= ; numeric when both sides are numbers.
 bool compare(const String& name, const String& op, const String& rhs, String& err);

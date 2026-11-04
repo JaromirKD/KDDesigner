@@ -305,6 +305,9 @@ function drv(d) {
     for (const a of d.addresses || []) pt(a.ga, a.name || '', String(a.dpt || '1').startsWith('9') ? '21.50' : 0);
   } else if (d.type === 'brightsign') {
     st.info = { Model: 'XT1144', Serial: 'D7E8A1000123', Firmware: '8.5.47', 'Boot version': '8.5.47', Connection: 'Ethernet', 'Player name': d.name };
+    // The simulated presentation behind the kdlink plugin (data/www/brightsign/kdlink.brs).
+    st.zones = [{ name: 'Video', state: 'Intro', file: 'intro.mp4' }, { name: 'Ticker', state: 'News', file: 'news.png' }, { name: 'Audio', state: 'Music', file: 'bgm.mp3' }];
+    st.uvars = { mode: 'day', visitors: '0', language: 'NL' };
   } else if (d.type === 'digidot') {
     st.info = { 'Device name': 'DiGidot C4', Serial: 'C4--20170803-4AFAE-9288B', Memory: '7984 of 46960 bytes', 'Frame rates': 'Art-Net 16 fps · scenes 24 fps' };
     st.scenes = ['Rainbow', 'Warm white', 'Fire', 'Ocean'];
@@ -381,6 +384,7 @@ function drvPoll() {
     // Live updates: Pharos WebSocket / NETIO MQTT-flex (simulated: "connected" whenever the device answers).
     st.live = d.type === 'knx' ? st.live : d.live ? (st.online ? 'live' : 'waiting') : undefined;
     st.liveNote = d.live && !st.online ? (d.type === 'netio' ? 'MQTT connection closed' : 'WebSocket: no connection') : undefined;
+    if (d.type === 'brightsign') bsPlugin(d);
     if (d.type === 'kissbox' && st.online) {   // a simulated door contact on the first input slot toggles every 20 s
       const s = kissKinds(d).findIndex((t) => t === 'in');
       if (s >= 0) drvSet(d, `${s + 1}.1`, Math.floor(Date.now() / 20000) % 2);
@@ -390,6 +394,31 @@ function drvPoll() {
     if (first || st.online !== was) histRecord(d.type, d.name, st.online ? 'online' : 'offline');
     if (!first && st.online !== was) deviceEvent(d.type, d.name, st.online);
   }
+}
+// The kdlink plugin answering a hello (like pluginPacket in Drivers.cpp): zones z<n> + z<n>.file, var.<name>.
+// A DWS that doesn't answer leaves the player online while the plugin does (here both follow answers()).
+function bsPlugin(d) {
+  const st = drv(d);
+  if (!d.plugin || !st.online) {
+    st.live = d.plugin ? 'waiting' : undefined;
+    st.liveNote = d.plugin ? `No answer from the kdlink plugin on UDP port ${d.pluginPort || 5010}` : undefined;
+    return;
+  }
+  st.pluginSeen = epoch();
+  st.live = 'live';
+  st.liveNote = undefined;
+  // The simulated presentation: the ticker changes every 15 s, visitors counts up per minute.
+  st.zones[1].state = Math.floor(Date.now() / 15000) % 2 ? 'Weather' : 'News';
+  st.zones[1].file = st.zones[1].state.toLowerCase() + '.png';
+  st.uvars.visitors = String(Math.floor(Date.now() / 60000) % 500);
+  st.info['KD plugin'] = `kdlink v1 · ${st.zones.length} zones · ${Object.keys(st.uvars).length} user variables`;
+  bsReport(d);
+}
+function bsReport(d) {
+  const st = drv(d);
+  drvSet(d, 'zones', st.zones.length, 'Zones');
+  st.zones.forEach((z, i) => { const n = `Zone ${i + 1} ${z.name}`; drvSet(d, `z${i + 1}`, z.state, n); drvSet(d, `z${i + 1}.file`, z.file, n + ' file'); });
+  for (const [k, v] of Object.entries(st.uvars)) drvSet(d, 'var.' + k, v, k);
 }
 // Checked at the monitoring interval, like Drivers.cpp (Monitor::intervalMs()).
 let drvLastPoll = 0;
@@ -450,6 +479,46 @@ function drvCommand(t) {
     return later(`write ${ga} = ${t[4]} (DPT ${dpt})`, () => { drvSet(d, ga, main === '1' ? truthy(t[4]) : t[4]); return 'sent'; });
   }
   if (type === 'brightsign') {
+    // Through the kdlink plugin (pluginSend in Drivers.cpp); the simulated presentation reacts like a real one would.
+    const plug = (label, fn) => {
+      if (!d.plugin) throw new Error(`BrightSign ${d.name}: switch on the KD plugin for this player first (Devices > BrightSign)`);
+      st.last = label;
+      setTimeout(() => {
+        if (!answers(d.ip)) return;
+        const [ok, text] = fn();
+        st.last = 'plugin: ' + text;
+        log(ok ? 1 : 2, 'SYS', `BrightSign ${d.name}: ${st.last}`);
+        bsReport(d);
+      }, 300);
+      return `BrightSign ${d.name}: ${label}`;
+    };
+    const zone = (r) => st.zones.find((z, i) => z.name.toLowerCase() === r.toLowerCase() || String(i + 1) === r);
+    if (w[2] === 'event' && t.length >= 4) {
+      return plug(`event ${rest(3)}`, () => {
+        // A Plugin Message transition: "<zone>_<state>" or "<zone>:<state>" moves that zone, anything else zone 1.
+        const m = /^([^_:]+)[_:](.+)$/.exec(rest(3)), z = (m && zone(m[1])) || st.zones[0], state = m && zone(m[1]) ? m[2] : rest(3);
+        z.state = state;
+        z.file = z.name === 'Audio' ? state.toLowerCase() + '.mp3' : z.name === 'Ticker' ? state.toLowerCase() + '.png' : state.toLowerCase() + '.mp4';
+        return [true, `event ${rest(3)}`];
+      });
+    }
+    if (w[2] === 'var' && t.length >= 5) {
+      return plug(`var ${t[3]} ${rest(4)}`, () => {
+        const k = Object.keys(st.uvars).find((x) => x.toLowerCase() === w[3]);
+        if (!k) return [false, `no user variable '${t[3]}'`];
+        st.uvars[k] = rest(4);
+        return [true, `${k} = ${rest(4)}`];
+      });
+    }
+    if ((w[2] === 'play' && t.length === 5) || (w[2] === 'stop' && t.length === 4)) {
+      return plug(`${w[2]} ${t[3]}${t[4] ? ' ' + t[4] : ''}`, () => {
+        const z = zone(t[3]);
+        if (!z) return [false, `no zone '${t[3]}'`];
+        if (w[2] === 'play') { z.state = '(direct) ' + t[4]; z.file = t[4]; return [true, `play ${t[4]} in ${t[3]}`]; }
+        z.state = 'stopped'; z.file = '';
+        return [true, `stop ${t[3]}`];
+      });
+    }
     if (w[2] === 'send' && t.length >= 4) {
       st.last = `UDP '${rest(3)}'`;
       // Simulated presentation: answers with a UDP message to the controller ("Player says").
@@ -458,7 +527,7 @@ function drvCommand(t) {
     }
     if (w[2] === 'reboot' && t.length === 3) return later('reboot', () => { st.bootAt = epoch() + 20; return '200 {"data":{"result":{"success":true,"reboot":true}}}'; });
     if (w[2] === 'api') return api(3, '/api/v1/');
-    throw new Error('expected: send <text>, reboot or api get|put|post|delete <path> [body]');
+    throw new Error('expected: event <text>, var <name> <value>, play <zone> <file>, stop <zone>, send <text>, reboot or api get|put|post|delete <path> [body]');
   }
   if (type === 'digidot') {
     if (w[2] === 'scene' && t.length >= 4) {
@@ -1009,7 +1078,7 @@ function anyState(sref) {
 }
 const pcLast = {};
 let projectVersion = 0;   // like Show::parse: bumps on every load
-const labels = {};   // live state of panel controls by name (State.cpp "labels"): text color flash value disabled
+const labels = {};   // live state of panel controls by name (State.cpp "labels"): text color flash value disabled locked
 // A control's state, by name in any case (the first spelling is kept, like State::label).
 const ctl = (name) => labels[Object.keys(labels).find((k) => k.toLowerCase() === String(name).toLowerCase()) ?? name] ??= {};
 let scheduled = [];   // {id, due, every, remaining, count, vars}
@@ -1138,15 +1207,16 @@ function exec(line, src, vars) {
     else { ctl(t[1]).text = t.slice(2).join(' '); r = `Label ${t[1]} = ${ctl(t[1]).text}`; }
     pushStatus();
   } else if (w[0] === 'panel' && t.length >= 3) {
-    // Like Cmd.cpp: panel <control> text|color|flash|value|enable|disable|reset
+    // Like Cmd.cpp: panel <control> text|color|flash|value|enable|disable|lock|unlock|reset
     const c = ctl(t[1]), n = t[1];
     if (w[2] === 'text' && t.length >= 4) { c.text = t.slice(3).join(' '); r = `Panel ${n} text ${c.text}`; }
     else if (w[2] === 'color' && t.length === 4) { c.color = t[3]; r = `Panel ${n} colour ${t[3]}`; }
     else if (w[2] === 'flash' && t.length === 4) { if (w[3] === 'off') delete c.flash; else c.flash = w[3] === 'on' ? 'on' : t[3]; r = `Panel ${n} flash ${t[3]}`; }
     else if (w[2] === 'value' && t.length === 4) { c.value = t[3]; r = `Panel ${n} = ${t[3]}`; }
-    else if ((w[2] === 'enable' || w[2] === 'disable') && t.length === 3) { if (w[2] === 'disable') c.disabled = true; else delete c.disabled; r = `Panel ${n} ${w[2]}d`; }
-    else if (w[2] === 'reset' && t.length === 3) { for (const k of ['text', 'color', 'flash', 'disabled']) delete c[k]; r = `Panel ${n} reset`; }
-    else throw new Error('expected: panel <control> text|color|flash|value|enable|disable|reset');
+    else if ((w[2] === 'enable' || w[2] === 'disable') && t.length === 3) { c.disabled = w[2] === 'disable'; r = `Panel ${n} ${w[2]}d`; }   // false: enable also frees one ticked "disabled"
+    else if ((w[2] === 'lock' || w[2] === 'unlock') && t.length === 3) { c.locked = w[2] === 'lock'; r = `Panel ${n} ${w[2]}ed`; }
+    else if (w[2] === 'reset' && t.length === 3) { for (const k of ['text', 'color', 'flash', 'disabled', 'locked']) delete c[k]; r = `Panel ${n} reset`; }
+    else throw new Error('expected: panel <control> text|color|flash|value|enable|disable|lock|unlock|reset');
     pushStatus();
   } else if (w[0] === 'fire' && w[1] === 'trigger' && (t.length === 3 || (t.length === 5 && w[3] === 'after'))) {
     const tr = trigRef(t[2]);
@@ -1240,17 +1310,23 @@ function exec(line, src, vars) {
     }
     r = `${w[2] === 'wake' ? 'Wake-on-LAN' : `'${w[2]}'`} sent to ${w[1] === 'all' ? targets.length + ' PC(s)' : targets[0].name}`;
   } else if (w[0] === 'var' && t.length >= 3) {
+    // Like Cmd.cpp + Globals::calc: + - * / <n> (or += -= *= /=), ++ and -- (= + 1 / - 1).
+    const op = (t[2] === '++' || t[2] === '--') && t.length === 3 ? t[2][0] : /^[-+*/]=?$/.test(t[2]) && t.length === 4 ? t[2][0] : null;
     if (t[2] === '=' && t.length >= 4) r = setVar(t[1], t.slice(3).join(' '));
-    else if ((t[2] === '+' || t[2] === '-') && t.length === 4) {
+    else if (op) {
       const v = varDef(t[1]);
       if (!v) throw new Error(`unknown variable '${t[1]}'`);
       if (v.type !== 'number') throw new Error(`${v.name} is not a number`);
-      r = setVar(t[1], String(+varVals[v.name] + (t[2] === '+' ? 1 : -1) * +t[3]));
+      const n = t.length === 4 ? t[3] : '1';
+      if (!/^-?\d*\.?\d+$/.test(n)) throw new Error(`'${n}' is not a number`);
+      if (op === '/' && +n === 0) throw new Error("can't divide by 0");
+      const a = +varVals[v.name], b = +n;
+      r = setVar(t[1], String(+({ '+': a + b, '-': a - b, '*': a * b, '/': a / b }[op]).toFixed(4)));
     } else if (w[2] === 'toggle' && t.length === 3) {
       const v = varDef(t[1]);
       if (!v) throw new Error(`unknown variable '${t[1]}'`);
       r = setVar(t[1], varVals[v.name] === '1' ? '0' : '1');
-    } else throw new Error('expected: var <name> = <value> | + <n> | - <n> | toggle');
+    } else throw new Error('expected: var <name> = <value> | + - * / <n> | ++ | -- | toggle');
   } else if (w[0] === 'send' && w[1] === 'tcp' && t.length >= 4) {
     const d = (project.tcp || []).find((x) => x.name.toLowerCase() === w[2]);
     if (!d) throw new Error(`unknown TCP device '${t[2]}'`);

@@ -2,6 +2,54 @@
 // KD Designer web UI - Triggers page and the trigger list (selection, drag, clipboard, numbers, problems, links).
 // Plain scripts sharing one global scope; load order is in index.html.
 
+// ---- Search box above the list ---------------------------------------------------------
+// Every word must appear somewhere in the trigger: name, number, type, notes, conditions,
+// actions, sequence steps or any setting (port, address, universe, …), in any order.
+const trigSearchWords = () => (S.trigFilter || '').toLowerCase().split(/\s+/).filter(Boolean);
+// The trigger's searchable parts as [label, text]; label shows where a hit was found.
+function trigSearchParts(x) {
+  const out = [];
+  for (const [k, v] of Object.entries(x)) {
+    if (k === 'color' || k === 'enabled' || v == null || v === '') continue;
+    if (k === 'conditions') v.forEach((c) => out.push(['if', c]));
+    else if (k === 'actions') v.forEach((a) => out.push(['', a]));
+    else if (k === 'steps') v.forEach((s) => out.push(['step', String(s)]));
+    else if (k === 'notes') String(v).split('\n').forEach((l) => l.trim() && out.push(['note', l]));
+    else out.push([k, typeof v === 'object' ? JSON.stringify(v) : String(v)]);
+  }
+  return out;
+}
+const trigMatches = (x, words) => {
+  const all = trigSearchParts(x).map((q) => q[1]).join('\n').toLowerCase();
+  return words.every((w) => all.includes(w));
+};
+// Indexes of the triggers the list shows (search + colour filter). A separator stays as a
+// heading when something in its section is shown.
+function trigVisibleIdx() {
+  const p = P(), words = trigSearchWords(), cf = S.trigColors || new Set();
+  if (!words.length && !cf.size) return p.triggers.map((_, i) => i);
+  const own = (x) => (!words.length || trigMatches(x, words)) && (!cf.size || cf.has(trigColor(x.color) ? x.color : ''));
+  const out = [];
+  let sep = -1;
+  p.triggers.forEach((x, i) => {
+    if (x.type === 'comment') { sep = own(x) ? (out.push(i), -1) : i; return; }
+    if (!own(x)) return;
+    if (sep >= 0) { out.push(sep); sep = -1; }
+    out.push(i);
+  });
+  return out;
+}
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const markWords = (s, words) => (words.length
+  ? s.split(new RegExp(`(${words.map(escRe).join('|')})`, 'gi')).map((part, i) => (i % 2 ? `<mark>${esc(part)}</mark>` : esc(part))).join('')
+  : esc(s));
+// Up to two lines under a found trigger showing where the words are (not for the name itself).
+function trigHitLines(x, words) {
+  const hits = trigSearchParts(x).filter(([k, s]) => k !== 'name' && k !== 'id' && k !== 'type' && words.some((w) => s.toLowerCase().includes(w)));
+  if (!hits.length) return '';
+  return `<span class="trig-hits">${hits.slice(0, 2).map(([k, s]) => `<span class="fr-hit">${k ? `<b>${esc(k)}</b> ` : ''}${markWords(s, words)}</span>`).join('')}${hits.length > 2 ? `<span class="muted">+${hits.length - 2} more</span>` : ''}</span>`;
+}
+
 views.triggers = () => {
   const p = P();
   const ti = S.sel.trigger, t = p.triggers[ti];
@@ -151,21 +199,24 @@ views.triggers = () => {
   const usedCols = [...Object.keys(TRIGGER_COLORS), ...Object.keys(colCount).filter((c) => !(c in TRIGGER_COLORS))];
   for (const c of cf) if (!usedCols.includes(c)) cf.delete(c);
   const filtering = f || cf.size;
+  const words = trigSearchWords();
+  const shown = new Set(trigVisibleIdx());
+  const nReal = p.triggers.filter((x) => x.type !== 'comment').length;
+  const nShown = p.triggers.filter((x, i) => x.type !== 'comment' && shown.has(i)).length;
   const multi = p.triggers.some((x) => S.trigSel.has(x));
   const isSel = (x, i) => (multi ? S.trigSel.has(x) : i === ti);
   const selT = t && t.type !== 'comment' ? t : null;
   const links = selT ? triggerLinks(selT) : null;
   const listItem = (x, i) => {
     const col = trigColor(x.color);
-    const hidden = (f && !(`${x.id} ${x.name} ${x.type} ${x.notes || ''}`.toLowerCase().includes(f.toLowerCase()))) ||
-      (cf.size && !cf.has(col ? x.color : ''));
-    if (hidden) return '';
+    if (!shown.has(i)) return '';
     // Drag to reorder (disabled while filtering, where the order is ambiguous).
     const drag = filtering ? '' : ` data-drag="${i}"`;
+    const grip = filtering ? '' : '<span class="act-grip trig-grip" title="Drag to move (the whole selection when this one is selected)">⠿</span>';
     const sel = isSel(x, i) ? ' sel' : '';
     const note = x.notes?.trim() ? `<span class="note-mark" title="${esc(x.notes.trim())}">✎</span>` : '';
     if (x.type === 'comment')
-      return `<div class="item sep${sel}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col};color:${col}` : ''}"><span style="flex:1">${esc(x.name || '—')}</span>${note}</div>`;
+      return `<div class="item sep${sel}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col};color:${col}` : ''}">${grip}<span class="tname" style="flex:1">${markWords(x.name || '—', words)}</span>${note}</div>`;
     // Connections of the selected trigger: → it sets this one off, ← this one sets it off.
     const lo = links?.out.find((l) => l.t === x), li = links?.in.find((l) => l.t === x);
     const linkCls = lo || li ? ` linked${lo ? ' link-out' : ''}${li ? ' link-in' : ''}` : '';
@@ -173,8 +224,9 @@ views.triggers = () => {
       (li ? `<span class="link-mark in" title="${esc(li.why)} → ${esc(selT.name)}">←</span>` : '');
     const probs = triggerProblems(x);
     const bang = probs.length ? `<span class="trig-err" title="${esc(probs.join('\n'))}">!</span>` : '';
+    const from = `<span class="trig-io">${trigIoHtml(x)}</span>`;
     return `<div class="item${sel}${x.enabled === false ? ' disabled' : ''}${col ? ' tinted' : ''}${linkCls}${probs.length ? ' has-err' : ''}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col}` : ''}">
-      <span class="id">${x.id}</span>${bang}<span style="flex:1">${esc(x.name)}</span>${note}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
+      ${grip}<span class="id">${x.id}</span>${bang}<span class="tname" style="flex:1;min-width:0">${markWords(x.name, words)}${words.length ? trigHitLines(x, words) : ''}</span>${note}${from}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
   };
   const custom = t && t.color && !TRIGGER_COLORS[t.color] ? t.color : '';
   const vars = t && TRIGGER_VARS[t.type];
@@ -183,15 +235,18 @@ views.triggers = () => {
     <label class="muted flow-toggle" title="When each trigger fired, on a time line (the controller keeps the last 512 fires)"><input type="checkbox" id="trigHist"${trigHistOn() ? ' checked' : ''}> show history</label>
     <span class="spacer"></span><button class="btn small${S.trigTool === 'templates' ? ' on' : ''}" data-trigtool="templates" title="Ready-made triggers to add">Templates…</button>
     <button class="btn small${S.trigTool === 'replace' ? ' on' : ''}" data-trigtool="replace" title="Find and replace in actions, conditions, names and notes (Ctrl+H)">Find &amp; replace…</button></h2>
-    ${trigToolHtml()}${trigHistOn() ? trigHistHtml() : ''}${trigFlowOn() ? trigFlowHtml(selT) : ''}<div class="split">
-    <div><input id="trigFilter" placeholder="Filter triggers…" value="${esc(f)}" style="width:100%;margin-bottom:6px">
+    ${trigToolHtml()}${trigHistOn() ? trigHistHtml() : ''}${trigFlowOn() ? trigFlowHtml(selT) : ''}<div class="split trig-split">
+    <div><div class="row nowrap trig-search"><input id="trigFilter" type="search" placeholder="Search triggers: name, command, IP, port… (Ctrl+F)" value="${esc(f)}" style="flex:1"
+        title="Shows the triggers that contain all the words, anywhere: name, notes, conditions, actions, steps or settings. Enter opens the first one, Esc clears.">
+      ${filtering ? `<span class="muted" style="white-space:nowrap">${nShown} of ${nReal}</span>` : ''}${f ? '<button class="btn small ghost" id="trigFilterClear" title="Clear the search (Esc)">✕</button>' : ''}</div>
     ${`<div class="row col-filter${cf.size ? ' some' : ''}" title="Show only triggers with these colours (click several; click again to turn off)">
       ${usedCols.map((c) => `<button class="swatch${cf.has(c) ? ' on' : ''}${colCount[c] ? '' : ' unused'}" data-colfilter="${esc(c)}" title="${esc(c || 'no colour')} (${colCount[c] || 0} trigger${colCount[c] === 1 ? '' : 's'})" style="${c ? `background:${trigColor(c)}` : ''}">${c ? '' : '∅'}</button>`).join('')}
       ${cf.size ? '<button class="btn small ghost" data-colfilter-clear>all colours</button>' : ''}</div>`}
-    <div class="list trig-list">${p.triggers.map(listItem).join('')}</div>
+    <div class="list trig-list">${p.triggers.map(listItem).join('')}${filtering && !nShown ? '<p class="muted" style="margin:8px">No trigger matches.</p>' : ''}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="trigger">+ Trigger</button><button class="btn small" data-add="separator">+ Separator</button><button class="btn small" data-trigtool="templates">+ From template</button>
-      ${t ? `<button class="btn small ghost" data-move="-1" title="Move up">▲</button><button class="btn small ghost" data-move="1" title="Move down">▼</button>` : ''}</div>
-    <p class="muted keys">Ctrl/Shift+click to select several · Ctrl+C / X / V copy, cut & paste · Ctrl+D duplicate · Del delete · ↑↓ select · Ctrl+A all</p></div>
+      ${t ? `<button class="btn small ghost" data-move="-1" title="Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} up (Alt+↑)">▲</button><button class="btn small ghost" data-move="1" title="Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} down (Alt+↓)">▼</button>` : ''}</div>
+    <p class="muted keys"><span class="io-grp in" style="vertical-align:middle">${devIcon('device')}</span> what sets it off → <span class="io-grp out" style="vertical-align:middle">${devIcon('device')}</span> devices it controls · ▶ fire now</p>
+    <p class="muted keys">Ctrl/Shift+click to select several · drag or Alt+↑↓ to move · Ctrl+C / X / V copy, cut & paste · Ctrl+D duplicate · Del delete · ↑↓ select · Ctrl+A all</p></div>
     <div>${t ? `
       <div class="row nowrap">${t.type === 'comment' ? '' : `<label class="muted" title="The trigger's number = its place in the list. Type a number to move it there.">#</label>
         <input type="number" id="trigNum" min="1" value="${t.id}" style="width:70px;font-size:16px" title="Type a number to move this trigger there">`}
@@ -201,11 +256,8 @@ views.triggers = () => {
       <textarea class="trig-notes" data-p="${base}.notes" rows="${Math.min(10, Math.max(2, (t.notes || '').split('\n').length))}" placeholder="${t.type === 'comment' ? 'Notes about this section…' : 'Notes: what this trigger is for, who triggers it, what to watch out for…'}">${esc(t.notes || '')}</textarea>
       <div id="trigProbs">${trigProbsHtml(t)}</div>
       ${dupName(t) ? `<p class="bad" style="margin:6px 0 0">Another trigger (#${p.triggers.filter((x) => x !== t && x.type !== 'comment' && x.name.toLowerCase() === t.name.toLowerCase()).map((x) => x.id).join(', #')}) has this name, so <code>fire trigger "${esc(t.name)}"</code> can’t tell them apart. Rename one of them.</p>` : ''}
-      ${multi && S.trigSel.size > 1 ? `<p class="muted" style="margin:6px 0 0">${S.trigSel.size} triggers selected - Ctrl+C, Ctrl+D or Del work on all of them.</p>` : ''}
-      ${links ? `<div class="links">
-        <div class="row"><span class="muted link-head">Set off by</span>${links.tls.map((l) => `<a href="#" class="chip-link in tl" data-goto-timeline="${l.tl.id}" title="Trigger cue on timeline ${l.tl.id} '${esc(l.tl.name)}' at ${(l.c.t / 1000).toFixed(1)} s">◆ Timeline ${l.tl.id} ${esc(l.tl.name)} <small>cue at ${(l.c.t / 1000).toFixed(1)} s</small></a>`).join('')}${links.in.map((l) => `<a href="#" class="chip-link in" data-goto-trigger="${l.t.id}" title="${esc(l.t.name)}: ${esc(l.why)}">← #${l.t.id} ${esc(l.t.name)} <small>${esc(l.why)}</small></a>`).join('')}${links.in.length || links.tls.length ? '' : '<span class="muted">nothing - only its own event</span>'}</div>
-        <div class="row"><span class="muted link-head">Sets off</span>${links.out.length ? links.out.map((l) => `<a href="#" class="chip-link out" data-goto-trigger="${l.t.id}" title="${esc(l.why)}">→ #${l.t.id} ${esc(l.t.name)} <small>${esc(l.why)}</small></a>`).join('') : '<span class="muted">no other triggers</span>'}</div>
-      </div>` : ''}
+      ${multi && S.trigSel.size > 1 ? `<p class="muted" style="margin:6px 0 0">${S.trigSel.size} triggers selected - drag, ▲ ▼ (Alt+↑↓), Ctrl+C, Ctrl+D or Del work on all of them.</p>` : ''}
+      ${links ? `<div class="links">${trigLinksHtml(selT, links)}</div>` : ''}
       <div class="form" style="margin-top:12px">
         ${t.type === 'comment' ? '' : `<label>Enabled</label><input type="checkbox" data-p="${base}.enabled" data-t="bool"${t.enabled !== false ? ' checked' : ''} data-r>`}
         <label>Type</label><select data-p="${base}.type" data-r>${TRIGGER_TYPES.map(([v, n]) => `<option value="${v}"${t.type === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
@@ -253,14 +305,7 @@ views.triggers.after = () => {
   $('#trigHist').addEventListener('change', (e) => { setTrigHist(e.target.checked); render(); });
   trigToolAfter();
   updateTrigRunning();
-  const flow = $('.trig-flow');
-  if (flow) {
-    flow.scrollLeft = S.flowScroll?.[0] || 0;
-    flow.scrollTop = S.flowScroll?.[1] || 0;
-    flow.addEventListener('scroll', () => (S.flowScroll = [flow.scrollLeft, flow.scrollTop]));
-    // The box can be resized (bottom edge); remember the height in this browser.
-    new ResizeObserver(() => { try { localStorage.setItem('kd.trigFlowH', String(flow.offsetHeight)); } catch { /* private mode */ } }).observe(flow);
-  }
+  trigFlowAfter();
   if ($('#trigActs')) initActionDrag($('#trigActs'), P().triggers[S.sel.trigger]);
   $('#trigFilter').addEventListener('input', (e) => {
     S.trigFilter = e.target.value;
@@ -270,8 +315,35 @@ views.triggers.after = () => {
     inp.focus();
     inp.setSelectionRange(pos, pos);
   });
+  $('#trigFilter').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (!S.trigFilter) { e.target.blur(); return; }
+      S.trigFilter = '';
+      render();
+      $('#trigFilter').focus();
+    } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      // Open the first found trigger (Enter) and carry on with ↑/↓ in the list.
+      e.preventDefault();
+      const first = trigVisibleIdx().find((i) => P().triggers[i].type !== 'comment');
+      if (first == null) return;
+      selectTriggers([first]);
+      render();
+    }
+  });
+  $('#trigFilterClear')?.addEventListener('click', () => { S.trigFilter = ''; render(); });
   // Any edit in the trigger editor may fix or cause a problem.
-  $('#main .split > div:last-child')?.addEventListener('change', () => setTimeout(refreshTrigProblems));
+  // Any edit in the trigger editor may fix or cause a problem, and change the flow (also
+  // while typing an action, shortly after the last key).
+  const editor = $('#main .split > div:last-child');
+  editor?.addEventListener('change', () => setTimeout(() => { refreshTrigProblems(); refreshTrigFlow(); refreshTrigIcons(); }));
+  let flowTimer = 0;
+  editor?.addEventListener('input', (e) => {
+    if (!e.target.matches('.cmd, .cond')) return;
+    clearTimeout(flowTimer);
+    // Fields only commit on "change": take the line as typed so far (like Save does).
+    flowTimer = setTimeout(() => { if (e.target.isConnected) { onBound({ target: e.target, type: 'input' }); refreshTrigIcons(); if ($('.trig-flow-wrap')) refreshTrigFlow(); } }, 600);
+  });
   $$('[data-colfilter]').forEach((b) => b.addEventListener('click', () => {
     const c = b.dataset.colfilter;
     if (S.trigColors.has(c)) S.trigColors.delete(c); else S.trigColors.add(c);
@@ -286,7 +358,7 @@ views.triggers.after = () => {
     nameIn.addEventListener('input', () => {
       t.name = nameIn.value;
       const item = $(`.trig-list [data-sel="trigger:${S.sel.trigger}"]`);
-      if (item) item.children[t.type === 'comment' ? 0 : 1].textContent = t.name || (t.type === 'comment' ? '—' : '');
+      if (item) item.querySelector('.tname').textContent = t.name || (t.type === 'comment' ? '—' : '');
       nameIn.classList.toggle('invalid', dupName(t));
       markDirty();
     });
@@ -305,7 +377,7 @@ views.triggers.after = () => {
         mark = document.createElement('span');
         mark.className = 'note-mark';
         mark.textContent = '✎';
-        item.children[t.type === 'comment' ? 0 : 1].after(mark);
+        item.querySelector('.tname').after(mark);
       } else if (mark && !t.notes.trim()) mark.remove();
       if (mark?.isConnected) mark.title = t.notes.trim();
       markDirty();
@@ -366,13 +438,51 @@ function behaviourFields(t, base) {
       <span class="muted">${waits ? 'when it fires again before its last line has run' : 'only matters with a sleep, wait or repeat … every in the actions'}</span></div>`;
 }
 
-// Drag-and-drop reordering of the trigger list (pointer events: mouse, touch, pen).
+// Moves the triggers at idxs (any selection, also with gaps) so they sit together in front
+// of the trigger now at index `to` (p.triggers.length = the end). Keeps the selection.
+function moveTriggerBlock(idxs, to, reveal = true) {
+  const arr = P().triggers, set = new Set(idxs.map((i) => arr[i]));
+  const primary = arr[S.sel.trigger];
+  const moving = arr.filter((t) => set.has(t)), rest = arr.filter((t) => !set.has(t));
+  const at = arr.slice(0, to).filter((t) => !set.has(t)).length;
+  rest.splice(at, 0, ...moving);
+  if (rest.every((t, i) => t === arr[i])) return false;
+  arr.splice(0, arr.length, ...rest);
+  afterTriggerMove(set, primary, reveal);
+  return true;
+}
+// ▲ / ▼ and Alt+↑ / Alt+↓: every selected trigger one place up or down, past the next
+// unselected one (gaps in the selection stay). Nothing moves once one is at the end.
+function moveTriggers(d) {
+  const arr = P().triggers, idx = selectedTrigIdx();
+  if (!idx.length || (d < 0 ? idx[0] === 0 : idx[idx.length - 1] === arr.length - 1)) return;
+  const set = new Set(idx.map((i) => arr[i])), primary = arr[S.sel.trigger];
+  for (const i of d < 0 ? idx : [...idx].reverse()) [arr[i], arr[i + d]] = [arr[i + d], arr[i]];
+  afterTriggerMove(set, primary);
+}
+function afterTriggerMove(set, primary, reveal = true) {
+  const arr = P().triggers;
+  renumberTriggers();
+  S.trigSel = set.size > 1 ? set : new Set();
+  S.sel.trigger = Math.max(0, arr.indexOf(primary));
+  trigAnchor = S.sel.trigger;
+  S.revealSel = reveal;
+  markDirty();
+  render();
+}
+
+// Drag-and-drop reordering of the trigger list (pointer events: mouse, touch, pen). Dragging
+// one of the selected triggers takes the whole selection along. A bar between the rows shows
+// where they will land.
 function initTriggerDrag(list) {
-  const clear = () => $$('.drop-before,.drop-after', list).forEach((el) => el.classList.remove('drop-before', 'drop-after'));
+  const bar = document.createElement('div');
+  bar.className = 'drop-bar';
+  const clear = () => bar.remove();
   list.addEventListener('pointerdown', (e) => {
     const src = e.target.closest('[data-drag]');
     if (!src || e.button !== 0 || e.target.closest('[data-fire]')) return;
     const from = +src.dataset.drag, x0 = e.clientX, y0 = e.clientY;
+    const p = P(), group = S.trigSel.size > 1 && S.trigSel.has(p.triggers[from]) ? selectedTrigIdx() : [from];
     let ghost = null, target = null, after = false, timer = null, lastY = y0;
     const autoScroll = () => {
       const r = list.getBoundingClientRect();
@@ -381,17 +491,24 @@ function initTriggerDrag(list) {
       pick(lastY);
     };
     const pick = (y) => {
-      clear();
       target = null;
-      for (const it of $$('[data-drag]', list)) {
+      const items = $$('[data-drag]', list);
+      for (const it of items) {
         const r = it.getBoundingClientRect();
         if (y >= r.top && y < r.bottom) {
           target = it;
           after = y > r.top + r.height / 2;
-          it.classList.add(after ? 'drop-after' : 'drop-before');
           break;
         }
       }
+      // Above the first / below the last row: the start / end of the list.
+      if (!target && items.length) {
+        after = y >= items[items.length - 1].getBoundingClientRect().bottom;
+        target = after ? items[items.length - 1] : y < items[0].getBoundingClientRect().top ? items[0] : null;
+      }
+      if (!target) return clear();
+      bar.style.top = target.offsetTop + (after ? target.offsetHeight : 0) - 2 + 'px';
+      if (!bar.isConnected) list.appendChild(bar);
     };
     const move = (ev) => {
       lastY = ev.clientY;
@@ -400,8 +517,9 @@ function initTriggerDrag(list) {
         ghost = src.cloneNode(true);
         ghost.classList.add('drag-ghost');
         ghost.style.width = src.offsetWidth + 'px';
+        if (group.length > 1) ghost.insertAdjacentHTML('beforeend', `<span class="drag-count">${group.length} triggers</span>`);
         document.body.appendChild(ghost);
-        src.classList.add('dragging');
+        for (const i of group) $(`[data-drag="${i}"]`, list)?.classList.add('dragging');
         document.body.classList.add('dragging-item');
         timer = setInterval(autoScroll, 30);
       }
@@ -420,20 +538,12 @@ function initTriggerDrag(list) {
       const swallow = (ce) => { ce.stopPropagation(); ce.preventDefault(); };
       window.addEventListener('click', swallow, { capture: true, once: true });
       setTimeout(() => window.removeEventListener('click', swallow, true), 0);
-      if (!target) { src.classList.remove('dragging'); clear(); return; }
-      let to = +target.dataset.drag + (after ? 1 : 0);
-      if (to > from) to--;
-      if (to !== from) {
-        const arr = P().triggers;
-        const [moved] = arr.splice(from, 1);
-        arr.splice(to, 0, moved);
-        renumberTriggers();
-        selectTriggers([to]);
-        S.revealSel = false;
-        markDirty();
-      }
-      S.sel.trigger = to;
-      render();
+      clear();
+      $$('.dragging', list).forEach((el) => el.classList.remove('dragging'));
+      if (!target) return;
+      if (group.length === 1) selectTriggers([from]);   // a dragged single trigger becomes the selected one
+      S.revealSel = false;
+      if (!moveTriggerBlock(group, +target.dataset.drag + (after ? 1 : 0), false)) render();
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -686,34 +796,153 @@ function commandParts(line) {
   const b = s.elseTok ? line.slice(s.elseTok.end).trim() : '';
   return [...(a ? commandParts(a) : []), ...(b ? commandParts(b) : [])];
 }
+// What one command does that can set off other triggers (or, kind 'panel', changes a
+// panel control or label: feedback, only drawn in the flow view).
+function cmdEffects(cmd) {
+  const fx = [];
+  const w = tokenize(cmd).map((x) => x.v), l = w.map((x) => x.toLowerCase());
+  const loopRef = trigLoopRef(cmd);
+  if (loopRef) {
+    const hits = findTrigs(loopRef.v);
+    if (hits.length === 1) fx.push({ kind: 'fire', t: hits[0], why: `repeat ${w[2]} times` });
+  } else if ((['fire', 'cancel', 'repeat'].includes(l[0]) && l[1] === 'trigger') || (l[0] === 'stop' && l[1] === 'repeat')) {
+    const hits = findTrigs(w[2] || '');
+    if (hits.length === 1) fx.push({ kind: 'fire', t: hits[0], why: l[0] === 'stop' ? 'stop repeat' : `${l[0]} trigger` });
+  } else if (l[0] === 'mode' && w.length >= 2) {
+    let g, s;
+    if (w.length >= 3) { g = findGroup(w[1]); s = findState(g, w[2]); }
+    else { const m = findMode(w[1]); if (m) { g = findGroup(m.group); s = m.state; } }
+    if (g && s) fx.push({ kind: 'mode', group: g.name, state: s });
+  } else if (l[0] === 'var' && ['=', '+', '-', '*', '/', '++', '--', '+=', '-=', '*=', '/=', 'toggle'].includes(l[2])) {
+    fx.push({ kind: 'var', name: w[1], op: l[2] });
+  } else if (l[0] === 'start' && l[1] === 'timeline') {
+    const tl = findRef(P().timelines, w[2] || '');
+    if (tl) fx.push({ kind: 'timeline', id: tl.id, name: tl.name });
+  } else if (l[0] === 'http' && w[2]) {
+    fx.push({ kind: 'http', url: w[2] });
+  } else if ((l[0] === 'panel' || l[0] === 'label') && w[1] && w.length > 2) {
+    fx.push({ kind: 'panel', name: w[1], why: `${l[0]} ${w.slice(2).join(' ')}` });
+  }
+  return fx;
+}
+// The devices one command controls (flow view): [{kind, name, act}]. "all" becomes every
+// projector / PC (up to 6, more are one box).
+const OUT_KINDS = {
+  projector: ['▭', 'Projector (PJLink)'], pc: ['▢', 'PC'], udp: ['⇢', 'UDP to'], osc: ['⇢', 'OSC to'], tcp: ['⇄', 'TCP device'],
+  http: ['⇢', 'HTTP to'], modbus: ['⌁', 'Modbus device'], io: ['⏻', 'Machine Control output'], email: ['✉', 'Email to'], drv: ['⌁', 'Show device'],
+};
+function cmdOutputs(cmd) {
+  const p = P(), w = tokenize(cmd).map((x) => x.v), l = w.map((x) => x.toLowerCase());
+  const rest = (i) => w.slice(i).join(' ');
+  const each = (list, kind, what, act) => {
+    if (l[1] !== 'all') return [{ kind, name: findRef(list, w[1])?.name || w[1], act }];
+    return list.length <= 6 ? list.map((x) => ({ kind, name: x.name, act })) : [{ kind, name: `all ${list.length} ${what}`, act }];
+  };
+  if (!w[1]) return [];
+  switch (l[0]) {
+    case 'projector': return each(p.projectors, 'projector', 'projectors', /^(on|off)$/.test(l[2]) ? `power ${l[2]}` : rest(2));
+    case 'pc': return each(p.pcs, 'pc', 'PCs', rest(2));
+    case 'send':
+      if (l[1] === 'tcp' && w[2]) return [{ kind: 'tcp', name: findRef(p.tcp, w[2])?.name || w[2], act: rest(3) }];
+      if ((l[1] === 'udp' || l[1] === 'osc') && w[2]) return [{ kind: l[1], name: findRef(p.devices, w[2])?.name || w[2], act: rest(3) }];
+      return [];
+    case 'http': {
+      let host = w[2] || '';
+      try { host = new URL(host).host; } catch { /* {variables} in the URL */ }
+      return host ? [{ kind: 'http', name: host, act: `${l[1]} ${w[2]}` }] : [];
+    }
+    case 'modbus': return [{ kind: 'modbus', name: w[1], act: rest(2) }];
+    case 'kissbox': case 'knx': case 'brightsign': case 'digidot': case 'netio': case 'pharos':
+      return [{ kind: 'drv', name: findRef(p.drivers || [], w[1])?.name || w[1], act: rest(2), type: l[0] }];
+    case 'io': return [{ kind: 'io', name: l[1] === 'all' ? 'all outputs' : pmcCfg(w[1]).name || w[1], act: rest(2) }];
+    case 'email': return [{ kind: 'email', name: w[1], act: w[2] || '' }];
+  }
+  return [];
+}
+// The devices a trigger's actions control: [{kind (DEVICE_ICONS key), name, act}].
+function trigOutputs(t) {
+  const out = [];
+  for (const line of t.actions || []) {
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    for (const part of commandParts(line))
+      for (const o of cmdOutputs(part)) out.push({ kind: o.kind === 'udp' || o.kind === 'osc' ? deviceKind(o.name) || 'network' : o.kind === 'drv' ? o.type : o.kind, name: o.name, act: o.act });
+  }
+  return out;
+}
+// Where a trigger's events come from: [{kind (DEVICE_ICONS key), name, why}] - its own
+// event source, show devices / Modbus feeding its variable, and timeline cues.
+function trigInputs(t) {
+  const p = P(), out = [];
+  switch (t.type) {
+    case 'panel': if (t.control) out.push({ kind: 'panel', name: t.control, why: t.event || 'click' }); break;
+    case 'device': out.push({ kind: deviceKind(t.device) || 'device', name: t.device || 'any monitored device', why: `goes ${t.state || 'offline'}` }); break;
+    case 'projector': out.push({ kind: 'projector', name: t.projector || 'any projector', why: t.alarm === 'lamp_hours' ? `lamp hours ${t.hours ?? 3000}` : `${t.alarm || 'any'} alarm` }); break;
+    case 'tcp': out.push({ kind: 'tcp', name: t.device || 'any TCP device', why: `message ${t.match ?? '*'}` }); break;
+    case 'udp': case 'osc': {
+      const from = t.fromIp && p.devices.find((d) => d.ip === t.fromIp);
+      out.push({ kind: 'network', name: from ? from.name : t.fromIp || `port ${t.port || p.settings.udpPort}`, why: t.type === 'udp' ? `UDP ${t.match || ''}` : `OSC ${t.address || ''}` });
+      break;
+    }
+    case 'input': out.push({ kind: 'io', name: t.io ? pmcCfg(t.io).name || t.io : `pin ${t.pin ?? 0}`, why: t.edge || 'rising' }); break;
+    case 'dmx_in': out.push({ kind: 'dmx', name: `${t.protocol === 'sacn' ? 'sACN' : 'Art-Net'} ${t.universe ?? (t.protocol === 'sacn' ? 1 : 0)}`, why: `channels ${t.channels || '1'}` }); break;
+    case 'http': out.push({ kind: 'http', name: t.url || 'any response', why: 'response' }); break;
+    case 'timeline_end': { const tl = p.timelines.find((x) => x.id === t.timeline); out.push({ kind: 'timeline', name: tl ? `${tl.id} ${tl.name}` : String(t.timeline ?? ''), why: 'ends' }); break; }
+    case 'variable':
+      if (!t.variable) break;
+      for (const d of p.drivers || [])
+        for (const [pt, name] of Object.entries(d.vars || {}))
+          if (String(name).toLowerCase() === t.variable.toLowerCase()) out.push({ kind: d.type, name: d.name, why: `reading ${pt} → var ${name}` });
+      { const mb = p.variables.find((x) => x.name.toLowerCase() === t.variable.toLowerCase())?.modbus?.device; if (mb) out.push({ kind: 'modbus', name: mb, why: `var ${t.variable}` }); }
+      break;
+  }
+  for (const s of trigFiredBy(t).tls) out.push({ kind: 'timeline', name: s, why: 'trigger cue' });
+  // Only direct fires (fire / repeat trigger), not through a mode, variable or timeline.
+  for (const s of trigFiredBy(t).fires) out.push({ kind: 'trigger', name: `#${s.t.id} ${s.t.name}`, why: s.why });
+  return out;
+}
+// A row's icons: [what sets it off] → [what it controls]; empty when neither.
+function trigIoHtml(x) {
+  const ins = ioIcons(trigInputs(x), 'in'), outs = ioIcons(trigOutputs(x), 'out');
+  return ins || outs ? `${ins ? `<span class="io-grp in">${ins}</span>` : ''}<span class="io-arr">→</span>${outs ? `<span class="io-grp out">${outs}</span>` : ''}` : '';
+}
+// The editor's "Set off by" / "Sets off" rows: triggers, timeline cues and devices.
+function trigLinksHtml(t, links = triggerLinks(t)) {
+  const uniq = (list) => list.filter((x, i) => list.findIndex((y) => y.kind === x.kind && y.name === x.name && (y.why || y.act) === (x.why || x.act)) === i);
+  // Timeline cues and triggers have their own chips.
+  const ins = uniq(trigInputs(t).filter((x) => x.why !== 'trigger cue' && x.kind !== 'trigger')), outs = uniq(trigOutputs(t));
+  return `<div class="row"><span class="muted link-head">Set off by</span>${ins.map((x) => ioChip(x, 'in')).join('')}${links.tls.map((l) => `<a href="#" class="chip-link in tl" data-goto-timeline="${l.tl.id}" title="Trigger cue on timeline ${l.tl.id} '${esc(l.tl.name)}' at ${(l.c.t / 1000).toFixed(1)} s">◆ Timeline ${l.tl.id} ${esc(l.tl.name)} <small>cue at ${(l.c.t / 1000).toFixed(1)} s</small></a>`).join('')}${links.in.map((l) => `<a href="#" class="chip-link in" data-goto-trigger="${l.t.id}" title="${esc(l.t.name)}: ${esc(l.why)}">← #${l.t.id} ${esc(l.t.name)} <small>${esc(l.why)}</small></a>`).join('')}${links.in.length || links.tls.length || ins.length ? '' : '<span class="muted">nothing - only its own event</span>'}</div>
+    <div class="row"><span class="muted link-head">Sets off</span>${links.out.map((l) => `<a href="#" class="chip-link out" data-goto-trigger="${l.t.id}" title="${esc(l.why)}">→ #${l.t.id} ${esc(l.t.name)} <small>${esc(l.why)}</small></a>`).join('')}${outs.map((x) => ioChip(x, 'out')).join('')}${links.out.length || outs.length ? '' : '<span class="muted">no other triggers or devices</span>'}</div>`;
+}
+// After an edit (also while typing an action): every row's icons (a "fire trigger" changes
+// another row too) and the selected trigger's links.
+function refreshTrigIcons() {
+  const p = P();
+  $$('.trig-list .item[data-sel^="trigger:"]').forEach((row) => {
+    const x = p.triggers[+row.dataset.sel.slice(8)], io = row.querySelector('.trig-io');
+    if (x && io) { const h = trigIoHtml(x); if (io.innerHTML !== h) io.innerHTML = h; }
+  });
+  const t = p.triggers[S.sel.trigger], box = $('.links');
+  if (box && t && t.type !== 'comment') box.innerHTML = trigLinksHtml(t);
+}
+// The list's icons: one per kind of device, the names (and what) in the hover text.
+function ioIcons(list, dir) {
+  const kinds = new Map();
+  for (const x of list) (kinds.get(x.kind) || kinds.set(x.kind, []).get(x.kind)).push(x);
+  const text = ([k, xs]) => `${DEVICE_ICONS[k]?.[0] || k}:\n${[...new Set(xs.map((x) => `${x.name}${x.why || x.act ? ` (${x.why || x.act})` : ''}`))].join('\n')}`;
+  const all = [...kinds], head = dir === 'in' ? 'Set off by' : 'Controls';
+  // More than 3 kinds: 2 icons and "+n" (keeps room for the name).
+  const shown = all.length > 3 ? all.slice(0, 2) : all, more = all.slice(shown.length);
+  return shown.map((g) => `<span class="io-ic ${dir}" title="${esc(`${head} ${text(g)}`)}">${devIcon(g[0])}</span>`).join('') +
+    (more.length ? `<span class="io-more" title="${esc(`${head}:\n${more.map(text).join('\n\n')}`)}">+${more.length}</span>` : '');
+}
+// A chip in the "Set off by" / "Sets off" rows; device kinds with a Devices tab link to it.
+function ioChip(x, dir) {
+  const tab = DEVICE_ICONS[x.kind]?.[2];
+  return `<a href="#" class="chip-link ${dir} dev"${tab ? ` data-goto-devices="${tab}"` : ''} title="${esc(`${DEVICE_ICONS[x.kind]?.[0] || x.kind}: ${x.name}${tab ? ' (click to open it on the Devices page)' : ''}`)}">${devIcon(x.kind)}${esc(x.name)}${x.why || x.act ? ` <small>${esc(x.why || x.act)}</small>` : ''}</a>`;
+}
 // What a trigger's actions do that can set off other triggers.
 function triggerEffects(t) {
-  const fx = [];
-  for (const line of t.actions || [])
-    for (const cmd of commandParts(line)) {
-      const w = tokenize(cmd).map((x) => x.v), l = w.map((x) => x.toLowerCase());
-      const loopRef = trigLoopRef(cmd);
-      if (loopRef) {
-        const hits = findTrigs(loopRef.v);
-        if (hits.length === 1) fx.push({ kind: 'fire', t: hits[0], why: `repeat ${w[2]} times` });
-      } else if ((['fire', 'cancel', 'repeat'].includes(l[0]) && l[1] === 'trigger') || (l[0] === 'stop' && l[1] === 'repeat')) {
-        const hits = findTrigs(w[2] || '');
-        if (hits.length === 1) fx.push({ kind: 'fire', t: hits[0], why: l[0] === 'stop' ? 'stop repeat' : `${l[0]} trigger` });
-      } else if (l[0] === 'mode' && w.length >= 2) {
-        let g, s;
-        if (w.length >= 3) { g = findGroup(w[1]); s = findState(g, w[2]); }
-        else { const m = findMode(w[1]); if (m) { g = findGroup(m.group); s = m.state; } }
-        if (g && s) fx.push({ kind: 'mode', group: g.name, state: s });
-      } else if (l[0] === 'var' && ['=', '+', '-', 'toggle'].includes(l[2])) {
-        fx.push({ kind: 'var', name: w[1], op: l[2] });
-      } else if (l[0] === 'start' && l[1] === 'timeline') {
-        const tl = findRef(P().timelines, w[2] || '');
-        if (tl) fx.push({ kind: 'timeline', id: tl.id, name: tl.name });
-      } else if (l[0] === 'http' && w[2]) {
-        fx.push({ kind: 'http', url: w[2] });
-      }
-    }
-  return fx;
+  return (t.actions || []).flatMap((line) => commandParts(line).flatMap(cmdEffects));
 }
 // Why `fx` (effects of one trigger) would set off trigger `dst`, or null.
 function setsOff(fx, dst) {
@@ -777,6 +1006,26 @@ function triggerLoop(t) {
   return `${what}, so it ${pause ? 'runs forever' : 'loops endlessly (the controller pauses it after 100 fires a second)'}${guarded ? ', unless a condition stops it' : ''}. ${pause ? 'For something that repeats, use an interval trigger or repeat … times every' : 'Remove the loop'}`;
 }
 
+// For the list's icons: per trigger, the timeline cues that fire it and the triggers that fire
+// it directly (fire / repeat trigger) ({tls: [text], fires: [{t, why}]}). Built once per
+// render like loopGraph, not per row.
+let firedByCache = null;
+function trigFiredBy(x) {
+  if (!firedByCache) {
+    const p = P(), m = firedByCache = new Map(), trigs = p.triggers.filter((t) => t.type !== 'comment');
+    const get = (t) => m.get(t) || m.set(t, { tls: [], fires: [] }).get(t);
+    for (const s of trigs)
+      for (const f of triggerEffects(s))
+        if (f.kind === 'fire' && f.t !== s && !/^(cancel|stop)/.test(f.why) && !get(f.t).fires.some((y) => y.t === s)) get(f.t).fires.push({ t: s, why: f.why });
+    for (const tl of p.timelines)
+      for (const c of tl.cues) {
+        const h = c.trigger != null && findTrigs(String(c.trigger));
+        if (h?.length === 1) get(h[0]).tls.push(`Timeline ${tl.id} '${tl.name}' at ${(c.t / 1000).toFixed(1)} s`);
+      }
+    Promise.resolve().then(() => { firedByCache = null; });
+  }
+  return firedByCache.get(x) || { tls: [], fires: [] };
+}
 // {out: triggers t sets off, in: triggers that set t off}, each {t, why}.
 function triggerLinks(t) {
   const out = [], inc = [], mine = triggerEffects(t);
@@ -810,49 +1059,181 @@ function trigLiveOn() {
 function setTrigLive(on) {
   try { on ? localStorage.removeItem('kd.trigLive') : localStorage.setItem('kd.trigLive', '0'); } catch { /* private mode */ }
 }
-// Nodes 't<id>' (triggers) and 'tl<id>' (timelines) that have at least one link, in list
-// order; edges {a, b, why: [...], weak} where weak = only cancels/stops a pending fire.
+// The if-structure of one action line: [{cmd}] or [{cond, yes: [...], no: [...]}] (nested ifs,
+// the command of a "repeat n times"), with the same rules as commandParts.
+function actionTree(line) {
+  const h = splitHead(line);
+  if (h) return h.kind === 'loop' && h.body != null ? actionTree(line.slice(h.body).trim()) : [];
+  const s = splitIfLine(line);
+  if (!s || !s.thenTok) return [{ cmd: line }];
+  const a = line.slice(s.thenTok.end, s.elseTok ? s.elseTok.start : line.length).trim();
+  const b = s.elseTok ? line.slice(s.elseTok.end).trim() : '';
+  return [{ cond: line.slice(s.ifTok.end, s.thenTok.start).trim(), yes: a ? actionTree(a) : [], no: b ? actionTree(b) : [] }];
+}
+// Where an event trigger's event comes from: [key, label, why, description (hover)] or null.
+// Triggers with the same source (two triggers on one panel button, one device) share its box.
+function trigSource(t) {
+  const p = P(), lc = (s) => String(s || '').toLowerCase();
+  switch (t.type) {
+    case 'panel': return t.control ? [`s:panel:${lc(t.control)}`, `▣ ${t.control}`, t.event || 'click', `From the touch panel: ${panelControlType(t.control) || 'control'} '${t.control}'`] : null;
+    case 'device': return [`s:dev:${lc(t.device)}`, `⌁ ${t.device || 'any device'}`, `goes ${t.state || 'offline'}`, `From a monitored device going online / offline: ${t.device || 'any device'} (checked on the Monitoring page)`];
+    case 'projector': return [`s:pj:${lc(t.projector)}`, `▭ ${t.projector || 'any projector'}`, t.alarm === 'lamp_hours' ? `lamp hours ${t.hours ?? 3000}` : `${t.alarm || 'any'} alarm`, `From a projector over PJLink: ${t.projector || 'any projector'} (errors, lamp hours)`];
+    case 'tcp': return [`s:tcp:${lc(t.device)}`, `⇄ ${t.device || 'any TCP device'}`, `message ${t.match ?? '*'}`, `From a TCP device: messages received from ${t.device || 'any TCP device'}`];
+    case 'udp': case 'osc': {
+      const port = t.port || p.settings.udpPort;
+      return [`s:${t.type}:${port}`, `${t.type.toUpperCase()} in :${port}`, t.type === 'udp' ? `message ${t.match || ''}` : t.address || '',
+        `From the network: ${t.type.toUpperCase()} messages received on port ${port} (e.g. from QLab, a show PC or a control system)`];
+    }
+    case 'input': {
+      const name = t.io && pmcCfg(t.io).name;
+      return [`s:in:${t.io || 'pin' + (t.pin ?? 0)}`, `⏻ ${t.io ? name || t.io : `pin ${t.pin ?? 0}`}`, t.edge || 'rising',
+        t.io ? `From a Machine Control input: ${t.io}${name ? ` (${name})` : ''} - a button, switch or sensor wired to it` : `From a Portenta input pin: ${t.pin ?? 0}`];
+    }
+    case 'dmx_in': {
+      const sacn = t.protocol === 'sacn', u = t.universe ?? (sacn ? 1 : 0);
+      return [`s:dmx:${sacn ? 's' : 'a'}${u}`, `DMX in ${sacn ? 'sACN' : 'Art-Net'} ${u}`, `channels ${t.channels || '1'}`, `From DMX input: ${sacn ? 'sACN' : 'Art-Net'} universe ${u} sent by a lighting desk or media server`];
+    }
+  }
+  return null;
+}
+// Nodes: 't<id>' triggers, 'tl<id>' timelines, 'if<id>.<n>' an if in a trigger's actions,
+// 's:…' where events come from (panel controls, devices, projectors, TCP/UDP/OSC, inputs,
+// DMX in, show devices feeding a variable) and 'fb:<name>' a panel control or label that
+// triggers change (feedback). Only nodes with a link are shown.
+// Edges {a, b, why: [...], br: ['yes'|'no'], weak, lk: Set}: weak = only cancels/stops a
+// pending fire; lk = the links 'from>to' (trigger to what it sets off) the piece is part of,
+// so a chain trigger → if → trigger lights up as one. links: lk → {a, b, weak}.
 // "start timeline" goes to the timeline, which in turn sets off its cue and end triggers.
 function trigFlowGraph() {
-  const p = P(), edges = new Map();
-  const add = (a, b, why) => {
+  const p = P(), edges = new Map(), links = new Map(), extra = new Map();
+  const add = (a, b, why, o = {}) => {
     if (a === b) return;
     const k = `${a}>${b}`;
-    if (!edges.has(k)) edges.set(k, { a, b, why: [], weak: true });
+    if (!edges.has(k)) edges.set(k, { a, b, why: [], br: [], weak: true, lk: new Set() });
     const e = edges.get(k);
-    if (!e.why.includes(why)) e.why.push(why);
-    if (!/^(cancel|stop)/.test(why)) e.weak = false;
+    if (why && !e.why.includes(why)) e.why.push(why);
+    if (o.br && !e.br.includes(o.br)) e.br.push(o.br);
+    if (o.lk) e.lk.add(o.lk);
+    if (!(o.weak ?? /^(cancel|stop)/.test(why || ''))) e.weak = false;
   };
+  // path: [{k: trigger}, {k: if node, why: into it, br: branch taken out of it}, …]
+  const reach = (path, to, why) => {
+    if (path.length === 1 && path[0].k === to) return;   // fires itself directly: the red ! says so
+    const weak = /^(cancel|stop)/.test(why), lk = `${path[0].k}>${to}`;
+    path.forEach((s, i) => {
+      const last = i === path.length - 1;
+      add(s.k, last ? to : path[i + 1].k, last ? why : path[i + 1].why, { lk, br: s.br, weak });
+    });
+    const l = links.get(lk) || links.set(lk, { a: path[0].k, b: to, weak: true, lines: new Set() }).get(lk);
+    if (!weak) l.weak = false;
+    l.lines.add(curLine);   // which action line, for lighting up at the right time (flowPlay)
+  };
+  let curLine = 0;
   const trigs = p.triggers.filter((t) => t.type !== 'comment');
-  for (const t of trigs)
-    for (const f of triggerEffects(t)) {
-      if (f.kind === 'fire') add(`t${t.id}`, `t${f.t.id}`, f.why);
-      else if (f.kind === 'timeline') add(`t${t.id}`, `tl${f.id}`, 'start timeline');
-      else for (const d of trigs) { const w = d !== t && setsOff([f], d); if (w) add(`t${t.id}`, `t${d.id}`, w); }
+  for (const t of trigs) {
+    let n = 0;
+    const walk = (path, items) => {
+      for (const it of items) {
+        if (it.cmd == null) {
+          const k = `if${t.id}.${n++}`, why = `if ${it.cond}`;
+          extra.set(k, { cond: it.cond, t });
+          walk([...path, { k, why, br: 'yes' }], it.yes);
+          walk([...path, { k, why, br: 'no' }], it.no);
+          continue;
+        }
+        for (const f of cmdEffects(it.cmd)) {
+          if (f.kind === 'fire') reach(path, `t${f.t.id}`, f.why);
+          else if (f.kind === 'timeline') reach(path, `tl${f.id}`, 'start timeline');
+          else if (f.kind === 'panel') {
+            // One feedback box per trigger (right under it), listing what it changes: a box
+            // shared by every trigger that sets lbl_show would pull arrows from all over.
+            const k = `fb:t${t.id}`;
+            if (!extra.has(k)) extra.set(k, { fb: [], t });
+            if (!extra.get(k).fb.includes(f.name)) extra.get(k).fb.push(f.name);
+            reach(path, k, f.why);
+          } else if (f.kind === 'mode' || f.kind === 'var') {
+            // Through one box per mode group / variable: n triggers that set it and m that
+            // listen give n + m arrows instead of n × m.
+            const hub = f.kind === 'mode' ? `h:mode:${f.group.toLowerCase()}` : `h:var:${f.name.toLowerCase()}`;
+            for (const d of trigs) {
+              const w = d !== t && setsOff([f], d);
+              if (!w) continue;
+              if (!extra.has(hub)) extra.set(hub, { hub: f.kind === 'mode' ? `mode ${f.group}` : `var ${f.name}` });
+              const into = f.kind === 'mode' ? `mode ${f.group} ${f.state}` : `var ${f.name} ${f.op === 'toggle' ? 'toggle' : f.op + ' …'}`;
+              const out = d.type === 'mode' ? `changes to ${d.mode || 'any state'}` : `changes${d.value ? ` to ${d.value}` : ''}`;
+              reach([...path, { k: hub, why: into }], `t${d.id}`, out);
+            }
+          } else for (const d of trigs) { const w = d !== t && setsOff([f], d); if (w) reach(path, `t${d.id}`, w); }
+        }
+        // The devices it controls: a box per device, under this trigger (like feedback).
+        for (const o of cmdOutputs(it.cmd)) {
+          const k = `o:t${t.id}:${o.kind}:${o.name.toLowerCase()}`;
+          if (!extra.has(k)) extra.set(k, { out: o.name, kind: o.kind, type: o.type, acts: [], t });
+          const n = extra.get(k);
+          if (o.act && !n.acts.includes(o.act)) n.acts.push(o.act);
+          reach(path, k, `${o.kind === 'drv' ? o.type : o.kind} ${o.act}`.trim());
+        }
+      }
+    };
+    (t.actions || []).forEach((line, i) => {
+      curLine = i;
+      if (line.trim() && !line.trim().startsWith('#')) walk([{ k: `t${t.id}` }], actionTree(line));
+    });
+    // Sources are links too, so "only this trigger" keeps where its events come from.
+    const source = (k, label, why, desc) => {
+      if (!extra.has(k)) extra.set(k, { src: label, desc });
+      add(k, `t${t.id}`, why, { weak: false });
+      links.set(`${k}>t${t.id}`, { a: k, b: `t${t.id}`, weak: false });
+    };
+    const s = trigSource(t);
+    if (s) source(...s);
+    // A variable that a show device (or Modbus) keeps up to date: that device sets it off.
+    if (t.type === 'variable' && t.variable) {
+      const v = t.variable.toLowerCase();
+      for (const d of p.drivers || [])
+        for (const [pt, name] of Object.entries(d.vars || {}))
+          if (String(name).toLowerCase() === v)
+            source(`s:drv:${String(d.name).toLowerCase()}`, `⌁ ${d.name}`, `reading ${pt} → var ${name}`, `From a show device: ${d.name} (${d.type}) - a reading linked to a variable`);
+      const mb = p.variables.find((x) => x.name.toLowerCase() === v)?.modbus?.device;
+      if (mb) source(`s:mb:${mb.toLowerCase()}`, `⌁ ${mb}`, `Modbus → var ${t.variable}`, `From a Modbus device: ${mb} - a value linked to a variable`);
     }
+  }
+  const step = (a, b, why) => { add(a, b, why); links.set(`${a}>${b}`, { a, b, weak: false }); };
   for (const s of trigs)
-    if (s.type === 'sequence') (s.steps || []).forEach((r, k) => { const h = String(r).trim() && findTrigs(String(r)); if (h?.length === 1) add(`t${h[0].id}`, `t${s.id}`, `step ${k + 1} of the sequence`); });
+    if (s.type === 'sequence') (s.steps || []).forEach((r, k) => { const h = String(r).trim() && findTrigs(String(r)); if (h?.length === 1) step(`t${h[0].id}`, `t${s.id}`, `step ${k + 1} of the sequence`); });
   for (const tl of p.timelines) {
     for (const c of tl.cues) {
       if (c.trigger == null) continue;
       const h = findTrigs(String(c.trigger));
-      if (h.length === 1) add(`tl${tl.id}`, `t${h[0].id}`, `cue at ${(c.t / 1000).toFixed(1)} s`);
+      if (h.length === 1) step(`tl${tl.id}`, `t${h[0].id}`, `cue at ${(c.t / 1000).toFixed(1)} s`);
     }
-    for (const d of trigs) if (d.type === 'timeline_end' && d.timeline === tl.id) add(`tl${tl.id}`, `t${d.id}`, 'timeline ends');
+    for (const d of trigs) if (d.type === 'timeline_end' && d.timeline === tl.id) step(`tl${tl.id}`, `t${d.id}`, 'timeline ends');
   }
+  for (const e of edges.values()) e.lk.add(`${e.a}>${e.b}`);
   const used = new Set([...edges.values()].flatMap((e) => [e.a, e.b]));
-  const nodes = new Map();
-  for (const t of trigs) if (used.has(`t${t.id}`)) nodes.set(`t${t.id}`, { t });
+  // First places: sources, then each trigger with its ifs and feedback, mode/variable boxes, timelines.
+  const nodes = new Map(), ex = [...extra];
+  for (const [k, n] of ex) if (n.src && used.has(k)) nodes.set(k, n);
+  for (const t of trigs) {
+    if (used.has(`t${t.id}`)) nodes.set(`t${t.id}`, { t });
+    for (const [k, n] of ex) if (n.t === t && used.has(k)) nodes.set(k, n);
+  }
+  for (const [k, n] of ex) if (n.hub && used.has(k)) nodes.set(k, n);
   for (const tl of p.timelines) if (used.has(`tl${tl.id}`)) nodes.set(`tl${tl.id}`, { tl });
-  return { nodes, edges: [...edges.values()], hidden: trigs.length - [...nodes.values()].filter((n) => n.t).length };
+  return { nodes, edges: [...edges.values()], links, hidden: trigs.length - [...nodes.keys()].filter((k) => /^t\d/.test(k)).length };
 }
-const FLOW_W = 190, FLOW_H = 30, FLOW_GX = 70, FLOW_GY = 10, FLOW_PAD = 12;
-// Columns from left to right: event sources first, then what they set off. Loops are
-// found depth-first and don't push nodes further right (drawn dashed, going back).
-function trigFlowLayout(g) {
-  const keys = [...g.nodes.keys()];
+const FLOW_W = 170, FLOW_H = 30, FLOW_ROW = 40, FLOW_GX = 18, FLOW_GY = 46, FLOW_PAD = 14, FLOW_LOOP = 60, FLOW_LANE = 12;
+const flowNodeH = (n) => (n.cond != null ? FLOW_ROW : n.src || n.fb || n.hub || n.out ? 26 : FLOW_H);
+const flowNodeW = (n) => (n.hub ? 140 : FLOW_W);
+// Rows from top to bottom: where events come from, the triggers, what they set off. Every
+// box sits as close as it can above what it sets off, so arrows stay short. Loops are found
+// depth-first and don't push boxes further down (drawn going back up along the right side).
+// An arrow that skips rows gets a lane point in each row it passes (a thin invisible box), so
+// the ordering keeps it out of the way of the boxes and other arrows. One connected part of
+// the graph; positions from 0,0. via: arrow 'a>b' → its lane points.
+function flowPart(g, keys, edges) {
   const outs = new Map(keys.map((k) => [k, []])), ins = new Map(keys.map((k) => [k, []]));
-  for (const e of g.edges) { outs.get(e.a).push(e.b); ins.get(e.b).push(e.a); }
+  for (const e of edges) { outs.get(e.a).push(e.b); ins.get(e.b).push(e.a); }
   const state = new Map(), back = new Set(), post = [];
   const visit = (k) => {
     state.set(k, 1);
@@ -865,68 +1246,386 @@ function trigFlowLayout(g) {
   };
   for (const k of keys) if (!ins.get(k).length) visit(k);
   for (const k of keys) if (!state.has(k)) visit(k);
-  const col = new Map(keys.map((k) => [k, 0]));
-  for (const k of post.reverse())
-    for (const b of outs.get(k)) if (!back.has(`${k}>${b}`)) col.set(b, Math.max(col.get(b), col.get(k) + 1));
-  // Rows: list order, then two passes that move each node towards the nodes that set it off.
-  const cols = [];
-  keys.forEach((k) => (cols[col.get(k)] = cols[col.get(k)] || []).push(k));
-  const row = new Map();
-  cols.forEach((c) => c.forEach((k, i) => row.set(k, i)));
-  for (let pass = 0; pass < 2; pass++)
-    for (let c = 1; c < cols.length; c++) {
-      const bary = (k) => {
-        const pr = ins.get(k).filter((a) => col.get(a) < c);
-        return pr.length ? pr.reduce((s, a) => s + row.get(a), 0) / pr.length : row.get(k);
-      };
-      const b = new Map(cols[c].map((k) => [k, bary(k)]));
-      cols[c].sort((x, y) => b.get(x) - b.get(y));
-      cols[c].forEach((k, i) => row.set(k, i));
+  const fwd = (k) => outs.get(k).filter((b) => !back.has(`${k}>${b}`));
+  const layer = new Map(keys.map((k) => [k, 0]));
+  for (const k of [...post].reverse()) for (const b of fwd(k)) layer.set(b, Math.max(layer.get(b), layer.get(k) + 1));
+  // Then down again, children first: each box just above the first thing it sets off.
+  for (const k of post) {
+    const c = fwd(k);
+    if (c.length) layer.set(k, Math.max(layer.get(k), Math.min(...c.map((b) => layer.get(b))) - 1));
+  }
+  const used = [...new Set(layer.values())].sort((a, b) => a - b), rowNo = new Map(used.map((l, i) => [l, i]));
+  const R = used.map(() => []), rowOf = new Map();
+  for (const k of keys) { const r = rowNo.get(layer.get(k)); rowOf.set(k, r); R[r].push(k); }
+  // Lane points; up/dn = neighbours one row up/down (real boxes and lane points alike).
+  const up = new Map(keys.map((k) => [k, []])), dn = new Map(keys.map((k) => [k, []])), via = new Map(), width = new Map();
+  for (const k of keys) width.set(k, flowNodeW(g.nodes.get(k)));
+  for (const e of edges) {
+    if (back.has(`${e.a}>${e.b}`)) continue;
+    let prev = e.a;
+    const pts = [];
+    for (let r = rowOf.get(e.a) + 1; r < rowOf.get(e.b); r++) {
+      const d = `~${e.a}>${e.b}~${r}`;
+      R[r].push(d); rowOf.set(d, r); width.set(d, FLOW_LANE); up.set(d, []); dn.set(d, []);
+      up.get(d).push(prev); dn.get(prev).push(d); pts.push(d); prev = d;
     }
-  const pos = new Map(keys.map((k) => [k, { x: FLOW_PAD + col.get(k) * (FLOW_W + FLOW_GX), y: FLOW_PAD + row.get(k) * (FLOW_H + FLOW_GY) }]));
-  return { pos, back, w: FLOW_PAD * 2 + cols.length * (FLOW_W + FLOW_GX) - FLOW_GX, h: FLOW_PAD * 2 + Math.max(...cols.map((c) => c.length)) * (FLOW_H + FLOW_GY) - FLOW_GY };
+    up.get(e.b).push(prev); dn.get(prev).push(e.b);
+    via.set(`${e.a}>${e.b}`, pts);
+  }
+  // Order in each row: start in list order, then sweeps down and up that move each box to
+  // the middle (median) of its neighbours, plus swapping neighbours where that helps; the
+  // order with the fewest crossing arrows wins.
+  const idx = new Map();
+  const index = () => R.forEach((r) => r.forEach((k, i) => idx.set(k, i)));
+  index();
+  const crossings = () => {
+    let n = 0;
+    for (let r = 0; r + 1 < R.length; r++) {
+      const segs = R[r].flatMap((a) => dn.get(a).map((b) => [idx.get(a), idx.get(b)]));
+      for (let i = 0; i < segs.length; i++)
+        for (let j = i + 1; j < segs.length; j++) if ((segs[i][0] - segs[j][0]) * (segs[i][1] - segs[j][1]) < 0) n++;
+    }
+    return n;
+  };
+  const median = (k, nb) => {
+    const p = nb.get(k).map((x) => idx.get(x)).sort((a, b) => a - b);
+    if (!p.length) return idx.get(k);
+    const m = p.length >> 1;
+    return p.length % 2 ? p[m] : (p[m - 1] + p[m]) / 2;
+  };
+  const sortRow = (r, nb) => {
+    const m = new Map(R[r].map((k) => [k, median(k, nb)]));
+    R[r].sort((a, b) => m.get(a) - m.get(b) || idx.get(a) - idx.get(b));
+    R[r].forEach((k, i) => idx.set(k, i));
+  };
+  // Crossings between u (left) and v (right) with their neighbours in one other row.
+  const cross = (u, v, nb) => { let n = 0; for (const a of nb.get(u)) for (const b of nb.get(v)) if (idx.get(a) > idx.get(b)) n++; return n; };
+  const transpose = () => {
+    for (let better = true, n = 0; better && n < 6; n++) {
+      better = false;
+      for (const r of R)
+        for (let i = 0; i + 1 < r.length; i++) {
+          const u = r[i], v = r[i + 1];
+          if (cross(v, u, up) + cross(v, u, dn) < cross(u, v, up) + cross(u, v, dn)) {
+            r[i] = v; r[i + 1] = u; idx.set(v, i); idx.set(u, i + 1); better = true;
+          }
+        }
+    }
+  };
+  let best = crossings(), bestR = R.map((r) => [...r]);
+  for (let pass = 0; pass < 8 && best > 0; pass++) {
+    if (pass % 2 === 0) for (let r = 1; r < R.length; r++) sortRow(r, up);
+    else for (let r = R.length - 2; r >= 0; r--) sortRow(r, dn);
+    transpose();
+    const c = crossings();
+    if (c < best) { best = c; bestR = R.map((r) => [...r]); }
+  }
+  bestR.forEach((r, i) => (R[i] = r));
+  index();
+  // Across (centres): each box under the middle of what it is linked to, without
+  // overlapping (the average of a left-to-right and a right-to-left packing).
+  const x = new Map();
+  for (const r of R) { let at = 0; for (const k of r) { x.set(k, at + width.get(k) / 2); at += width.get(k) + FLOW_GX; } }
+  const gap = (a, b) => (width.get(a) + width.get(b)) / 2 + (a[0] === '~' && b[0] === '~' ? 4 : FLOW_GX);
+  const place = (r, nb) => {
+    const want = r.map((k) => { const n = nb.get(k); return n.length ? n.reduce((s, a) => s + x.get(a), 0) / n.length : x.get(k); });
+    const l = [], rt = [];
+    want.forEach((w, i) => (l[i] = i ? Math.max(w, l[i - 1] + gap(r[i - 1], r[i])) : w));
+    for (let i = want.length - 1; i >= 0; i--) rt[i] = i < want.length - 1 ? Math.min(want[i], rt[i + 1] - gap(r[i], r[i + 1])) : want[i];
+    r.forEach((k, i) => x.set(k, (l[i] + rt[i]) / 2));
+  };
+  for (let pass = 0; pass < 4; pass++) {
+    for (let i = 1; i < R.length; i++) place(R[i], up);
+    for (let i = R.length - 2; i >= 0; i--) place(R[i], dn);
+  }
+  const all = [...x.keys()];
+  const minX = Math.min(...all.map((k) => x.get(k) - width.get(k) / 2)), maxX = Math.max(...all.map((k) => x.get(k) + width.get(k) / 2));
+  const rowY = (r) => r * (FLOW_ROW + FLOW_GY);
+  const pos = new Map(keys.map((k) => {
+    const h = flowNodeH(g.nodes.get(k)), w = width.get(k);
+    return [k, { x: x.get(k) - w / 2 - minX, y: rowY(rowOf.get(k)) + (FLOW_ROW - h) / 2, w, h }];
+  }));
+  for (const [ek, pts] of via) via.set(ek, pts.map((d) => ({ x: x.get(d) - minX, y: rowY(rowOf.get(d)) + FLOW_ROW / 2 })));
+  return { pos, back, via, w: maxX - minX + (back.size ? FLOW_LOOP : 0), h: rowY(R.length) - FLOW_GY };
 }
+// Chains that have nothing to do with each other are laid out on their own and then placed
+// next to each other in list order, wrapping like text, so the diagram doesn't get very wide.
+function trigFlowLayout(g) {
+  const keys = [...g.nodes.keys()], order = new Map(keys.map((k, i) => [k, i]));
+  const root = new Map(keys.map((k) => [k, k]));
+  const find = (k) => (root.get(k) === k ? k : (root.set(k, find(root.get(k))), root.get(k)));
+  for (const e of g.edges) root.set(find(e.a), find(e.b));
+  const parts = new Map();
+  for (const k of keys) (parts.get(find(k)) || parts.set(find(k), []).get(find(k))).push(k);
+  const laid = [...parts.values()].map((ks) => { const s = new Set(ks); return flowPart(g, ks, g.edges.filter((e) => s.has(e.a))); });
+  const big = Math.max(...laid.map((l) => l.w)), maxW = Math.max(big, 1100), GAP = 40;
+  // Wide chains first (they are the main show), then the small ones in list order.
+  laid.sort((a, b) => (b.w > maxW / 2) - (a.w > maxW / 2) || order.get(a.pos.keys().next().value) - order.get(b.pos.keys().next().value));
+  const pos = new Map(), back = new Set(), via = new Map();
+  let x = 0, y = 0, lineH = 0, w = 0;
+  for (const l of laid) {
+    if (x && x + l.w > maxW) { x = 0; y += lineH + GAP; lineH = 0; }
+    for (const [k, p] of l.pos) pos.set(k, { ...p, x: FLOW_PAD + x + p.x, y: FLOW_PAD + y + p.y });
+    for (const [k, pts] of l.via) via.set(k, pts.map((p) => ({ x: FLOW_PAD + x + p.x, y: FLOW_PAD + y + p.y })));
+    for (const b of l.back) back.add(b);
+    x += l.w + GAP;
+    w = Math.max(w, x - GAP);
+    lineH = Math.max(lineH, l.h);
+  }
+  return { pos, back, via, w: FLOW_PAD * 2 + w, h: FLOW_PAD * 2 + y + lineH };
+}
+// "Only this trigger": what sets it off (all the way up to where the events come from) and
+// what it sets off (all the way down), following the trigger-to-trigger links, so a mode
+// box keeps only the arrows of this chain.
+function flowFocus(g, key) {
+  const from = new Map(), to = new Map(), keep = new Set();
+  for (const [lk, l] of g.links) {
+    (from.get(l.a) || from.set(l.a, []).get(l.a)).push(lk);
+    (to.get(l.b) || to.set(l.b, []).get(l.b)).push(lk);
+  }
+  const walk = (down) => {
+    const seen = new Set([key]), queue = [key];
+    while (queue.length)
+      for (const lk of (down ? from : to).get(queue.shift()) || []) {
+        keep.add(lk);
+        const n = g.links.get(lk)[down ? 'b' : 'a'];
+        if (!seen.has(n)) { seen.add(n); queue.push(n); }
+      }
+  };
+  walk(true);
+  walk(false);
+  const edges = g.edges.filter((e) => [...e.lk].some((l) => keep.has(l)));
+  const used = new Set([key, ...edges.flatMap((e) => [e.a, e.b])]);
+  return { ...g, edges, nodes: new Map([...g.nodes].filter(([k]) => used.has(k))) };
+}
+// Colour filter: the triggers with one of these colours ('' = none) and everything linked to
+// them one step up or down; other triggers on those links stay as context, dimmed.
+const flowColKey = (t) => (trigColor(t.color) ? t.color : '');
+function flowByColour(g, cols) {
+  const match = new Set([...g.nodes].filter(([k, n]) => /^t\d/.test(k) && cols.has(flowColKey(n.t))).map(([k]) => k));
+  const keep = new Set([...g.links].filter(([, l]) => match.has(l.a) || match.has(l.b)).map(([lk]) => lk));
+  const edges = g.edges.filter((e) => [...e.lk].some((l) => keep.has(l)));
+  const used = new Set([...match, ...edges.flatMap((e) => [e.a, e.b])]);
+  return { ...g, edges, nodes: new Map([...g.nodes].filter(([k]) => used.has(k))), dim: new Set([...used].filter((k) => /^t\d/.test(k) && !match.has(k))) };
+}
+// The whole flow gets one device box per trigger ("2 projectors, 4 PCs"), so it doesn't get
+// very wide; "only this trigger" shows each device. ren: device box → the merged box.
+function flowMergeDevices(g) {
+  const per = new Map(), ren = new Map();
+  for (const [k, n] of g.nodes) if (n.out) (per.get(n.t) || per.set(n.t, []).get(n.t)).push(k);
+  for (const [t, ks] of per) if (ks.length > 1) for (const k of ks) ren.set(k, `o:t${t.id}:*`);
+  const nodes = new Map();
+  for (const [k, n] of g.nodes) {
+    const r = ren.get(k);
+    if (!r) nodes.set(k, n);
+    else if (!nodes.has(r)) nodes.set(r, { out: '*', list: per.get(n.t).map((x) => g.nodes.get(x)), t: n.t, acts: [] });
+  }
+  const edges = new Map();
+  for (const e of g.edges) {
+    const a = ren.get(e.a) || e.a, b = ren.get(e.b) || e.b, k = `${a}>${b}`, m = edges.get(k);
+    if (!m) { edges.set(k, { ...e, a, b, why: [...e.why], br: [...e.br], lk: new Set(e.lk) }); continue; }
+    for (const w of e.why) if (!m.why.includes(w)) m.why.push(w);
+    for (const b2 of e.br) if (!m.br.includes(b2)) m.br.push(b2);
+    for (const l of e.lk) m.lk.add(l);
+    m.weak = m.weak && e.weak;
+  }
+  return { ...g, nodes, edges: [...edges.values()], ren };
+}
+const OUT_PLURAL = { projector: 'projectors', pc: 'PCs' };
+// Big view (⤢), zoom and "only this trigger" are per page visit; the height of the small box is remembered.
+const flowZoom = () => S.flowZoom || 1;
+// "Only this trigger" is on until it is unticked (the whole flow of a big show is a lot to read).
+const flowOnly = () => S.flowOnly !== false;
 function trigFlowHtml(selT) {
-  const g = trigFlowGraph();
+  const focus = flowOnly() && selT && selT.type !== 'comment';
+  const full = trigFlowGraph(), fc = S.flowColors || (S.flowColors = new Set());
+  // Colours of the triggers in the flow (in palette order, then custom ones).
+  const colOrder = Object.keys(TRIGGER_COLORS), cols = new Map();
+  for (const [k, n] of full.nodes) if (/^t\d/.test(k)) cols.set(flowColKey(n.t), (cols.get(flowColKey(n.t)) || 0) + 1);
+  for (const c of fc) if (!cols.has(c)) fc.delete(c);
+  const colList = [...cols.keys()].sort((a, b) => (colOrder.includes(a) ? colOrder.indexOf(a) : 99) - (colOrder.includes(b) ? colOrder.indexOf(b) : 99));
+  const g = focus ? flowFocus(full, `t${selT.id}`) : flowMergeDevices(fc.size ? flowByColour(full, fc) : full);
   S.flowGraph = g;   // for the live part (onTrigLog)
   let h = 0;
   try { h = +localStorage.getItem('kd.trigFlowH') || 0; } catch { /* private mode */ }
-  const box = (inner) => `<div class="trig-flow" style="height:${h || 260}px">${inner}</div>`;
-  if (!g.nodes.size) return box('<p class="muted" style="margin:12px">No trigger or timeline sets off another trigger yet (fire trigger, a mode or variable change, a trigger cue on a timeline, a timeline end…).</p>');
+  const big = !!S.flowBig, z = flowZoom();
+  const only = selT && selT.type !== 'comment'
+    ? `<label class="muted flow-only${flowOnly() ? ' on' : ''}" title="Show only what sets this trigger off and what it sets off. Click another box to follow its flow."><input type="checkbox" id="flowOnly"${flowOnly() ? ' checked' : ''}> only #${selT.id} ${esc(selT.name.length > 22 ? selT.name.slice(0, 21) + '…' : selT.name)}</label>`
+    : flowOnly() ? '<span class="muted flow-only" title="Select a trigger to see only its flow">only: select a trigger</span>' : '';
+  const tools = `<div class="flow-tools">${only}<button class="btn small ghost" data-flowzoom="-1" title="Smaller">−</button><button class="btn small ghost" data-flowzoom="0" title="Back to 100 %">${Math.round(z * 100)} %</button><button class="btn small ghost" data-flowzoom="1" title="Bigger">+</button>
+    <button class="btn small" id="flowBig" title="${big ? 'Back to the trigger list (Esc)' : 'Show the flow on the whole screen'}">${big ? '✕ Close' : '⤢ Expand'}</button></div>`;
+  const colRow = focus || colList.length < 2 ? '' : `<div class="row col-filter flow-cols${fc.size ? ' some' : ''}" title="Show only the flow of triggers with these colours (click several; click again to turn off)">
+    <span class="muted">Colours:</span>${colList.map((c) => `<button class="swatch${fc.has(c) ? ' on' : ''}" data-flowcol="${esc(c)}" title="${esc(c || 'no colour')} (${cols.get(c)} trigger${cols.get(c) === 1 ? '' : 's'} in the flow)" style="${c ? `background:${trigColor(c)}` : ''}">${c ? '' : '∅'}</button>`).join('')}
+    ${fc.size ? '<button class="btn small ghost" data-flowcol-clear>all colours</button>' : ''}</div>`;
+  const box = (inner, help = '') => `<div class="trig-flow-wrap${big ? ' big' : ''}">${big ? '<h3>Trigger flow</h3>' : ''}${tools}${colRow}<div class="trig-flow"${big ? '' : ` style="height:${h || 320}px"`}>${inner}</div>${help}</div>`;
+  if (!g.nodes.size) return box(`<p class="muted" style="margin:12px">${focus ? `#${selT.id} ${esc(selT.name)} isn't linked to anything: no event source, and it doesn't set off or get set off by another trigger.` : 'No trigger or timeline sets off another trigger yet (fire trigger, a mode or variable change, a trigger cue on a timeline, a timeline end…).'}</p>`);
   const L = trigFlowLayout(g), p = P();
   const selKey = selT ? `t${selT.id}` : '';
   const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+  // Endless loops (the red ! in the list) are drawn red; "unless a condition stops it" are not.
+  const looping = new Set(p.triggers.filter((t) => /loops endlessly|runs forever/.test(triggerLoop(t) || '') && !/unless a condition/.test(triggerLoop(t))).map((t) => `t${t.id}`));
+  const owner = (k) => (g.nodes.get(k).cond != null ? `t${g.nodes.get(k).t.id}` : k);
   const edgeSvg = (e) => {
     const a = L.pos.get(e.a), b = L.pos.get(e.b);
-    const sx = a.x + FLOW_W, sy = a.y + FLOW_H / 2, tx = b.x - 2, ty = b.y + FLOW_H / 2;
-    const dx = tx > sx ? Math.max(30, (tx - sx) / 2) : 90;
-    const sel = e.a === selKey || e.b === selKey;
-    const cls = `fl-edge${e.weak ? ' weak' : ''}${L.back.has(`${e.a}>${e.b}`) || tx <= sx ? ' back' : ''}${sel ? ' sel' : ''}`;
-    const label = sel ? `<text class="fl-why" x="${(sx + tx) / 2}" y="${(sy + ty) / 2 - 4}" text-anchor="middle">${esc(cut(e.why.join(', '), 34))}</text>` : '';
-    const d = `M${sx} ${sy} C${sx + dx} ${sy} ${tx - dx} ${ty} ${tx} ${ty}`;
-    return `<g class="${cls}" data-ek="${e.a}>${e.b}"><title>${esc(e.why.join('\n'))}</title><path d="${d}"/><path class="hit" d="${d}"/>${label}</g>`;
+    const back = L.back.has(`${e.a}>${e.b}`) || b.y <= a.y, no = e.br.length === 1 && e.br[0] === 'no';
+    let d, sx, sy, mx, my;
+    if (back) {   // up along the right-hand side, into the right of the box
+      const tx = b.x + b.w + 2, ty = b.y + b.h / 2, ox = Math.max(a.x + a.w, tx) + FLOW_LOOP - 8;
+      sx = a.x + a.w; sy = a.y + a.h / 2;
+      d = `M${sx} ${sy} C${ox} ${sy} ${ox} ${ty} ${tx} ${ty}`;
+      mx = ox - 10; my = (sy + ty) / 2;
+    } else {      // down: from the bottom (an if's "no" from its right point) to the top, through its lane points
+      const pts = [...(L.via.get(`${e.a}>${e.b}`) || []), { x: b.x + b.w / 2, y: b.y - 2 }];
+      if (no) { sx = a.x + a.w; sy = a.y + a.h / 2; } else { sx = a.x + a.w / 2; sy = a.y + a.h; }
+      d = `M${sx} ${sy}`;
+      let px = sx, py = sy;
+      pts.forEach((q, i) => {
+        const dy = Math.max(12, (q.y - py) / 2);
+        d += i === 0 && no ? ` C${px + 40} ${py} ${q.x} ${q.y - dy} ${q.x} ${q.y}` : ` C${px} ${py + dy} ${q.x} ${q.y - dy} ${q.x} ${q.y}`;
+        px = q.x; py = q.y;
+      });
+      const mid = pts.length > 1 ? pts[(pts.length - 1) >> 1] : null;
+      mx = mid ? mid.x : (sx + px) / 2; my = mid ? mid.y : (sy + py) / 2;
+    }
+    const sel = !!selKey && [...e.lk].some((l) => l.startsWith(`${selKey}>`) || l.endsWith(`>${selKey}`));
+    const loop = back && looping.has(owner(e.a)) && looping.has(owner(e.b));
+    const cls = `fl-edge${e.weak ? ' weak' : ''}${back ? ' back' : ''}${loop ? ' loop' : ''}${sel ? ' sel' : ''}`;
+    const br = e.br.length ? `<text class="fl-br ${e.br.join('-')}" x="${no ? sx + 6 : sx + 5}" y="${no ? sy - 4 : sy + 13}">${e.br.join('/')}</text>` : '';
+    // (not into a device or feedback box: the box itself says what it does)
+    // A timeline's arrows always say when on the timeline they fire (just above the trigger).
+    const when = /^tl\d/.test(e.a) ? e.why.map((w) => (w === 'timeline ends' ? 'at end' : w.replace(/^cue at /, ''))).sort((x, y) => (x === 'at end' ? 1e9 : parseFloat(x)) - (y === 'at end' ? 1e9 : parseFloat(y))) : null;
+    const label = when?.length ? `<text class="fl-why fl-when" x="${back ? mx : b.x + b.w / 2 + 6}" y="${back ? my : b.y - 7}" text-anchor="${back ? 'middle' : 'start'}">⏱ ${esc(cut(when.join(', '), 30))}</text>`
+      : sel && e.why.length && !e.why.every((w) => w.startsWith('if ')) && !/^(o|fb):/.test(e.b) ? `<text class="fl-why" x="${mx}" y="${my}" text-anchor="middle">${esc(cut(e.why.join(', '), 34))}</text>` : '';
+    return `<g class="${cls}" data-ek="${esc(`${e.a}>${e.b}`)}"><title>${esc([...(e.br.length ? [e.br.join(' / ')] : []), ...e.why].join('\n'))}${loop ? '\nEndless loop!' : ''}</title><path d="${d}"/><path class="hit" d="${d}"/>${br}${label}</g>`;
   };
   const nodeSvg = ([k, n]) => {
-    const { x, y } = L.pos.get(k);
+    const { x, y, w, h } = L.pos.get(k), fk = esc(k);
     if (n.tl) {
-      return `<g class="fl-node tl" data-fk="${k}" data-goto-timeline="${n.tl.id}"><title>Timeline ${n.tl.id} '${esc(n.tl.name)}' - click to open</title>
-        <rect x="${x}" y="${y}" width="${FLOW_W}" height="${FLOW_H}" rx="${FLOW_H / 2}"/><text x="${x + 12}" y="${y + 19}">◆ ${n.tl.id} ${esc(cut(n.tl.name || '', 22))}</text></g>`;
+      return `<g class="fl-node tl" data-fk="${fk}" data-goto-timeline="${n.tl.id}"><title>Timeline ${n.tl.id} '${esc(n.tl.name)}' - click to open</title>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}"/><text x="${x + 12}" y="${y + 19}">◆ ${n.tl.id} ${esc(cut(n.tl.name || '', 20))}</text></g>`;
     }
-    const t = n.t, col = trigColor(t.color), i = p.triggers.indexOf(t);
-    return `<g class="fl-node${k === selKey ? ' sel' : ''}${t.enabled === false ? ' disabled' : ''}" data-fk="${k}" data-sel="trigger:${i}"><title>#${t.id} ${esc(t.name)} (${esc(t.type)})${t.enabled === false ? ' - disabled' : ''}</title>
-      <rect x="${x}" y="${y}" width="${FLOW_W}" height="${FLOW_H}" rx="4"/>${col ? `<rect class="fl-col" x="${x}" y="${y}" width="4" height="${FLOW_H}" style="fill:${col}"/>` : ''}
-      <text x="${x + 10}" y="${y + 19}"><tspan class="fl-id">${t.id}</tspan> ${esc(cut(t.name || '', 19))}</text><text class="fl-type" x="${x + FLOW_W - 6}" y="${y + 19}" text-anchor="end">${esc(t.type)}</text></g>`;
+    if (n.cond != null) {
+      const i = p.triggers.indexOf(n.t), cx = x + w / 2, cy = y + h / 2;
+      return `<g class="fl-node if${owner(k) === selKey ? ' sel' : ''}" data-fk="${fk}" data-sel="trigger:${i}"><title>if ${esc(n.cond)}\n(in trigger #${n.t.id} ${esc(n.t.name)})\nyes = then, no = else</title>
+        <polygon points="${x},${cy} ${cx},${y} ${x + w},${cy} ${cx},${y + h}"/><text x="${cx}" y="${cy + 4}" text-anchor="middle">${esc(cut(n.cond, 22))}?</text></g>`;
+    }
+    if (n.list) {   // several devices of one trigger, merged
+      const kinds = new Map();
+      for (const d of n.list) kinds.set(d.kind, (kinds.get(d.kind) || 0) + 1);
+      const acts = [...new Set(n.list.flatMap((d) => d.acts))];
+      const text = [...kinds].map(([kd, c]) => `${OUT_KINDS[kd][0]} ${c > 1 ? `${c} ${OUT_PLURAL[kd] || 'devices'}` : n.list.find((d) => d.kind === kd).out}`).join(', ') + (acts.length === 1 ? `: ${acts[0]}` : '');
+      return `<g class="fl-node out" data-fk="${fk}"><title>${esc(`Trigger #${n.t.id} ${n.t.name} controls:\n${n.list.map((d) => `${OUT_KINDS[d.kind][0]} ${d.out}${d.acts.length ? `: ${d.acts.join(', ')}` : ''}`).join('\n')}\n(tick "only" with this trigger selected to see each device)`)}</title>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><text x="${x + w / 2}" y="${y + 17}" text-anchor="middle">${esc(cut(text, 26))}</text></g>`;
+    }
+    if (n.out) {
+      const [icon, what] = OUT_KINDS[n.kind];
+      return `<g class="fl-node out" data-fk="${fk}"><title>${esc(`${n.kind === 'drv' ? `${what} (${n.type})` : what} ${n.out}${n.acts.length ? `: ${n.acts.join(', ')}` : ''}\n(by trigger #${n.t.id} ${n.t.name})`)}</title>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><text x="${x + w / 2}" y="${y + 17}" text-anchor="middle">${esc(cut(`${icon} ${n.out}${n.acts.length ? `: ${n.acts.join(', ')}` : ''}`, 26))}</text></g>`;
+    }
+    if (n.src || n.fb || n.hub) {
+      const cls = n.fb ? 'fb' : n.hub ? 'hub' : 'src';
+      const title = n.fb ? `Feedback: trigger #${n.t.id} changes panel control${n.fb.length > 1 ? 's' : ''} / label${n.fb.length > 1 ? 's' : ''} ${n.fb.map((f) => `'${esc(f)}'`).join(', ')}`
+        : n.hub ? `${esc(n.hub)}: the triggers above change it, the triggers below react to the change`
+          : esc([n.desc || n.src, ...g.edges.filter((e) => e.a === k).map((e) => { const t = g.nodes.get(e.b).t; return `${e.why.join(', ')} → #${t.id} ${t.name}`; })].join('\n'));
+      return `<g class="fl-node ${cls}" data-fk="${fk}"><title>${title}</title>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${n.hub ? 4 : h / 2}"/><text x="${x + w / 2}" y="${y + 17}" text-anchor="middle">${esc(cut(n.fb ? `↩ ${n.fb.join(', ')}` : n.hub ? `◇ ${n.hub}` : n.src, n.hub ? 21 : 26))}</text></g>`;
+    }
+    const t = n.t, col = trigColor(t.color), i = p.triggers.indexOf(t), cond = t.conditions?.some((c) => c.trim());
+    // The name gets what the number and the type (right) leave free, about 7 px a letter.
+    const room = Math.max(6, Math.floor((w - 26 - String(t.id).length * 6.5 - (t.type.length + (cond ? 3 : 0)) * 6) / 7));
+    return `<g class="fl-node${k === selKey ? ' sel' : ''}${t.enabled === false ? ' disabled' : ''}${looping.has(k) ? ' looping' : ''}${g.dim?.has(k) ? ' dim' : ''}" data-fk="${fk}" data-sel="trigger:${i}"><title>#${t.id} ${esc(t.name)} (${esc(t.type)})${t.enabled === false ? ' - disabled' : ''}${cond ? `\nOnly if: ${esc(t.conditions.filter((c) => c.trim()).join(' and '))}` : ''}${looping.has(k) ? `\n${esc(triggerLoop(t))}` : ''}</title>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>${col ? `<rect class="fl-col" x="${x}" y="${y}" width="4" height="${h}" style="fill:${col}"/>` : ''}
+      <text x="${x + 10}" y="${y + 19}"><tspan class="fl-id">${t.id}</tspan> ${esc(cut(t.name || '', room))}</text><text class="fl-type" x="${x + w - 6}" y="${y + 19}" text-anchor="end">${cond ? '<tspan class="fl-if">if</tspan> ' : ''}${esc(t.type)}</text></g>`;
   };
-  return box(`<svg width="${L.w}" height="${L.h}" viewBox="0 0 ${L.w} ${L.h}">
+  return box(`<svg width="${Math.round(L.w * z)}" height="${Math.round(L.h * z)}" viewBox="0 0 ${L.w} ${L.h}">
     <defs><marker id="flArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
-      <marker id="flArrowHot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs>
-    ${g.edges.map(edgeSvg).join('')}${[...g.nodes].map(nodeSvg).join('')}</svg>`) +
-    `<p class="muted flow-help">Arrows: what sets off what (select a trigger to see why). Boxes light up when they fire on the controller. Dashed: cancels/stops, or goes back.${g.hidden ? ` ${g.hidden} trigger${g.hidden === 1 ? '' : 's'} without links not shown.` : ''}</p>`;
+      <marker id="flArrowHot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
+      <marker id="flArrowLoop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs>
+    ${g.edges.map(edgeSvg).join('')}${[...g.nodes].map(nodeSvg).join('')}</svg>`,
+  `<p class="muted flow-help">Top to bottom: where events come from (round boxes), the triggers and what they set off; mode and variable changes go through a ◇ box; under a trigger, the panel buttons and labels it changes (↩ feedback). Diamonds are <code>if</code>s in the actions: <b class="ok">yes</b> = then, <b class="bad">no</b> = else. Select a trigger to see why each arrow is there. Dashed: cancels/stops, or goes back up; red = an endless loop.${focus ? ` Only the flow of #${selT.id} ${esc(selT.name)}: what sets it off and what it sets off.` : fc.size ? ' Only the triggers with the picked colours and what is linked to them (other triggers dimmed).' : g.hidden ? ` ${g.hidden} trigger${g.hidden === 1 ? '' : 's'} without links not shown.` : ''}</p>`);
+}
+// After an edit in the editor: redraw only the diagram, so the field being typed in keeps its focus.
+function refreshTrigFlow() {
+  const wrap = $('.trig-flow-wrap'), t = P().triggers[S.sel.trigger];
+  if (!wrap || S.view !== 'triggers') return;
+  wrap.outerHTML = trigFlowHtml(t && t.type !== 'comment' ? t : null);
+  trigFlowAfter();
+}
+function trigFlowAfter() {
+  const flow = $('.trig-flow');
+  if (!flow) return;
+  flow.scrollLeft = S.flowScroll?.[0] || 0;
+  flow.scrollTop = S.flowScroll?.[1] || 0;
+  flow.addEventListener('scroll', () => (S.flowScroll = [flow.scrollLeft, flow.scrollTop]));
+  // The small box can be resized (bottom edge); remember the height in this browser.
+  if (!S.flowBig) new ResizeObserver(() => { try { localStorage.setItem('kd.trigFlowH', String(flow.offsetHeight)); } catch { /* private mode */ } }).observe(flow);
+  $('#flowBig').addEventListener('click', () => { S.flowBig = !S.flowBig; S.flowScroll = null; render(); });
+  $('#flowOnly')?.addEventListener('change', (e) => { S.flowOnly = e.target.checked; S.flowScroll = null; render(); });
+  $$('[data-flowcol]').forEach((b) => b.addEventListener('click', () => {
+    const c = b.dataset.flowcol;
+    S.flowColors.has(c) ? S.flowColors.delete(c) : S.flowColors.add(c);
+    S.flowScroll = null;
+    render();
+  }));
+  $('[data-flowcol-clear]')?.addEventListener('click', () => { S.flowColors.clear(); S.flowScroll = null; render(); });
+  for (const b of $$('[data-flowzoom]')) b.addEventListener('click', () => {
+    const d = +b.dataset.flowzoom, z = flowZoom();
+    S.flowZoom = d ? Math.max(0.3, Math.min(2, Math.round((z + d * (z < 1 || (z === 1 && d < 0) ? 0.1 : 0.25)) * 100) / 100)) : 1;
+    render();
+  });
 }
 // Live: the controller logs "Trigger 5 'Name' fired (<reason>[ from trigger 3])" (Triggers.cpp,
 // runTrigger). Light up that box and the arrow it came by. Without a "from" (a mode or variable
 // change is handled later in the main loop), the arrow is the one from the trigger that fired last.
 const FIRED_LINE = /^Trigger (\d+) '.*' fired \((.*)\)$/;
+const flowFk = (k) => `[data-fk="${CSS.escape(k)}"]`, flowEk = (e) => `[data-ek="${CSS.escape(`${e.a}>${e.b}`)}"]`;
+// Light up the arrows of link lk (trigger → what it sets off), and the ifs and boxes on the way.
+function flowChain(g, lk) {
+  for (const e of g?.edges || []) if (e.lk.has(lk)) { flowFlash(flowEk(e)); if (e.a !== lk.split('>')[0]) flowFlash(flowFk(e.a)); }
+}
+// When each action line of t runs, in ms after it fires: [{line, at, wait}]. A "sleep" moves
+// the lines after it on; lines after a "wait until" have wait: true (at = after the wait
+// ends); a "repeat n times every s" line runs once per round and holds up the lines after it.
+function actionTimes(t) {
+  const out = [];
+  let at = 0, wait = false;
+  (t.actions || []).forEach((raw, i) => {
+    const a = raw.trim();
+    const sl = /^sleep\s+(\d+(?:\.\d+)?)\s*$/i.exec(a);
+    if (sl) { at += +sl[1] * 1000; return; }
+    if (/^wait\s+until\b/i.test(a)) { if (!wait) { wait = true; at = 0; } return; }
+    const rp = /^repeat\s+(\d+)\s+times\s+(?:every\s+(\d+(?:\.\d+)?)\s)?/i.exec(a) || /^repeat\s+(?:"[^"]*"|\S+)\s+(\d+)\s+times\s+every\s+(\d+(?:\.\d+)?)/i.exec(a);
+    const n = rp && rp[2] ? Math.min(+rp[1], 50) : 1, every = rp && rp[2] ? +rp[2] * 1000 : 0;
+    for (let k = 0; k < n; k++) out.push({ line: i, at: at + k * every, wait });
+    at += (n - 1) * every;
+  });
+  return out;
+}
+// What a trigger changes (timelines, panel feedback, devices) lights up when that action line
+// runs, not all at once when it fires. Lines after a "wait until" wait for the status to show
+// the wait is over (updateTrigRunning). An "if" may skip a line, but the log doesn't say.
+function flowPlay(t, key, g) {
+  const byLine = new Map();
+  for (const l of g.links.values())
+    if (l.a === key && /^(tl|fb:|o:)/.test(l.b)) for (const i of l.lines || []) (byLine.get(i) || byLine.set(i, []).get(i)).push(l);
+  if (!byLine.size) return;
+  const light = (ls) => {
+    for (const l of ls) {
+      flowChain(g, `${l.a}>${l.b}`);
+      flowFlash(flowFk(g.ren?.get(l.b) || l.b));
+      (S.flowRecent || (S.flowRecent = new Map())).set(l.b, Date.now());
+    }
+  };
+  const later = [];
+  for (const x of actionTimes(t)) {
+    const ls = byLine.get(x.line);
+    if (!ls) continue;
+    if (x.wait) later.push([x.at, ls]);
+    else if (x.at) setTimeout(() => light(ls), x.at);
+    else light(ls);
+  }
+  if (later.length) (S.flowWaits || (S.flowWaits = new Map())).set(t.id, { at: Date.now(), seen: false, run: () => later.forEach(([ms, ls]) => setTimeout(() => light(ls), ms)) });
+}
 function onTrigLog(m) {
   const x = m.c === 'TRIG' && FIRED_LINE.exec(m.m || '');
   if (x) trigHistPoke();
@@ -938,17 +1637,19 @@ function onTrigLog(m) {
   let from = ft ? `t${ft[1]}` : tl ? `tl${tl[1]}` : null;
   if (!from && g) {
     let best = 0;
-    for (const e of g.edges) if (e.b === key && !e.weak && (recent.get(e.a) || 0) > Math.max(best, now - 3000)) { best = recent.get(e.a); from = e.a; }
+    for (const l of g.links.values()) if (l.b === key && !l.weak && (recent.get(l.a) || 0) > Math.max(best, now - 3000)) { best = recent.get(l.a); from = l.a; }
   }
   recent.set(key, now);
   // A trigger with a "sleep" keeps running; light it until the status says it is done.
   const trig = P().triggers.find((t) => t.id === +x[1] && t.type !== 'comment');
   if (trig?.actions?.some((a) => /^\s*(sleep|wait|repeat\s.*\btimes)\b/i.test(a))) (S.trigStarted || (S.trigStarted = new Map())).set(+x[1], now);
   updateTrigRunning();
-  flowFlash(`[data-fk="${key}"]`);
-  if (from) { flowFlash(`[data-ek="${from}>${key}"]`); flowFlash(`[data-fk="${from}"]`, true); }
-  // Timelines it (probably) starts: an "if" may skip it, but the log doesn't say.
-  for (const e of g?.edges || []) if (e.a === key && e.b.startsWith('tl')) { flowFlash(`[data-ek="${e.a}>${e.b}"]`); flowFlash(`[data-fk="${e.b}"]`); recent.set(e.b, now); }
+  // The arrow it came by (through any ifs on the way); with no trigger before it, the box
+  // its event comes from (panel button, device…).
+  flowFlash(flowFk(key));
+  if (from) { flowChain(g, `${from}>${key}`); flowFlash(flowFk(from), true); }
+  else for (const e of g?.edges || []) if (e.b === key && e.a.startsWith('s:')) { flowFlash(flowEk(e)); flowFlash(flowFk(e.a)); }
+  if (trig && g) flowPlay(trig, key, g);
   // The row in the list, with where it came from ("← 38", "← TL 2") while it is lit.
   const i = P().triggers.findIndex((t) => t.id === +x[1] && t.type !== 'comment');
   const row = i >= 0 && $(`.trig-list [data-sel="trigger:${i}"]`);
@@ -964,6 +1665,12 @@ function onTrigLog(m) {
 // lists the rest of its actions as a scheduled job with sleep: true and the time left.
 // Just after it fired the status may not have it yet, so a fresh start counts too.
 function updateTrigRunning() {
+  // A run waiting in "wait until" (flowPlay): once the status showed the wait and now doesn't,
+  // the rest of its actions run. If it never showed up the condition was already true.
+  for (const [id, w] of S.flowWaits || []) {
+    if ((S.status?.scheduled || []).some((s) => s.trigger === id && s.wait != null)) w.seen = true;
+    else if (w.seen || Date.now() - w.at > 2500) { S.flowWaits.delete(id); w.run(); }
+  }
   if (S.view !== 'triggers') return;
   const live = trigLiveOn(), run = new Map(), now = Date.now();
   if (live) {
@@ -1050,19 +1757,29 @@ const trigKeysActive = () => S.view === 'triggers' && !editingText(document.acti
 views.triggers.keys = (e) => {
   if ($('.builder')) return;   // the command builder dialog is open
   const p = P(), mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (S.flowBig) {   // the big flow view covers the list: only Esc (back to it)
+    if (e.key === 'Escape') { S.flowBig = false; render(); }
+    return;
+  }
   if (mod && k === 'h') {
     e.preventDefault();
     S.trigTool = 'replace';
     render();
     $('#frFind')?.focus();
     $('#frFind')?.select();
+  } else if (mod && k === 'f') {
+    e.preventDefault();
+    $('#trigFilter')?.focus();
+    $('#trigFilter')?.select();
   } else if (mod && k === 'd') {
     e.preventDefault();
     const idx = selectedTrigIdx();
     if (idx.length) insertTriggers(idx.map((i) => p.triggers[i]), Math.max(...idx) + 1, 'Duplicated');
   } else if (mod && k === 'a') {
     e.preventDefault();
-    selectTriggers(p.triggers.map((_, i) => i), S.sel.trigger);
+    // Only what the list shows, so a search + Ctrl+A + Del can't delete hidden triggers.
+    const vis = trigVisibleIdx();
+    selectTriggers(vis, vis.includes(S.sel.trigger) ? S.sel.trigger : vis[0]);
     S.revealSel = false;
     render();
   } else if (mod && (k === 'c' || k === 'x')) {
@@ -1083,9 +1800,16 @@ views.triggers.keys = (e) => {
   } else if (e.key === 'Delete') {
     e.preventDefault();
     deleteTriggers(selectedTrigIdx());
+  } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.altKey && !mod) {
+    e.preventDefault();
+    moveTriggers(e.key === 'ArrowUp' ? -1 : 1);
   } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !mod) {
     e.preventDefault();
-    const i = Math.max(0, Math.min(p.triggers.length - 1, S.sel.trigger + (e.key === 'ArrowDown' ? 1 : -1)));
+    // Step through the triggers the list shows (a search or colour filter hides the rest).
+    // While searching, skip the separators (they are only headings then).
+    const vis = trigVisibleIdx().filter((j) => !(S.trigFilter && p.triggers[j].type === 'comment')), at = vis.indexOf(S.sel.trigger);
+    if (!vis.length) return;
+    const i = vis[at < 0 ? 0 : Math.max(0, Math.min(vis.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))];
     if (e.shiftKey) { S.trigSel.add(p.triggers[i]); S.sel.trigger = i; S.revealSel = true; render(); }
     else { selectTriggers([i]); render(); }
   }

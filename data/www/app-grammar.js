@@ -34,8 +34,10 @@ const GRAMMAR = [
   ['panel {pctl} flash {flash}', 'Make a panel control flash (on, or a colour to flash in) or stop (off)'],
   ['panel {pctl} value {pval}', 'Move a slider or dial, switch a toggle (1/0), set a colour wheel (#rrggbb) or an XY pad (x,y)'],
   ['panel {pctl} disable', 'Grey out a panel control so it can’t be used'],
-  ['panel {pctl} enable', 'Make a disabled panel control usable again'],
-  ['panel {pctl} reset', 'Back to the text and colour set on the Panel page, flashing and disabled off'],
+  ['panel {pctl} enable', 'Make a disabled panel control usable again (also one ticked "disabled" on the Panel page)'],
+  ['panel {pctl} lock', 'Panel control shows as normal but can’t be touched (e.g. a slider used as a progress bar)'],
+  ['panel {pctl} unlock', 'Panel control can be touched again (also one set to "display only" on the Panel page)'],
+  ['panel {pctl} reset', 'Back to the text, colour, "display only" and "disabled" set on the Panel page, flashing off'],
   ['fire trigger {trig}', 'Run another trigger now (nested task list)'],
   ['fire trigger {trig} after {sec}', 'Run another trigger after a delay (Wait)'],
   ['cancel trigger {trig}', 'Cancel delayed fires of a trigger'],
@@ -74,6 +76,14 @@ const GRAMMAR = [
   ['var {var} = {text...}', 'Set a variable'],
   ['var {var} + {num}', 'Add to a number variable'],
   ['var {var} - {num}', 'Subtract from a number variable'],
+  ['var {var} ++', 'Add 1 to a number variable (count up)'],
+  ['var {var} --', 'Subtract 1 from a number variable (count down)'],
+  ['var {var} += {num}', 'Add to a number variable (same as +)'],
+  ['var {var} -= {num}', 'Subtract from a number variable (same as -)'],
+  ['var {var} * {num}', 'Multiply a number variable'],
+  ['var {var} / {num}', 'Divide a number variable'],
+  ['var {var} *= {num}', 'Multiply a number variable (same as *)'],
+  ['var {var} /= {num}', 'Divide a number variable (same as /)'],
   ['var {var} toggle', 'Flip an on/off variable'],
   ['if {cond...} then {command...}', 'Run a command only when a condition holds (optional: else <command>)', { hidden: true }],
   ['send tcp {tcpdev} {text...}', 'Send a line to a TCP device'],
@@ -89,6 +99,10 @@ const GRAMMAR = [
   ['knx {knx} write {knxga} {knxval} {dpt}', 'KNX: write a group address with this DPT'],
   ['knx {knx} read {knxga}', 'KNX: ask for the value of a group address'],
   ['brightsign {bsign} send {text...}', 'BrightSign: send a UDP command to the presentation'],
+  ['brightsign {bsign} event {text...}', 'BrightSign (KD plugin): a Plugin Message to the presentation - use it on a transition to go to any state'],
+  ['brightsign {bsign} var {bsvar} {text...}', 'BrightSign (KD plugin): set a user variable of the presentation'],
+  ['brightsign {bsign} play {bszone} {bsfile}','BrightSign (KD plugin): play a file in a zone directly'],
+  ['brightsign {bsign} stop {bszone}', 'BrightSign (KD plugin): stop the video/audio of a zone'],
   ['brightsign {bsign} reboot', 'BrightSign: reboot the player'],
   ['brightsign {bsign} api {httpmethod} {path}', 'BrightSign: any local DWS API call, e.g. api get info'],
   ['brightsign {bsign} api {httpmethod} {path} {text...}', 'BrightSign: local DWS API call with a JSON body'],
@@ -270,7 +284,7 @@ function matchPart(part, tok) {
     case '{kissval}': return /^(on|off)$/i.test(tok) || (/^\d+$/.test(tok) && +tok <= 255);
     case '{slot}': return /^[1-8]$/.test(tok);
     case '{knxga}': return /^\d+\/\d+(\/\d+)?$/.test(tok) || !!knxAddr(tok);
-    case '{knxval}': case '{word}': case '{path}': case '{digiscene}': return tok.length > 0;
+    case '{knxval}': case '{word}': case '{path}': case '{digiscene}': case '{bszone}': case '{bsvar}': case '{bsfile}': return tok.length > 0;
     case '{dpt}': return /^\d+(\.\d+)?$/.test(tok);
     case '{netioout}': return /^(all|\d+)$/i.test(tok) || (drvStatusOf(ctxDrv('netio'))?.points || []).some((x) => /^out\d+$/.test(x.k) && (x.n || '').toLowerCase() === tok.toLowerCase());
     case '{netioact}': return /^(on|off|toggle|restart|pulse)$/i.test(tok);
@@ -353,7 +367,7 @@ function candidates(part, partial) {
     case '{date}': return presets(['12-24', '12-31', '01-01', new Date().toISOString().slice(0, 10)], '<MM-DD | YYYY-MM-DD>');
     case '{days}': return presets(['mon,tue,wed,thu,fri', 'sat,sun'], '<mon,tue,…>');
     case '{email}': return hint('<name@domain>');
-    case '{tl}': return objs(p.timelines, 'timeline');
+    case '{tl}': return named(p.timelines, 'timeline');
     case '{sc}': return objs(p.scenes, 'scene');
     case '{sec}': return presets(['0', '1', '2', '3', '5', '10'], '<seconds>');
     case '{pct}': return presets(['0', '25', '50', '75', '100'], '<0-100>');
@@ -396,6 +410,12 @@ function candidates(part, partial) {
           ['temperature', 'temperatures'], ['time', 'clock'], ['text_slot', 'text slots'], ['lua', 'Lua variables'], ['log', 'controller log'], ['replication', 'replication'], ['input', 'inputs']];
       return [...paths.filter(([v]) => v.startsWith(pl)).map(([v, n]) => ({ insert: v, label: v, desc: n, key: 'pa' + v })), ...hint('<path, e.g. info or /api/v1/info>')];
     }
+    // BrightSign zones and user variables, as the kdlink plugin reported them.
+    case '{bszone}': return [...(drvStatusOf(ctxDrv('brightsign'))?.points || []).filter((x) => /^z\d+$/.test(x.k)).map((x) => [x.k.slice(1), (x.n || '').replace(/^Zone \d+ ?/, ''), x.v])
+      .filter(([n, name]) => n.startsWith(pl) || name.toLowerCase().includes(pl)).map(([n, name, v]) => ({ insert: quote(name || n), label: name || n, desc: `zone ${n}${v ? ' · now ' + v : ''}`, key: 'bz' + n })), ...hint('<zone name or #>')];
+    case '{bsvar}': return [...(drvStatusOf(ctxDrv('brightsign'))?.points || []).filter((x) => x.k.startsWith('var.') && (x.n || x.k).toLowerCase().includes(pl))
+      .map((x) => ({ insert: quote(x.n || x.k.slice(4)), label: x.n || x.k.slice(4), desc: `user variable · now ${x.v}`, key: 'bv' + x.k })), ...hint('<user variable>')];
+    case '{bsfile}': return hint('<file on the card, e.g. clip.mp4>');
     case '{digiscene}': return [...(drvStatusOf(ctxDrv('digidot'))?.scenes || []).filter((s) => s.toLowerCase().includes(pl))
       .map((s) => ({ insert: quote(s), label: s, desc: 'DiGidot scene', key: 'ds' + s })), ...hint('<scene name or #>')];
     case '{netioout}': {
@@ -845,7 +865,8 @@ function attachAC(input, { onEnter, grammar = GRAMMAR } = {}) {
 // ---------------------------------------------------------------------------
 const KEYWORD_HELP = {
   var: 'A user variable (Variables page): number, text or on/off.', toggle: 'Flip on ↔ off.',
-  '=': 'Set to / equals.', '+': 'Add.', '-': 'Subtract.',
+  '=': 'Set to / equals.', '+': 'Add.', '-': 'Subtract.', '*': 'Multiply.', '/': 'Divide.',
+  '++': 'Add 1.', '--': 'Subtract 1.', '+=': 'Add.', '-=': 'Subtract.', '*=': 'Multiply.', '/=': 'Divide.',
   if: 'Run a command only when a condition holds.', then: 'Runs when the condition is true.', else: 'Runs when the condition is false.',
   tcp: 'TCP: a kept-open connection to a device (Devices page); its replies fire TCP triggers.',
   http: 'HTTP request to a web/REST API (plain http). The response fires HTTP triggers.',
@@ -871,6 +892,7 @@ const KEYWORD_HELP = {
   panel: 'A control on the touch panel (button, toggle, slider, dial, colour wheel, label), by its name.',
   flash: 'Blink: on, off, or a colour to blink in.', value: 'The position of a slider or dial, a toggle (1/0) or a colour wheel (#rrggbb).',
   disable: 'Greyed out: can’t be touched.', enable: 'Usable again.',
+  lock: 'Looks normal but can’t be touched (a progress bar).', unlock: 'Can be touched again.',
   fire: 'Run another trigger’s actions.', trigger: 'A trigger from the trigger list.',
   after: 'Delay before it runs, in seconds (Pharos “Wait”).',
   cancel: 'Cancel pending delayed fires.',
@@ -914,7 +936,7 @@ const PART_CLASS = {
   '{onoff}': 'kw', '{loglvl}': 'kw', '{text...}': 'str', '{pc}': 'ref', '{pcaction}': 'kw', '{devname}': 'ref', '{updown}': 'kw',
   '{var}': 'ref', '{num}': 'num', '{op}': 'kw', '{tcpdev}': 'ref', '{httpmethod}': 'kw', '{url}': 'addr', '{mbdev}': 'ref', '{mbtable}': 'kw',
   '{calname}': 'ref', '{activity}': 'kw', '{date}': 'addr',
-  '{kiss}': 'ref', '{knx}': 'ref', '{bsign}': 'ref', '{digi}': 'ref', '{netio}': 'ref', '{pharos}': 'ref', '{digiscene}': 'ref', '{word}': 'ref',
+  '{kiss}': 'ref', '{knx}': 'ref', '{bsign}': 'ref', '{digi}': 'ref', '{netio}': 'ref', '{pharos}': 'ref', '{digiscene}': 'ref', '{word}': 'ref', '{bszone}': 'ref', '{bsvar}': 'ref', '{bsfile}': 'str',
   '{kisspoint}': 'addr', '{knxga}': 'addr', '{path}': 'addr', '{kissval}': 'num', '{slot}': 'num', '{dpt}': 'num', '{netioout}': 'num', '{knxval}': 'str',
   '{netioact}': 'kw', '{pharostl}': 'kw', '{pharossc}': 'kw', '{fixgrp}': 'kw', '{pharosproto}': 'kw',
   '{iopoint}': 'addr', '{ioval}': 'num',
@@ -1000,6 +1022,12 @@ function partHelp(part, tok, g) {
     }
     case '{ioval}': return /^\d/.test(tok) ? `${tok} V` : `Switch ${tok}`;
     case '{digiscene}': return `DiGidot scene “${tok}”${/^\d+$/.test(tok) ? ' (by position in the list)' : ''}`;
+    case '{bszone}': case '{bsvar}': {
+      const zone = part === '{bszone}', t = tok.toLowerCase();
+      const p = (drvStatusOf(ctxDrv('brightsign'))?.points || []).find((x) => (zone ? /^z\d+$/.test(x.k) && (x.k.slice(1) === t || (x.n || '').replace(/^Zone \d+ ?/, '').toLowerCase() === t)
+        : x.k.startsWith('var.') && (x.n || x.k.slice(4)).toLowerCase() === t));
+      return `${zone ? 'Zone' : 'User variable'} “${tok}”${p ? ` · now ${p.v || '—'}` : ' (not reported by the player yet)'}`;
+    }
     case '{path}': return tok.startsWith('/') ? `Path ${tok}` : `Path ${CTX[0]?.toLowerCase() === 'brightsign' ? '/api/v1/' : '/api/'}${tok}`;
     case '{sec}': return `${tok} seconds`;
     case '{pct}': return `${tok} %`;
@@ -1145,11 +1173,11 @@ function builderField(part, val, i) {
     const cur = findRef(list, String(val ?? '').replace(/^"|"$/g, ''));
     const v = (o) => (o.name && !/^\d+$/.test(o.name) && list.filter((x) => (x.name || '').toLowerCase() === o.name.toLowerCase()).length === 1 ? quote(o.name) : o.id);
     if (cur) val = v(cur);
-    return sel([['all', all], ...list.map((x) => [v(x), `${x.name} (#${x.id})`])]);
+    return sel([...(all ? [['all', all]] : []), ...list.map((x) => [v(x), `${x.name} (#${x.id})`])]);
   };
   const num = (min, max, step = 1) => `<input type="number" data-bi="${i}" min="${min}" max="${max}" step="${step}" value="${esc(val)}" style="width:90px">`;
   switch (part) {
-    case '{tl}': return sel(p.timelines.map((t) => [t.id, `${t.id} · ${t.name}`]));
+    case '{tl}': return refSel(p.timelines);
     case '{sc}': return sel(p.scenes.map((s) => [s.id, `${s.id} · ${s.name}`]));
     case '{trig}': return sel(p.triggers.filter((t) => t.type !== 'comment').map((t) => [findTrigs(t.name).length === 1 ? quote(t.name) : t.id, `${t.id} · ${t.name}`]));
     case '{mode}': return sel(p.modes.flatMap((g) => g.states.map((s) => [quote(s), `${g.name}: ${s}`])));

@@ -484,7 +484,7 @@ void handleUdp(UdpListener& l, int listener, bool isCommandPort) {
     String msg((const char*)pkt);
     msg.trim();
     LOGD(Trig, "UDP :%u from %s: '%s'", l.port, from.toString().c_str(), msg.c_str());
-    Drivers::onUdp(from, msg);
+    if (Drivers::onUdp(from, msg)) continue;   // a BrightSign plugin report, not a trigger message
     Vars vars;
     vars.set("message", msg);
     senderVars(vars, from, fromPort, listener);
