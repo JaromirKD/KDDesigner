@@ -102,6 +102,8 @@ void updateStats(uint32_t now) {
   g_stats.sacnTxPs = Net::counters.sacnTx - lastNet.sacnTx;
   lastNet.artTx = Net::counters.artTx;
   lastNet.artRx = Net::counters.artRx;
+  g_stats.sacnRxPs = Net::counters.sacnRx - lastNet.sacnRx;
+  lastNet.sacnRx = Net::counters.sacnRx;
   lastNet.sacnTx = Net::counters.sacnTx;
   g_stats.udpRxPs = Triggers::udpReceived() - lastUdp;
   lastUdp = Triggers::udpReceived();
@@ -187,6 +189,9 @@ void loop() {
 
   CRUMB("waiting for g_engine");
   g_engine.lock();
+  // Read again: while we waited the web thread may have started a timeline at a later
+  // millis(), and the engine must not see a start time in its future.
+  now = millis();
   CRUMB("Net::poll");
   Net::poll();   // under the lock: DMX-input frames are read by Triggers, set up by a project (re)load
   CRUMB("Triggers::poll");

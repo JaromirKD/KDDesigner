@@ -136,17 +136,47 @@ Still open:
   `setSocketTimeout`. `Io.cpp` logs "I/O thread: <job> took N ms" over 500 ms. Afterwards: PLC
   polled every 500 ms (max gap 506 ms) with the Inloop playing, trigger test 22/25 (the 3 left
   are the test's own expectations and sACN input), TCP + Modbus reconnect after the peer restarts.
-  Not yet done: a clean 5-minute run on the final build (the network cable/link was lost during it).
-- **No network at start-up**: with the cable out, DHCP fails, the log says "Ethernet cable not
-  connected" and the IP stays 0.0.0.0 (the fallback 192.168.1.50 isn't used). Check that the
-  controller picks the network up when the cable is plugged in later (DHCP retry on link-up).
-- **Start reason after reflashing the same build** says `unexpected`: the build id hashes
-  `KD_VERSION __DATE__ __TIME__` of main.cpp only, which isn't recompiled when other files change.
-  Use a checksum of the flash image instead.
-- **sACN input** (`dmx_in` with protocol sacn, unicast from the PC to universe 1) did not fire; Art-Net
-  input did. Check the sACN receive path in `Net::poll` (multicast join + unicast on 5568).
-- **Engine load with a big show**: the feature demo's Inloop takes ~12 ms of the 25 ms tick (spikes
-  to 23 ms), and then the DMX port drops to ~22 fps. Profile `Show::tick` / `sendOutputs` / effects.
+  Clean 5-minute run done 6 Nov 2026 (router off, fallback address): PLC every 505 ms, 0 failed
+  requests; only the one NTP try (no DNS) still blocked the I/O thread 15 s - see NTP below.
+- ~~No network at start-up~~ - fixed 6 Nov 2026. The "lost network" that day was the office
+  router (DHCP server) being off, not the cable: Arduino's `Ethernet.linkStatus()` only says
+  whether the interface has an address, so "no DHCP answer" was logged as "cable not connected",
+  and the fallback never took because `Ethernet.begin(ip…)` was called while the DHCP connect was
+  still running (a second `connect()` is ignored). Now (`Net::begin` / `Net::maintain`): the cable
+  link is read from the PHY chip on Mbed's shared event queue (the driver's own PHY thread), the
+  log says "No Ethernet link…" or "Cable OK, but no DHCP answer…", the interface is disconnected
+  before the fallback is set, and cable pulls are logged. While on the fallback a DHCP DISCOVER
+  goes out every 30 s from port 68 *keeping the address*; only an OFFER switches the interface
+  to DHCP (back to the fallback after 10 s if no lease, then 10 min before the next switch). A
+  first version re-ran lwIP's DHCP every minute instead: every device dropped off for 10 s each
+  time. Fallback is now `172.16.1.111` (the office network; `KD_FALLBACK_*` can be set per build).
+- ~~Start reason after reflashing the same build says `unexpected`~~ - fixed: the build id is a
+  hash of the firmware in flash (code + data, `buildId()` in main.cpp) instead of main.cpp's
+  `__DATE__ __TIME__`, and a USB upload (the 1200-baud touch, hooked in our `variant.cpp` as
+  `kdBeforeBootloader`) is marked, so the same build flashed again shows `USB upload`.
+- ~~NTP blocked the I/O thread every minute~~ - fixed: with no DNS answer (router off) a try took
+  ~17 s on the I/O thread, which also polls PLCs and TCP devices (PLC gaps of 17 s). Now the
+  name is resolved first (Arduino's `beginPacket(host)` "succeeded" without an address) and
+  failed tries back off 1, 2, 4 … 30 min. Better still: NTP in its own thread.
+- ~~sACN input did not fire~~ - fixed 6 Nov 2026. Unicast always worked: a "changes" `dmx_in`
+  trigger logs "fired" at debug level, which the trigger test looks for (`trigtest.js` should
+  check the grand master instead). Multicast never arrived: Mbed's STM32 EMAC driver has
+  `add_multicast_group` / `set_all_multicast` as no-ops, so the MAC filter (`ETH->MACPFR` 0)
+  dropped every multicast frame. `macAcceptGroup` in Net.cpp opens the group's hash bin (re-applied
+  every second by `Net::maintain`). Anything else that joins multicast needs the same. `sacnRx`
+  (packets/s) is in the status and on the dashboard.
+- ~~Engine tick ~24 ms with a looping timeline~~ - fixed 6 Nov 2026: the main loop read `now`
+  before waiting for `g_engine`; a timeline started meanwhile (web thread, trigger) had
+  `start > now`, `now - start` wrapped, the timeline "looped" every tick (`start += length` kept
+  it ahead) and re-fired all its cues 40 times a second, for ever (status `pos` ~3.7e9). Now
+  `updateTimeline` uses a signed difference and the loop reads `now` after taking the lock.
+  Worth checking the other `now - x.start` fades / effects for the same pattern.
+- **Engine load with a big show**: the feature demo's Inloop takes ~6-12 ms of the 25 ms tick
+  (measured again after the fix above, which may have caused the earlier 23 ms spikes), and then
+  the DMX port drops to ~22 fps. Profile `Show::tick` / `sendOutputs` / effects.
+- **NTP in its own thread**: a failed DNS lookup still blocks the I/O thread (PLC, TCP devices)
+  ~15 s once per back-off step. Small: "Web UI on http://0.0.0.0/" is logged when started without
+  a cable (the address follows later).
 - **Heap**: ~196 KB is used with an empty show (thread stacks ~80 KB, network, USB); the feature
   demo leaves ~100 KB free. Trim thread stacks after measuring them (Mbed stack stats are enabled).
 - Small: a timeline master set while it is releasing ends the release early in the mock but not
@@ -159,7 +189,8 @@ Still open:
 - **Engine tick 17-20 ms (budget 25) while an update is uploaded**: the HTTP thread writing to the
   stick holds the CPU. Uploads run at ~53 KB/s (TCP window 4 × 536 bytes): a 1.8 MB firmware update
   takes ~50 s. Fine outside show hours; raise `lwip.tcp-mss` / `tcp-wnd` if it matters.
-- **NTP** answered on some tries, "no reply" on others (pool.ntp.org from the office network).
+- **NTP** answered on some tries, "no reply" on others (pool.ntp.org from the office network). Recheck
+  with the router on (6 Nov it was off: no DNS at all).
 - Each `EthernetClient` still costs a 4 KB reader-thread stack plus buffers; with ~205 KB free that
   is fine, but watch the heap line with many TCP devices / projectors.
 

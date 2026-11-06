@@ -995,7 +995,10 @@ void runUdp() {
       if (d.type == Kiss && kissOpen) {
         if (d.pollPending && now - d.pollSentAt > 2000) {
           d.pollPending = false;
-          if (markCheck(d, false, true, "no reply on UDP " + String(d.port))) events.push_back({d.id, false});
+          // The box sends its answers to the return IP/port set in the box (Kiss-Box Editor),
+          // not to whoever asked: commands still work when that points elsewhere, so say so.
+          if (markCheck(d, false, true, "no reply - set the box's return IP to " + Net::localIP().toString() + " port " + String(kissOpen) + " (Kiss-Box Editor, I/O Mode Setup)"))
+            events.push_back({d.id, false});
         }
         if ((int32_t)(now - d.nextPoll) >= 0) {
           d.nextPoll = now + Monitor::intervalMs();

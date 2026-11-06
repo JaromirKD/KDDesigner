@@ -5,7 +5,7 @@
 struct Stats {
   uint32_t engineFps = 0;
   uint32_t dmxFps = 0;
-  uint32_t artTxPs = 0, artRxPs = 0, sacnTxPs = 0, udpRxPs = 0;
+  uint32_t artTxPs = 0, artRxPs = 0, sacnTxPs = 0, sacnRxPs = 0, udpRxPs = 0;
   uint32_t tickUsMax = 0;     // worst engine tick in the last second
   uint32_t loopUsMax = 0;     // worst main-loop iteration in the last second
   uint32_t httpRequests = 0;

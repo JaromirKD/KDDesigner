@@ -840,9 +840,10 @@ function setUiPref(k, v) {
 // controller", so you never change a running show thinking it is your PC copy.
 const LIVE_COLORS = [   // key, colour, text on it
   ['red', '#e5484d', '#fff'], ['magenta', '#d63ad6', '#fff'], ['orange', '#ff7a1a', '#111'],
-  ['green', '#2fbf71', '#111'], ['blue', '#3b82f6', '#fff'],
+  ['green', '#2fbf71', '#111'], ['blue', '#3b82f6', '#fff'], ['grey', '#6b7280', '#fff'],
 ];
 const liveColor = () => LIVE_COLORS.find(([k]) => k === uiPref('kd.liveColor', 'red')) || LIVE_COLORS[0];
+const pcColor = () => LIVE_COLORS.find(([k]) => k === uiPref('kd.pcColor', 'blue')) || LIVE_COLORS[4];
 // null until the first status: nothing is shown rather than a wrong guess.
 const isLive = () => (S.status ? S.status.version !== 'mock' : null);
 function pageTitle() {
@@ -853,10 +854,11 @@ function pageTitle() {
 let whereKey = '';
 function applyWhere(force) {
   const live = isLive(), st = S.status;
-  const key = `${live}|${st?.ip}|${liveColor()[0]}`;
+  const key = `${live}|${st?.ip}|${liveColor()[0]}|${pcColor()[0]}`;
   if (!force && key === whereKey) return;
   whereKey = key;
   document.body.classList.toggle('live', live === true);
+  document.body.classList.toggle('pc', live === false);
   const w = $('#where'), sv = $('#save');
   if (!w || !sv) return;   // applyUi runs once before the page is complete
   w.className = 'where' + (live ? ' on' : live === false ? ' pc' : '');
@@ -869,8 +871,8 @@ function applyWhere(force) {
   sv.textContent = live ? 'Save to controller' : 'Save';
   sv.title = live ? 'Save the project to the controller: the running show changes (Ctrl+S)' : live === false ? 'Save the project on this PC (Ctrl+S)' : 'Save project to USB (Ctrl+S)';
   document.title = pageTitle();
-  // Tab icon: a filled coloured dot when live, a grey ring on the PC.
-  const ic = live ? `<circle cx="8" cy="8" r="7" fill="${liveColor()[1]}"/>` : '<circle cx="8" cy="8" r="5.5" fill="none" stroke="#8a90a0" stroke-width="3"/>';
+  // Tab icon: a filled dot in the live colour, a ring in the PC colour.
+  const ic = live ? `<circle cx="8" cy="8" r="7" fill="${liveColor()[1]}"/>` : `<circle cx="8" cy="8" r="5.5" fill="none" stroke="${pcColor()[1]}" stroke-width="3"/>`;
   let link = $('link[rel=icon]');
   if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
   link.href = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${ic}</svg>`);
@@ -891,6 +893,8 @@ function applyUi() {
   const lc = liveColor();
   html.style.setProperty('--live', lc[1]);
   html.style.setProperty('--live-fg', lc[2]);
+  html.style.setProperty('--pc', pcColor()[1]);
+  html.style.setProperty('--pc-fg', pcColor()[2]);
   document.body.classList.toggle('live-frame', uiPref('kd.liveFrame', '1') === '1');
   applyWhere(true);
   // The compact (phone) layout follows the width the page really has after zooming;

@@ -33,10 +33,11 @@ SocketAddress sockAddr(IPAddress a) {
 
 NetConfig want;               // from the project
 bool onFallback = false;      // DHCP wanted but nobody answered: on KD_FALLBACK_IP
-bool dhcpTrying = false;      // a background DHCP try is running (no address meanwhile)
-uint32_t tryStart = 0, nextTry = 0, fallbackSince = 0, notUpSince = 0, lastPhy = 0;
+bool dhcpTrying = false;      // switched to DHCP after an OFFER (no address meanwhile)
+uint32_t tryStart = 0, nextTry = 0, notUpSince = 0, lastPhy = 0;
 int8_t lastCable = -1;
 IPAddress lastIp;
+uint8_t mac[6];
 
 IPAddress fixedIp() { return want.dhcp ? IPAddress(KD_FALLBACK_IP) : want.ip; }
 IPAddress fixedMask() { return want.dhcp ? IPAddress(KD_FALLBACK_MASK) : want.mask; }
@@ -53,9 +54,52 @@ void useFixed() {
   e->connect();
 }
 
-// Asks for DHCP again in the background; maintain() goes back to the fallback after 10 s.
-// The interface has no address meanwhile, so this is only done while on the fallback.
+// While on the fallback a DHCP DISCOVER is sent now and then from port 68, keeping the
+// address (asking lwIP for DHCP again would leave the controller without one for up to 10 s
+// each time: everything dropped off the network). Only when a server OFFERs is the
+// interface switched to DHCP.
+EthernetUDP probe;
+bool probeOpen = false;
+uint32_t probeXid = 0;
+void closeProbe() { if (probeOpen) probe.stop(); probeOpen = false; }
+void sendDiscover(uint32_t now) {
+  if (!probeOpen) probeOpen = probe.begin(68);
+  if (!probeOpen) return;
+  uint8_t p[300] = {0};                          // BOOTP minimum size
+  p[0] = 1; p[1] = 1; p[2] = 6;                  // request, Ethernet, 6-byte MAC
+  probeXid = 0x4B440000 ^ (now & 0xffff) ^ (mac[5] << 16);
+  p[4] = probeXid >> 24; p[5] = probeXid >> 16; p[6] = probeXid >> 8; p[7] = probeXid;
+  p[10] = 0x80;                                  // broadcast flag: answer to 255.255.255.255
+  memcpy(p + 28, mac, 6);
+  const uint8_t opts[] = {99, 130, 83, 99, 53, 1, 1, 55, 2, 1, 3, 255};   // cookie, DISCOVER, ask mask/router
+  memcpy(p + 236, opts, sizeof(opts));
+  probe.beginPacket(IPAddress(255, 255, 255, 255), 67);
+  probe.write(p, sizeof(p));
+  probe.endPacket();
+}
+// An OFFER for our DISCOVER: returns the server's address.
+bool offerSeen(IPAddress& server) {
+  if (!probeOpen) return false;
+  uint8_t p[300];
+  bool seen = false;
+  while (probe.parsePacket() > 0) {
+    int n = probe.read(p, sizeof(p));
+    probe.flush();
+    if (n < 243 || p[0] != 2 || memcmp(p + 28, mac, 6) != 0) continue;
+    uint32_t xid = ((uint32_t)p[4] << 24) | (p[5] << 16) | (p[6] << 8) | p[7];
+    if (xid != probeXid || p[236] != 99 || p[237] != 130) continue;
+    for (int i = 240; i + 2 < n && p[i] != 255;) {   // option 53 = message type, 2 = OFFER
+      if (p[i] == 0) { i++; continue; }
+      if (p[i] == 53 && p[i + 2] == 2) { seen = true; server = probe.remoteIP(); }
+      i += 2 + p[i + 1];
+    }
+  }
+  return seen;
+}
+
+// Switches the interface to DHCP; maintain() goes back to the fallback after 10 s.
 void tryDhcp(uint32_t now) {
+  closeProbe();   // lwIP's DHCP client needs port 68
   EthernetInterface* e = eth();
   e->disconnect();
   e->set_dhcp(true);
@@ -65,9 +109,9 @@ void tryDhcp(uint32_t now) {
   tryStart = now;
 }
 
-// Retry every minute for the first 10 minutes (a router that boots slower than the
-// controller after a power cut), then every 10 minutes.
-void scheduleTry(uint32_t now) { nextTry = now + (now - fallbackSince < 600000 ? 60000 : 600000); }
+// A DISCOVER every 30 s costs nothing (one small broadcast), so a router that comes back,
+// or boots slower than the controller after a power cut, is found within half a minute.
+void scheduleTry(uint32_t now) { nextTry = now + 30000; }
 
 // beginMulticast is protected in MbedUDP; the sACN socket joins a group for DMX input.
 struct McastUDP : public EthernetUDP {
@@ -101,6 +145,26 @@ void storeIn(bool sacn, uint16_t universe, const uint8_t* data, int len) {
   }
 }
 
+// Mbed's STM32 Ethernet driver ignores multicast joins (add_multicast_group does nothing),
+// so the MAC's own filter kept dropping sACN multicast: only unicast sACN reached the
+// socket. Let the group's MAC address 01:00:5e:7f:hi:lo through the hash filter (bin =
+// top 6 bits of the bit-reversed CRC-32 of the address, as in Linux' dwmac4 driver). Only
+// that bin passes, not all multicast, so other consoles' universes don't load the CPU.
+void macAcceptGroup(uint16_t universe) {
+  const uint8_t m[6] = {0x01, 0x00, 0x5e, 0x7f, (uint8_t)(universe >> 8), (uint8_t)(universe & 0xff)};
+  uint32_t crc = 0xffffffff;
+  for (uint8_t b : m) {
+    crc ^= b;
+    for (int i = 0; i < 8; i++) crc = (crc >> 1) ^ (0xEDB88320 & (0 - (crc & 1)));
+  }
+  crc = ~crc;
+  uint32_t bin = 0;
+  for (int i = 0; i < 6; i++) if (crc & (1u << i)) bin |= 1u << (5 - i);
+  if (bin >= 32) ETH->MACHT1R |= 1u << (bin - 32);
+  else ETH->MACHT0R |= 1u << bin;
+  ETH->MACPFR |= ETH_MACPFR_HMC;
+}
+
 // The sACN socket is also the output socket: reopen it on the main thread only,
 // when the multicast group for DMX input changes.
 void joinSacn() {
@@ -108,13 +172,17 @@ void joinSacn() {
   sacnUdp.stop();
   bool ok = sacnGroup ? sacnUdp.beginMulticast(IPAddress(239, 255, sacnGroup >> 8, sacnGroup & 0xff), kSacnPort) : sacnUdp.begin(kSacnPort);
   if (sacnGroup && !ok) { LOGW(Sacn, "Cannot join sACN universe %u (multicast) - only unicast sACN is received", sacnGroup); sacnUdp.begin(kSacnPort); }
-  else if (sacnGroup) LOGI(Sacn, "Receiving sACN universe %u for DMX input", sacnGroup);
+  else if (sacnGroup) {
+    uint32_t before = ETH->MACPFR;
+    macAcceptGroup(sacnGroup);
+    LOGI(Sacn, "Receiving sACN universe %u for DMX input (MAC filter %08lx -> %08lx, hash %08lx %08lx)", sacnGroup,
+         (unsigned long)before, (unsigned long)ETH->MACPFR, (unsigned long)ETH->MACHT1R, (unsigned long)ETH->MACHT0R);
+  }
   sacnJoined = sacnGroup;
 }
 uint8_t artSeq[256];           // sequence counter per (low byte of) port address
 uint8_t sacnSeq[KD_MAX_UNIVERSES * 16];
 uint8_t cid[16];
-uint8_t mac[6];
 uint8_t pkt[640];
 
 void put16be(uint8_t* p, uint16_t v) { p[0] = v >> 8; p[1] = v & 0xff; }
@@ -170,11 +238,10 @@ void begin(const NetConfig& cfg) {
     LOGW(Net, "No Ethernet link: check the cable, the switch port and its link light. Address %s once the link is there%s",
          fip.toString().c_str(), cfg.dhcp ? " (DHCP is asked again first)" : "");
   else if (cfg.dhcp && !ok)
-    LOGW(Net, "Cable OK, but no DHCP answer (is the router / DHCP server on?): using the fallback address %s for now. DHCP is asked again every minute",
+    LOGW(Net, "Cable OK, but no DHCP answer (is the router / DHCP server on?): using the fallback address %s, and switching to DHCP when a server answers",
          fip.toString().c_str());
   onFallback = cfg.dhcp && !ok;
-  fallbackSince = millis();
-  scheduleTry(fallbackSince);
+  scheduleTry(millis());
   lastCable = cable;
   lastIp = Ethernet.localIP();
 
@@ -196,6 +263,7 @@ void maintain(uint32_t now) {
   if (!isUp || now - lastPhy < 1000) return;
   lastPhy = now;
   askPhy();   // read now, used next second
+  if (sacnJoined) macAcceptGroup(sacnJoined);   // in case the driver re-initialised the MAC
   int8_t c = cable;
   if (c != lastCable && lastCable >= 0) {
     if (c) LOGI(Net, "Ethernet cable connected");
@@ -205,18 +273,25 @@ void maintain(uint32_t now) {
   lastCable = c;
 
   bool upNow = hasAddress();
+  IPAddress server;
   if (dhcpTrying) {
     if (upNow) {
       dhcpTrying = onFallback = false;
-      LOGI(Net, "DHCP answered");
     } else if (now - tryStart > 10000) {
+      // Offered, but the lease didn't complete: back to the fallback, and wait longer
+      // before the next switch so a half-working server can't drop the network every minute.
+      LOGW(Net, "No DHCP lease after 10 s: back to the fallback %s", fixedIp().toString().c_str());
       dhcpTrying = false;
       onFallback = true;
       useFixed();
-      scheduleTry(now);
+      nextTry = now + 600000;
     }
-  } else if (onFallback && c == 1 && (int32_t)(now - nextTry) >= 0) {
+  } else if (onFallback && offerSeen(server)) {
+    LOGI(Net, "DHCP server %s answers: switching from the fallback to DHCP", server.toString().c_str());
     tryDhcp(now);
+  } else if (onFallback && c == 1 && (int32_t)(now - nextTry) >= 0) {
+    sendDiscover(now);
+    scheduleTry(now);
   } else if (c == 1 && !upNow) {
     // Cable in but no address for 15 s (a lost DHCP lease, or the stack didn't come back
     // after the link returned): DHCP again (falls back after 10 s) or the fixed address.
@@ -225,7 +300,6 @@ void maintain(uint32_t now) {
       notUpSince = 0;
       if (want.dhcp) {
         LOGW(Net, "No network address: asking DHCP again");
-        fallbackSince = now;
         tryDhcp(now);
       } else useFixed();
     }
@@ -270,6 +344,7 @@ void poll() {
   while ((len = sacnUdp.parsePacket()) > 0) {
     int n = sacnUdp.read(pkt, sizeof(pkt));
     sacnUdp.flush();
+    counters.sacnRx++;
     // E1.31 data packet with a DMX start code, from another device.
     if (!dmxInCount || n < 126 || memcmp(pkt + 4, "ASC-E1.17", 9) != 0 || pkt[21] != 0x04 || pkt[43] != 0x02 || pkt[125] != 0) continue;
     if (sacnUdp.remoteIP() == self) continue;

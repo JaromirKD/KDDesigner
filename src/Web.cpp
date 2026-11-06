@@ -290,6 +290,7 @@ void buildStatus(JsonDocument& d) {
   s["artTx"] = g_stats.artTxPs;
   s["artRx"] = g_stats.artRxPs;
   s["sacnTx"] = g_stats.sacnTxPs;
+  s["sacnRx"] = g_stats.sacnRxPs;
   s["udpRx"] = g_stats.udpRxPs;
   s["tickUs"] = g_stats.tickUsMax;
   s["loopUs"] = g_stats.loopUsMax;

@@ -34,7 +34,7 @@ void sendArtDmx(uint16_t portAddress, const uint8_t* data512, IPAddress dest);
 void sendSacn(uint16_t universe, const uint8_t* data512, uint8_t priority);
 
 struct Counters {
-  volatile uint32_t artTx, artRx, sacnTx, pollReplies;
+  volatile uint32_t artTx, artRx, sacnTx, sacnRx, pollReplies;
 };
 extern Counters counters;
 }  // namespace Net

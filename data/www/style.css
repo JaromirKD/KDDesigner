@@ -69,12 +69,13 @@ h3 { margin: 16px 0 8px; font-size: 13px; text-transform: uppercase; letter-spac
 /* PC editor or live controller (applyWhere in app-core.js) */
 .where { font-size: 12px; font-weight: 700; letter-spacing: .06em; padding: 3px 10px; border-radius: 4px; white-space: nowrap; cursor: help; }
 .where:empty { display: none; }
-.where.pc { color: var(--muted); border: 1px dashed var(--border2); }
-.where.on { background: var(--live); color: var(--live-fg); }
+.where.pc, .where.on { background: var(--where); color: var(--where-fg); font-size: 13px; padding: 4px 12px; }
 .narrow .where .long { display: none; }
-body.live .top { box-shadow: inset 0 -3px 0 var(--live); }
+/* --where = the PC colour or the live colour (badge); live adds a thin frame round the window. */
+body.pc { --where: var(--pc); --where-fg: var(--pc-fg); }
+body.live { --where: var(--live); --where-fg: var(--live-fg); }
 body.live #save.primary { background: var(--live); border-color: var(--live); color: var(--live-fg); }
-body.live.live-frame::after { content: ""; position: fixed; inset: 0; border: 3px solid var(--live); pointer-events: none; z-index: 9000; }
+body.live.live-frame::after { content: ""; position: fixed; inset: 0; border: 2px solid var(--live); pointer-events: none; z-index: 9000; }
 .live-colors { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .live-colors button { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; }
 .live-colors button.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }

@@ -824,16 +824,22 @@ function tick() {
         const tr = c.track || 0;
         if (c.release) {
           if (pb.last[tr] !== c.from || pb.rel[tr]) continue;   // another cue took over the track meanwhile
+          // A clip running to the end of a looping timeline (no fade-out) is kept when the track
+          // starts again at 0 s, like updateTimeline in Show.cpp (no black frame at the loop).
+          if (!fade && t.loop && t.length && c.t >= t.length &&
+              t.cues.some((x) => x.t === 0 && x.trigger == null && (x.track || 0) === tr)) continue;
           pb.rel[tr] = { start: at, len: fade, op: 1 };
           if (!fade) endRelease(pb, tr);
           continue;
         }
+        pb.fx = pb.fx || {};
+        // Looped round to an effect cue still running on its track: it runs on (time and phase carry on).
+        if (c.effect != null && pb.fx[tr]?.cue === c && pb.last[tr] === c.t && !pb.rel[tr]) continue;
         if (pb.rel[tr]) endRelease(pb, tr);
         pb.last[tr] = c.t;
-        pb.fx = pb.fx || {};
         if (c.effect != null) {
           const run = effectRun(t, c);
-          if (run) { run.start = at; fire(pb, effectFrame(run, now), fade, at, c.path, tr); pb.fx[tr] = run; }
+          if (run) { run.start = at; run.cue = c; fire(pb, effectFrame(run, now), fade, at, c.path, tr); pb.fx[tr] = run; }
         } else {
           delete pb.fx[tr];
           const lv = cueLevels(t, c);
@@ -2123,7 +2129,7 @@ function status() {
   return {
     version: upd.version, uptime: now - t0, started: 'power on',
     update: { target: updTarget(), ready: true, bootloader: 25, ...(upd.last ? { last: upd.last, lastOk: true } : {}), ...(upd.restarting ? { restarting: true } : {}) }, time: clock ? Math.floor(now / 1000) : 0, usb: true, ip: '127.0.0.1',
-    stats: { engineFps: 40, dmxFps: 40, artTx: 80, artRx: 1, sacnTx: 80, udpRx: 0, tickUs: 180 + Math.floor(Math.random() * 40), loopUs: 900, http: httpCount, heap: sampleHeap() },
+    stats: { engineFps: 40, dmxFps: 40, artTx: 80, artRx: 1, sacnTx: 80, sacnRx: 0, udpRx: 0, tickUs: 180 + Math.floor(Math.random() * 40), loopUs: 900, http: httpCount, heap: sampleHeap() },
     logSeq: seq, project: project.name, projectVersion, gm: Math.round(gm * 100), blackout, outputs, labels,
     modes: Object.fromEntries(modeGroups().map((g) => [g.name, modeCur[g.name] || ''])), mode: modeCur[modeGroups()[0]?.name] || '',
     modeFor: Object.fromEntries(modeGroups().filter((g) => modeCur[g.name]).map((g) => [g.name, modeSecs(g.name)])),

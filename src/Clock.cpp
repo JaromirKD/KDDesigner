@@ -109,13 +109,27 @@ int sunUtcMinutes(int y, int m, int d, bool rise) {
   return (int)lround(720 - 4 * (lon + (rise ? ha : -ha)) - eq);
 }
 
+// Failed tries in a row: the next one waits 1, 2, 4, ... 30 minutes. A try blocks the I/O
+// thread (which also polls PLCs and TCP devices) up to ~17 s when no DNS server answers,
+// e.g. with the router off, so it must not run every minute.
+uint8_t ntpFails = 0;
+uint32_t retryMs() { return ntpFails >= 5 ? 30UL * 60000 : 60000UL << ntpFails; }
+
 void ntpSync() {
   lastTryMs = millis();
+  ntpFails = min(ntpFails + 1, 10);   // cleared when a reply arrives
+  // Resolve first: Arduino's beginPacket(host) "succeeds" without an address and sends to 0.0.0.0.
+  IPAddress server;
+  if (!server.fromString(ntpServer) && !Ethernet.hostByName(ntpServer.c_str(), server)) {
+    lastError = "cannot resolve " + ntpServer + " (no DNS answer: router / internet off?)";
+    LOGW(Sys, "NTP: %s - next try in %lu min", lastError.c_str(), (unsigned long)(retryMs() / 60000));
+    return;
+  }
   EthernetUDP u;
   if (!u.begin(2390)) { lastError = "no UDP socket"; return; }
   uint8_t pkt[48] = {0};
   pkt[0] = 0x23;  // LI 0, version 4, client mode
-  if (!u.beginPacket(ntpServer.c_str(), 123)) { lastError = "cannot resolve " + ntpServer; u.stop(); LOGW(Sys, "NTP: %s", lastError.c_str()); return; }
+  u.beginPacket(server, 123);
   u.write(pkt, sizeof(pkt));
   u.endPacket();
   uint32_t t0 = millis();
@@ -125,7 +139,8 @@ void ntpSync() {
     rtos::ThisThread::sleep_for(std::chrono::milliseconds(20));
   }
   u.stop();
-  if (!got) { lastError = "no reply from " + ntpServer; LOGW(Sys, "NTP: %s", lastError.c_str()); return; }
+  if (!got) { lastError = "no reply from " + ntpServer; LOGW(Sys, "NTP: %s - next try in %lu min", lastError.c_str(), (unsigned long)(retryMs() / 60000)); return; }
+  ntpFails = 0;
   uint32_t secs = ((uint32_t)pkt[40] << 24) | (pkt[41] << 16) | (pkt[42] << 8) | pkt[43];
   uint32_t unix = secs - 2208988800UL;
   if (unix < 1600000000UL) { lastError = "bad time from server"; return; }
@@ -169,7 +184,7 @@ void load() {
 void service() {
   if (!ntpEnabled || !Net::up() || !ntpServer.length()) return;
   uint32_t now = millis();
-  bool due = forceSync || (!syncedOnce && (!lastTryMs || now - lastTryMs > 60000)) ||
+  bool due = forceSync || (!syncedOnce && (!lastTryMs || now - lastTryMs > retryMs())) ||
              (syncedOnce && now - lastTryMs > 6UL * 3600 * 1000);
   if (!due) return;
   forceSync = false;

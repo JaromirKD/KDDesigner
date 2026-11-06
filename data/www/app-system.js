@@ -1805,11 +1805,16 @@ function displaySettingsHtml() {
     ${LIVE_COLORS.map(([k, c]) => `<button data-livecolor="${k}" class="${k === liveColor()[0] ? 'on' : ''}" style="background:${c}" title="${k}"></button>`).join('')}
     <button class="toggle${uiPref('kd.liveFrame', '1') === '1' ? ' on' : ''}" id="liveFrame" style="width:auto;height:auto;border-radius:4px;padding:3px 10px" title="A coloured frame around the whole window while editing a controller">Frame</button>
   </div>
-  <p class="muted">The colour of the badge, top line, Save button and frame when you edit a controller itself (on the PC editor the badge is grey). You are now ${isLive() ? '<b>live on the controller</b>' : 'on the <b>PC editor</b>'}.</p>`;
+  <div class="row live-colors" style="margin-top:8px">
+    <span class="muted" style="min-width:60px">PC</span>
+    ${LIVE_COLORS.map(([k, c]) => `<button data-pccolor="${k}" class="${k === pcColor()[0] ? 'on' : ''}" style="background:${c}" title="${k}"></button>`).join('')}
+  </div>
+  <p class="muted">The badge takes the <b>Live</b> colour when you edit a controller itself (plus the Save button and a thin frame around the window), and the <b>PC</b> colour in the PC editor. Pick two colours that look nothing alike. You are now ${isLive() ? '<b>live on the controller</b>' : 'on the <b>PC editor</b>'}.</p>`;
 }
 function attachDisplaySettings() {
   $$('[data-uitheme]').forEach((b) => b.addEventListener('click', () => { setUiPref('kd.theme', b.dataset.uitheme); render(); }));
   $$('[data-livecolor]').forEach((b) => b.addEventListener('click', () => { setUiPref('kd.liveColor', b.dataset.livecolor); render(); }));
+  $$('[data-pccolor]').forEach((b) => b.addEventListener('click', () => { setUiPref('kd.pcColor', b.dataset.pccolor); render(); }));
   $('#liveFrame').addEventListener('click', () => { setUiPref('kd.liveFrame', uiPref('kd.liveFrame', '1') === '1' ? '0' : '1'); render(); });
   $('#uiAuto').addEventListener('click', () => {
     // Off: keep the size it has now, so switching Auto off changes nothing on screen.

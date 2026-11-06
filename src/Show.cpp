@@ -291,9 +291,22 @@ void fadeMasterTo(Playback& p, float target, uint32_t fadeMs, uint32_t now) {
   if (!fadeMs) p.master = target;
 }
 
+// A light cue (scene, preset or effect) on this track at 0 s: after a loop it takes the track over.
+bool trackStartsAtZero(const Timeline& t, uint8_t track) {
+  for (const auto& c : t.cues) {   // sorted by time
+    if (c.t > 0) break;
+    if (c.track == track && !c.release && !c.trigger.length()) return true;
+  }
+  return false;
+}
+
 void updateTimeline(Playback& p, uint32_t now) {
   const Timeline& t = timelines[p.ref];
-  uint32_t elapsed = (p.paused ? p.pausedAt : now) - p.start;
+  // Signed: a timeline started (millis()) after this tick's `now` was read must count as 0,
+  // not wrap to ~49 days - that "looped" it on every tick (start += length kept it in the
+  // future), firing all its cues 40 times a second (seen on the board: tick ~24 ms).
+  int32_t e = (int32_t)((p.paused ? p.pausedAt : now) - p.start);
+  uint32_t elapsed = e > 0 ? (uint32_t)e : 0;
   if (p.paused || p.ended) return;
   while (p.nextCue < t.cues.size() && t.cues[p.nextCue].t <= elapsed) {
     const Cue& c = t.cues[p.nextCue++];
@@ -306,12 +319,18 @@ void updateTimeline(Playback& p, uint32_t now) {
     auto& f = p.tf[c.track];
     if (c.release) {
       if (f.lastT != c.from || f.rel) continue;   // another cue took over the track meanwhile
+      // A clip that runs to the end of a looping timeline, with no fade-out, is not let go
+      // when the track starts again at 0 s: letting go showed one frame of black at the loop.
+      if (!c.fade && t.loop && t.length && c.t >= t.length && trackStartsAtZero(t, c.track)) continue;
       f.rel = true;
       f.rStart = at;
       f.rLen = c.fade;
       if (!c.fade) endRelease(p, c.track);
       continue;
     }
+    // Looped round to an effect cue that is still running on its track (nothing else took the
+    // track over): it runs on, so its time and phase carry on seamlessly instead of restarting.
+    if (c.fx >= 0 && f.fx == c.fx && f.lastT == c.t && !f.rel) continue;
     if (!c.trigger.length()) {
       if (f.rel) endRelease(p, c.track);   // a new cue during a fade-out starts from the live output
       f.lastT = c.t;
@@ -416,9 +435,14 @@ void tick(uint32_t now) {
 }
 
 void sendOutputs(uint32_t now) {
+  // DMX first and all ports together: commit() starts the frame on every port at once.
   for (size_t u = 0; u < universes.size(); u++) {
     const UniverseCfg& c = universes[u];
-    if (cfg.outDmx && c.useDmx && c.dmxPort > 0) Dmx::setFrame(c.dmxPort, out[u]);  // DMX thread paces itself
+    if (cfg.outDmx && c.useDmx && c.dmxPort > 0) Dmx::setFrame(c.dmxPort, out[u]);
+  }
+  Dmx::commit();
+  for (size_t u = 0; u < universes.size(); u++) {
+    const UniverseCfg& c = universes[u];
     if (cfg.outArtnet && c.useArtnet && c.artnet >= 0 && due(artPace, u, now, cfg.artnetFps, cfg.artnetChangesOnly))
       Net::sendArtDmx(c.artnet, out[u], c.artnetDest);
     if (cfg.outSacn && c.useSacn && c.sacn > 0 && due(sacnPace, u, now, cfg.sacnFps, cfg.sacnChangesOnly))
@@ -607,7 +631,7 @@ void statusJson(JsonObject o) {
       j["kind"] = "timeline";
       j["id"] = t.id;
       j["name"] = t.name;
-      j["pos"] = (p.paused ? p.pausedAt : now) - p.start;
+      j["pos"] = max((int32_t)((p.paused ? p.pausedAt : now) - p.start), (int32_t)0);
       j["length"] = t.length;
       j["paused"] = p.paused;
       j["ended"] = p.ended;

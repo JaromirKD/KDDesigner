@@ -77,7 +77,7 @@ function renderPlaybacks() {
       <label>Main loop</label><span>worst ${s.loopUs} µs</span>
       <label>Memory</label><span>${memText(s.heap)}</span>
       <label>Art-Net</label><span>${s.artTx} tx/s · ${s.artRx} rx/s</span>
-      <label>sACN</label><span>${s.sacnTx} tx/s</span>
+      <label>sACN</label><span>${s.sacnTx} tx/s · ${s.sacnRx || 0} rx/s</span>
       <label>UDP in</label><span>${s.udpRx}/s</span>
       <label>HTTP</label><span>${s.http} requests</span>
     </div>` : '<span class="muted">Waiting for controller…</span>';
