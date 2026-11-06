@@ -1,7 +1,7 @@
 # KD Designer
 
 A stand-alone DMX / Art-Net / sACN show controller for the **Arduino Portenta H7**, inspired by Pharos Designer 2.
-You program it from a browser, and everything (the show, the web UI and the logs) lives on a USB stick.
+You program it from a browser, and everything (the show, the web UI and the logs) lives on a USB storage device (stick or SSD).
 
 ```
             ┌──────────────── Portenta H7 (M7 core) ─────────────────┐
@@ -25,7 +25,7 @@ You program it from a browser, and everything (the show, the web UI and the logs
 | Portenta Breakout or Mid Carrier | Provides Ethernet RJ45 and a USB-A host port. The breakout's USB-A VBUS is switched on via `PA_15`. |
 | **or** Portenta Machine Control | The Portenta H7 inside Arduino's industrial box: Ethernet, USB-A, **one** RS485 port (used for DMX 1) and 24 V / 0-10 V I/O you can use in the show (see **Machine Control I/O** below). Needs its own firmware build (`machine_control`). |
 | RS485 transceiver per DMX port | MAX485 works for a start. Use isolated parts (ISO3082/ADM2587E) for real installs. |
-| USB stick | FAT32. |
+| USB storage device | A stick or SSD, FAT32. |
 
 DMX wiring (per port): UART TX → transceiver DI, DE and /RE tied to 3.3 V (transmit only), A/B → XLR pins 3/2, GND → pin 1. Add a 120 Ω terminator at the end of the line.
 Default TX pins are in [src/Config.h](src/Config.h) (`PA_9` = UART1, `PG_14` = UART6). **Check these against your carrier's pinout** before wiring.
@@ -63,7 +63,7 @@ The build uses a rebuilt copy of Arduino's core library for the Portenta (`tools
 3. Open `KDDesigner.ino` (the folder must stay named `KDDesigner`). The IDE compiles `src/` automatically.
 4. Tools → Board → **Arduino Portenta H7 (M7 core)**, pick the port, then Upload.
 
-## Prepare the USB stick
+## Prepare the storage device
 
 Copy the contents of [data/](data) to the root of a FAT32 stick:
 
@@ -131,7 +131,7 @@ To make or edit a show on your PC, double-click **`KD Designer (PC).cmd`** in th
   - **Copy show to PC**: copies the show with its map images into a new show folder.
   - **Send show**: replaces the controller's show with a PC show. Its old show is saved in Backups first, and it keeps its own network settings.
   - **Install update**: sends the newest matching `.kdupdate` from `updates/`.
-- **USB**: Arduino boards on USB (a Portenta H7 with its COM port, or "bootloader" after a double-tap on reset) and USB sticks. A KD stick (one with `www` or `show`) shows its show. Buttons: **Copy show to PC**, **Put show on stick** (old show to Backups, network settings kept), **Copy/Update web UI** (copies `data/www` to the stick's `www`).
+- **USB**: Arduino boards on USB (a Portenta H7 with its COM port, or "bootloader" after a double-tap on reset) and storage devices (USB sticks and USB disks/SSDs). A KD storage device (one with `www` or `show`) shows its show. Buttons: **Copy show to PC**, **Put show on device** (old show to Backups, network settings kept), **Copy/Update web UI** (copies `data/www` to the device's `www`).
 - **Other Art-Net devices**: other nodes that answered the poll (gateways, consoles, media servers), with a link to each one's web page.
 - **This PC**: the PC's IP addresses (handy to set up the controller's network), the shows and backups folders, and the update files.
 
@@ -416,7 +416,7 @@ The live output of one universe (after grand master), 4 times a second.
       - BrightSign: model, serial, firmware, boot version, connection; with the KD plugin also each zone with what it plays, and the user variables. The DWS API has no crash or reboot reason.
       - NETIO: model, firmware, serial, device clock, mains voltage, loads. DiGidot: scene playing, memory, Art-Net and scene frame rates. Kiss-Box and KNX report nothing beyond answering.
     - **Variables**: pick a variable next to any reading and it follows the device (device → variable), e.g. a Kiss-Box door contact, a NETIO output, a KNX switch, a Pharos timeline's state (`running`, `paused`…) or the DiGidot scene. React with a **Variable change** trigger. On/off readings are `1`/`0`.
-    - **Kiss-Box** I/O (Kiss-Box protocol firmware, **UDP** mode, default port 9813): pick the **frame** (IO3CC 3 slots / IO8CC 8 slots) and the **card in each slot**: DO4PR (4 power relays), DO8SK (8 outputs 5-30 VDC), DI8DC (8 inputs 12-48 VDC), AO8DA (8 analog outputs 0-10 V, slider 0-255), AI8RA (8 analog inputs 0-5 V). Name every channel (e.g. "Fog machine") and link it to a variable. The controller reads every slot each check; switch on **automatic input state** for input cards in the Kiss-Box editor with the controller's **listen port** (default 9813) as destination, so contact changes arrive straight away. `kissbox io 1.3 on`, `kissbox io 1 all 1 0 1 0 0 0 0 0`, `kissbox io read 2`, raw: `kissbox io send A5 00 02 01`.
+    - **Kiss-Box** I/O (Kiss-Box protocol firmware, **UDP** mode, default port 9813): pick the **frame** (IO3CC 3 slots / IO8CC 8 slots) and the **card in each slot**: DO4PR (4 power relays), DO8SK (8 outputs 5-30 VDC), DI8DC (8 inputs 12-48 VDC), AO8DA (8 analog outputs 0-10 V, slider 0-255), AI8RA (8 analog inputs 0-5 V). Name every channel (e.g. "Fog machine") and link it to a variable. The controller reads every slot each check. **The box answers on its own destination port** (Kiss-Box Editor, I/O Mode Setup), usually as a broadcast, not to the port it was asked from: set the device's **listen port** to that port (default 9813; a box we tested used 9817). If they differ, commands still work but the box shows offline ("no reply on listen port ..."), its buttons don't follow and inputs never arrive. If the box sends to a fixed IP instead of broadcasting, that IP must be the controller's. Switch on automatic input state for input cards so contact changes arrive straight away. `kissbox io 1.3 on`, `kissbox io 1 all 1 0 1 0 0 0 0 0`, `kissbox io read 2`, raw: `kissbox io send A5 00 02 01`.
     - **KNX** via a KNX IP interface or router (KNXnet/IP **tunnelling**, UDP 3671; it uses one of the interface's tunnels). Add the group addresses in the table (address, name, datapoint type from a menu, variable), or paste a list (`1/1/1  1  Hall light` per line, e.g. from ETS). They are read once when the tunnel opens and then follow every telegram on the bus (optionally re-read every N s). Controls follow the type: On/Off for switches, ▲▼■ for dim/blinds, a slider for percent, a colour picker for RGB, a field for numbers. `knx gw write "Hall light" on`, `knx gw write 1/2/1 40 5.001`, `knx gw read 3/1/1`. DPTs: 1 on/off, 2, 3 dim (`up`/`down`/`stop`), 5 / 5.001 percent, 5.010 0-255, 6, 7, 8, 9 (temperature etc.), 12, 13, 14, 16 text, 17/18 scene 1-64, 232 RGB `#rrggbb`.
     - **BrightSign**: `brightsign lobby send play1` sends UDP text to the presentation (**UDP** port, default 5000, as set for UDP input in BrightAuthor). Status and `reboot` use the player's **local DWS** REST API (port 80, digest login: user `admin`, password = the DWS password, by default the serial number; the local DWS must be enabled, it is off by default on BrightSignOS 9). **Newer BrightSignOS versions only allow the DWS over https**, which the controller can't do yet: then UDP commands still work, but status and reboot don't. Any DWS call: `brightsign lobby api get info`, `api get files/sd`, `api put control/reboot`. Make **command buttons** (name + UDP text) on the BrightSign tab. **What's playing**: let the presentation send a UDP message to the controller's trigger port on every state (BrightAuthor: send UDP, e.g. `playing Intro`); the last one shows as **Player says** (and can feed a variable); UDP triggers still fire on it too.
       - **KD plugin** (watch and test; every player keeps running its own presentation, so the controller is never a single point of failure): a small script plugin, `kdlink.brs` (download it on the BrightSign tab; it's in `data/www/brightsign/`). In BrightAuthor:connected: Presentation Settings → Support Content → Script Plugins → add it with the name **`kdlink`**, publish, then tick **KD plugin** for the player. Nothing else in the presentation changes: program it as you always do. The plugin listens on its own UDP port **5010** (a user variable `kdPort` changes it), so the presentation's own UDP input is not touched, and it works without the DWS (a player whose DWS can't be reached stays online while the plugin answers; ⚡ live shows it answers). With the controller off, the plugin does nothing.

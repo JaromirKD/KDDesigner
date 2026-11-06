@@ -352,7 +352,7 @@ function mqttCard(m, card) {
 // ---- Devices tab per type ------------------------------------------------------------
 const DRV_HELP = {
   kissbox: `Kiss-Box I/O with the <b>Kiss-Box protocol</b> firmware in <b>UDP</b> mode (port 9813). Pick the frame and the card in each slot, name the channels and link them to variables.
-    <b>The box only answers to the address set in the box</b>: in the Kiss-Box Editor (I/O Mode Setup, UDP mode) set the <b>destination / return IP</b> to this controller's IP and the <b>destination port</b> to the <b>listen port</b> below. If that still points at an old controller, commands work but the box shows <b>offline</b> and inputs never arrive.
+    <b>The box answers on its own destination port</b> (Kiss-Box Editor, I/O Mode Setup), usually as a broadcast, not to the port it was asked from: set the <b>listen port</b> below to that port (e.g. 9817). If they differ, commands still work but the box shows <b>offline</b>, the buttons don't follow and inputs never arrive. If the box sends to a fixed IP instead of broadcast, that IP must be this controller's.
     For instant input changes, also switch on automatic input state (timed updates) for the input cards.
     Commands: <code>kissbox io 1.3 on</code>, <code>kissbox io 2 all 1 0 1 0 0 0 0 0</code>, <code>kissbox io read 3</code>, <code>kissbox io 3.1 128</code> (analog).`,
   knx: `A <b>KNX IP interface or router</b> (KNXnet/IP tunnelling, UDP 3671; it uses one of its tunnels). Add the group addresses with their datapoint type.

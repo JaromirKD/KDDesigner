@@ -150,7 +150,7 @@ void setup() {
       if (Show::loadFile(KD_PROJECT_BAK, err)) LOGW(Show, "Loaded backup project instead");
     }
   } else {
-    LOGW(Show, "No project on USB - starting empty");
+    LOGW(Show, "No project on the storage device - starting empty");
     Show::parse("{}", 2, err);
   }
 

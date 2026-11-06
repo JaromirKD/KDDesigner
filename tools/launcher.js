@@ -227,7 +227,9 @@ function scanUsb() {
   if (usbBusy) return usbBusy;
   usbBusy = ps('$ErrorActionPreference="SilentlyContinue";'
     + `$b = @(Get-CimInstance Win32_PnPEntity -Filter "PNPDeviceID LIKE 'USB\\\\VID_2341%' OR PNPDeviceID LIKE 'USB\\\\VID_2A03%'" | Select-Object Name,PNPDeviceID,Status);`
-    + '$d = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=2" | Select-Object DeviceID,VolumeName,Size,FreeSpace);'
+    // Removable drives plus drives on a USB disk: many sticks and all USB SSDs say "fixed".
+    + '$u = @(Get-Disk | Where-Object BusType -eq "USB" | Get-Partition | Where-Object DriveLetter | ForEach-Object { "$($_.DriveLetter):" });'
+    + '$d = @(Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 -or $u -contains $_.DeviceID } | Select-Object DeviceID,VolumeName,Size,FreeSpace);'
     + '@{boards=$b; drives=$d} | ConvertTo-Json -Depth 3 -Compress').then((out) => {
     const j = JSON.parse(out || '{}');
     const byDev = new Map();
@@ -465,10 +467,10 @@ const actions = {
     return new Promise((ok) => execFile(process.execPath, [path.join(__dirname, 'check-project.js'), file], { cwd: REPO, windowsHide: true, timeout: 60000, maxBuffer: 8 << 20 },
       (err, out, errOut) => ok({ text: (String(out) + String(errOut)).trim(), problems: !!err })));
   },
-  // USB stick: copy its show to the PC, put a PC show on it, or give it this PC's web UI.
+  // USB storage device: copy its show to the PC, put a PC show on it, or give it this PC's web UI.
   async stickGet({ drive }) {
     const src = needShow(path.join(drive + '\\', 'show'));
-    const dir = freeFolder((showInfo(src)?.project || 'Stick show') + ' (stick)');
+    const dir = freeFolder((showInfo(src)?.project || 'Storage show') + ' (storage device)');
     copyShow(src, dir);
     return { path: dir };
   },
@@ -478,7 +480,7 @@ const actions = {
     let bak = '';
     if (fs.existsSync(path.join(dst, 'project.json'))) {
       const old = readKdshow(dst);
-      bak = backupFile(`${old.project.name || 'show'} from stick`);
+      bak = backupFile(`${old.project.name || 'show'} from storage device`);
       fs.writeFileSync(bak, JSON.stringify(old, null, 1));
       // Keep the controller's network settings, as when sending over the network.
       const show = readKdshow(p);

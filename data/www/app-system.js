@@ -1048,7 +1048,7 @@ function renderMonitor() {
     ${extra || ''}${actions ? `<div class="row" style="margin-top:8px">${actions}</div>` : ''}</div>`;
   const s = st?.stats;
   const controller = st ? card(Date.now() - S.statusAt < 4000 ? 'online' : 'offline', 'Controller', `${st.ip} · firmware ${st.version}`, [
-    ['Uptime', fmtTime(st.uptime).replace(/\.\d$/, '')], ['Last start', startedText(st.started)], ['USB stick', st.usb ? 'mounted' : '<span class="bad">missing</span>'],
+    ['Uptime', fmtTime(st.uptime).replace(/\.\d$/, '')], ['Last start', startedText(st.started)], ['Storage device', st.usb ? 'mounted' : '<span class="bad">missing</span>'],
     ['Engine', `${s.engineFps} fps · tick ${s.tickUs} µs`], ['DMX', `${s.dmxFps} fps`],
     ['Art-Net / sACN', `${s.artTx} / ${s.sacnTx} pkt/s`], ['Clock', st.time > 1600000000 ? new Date(st.time * 1000).toLocaleString() : 'not set'],
     ['Memory', memText(s.heap)], ['Lowest free', s.heap ? kb(s.heap.minFree) + ' (since boot)' : '—'],
@@ -1758,7 +1758,7 @@ views.settings = () => {
   <p id="updInfo">${updInfoHtml()}</p>
   <div class="row"><label class="btn" title="A .kdupdate file (made by the firmware build, in the updates folder)">Install update file…<input type="file" id="updFile" accept=".kdupdate" hidden></label>
     <span id="updProgress" class="muted"></span></div>
-  <p class="muted">Installs new firmware and a new web UI over the network, no USB cable or stick swap needed. The project, images and logs are kept.
+  <p class="muted">Installs new firmware and a new web UI over the network, no USB cable or storage device swap needed. The project, images and logs are kept.
     A firmware update restarts the controller: no light output for about half a minute.</p>
   <h3>Raw project JSON</h3>
   <textarea class="json" id="raw" spellcheck="false"></textarea>

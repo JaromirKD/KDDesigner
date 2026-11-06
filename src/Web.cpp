@@ -36,7 +36,7 @@ namespace {
 const char kFallbackPage[] = R"HTML(<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>KD Designer</title>
 <style>body{background:#15171c;color:#d8dbe2;font:14px system-ui;margin:16px}pre{font:12px monospace;white-space:pre-wrap}</style>
-</head><body><h2>KD Designer</h2><p>Web UI not found. Copy the <code>www</code> folder to the USB stick.</p>
+</head><body><h2>KD Designer</h2><p>Web UI not found. Copy the <code>www</code> folder to the USB storage device.</p>
 <pre id="l"></pre><script>
 const l=document.getElementById('l'),es=new EventSource('/api/events');
 es.addEventListener('log',e=>{const m=JSON.parse(e.data);l.textContent=m.c+' '+m.m+'\n'+l.textContent.slice(0,20000)});
@@ -320,7 +320,7 @@ void buildStatus(JsonDocument& d) {
 }
 
 void handleProjectPut(EthernetClient& c, size_t len) {
-  if (!Storage::mounted()) { sendResult(c, false, "No USB stick"); return; }
+  if (!Storage::mounted()) { sendResult(c, false, "No storage device"); return; }
   BigRam::Buffer body;
   Log::crumb(Log::kCrumbWeb, "save: receiving");
   if (!readBody(c, len, body)) { sendResult(c, false, body.data ? "Upload incomplete" : "Project too big for the memory"); return; }
@@ -342,13 +342,13 @@ void handleProjectPut(EthernetClient& c, size_t len) {
 
   // Atomic-ish save: write tmp, keep the previous version as .bak, swap.
   if (!Storage::writeFile(KD_PROJECT_TMP, body.data, body.len)) {
-    sendResult(c, false, "Write to USB failed");
+    sendResult(c, false, "Write to the storage device failed");
     return;
   }
   remove(KD_PROJECT_BAK);
   rename(KD_PROJECT_PATH, KD_PROJECT_BAK);
   rename(KD_PROJECT_TMP, KD_PROJECT_PATH);
-  LOGI(Web, "Project saved to USB (%u bytes)", (unsigned)body.len);
+  LOGI(Web, "Project saved to the storage device (%u bytes)", (unsigned)body.len);
   sendResult(c, true, "Saved and loaded");
 }
 
@@ -364,13 +364,13 @@ bool mediaName(const String& n) {
 
 // PUT /api/media?name=plan.jpg - streamed straight to the stick (images can be MBs).
 void handleMediaPut(EthernetClient& c, const String& name, size_t len) {
-  if (!Storage::mounted()) { sendResult(c, false, "No USB stick"); return; }
+  if (!Storage::mounted()) { sendResult(c, false, "No storage device"); return; }
   if (!mediaName(name)) { sendResult(c, false, "Bad file name (letters, digits, . - _ and an image extension)"); return; }
   if (!len || len > KD_MAX_UPLOAD) { sendResult(c, false, "File too big (max " + String(KD_MAX_UPLOAD / 1048576) + " MB)"); return; }
   String path = String(KD_MEDIA_DIR) + "/" + name;
   String tmp = path + ".part";
   FILE* f = fopen(tmp.c_str(), "wb");
-  if (!f) { sendResult(c, false, "Cannot write to USB"); return; }
+  if (!f) { sendResult(c, false, "Cannot write to the storage device"); return; }
   uint8_t buf[1024];
   size_t got = 0;
   uint32_t t0 = millis();
@@ -442,7 +442,7 @@ void handle(EthernetClient& c) {
     buildStatus(d);
     sendJson(c, d);
   } else if (p == "/api/project" && req.method == "GET") {
-    if (!Storage::mounted()) sendResult(c, false, "No USB stick");
+    if (!Storage::mounted()) sendResult(c, false, "No storage device");
     else sendFile(c, KD_PROJECT_PATH, "application/json");
   } else if (p == "/api/project" && (req.method == "PUT" || req.method == "POST")) {
     handleProjectPut(c, req.contentLength);

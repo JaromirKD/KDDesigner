@@ -80,7 +80,7 @@ struct Drv {
 };
 
 struct Job { int id; String method, path, body, label; };          // HTTP (method "POLL" = status poll)
-struct UJob { int id; std::vector<uint8_t> data; String label; uint32_t at; };  // KNX cEMI frame or Kiss-Box bytes
+struct UJob { int id; std::vector<uint8_t> data; String label; uint32_t at; bool quiet; };  // KNX cEMI frame or Kiss-Box bytes; quiet = not logged
 using VarSets = std::vector<std::pair<String, String>>;
 
 std::vector<Drv> list;
@@ -932,8 +932,8 @@ void runUdp() {
       }
       if (d->type == Knx) { if (d->txq.size() < 64) d->txq.push_back(it->data); }
       else if (kissOpen) kissSend(*d, it->data.data(), it->data.size());
-      d->last = it->label + " sent";
-      LOGI(Sys, "%s %s: %s", kTypeNames[d->type], d->name.c_str(), it->label.c_str());
+      if (!it->quiet) d->last = it->label + " sent";
+      if (!it->quiet) LOGI(Sys, "%s %s: %s", kTypeNames[d->type], d->name.c_str(), it->label.c_str());
       it = ujobs.erase(it);
     }
     // Received packets, matched to a device by IP.
@@ -995,9 +995,9 @@ void runUdp() {
       if (d.type == Kiss && kissOpen) {
         if (d.pollPending && now - d.pollSentAt > 2000) {
           d.pollPending = false;
-          // The box sends its answers to the return IP/port set in the box (Kiss-Box Editor),
-          // not to whoever asked: commands still work when that points elsewhere, so say so.
-          if (markCheck(d, false, true, "no reply - set the box's return IP to " + Net::localIP().toString() + " port " + String(kissOpen) + " (Kiss-Box Editor, I/O Mode Setup)"))
+          // The box doesn't answer to the sender's port: it broadcasts (or sends to a fixed IP) on
+          // the destination port set in the box. Commands still work when the ports differ, so say so.
+          if (markCheck(d, false, true, "no reply on listen port " + String(kissOpen) + " - set it to the box's destination port (Kiss-Box Editor, I/O Mode Setup)"))
             events.push_back({d.id, false});
         }
         if ((int32_t)(now - d.nextPoll) >= 0) {
@@ -1281,9 +1281,9 @@ bool queueHttp(const Drv& d, const String& method, const String& path, const Str
   msg = String(kTypeNames[d.type]) + " " + d.name + ": " + label + " queued";
   return true;
 }
-bool queueUdp(const Drv& d, const std::vector<uint8_t>& data, const String& label, String& msg) {
+bool queueUdp(const Drv& d, const std::vector<uint8_t>& data, const String& label, String& msg, bool quiet = false) {
   if (ujobs.size() > 64) { msg = "device queue full"; return false; }
-  ujobs.push_back({d.id, data, label, millis()});
+  ujobs.push_back({d.id, data, label, millis(), quiet});
   msg = String(kTypeNames[d.type]) + " " + d.name + ": " + label + (d.type == Knx && !d.up ? " (waiting for the tunnel)" : " queued");
   return true;
 }
@@ -1318,7 +1318,7 @@ bool kissCmd(Drv& d, const std::vector<String>& t, String& msg) {
     std::vector<uint8_t> p = {0xA4, (uint8_t)(slot - 1)};
     for (int i = 4; i < 12; i++) { bool b; p.push_back(truthy(t[i], b) ? b : (uint8_t)constrain(t[i].toInt(), 0L, 255L)); }
     String readMsg;   // the reply describes the write, not the read-back after it
-    return queueUdp(d, p, "slot " + t[2] + " all " + rest(t, 4), msg) && queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + t[2], readMsg);
+    return queueUdp(d, p, "slot " + t[2] + " all " + rest(t, 4), msg) && queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + t[2], readMsg, true);
   }
   int dot = t.size() == 4 ? t[2].indexOf('.') : -1;
   if (dot > 0) {
@@ -1330,7 +1330,7 @@ bool kissCmd(Drv& d, const std::vector<String>& t, String& msg) {
     // Write one channel, then read the slot back so the status follows.
     String readMsg;
     return queueUdp(d, {0xA5, (uint8_t)(slot - 1), (uint8_t)(ch - 1), v}, t[2] + " = " + t[3], msg) &&
-           queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + String(slot), readMsg);
+           queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + String(slot), readMsg, true);   // read-back: not logged (a log line per click is enough)
   }
   msg = "expected: <slot>.<ch> on|off|<0-255>, <slot> all <8 values>, read <slot> or send <hex bytes>";
   return false;

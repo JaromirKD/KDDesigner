@@ -1974,7 +1974,7 @@ http.createServer(async (req, res) => {
     fs.writeFileSync(PROJECT, b);
     if (safeMode) { safeMode = false; log(1, 'TRIG', 'Safe mode off - triggers run again'); }
     loadProject();
-    log(1, 'WEB', `Project saved to USB (${b.length} bytes)`);
+    log(1, 'WEB', `Project saved to the storage device (${b.length} bytes)`);
     return json(res, 200, { ok: true, reply: 'Saved and loaded' });
   }
   if (p === '/api/cmd') {
@@ -2084,7 +2084,7 @@ http.createServer(async (req, res) => {
 }).listen(PORT, () => {
   console.log(`KD Designer mock running on http://localhost:${PORT} (show folder ${SHOW})`);
   log(1, 'SYS', 'KD Designer mock booting');
-  log(1, 'USB', 'USB stick mounted at /usb');
+  log(1, 'USB', 'Storage device mounted at /usb');
   log(1, 'NET', 'IP 127.0.0.1  MAC 00:00:00:00:00:00');
   loadProject();
 });

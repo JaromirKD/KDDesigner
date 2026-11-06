@@ -773,7 +773,7 @@ views.map = () => {
       <div class="row"><input data-p="${base}.name" value="${esc(m.name)}" style="font-size:16px;flex:1" data-r>
         <button class="btn small ghost" data-del="${base}">Delete map</button></div>
       <div class="row map-tools">
-        <label class="btn small" title="JPG/PNG/WebP/SVG, max 4 MB, stored on the USB stick">${m.background ? 'Replace image' : 'Background image…'}<input type="file" id="mapBg" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
+        <label class="btn small" title="JPG/PNG/WebP/SVG, max 4 MB, stored on the storage device">${m.background ? 'Replace image' : 'Background image…'}<input type="file" id="mapBg" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
         ${m.background ? '<button class="btn small ghost" id="mapBgDel">Remove image</button>' : ''}
         <select id="mapAspect" title="Shape of the map">${ASPECTS.map(([a, n]) => `<option value="${a}"${Math.abs(a - m.aspect) < 0.01 ? ' selected' : ''}>${n}</option>`).join('')}${ASPECTS.some(([a]) => Math.abs(a - m.aspect) < 0.01) ? '' : `<option selected value="${m.aspect}">image (${(+m.aspect).toFixed(2)})</option>`}</select>
         <label class="muted"><input type="checkbox" data-p="${base}.snap" data-t="bool"${m.snap !== false ? ' checked' : ''}> Snap</label>

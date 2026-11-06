@@ -622,7 +622,7 @@ function updateHeader() {
   const st = S.status;
   const chips = [];
   if (st) {
-    chips.push(`<span class="chip ${st.usb ? 'ok' : 'bad'}">USB ${st.usb ? 'mounted' : 'missing'}</span>`);
+    chips.push(`<span class="chip ${st.usb ? 'ok' : 'bad'}">Storage device ${st.usb ? 'mounted' : 'missing'}</span>`);
     chips.push(`<span class="chip">${esc(st.ip)}</span>`);
     chips.push(`<span class="chip">engine ${st.stats.engineFps} fps</span>`);
     chips.push(`<span class="chip">DMX ${st.stats.dmxFps} fps</span>`);

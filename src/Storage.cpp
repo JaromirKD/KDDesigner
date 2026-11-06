@@ -15,7 +15,7 @@ void tryMount() {
   if (!msd.connect()) return;
   int err = usbfs.mount(&msd);
   if (err) {
-    LOGE(Usb, "Mount failed (%d). Is the stick FAT32?", err);
+    LOGE(Usb, "Mount failed (%d). Is the storage device FAT32?", err);
     return;
   }
   isMounted = true;
@@ -23,7 +23,7 @@ void tryMount() {
   mkdir(KD_MEDIA_DIR, 0777);
   mkdir("/usb/logs", 0777);
   mkdir("/usb/www", 0777);
-  LOGI(Usb, "USB stick mounted at /usb");
+  LOGI(Usb, "Storage device mounted at /usb");
 }
 }  // namespace
 
@@ -37,7 +37,7 @@ void begin(uint32_t waitMs) {
     tryMount();
     if (!isMounted) delay(250);
   }
-  if (!isMounted) LOGW(Usb, "No USB stick found - running without storage");
+  if (!isMounted) LOGW(Usb, "No storage device found - running without storage");
 }
 
 void poll() {
@@ -46,7 +46,7 @@ void poll() {
   if (isMounted && !msd.connected()) {
     usbfs.unmount();
     isMounted = false;
-    LOGW(Usb, "USB stick removed");
+    LOGW(Usb, "Storage device removed");
   } else if (!isMounted) {
     tryMount();
   }

@@ -266,7 +266,7 @@ function drawNet() {
       <div class="head"><span class="dot ${state[0]}"></span><b>${esc(c.project || 'KD controller')}</b>
         <span class="mono muted">${esc(c.ip)}</span><span class="grow"></span>
         <button class="small" data-c="forget" title="Remove from this list">✕</button></div>
-      <div class="small muted">${esc(state[1])}${c.online ? ` · firmware ${esc(c.version)} · ${esc(c.target)} · up ${dur(c.uptime)}${c.usb === false ? ' · <span style="color:var(--err)">no USB stick</span>' : ''}` : ''}${c.found ? '' : c.online ? ' · added by address' : ''}</div>
+      <div class="small muted">${esc(state[1])}${c.online ? ` · firmware ${esc(c.version)} · ${esc(c.target)} · up ${dur(c.uptime)}${c.usb === false ? ' · <span style="color:var(--err)">no storage device</span>' : ''}` : ''}${c.found ? '' : c.online ? ' · added by address' : ''}</div>
       ${c.online ? `<div class="acts">
         <a class="btn small" href="${esc(url)}" target="_blank">Open web UI</a>
         <a class="btn small" href="${esc(url)}panel" target="_blank">Touch panel</a>
@@ -303,15 +303,15 @@ function drawUsb() {
     return `<div class="card" data-drive="${esc(d.drive)}">
       <div class="head"><span class="dot ${d.kd ? 'ok' : ''}"></span><b>${esc(d.drive)} ${esc(d.label)}</b><span class="grow"></span>
         <span class="muted small">${size(d.free)} free of ${size(d.size)}</span></div>
-      <div class="small muted">${d.kd ? `KD stick${d.show ? ` · show <b>${esc(d.show.project || '?')}</b> saved ${ago(d.show.saved)}` : ' · no show'}${d.www ? '' : ' · no web UI'}` : 'Not a KD stick yet (no www or show folder)'}</div>
+      <div class="small muted">${d.kd ? `KD storage device${d.show ? ` · show <b>${esc(d.show.project || '?')}</b> saved ${ago(d.show.saved)}` : ' · no show'}${d.www ? '' : ' · no web UI'}` : 'Not a KD storage device yet (no www or show folder)'}</div>
       <div class="acts">
-        ${d.show ? `<button class="small" data-s="get" title="Copies the stick's show into a new show folder on this PC">${spin('sget:' + key)}Copy show to PC</button>` : ''}
+        ${d.show ? `<button class="small" data-s="get" title="Copies the storage device's show into a new show folder on this PC">${spin('sget:' + key)}Copy show to PC</button>` : ''}
         <select data-s-show>${showOptions()}</select>
-        <button class="small" data-s="put" title="Puts a PC show in the stick's show folder. Its old show is saved in Backups first; its network settings are kept.">${spin('sput:' + key)}Put show on stick</button>
-        <button class="small" data-s="www" title="Copies this PC's web UI (data/www) to the stick's www folder">${spin('swww:' + key)}${d.www ? 'Update web UI' : 'Copy web UI'}</button>
+        <button class="small" data-s="put" title="Puts a PC show in the storage device's show folder. Its old show is saved in Backups first; its network settings are kept.">${spin('sput:' + key)}Put show on device</button>
+        <button class="small" data-s="www" title="Copies this PC's web UI (data/www) to the storage device's www folder">${spin('swww:' + key)}${d.www ? 'Update web UI' : 'Copy web UI'}</button>
       </div></div>`;
   }).join('');
-  $('#usb').innerHTML = `<h3 style="margin-top:0">Boards</h3>${boards}<h3>USB sticks</h3>${drives || '<div class="empty small">No USB stick.</div>'}`
+  $('#usb').innerHTML = `<h3 style="margin-top:0">Boards</h3>${boards}<h3>Storage devices</h3>${drives || '<div class="empty small">No storage device on USB.</div>'}`
     + (u.error ? `<div class="small" style="color:var(--warn)">${esc(u.error)}</div>` : '');
 }
 function drawPc() {
@@ -472,11 +472,11 @@ $('#usb').addEventListener('click', async (e) => {
   if (a === 'get') { const j = await act('stickGet', { drive }, 'sget:' + drive); if (j) { S.sel = k(j.path); toast('Copied to ' + j.path); } }
   if (a === 'put') {
     const s = showByPath($('[data-s-show]', card).value);
-    if (!s || !confirm(`Put "${s.example || s.name}" on ${drive}?\n\nIt replaces the stick's show (saved in Backups first).`)) return;
+    if (!s || !confirm(`Put "${s.example || s.name}" on ${drive}?\n\nIt replaces the storage device's show (saved in Backups first).`)) return;
     const j = await act('stickPut', { drive, path: s.path }, 'sput:' + drive);
     if (j?.backup) toast('Old show saved: ' + j.backup);
   }
-  if (a === 'www' && confirm(`Copy this PC's web UI to ${drive}\\www?\n\nThe stick's current www folder is replaced.`)) await act('stickWww', { drive }, 'swww:' + drive);
+  if (a === 'www' && confirm(`Copy this PC's web UI to ${drive}\\www?\n\nThe storage device's current www folder is replaced.`)) await act('stickWww', { drive }, 'swww:' + drive);
   pollUsb();
 });
 document.addEventListener('click', (e) => {

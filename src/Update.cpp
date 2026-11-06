@@ -185,7 +185,7 @@ bool install(Reader& in, String& msg, bool& restart) {
     return false;
   }
   if (hasFw && !(mounted && bootloaderOk())) { msg = "Firmware update not possible here: " + problem; return false; }
-  if (hasWww && !Storage::mounted()) { msg = "No USB stick (the web UI lives on it)"; return false; }
+  if (hasWww && !Storage::mounted()) { msg = "No storage device (the web UI lives on it)"; return false; }
   LOGI(Sys, "Receiving update %s (%u KB)", version.c_str(), (unsigned)(total / 1024));
 
   if (hasWww) { removeTree(kWwwNew); mkdir(kWwwNew, 0777); }
@@ -199,7 +199,7 @@ bool install(Reader& in, String& msg, bool& restart) {
     String path = fw ? String(kFwTmp) : String(kWwwNew) + name.substring(3);   // www/x -> /usb/www_new/x
     if (!fw) makeDirs(path);
     FILE* out = fopen(path.c_str(), "wb");
-    if (!out) { msg = "Cannot write " + name + (fw ? " to the QSPI flash" : " to the USB stick"); return false; }
+    if (!out) { msg = "Cannot write " + name + (fw ? " to the QSPI flash" : " to the storage device"); return false; }
     uint32_t crc = 0xFFFFFFFF, vec[2] = {0, 0};
     size_t got = 0;
     bool written = true;
