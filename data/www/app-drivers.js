@@ -87,25 +87,26 @@ const liveChip = (j) => (j.live ? `<span class="tag ${j.live === 'live' ? 'mon-o
 // Devices / Monitoring tab -> its icon (DEVICE_ICONS).
 const TAB_ICON = { network: 'network', tcp: 'tcp', pcs: 'pc', projectors: 'projector', email: 'email', board: 'io' };
 const tabIcon = (k) => (TAB_ICON[k] || DRIVERS[k] ? devIcon(TAB_ICON[k] || k) : '');
-function deviceTabs(tab) {
+// Devices and Monitoring share one tab bar (same rows, order and counts); `attr` says which page it switches,
+// `usable(k)` greys out the tabs Monitoring has nothing for.
+function tabBar(tab, attr, first, usable = () => true) {
   const p = P(), n = (t) => p.drivers.filter((d) => d.type === t).length;
-  const btn = (k, label, count) => `<button class="${tab === k ? 'on' : ''}" data-devtab="${k}">${tabIcon(k)}${label}${count ? ` <small>${count}</small>` : ''}</button>`;
-  return `<div class="seg devtabs">${DEVICE_TABS.map(([k, l]) => btn(k, l, DEVICE_TAB_COUNT[k]?.(p))).join('')}</div>
+  const btn = (k, label, count) => `<button class="${tab === k ? 'on' : ''}" data-${attr}="${k}"${usable(k) ? '' : ' disabled title="Nothing to monitor"'}>${tabIcon(k)}${label}${count ? ` <small>${count}</small>` : ''}</button>`;
+  return `<div class="seg devtabs">${[...first, ...DEVICE_TABS].map(([k, l]) => btn(k, l, DEVICE_TAB_COUNT[k]?.(p))).join('')}</div>
     <div class="seg devtabs">${Object.entries(DRIVERS).map(([k, v]) => btn(k, v.label, n(k))).join('')}</div>`;
 }
-// Monitoring tabs: All, then only the kinds this project has.
+const deviceTabs = (tab) => tabBar(tab, 'devtab', []);
+// Monitoring tabs that have something to show (Email never has).
 function monTabList() {
   const p = P();
-  return [['all', 'All'], ...(p.projectors.length ? [['projectors', 'Projectors']] : []), ...(p.pcs.length ? [['pcs', 'PCs']] : []),
-    ...(p.devices.length || p.tcp.length || p.modbus.length ? [['network', 'Network']] : []),
-    ...Object.keys(DRIVERS).filter((t) => p.drivers.some((d) => d.type === t)).map((t) => [t, DRIVERS[t].label]),
-    ...(pmcUsed() ? [['board', 'Machine Control']] : [])];
+  return [['all', 'All'], ...(p.devices.length ? [['network', 'Network']] : []), ...(p.tcp.length || p.modbus.length ? [['tcp', 'TCP & Modbus']] : []),
+    ...(p.pcs.length ? [['pcs', 'PCs']] : []), ...(p.projectors.length ? [['projectors', 'Projectors']] : []),
+    ...(pmcUsed() ? [['board', 'Machine Control']] : []),
+    ...Object.keys(DRIVERS).filter((t) => p.drivers.some((d) => d.type === t)).map((t) => [t, DRIVERS[t].label])];
 }
 function monTabs() {
-  const tabs = monTabList();
-  if (tabs.length < 3) return '';
-  const tab = tabs.some(([k]) => k === S.monTab) ? S.monTab : 'all';
-  return `<div class="seg devtabs">${tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-montab="${k}">${tabIcon(k)}${l}</button>`).join('')}</div>`;
+  const keys = monTabList().map(([k]) => k);
+  return tabBar(keys.includes(S.monTab) ? S.monTab : 'all', 'montab', [['all', 'All']], (k) => keys.includes(k));
 }
 
 // ---- small building blocks ---------------------------------------------------------
@@ -266,10 +267,27 @@ function drvPanel(x, j, mode, i) {
       const zones = pts.filter((p) => /^z\d+$/.test(p.k)), uvars = pts.filter((p) => p.k.startsWith('var.'));
       const zname = (p) => p.n.replace(/^Zone \d+ ?/, '') || p.k.slice(1);
       const zref = (p) => quote(zname(p));
+      const gpio = pts.filter((p) => /^gpio\d$/.test(p.k));
+      const leds = gpio.length ? `<span class="row nowrap" style="gap:3px">${gpio.map((p) => led(id, p.k, p.v, `GPIO ${p.k.slice(4)}`)).join('')}</span>` : '';
       if (mode === 'compact') return zones.map((p) => `<div class="drv-row"><span class="drv-name">${esc(zname(p))}</span><span>${liveText(id, p.k, p.v)}</span><span></span></div>`).join('') +
+        (leds ? `<div class="drv-row"><span class="drv-name">GPIO</span>${leds}<span></span></div>` : '') +
         `<div class="drv-row"><span class="drv-name">Player says</span><span>${says}</span><span></span></div>`;
       const cmds = x.commands || [];
-      const plugin = !x.plugin ? '' : `<h4>Zones</h4>${zones.length ? `<table class="drv-tbl"><tr><th>#</th><th>Zone</th><th>Playing (state)</th><th>File</th><th>Variable</th><th>Control</th></tr>
+      // Test buttons: every state of every zone, read from the presentation; the state playing now is lit.
+      const states = j.states || [];
+      const tests = zones.map((p) => {
+        const zn = +p.k.slice(1), ss = states.filter((s) => s.z === zn);
+        if (!ss.length) return '';
+        return `<div class="row" style="gap:4px;margin:3px 0"><span class="muted" style="min-width:80px">${esc(zname(p))}</span>${ss.map((s) =>
+          `<button class="btn small bs-test${bsTestOn(p.v, s.n) ? ' on' : ''}" data-cmd="${esc(`brightsign ${ref} test ${zref(p)} ${quote(s.n)}`)}" data-bstest="${id}|${p.k}|${esc(s.n)}"
+            title="${esc(s.f ? `Play ${s.f} in ${zname(p)}` : 'This state has no media file to play')}"${s.f ? '' : ' disabled'}>${esc(s.n)}</button>`).join('')}</div>`;
+      }).join('');
+      const act = (j.activity || []).slice().reverse();
+      const plugin = !x.plugin ? '' : `${tests ? `<h4>Test</h4><p class="muted" style="margin:0 0 4px">Plays the file of that state in the zone. When it ends, the presentation carries on by itself.</p>${tests}` : ''}
+        ${gpio.length ? `<h4>GPIO inputs</h4><div class="row">${leds}<span class="muted">link one to a variable in the table below</span></div>` : ''}
+        <h4>Activity <span class="muted" style="font-weight:normal">what the player received: serial, UDP, GPIO, zone changes</span></h4>
+        <div class="bs-act" data-bsact="${id}">${bsActHtml(act)}</div>
+        <h4>Zones</h4>${zones.length ?`<table class="drv-tbl"><tr><th>#</th><th>Zone</th><th>Playing (state)</th><th>File</th><th>Variable</th><th>Control</th></tr>
           ${zones.map((p) => `<tr><td>${p.k.slice(1)}</td><td>${esc(zname(p))}</td><td>${liveText(id, p.k, p.v)}</td><td class="mono">${liveText(id, p.k + '.file', ptVal(j, p.k + '.file'))}</td>${vcell(p.k)}
             <td><div class="row nowrap">${cmdSet(`brightsign ${ref} play ${zref(p)} {v}`, 'file.mp4')}${cmdBtn(`brightsign ${ref} stop ${zref(p)}`, '■', '', 'Stop the video/audio of this zone')}</div></td></tr>`).join('')}</table>`
           : '<p class="muted">No zones reported yet: the plugin answers at the next status check (check it is in the presentation, named <code>kdlink</code>).</p>'}
@@ -278,7 +296,9 @@ function drvPanel(x, j, mode, i) {
           ${uvars.map((p) => `<tr><td>${esc(p.n || p.k.slice(4))}</td><td>${liveText(id, p.k, p.v)}</td>${vcell(p.k)}<td>${cmdSet(`brightsign ${ref} var ${quote(p.n || p.k.slice(4))} {v}`, 'value', true)}</td></tr>`).join('')}</table>`
           : '<p class="muted">No user variables reported (the presentation has none, or the plugin hasn\'t answered yet).</p>'}`;
       return `${plugin}<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th></tr>
-          <tr><td title="The last UDP message the presentation sent to the controller (or a Send Plugin Message to kdlink)">Player says</td><td>${says}</td>${vcell('msg')}</tr></table>
+          <tr><td title="The last UDP message the presentation sent to the controller (or a Send Plugin Message to kdlink)">Player says</td><td>${says}</td>${vcell('msg')}</tr>
+          ${pts.some((p) => p.k === 'serial') ? `<tr><td title="The last line the player received on its serial port">Serial in</td><td class="mono">${liveText(id, 'serial', ptVal(j, 'serial'))}</td>${vcell('serial')}</tr>` : ''}
+          ${gpio.map((p) => `<tr><td>GPIO ${p.k.slice(4)}</td><td>${led(id, p.k, p.v)}</td>${vcell(p.k)}</tr>`).join('')}</table>
         <h4>Commands</h4>
         <table class="drv-tbl"><tr><th>Button</th><th>UDP text sent to the player</th><th></th>${edit ? '<th></th>' : ''}</tr>
           ${cmds.map((c, k) => `<tr><td>${edit ? `<input data-p="drivers.${i}.commands.${k}.name" value="${esc(c.name || '')}" placeholder="e.g. Play intro" style="width:130px">` : esc(c.name || '')}</td>
@@ -339,8 +359,9 @@ const DRV_HELP = {
     Commands: <code>knx gw write "Hall light" on</code>, <code>knx gw write 1/2/1 40</code>, <code>knx gw read "Hall temp"</code>.`,
   brightsign: `BrightSign players: commands go as <b>UDP</b> to the presentation (BrightAuthor: UDP input on the port below). Status and reboot use the player's local DWS (port 80, user <code>admin</code>, the DWS password; on newer BrightSignOS only over https, which isn't supported yet).
     <b>What's playing:</b> let the presentation send a UDP message to this controller (port ${'${port}'}) on every state, e.g. <code>playing Intro</code>: it shows as <b>Player says</b>.<br>
-    <b>KD plugin</b> (live zones, user variables and control): download <code>kdlink.brs</code>, add it in BrightAuthor:connected under Presentation Settings → Support Content → Script Plugins with the name <code>kdlink</code>, publish, and tick KD plugin below.
-    It works without the DWS. Commands: <code>brightsign player event video_intro</code> (a <b>Plugin Message</b> event in the presentation: put it on a transition to go to any state), <code>var mode night</code> (a user variable), <code>play Video clip.mp4</code> / <code>stop Video</code> (directly in a zone).`,
+    <b>KD plugin</b> (watch and test, the player keeps running its own show): download <code>kdlink.brs</code>, add it in BrightAuthor:connected under Presentation Settings → Support Content → Script Plugins with the name <code>kdlink</code>, publish, and tick KD plugin below. Nothing else in the presentation changes, and it works without the DWS.
+    You get every zone with what it plays, a <b>Test</b> button per state (plays that state's file; the presentation carries on after it), the GPIO inputs, an <b>Activity</b> list (serial lines, UDP, buttons) and the user variables.
+    Commands: <code>brightsign player test Video "Video 2"</code>, <code>play Video clip.mp4</code>, <code>stop Video</code>, <code>var mode night</code>, <code>event &lt;text&gt;</code> (a Plugin Message, if you ever use one).`,
   digidot: `DiGidot C4 pixel controllers (JSON API, default user/password <code>admin</code>/<code>admin</code>). The C4 has no push option: it is polled.
     Commands: <code>digidot c4 scene "Rainbow" fade 2</code>, <code>digidot c4 master 50</code>, <code>digidot c4 stop</code>, any API call with <code>digidot c4 send {…}</code>.`,
   netio: `NETIO power sockets (JSON API: enable it on the NETIO under M2M API Protocols → JSON API, read/write, default <code>netio</code>/<code>netio</code>).
@@ -413,7 +434,8 @@ function driverPage(type) {
   return `<p class="muted drv-help">${help}<br>Status is checked every <b>${every} s</b> (set on the Monitoring page, for all devices)${type === 'knx' || type === 'pharos' || type === 'netio' ? '; with live updates that check is only a safety net' : ''}.</p>
     ${list.map(dev).join('') || `<p class="muted">No ${info.label} yet.</p>`}
     <div class="row" style="margin-top:8px"><button class="btn" data-add="drv-${type}">+ ${info.label}</button>
-      <span class="muted">Save to send the settings to the controller; the readings and buttons work once it answers.</span></div>`;
+      <span class="muted">Save to send the settings to the controller; the readings and buttons work once it answers.</span></div>
+    ${groupsSection(type, `${info.label} groups`, `<code>${type} &lt;group&gt; …</code> runs the same command on every ${info.label} in the group.`)}`;
 }
 function driverPageAfter() {
   // Nothing per page: the handlers below are global.
@@ -500,6 +522,17 @@ function updateDrvLive() {
     else if (f === 'badge') { el.textContent = v || 'none'; el.className = `tag ${v === 'running' || v === 'started' ? 'mon-ok' : v === 'paused' || v === 'holding_at_end' ? 'mon-warn' : ''}`; }
     else el.textContent = v === '' ? '—' : v;
   }
+  // BrightSign: the Activity list and which test button is lit.
+  for (const el of $$('[data-bsact]')) {
+    const j = S.status?.drivers?.find((x) => x.id === +el.dataset.bsact);
+    const html = bsActHtml((j?.activity || []).slice().reverse());
+    if (j && el.dataset.last !== html) { el.dataset.last = html; el.innerHTML = html; }
+  }
+  for (const el of $$('[data-bstest]')) {
+    const [id, k, n] = el.dataset.bstest.split('|');
+    const j = S.status?.drivers?.find((x) => x.id === +id);
+    if (j) el.classList.toggle('on', bsTestOn(ptVal(j, k), n));
+  }
   // New outputs, timelines or scenes reported by a device: redraw once, unless someone is typing.
   const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && document.activeElement.closest('#main');
   for (const el of $$('[data-livekeys]')) {
@@ -507,7 +540,11 @@ function updateDrvLive() {
     if (j && !typing && liveKeys(j) !== el.dataset.keys) { render(); return; }
   }
 }
-const liveKeys = (j) => [...(j.points || []).map((p) => p.k), ...(j.scenes || []), (j.triggers || []).length, j.info?.Model || ''].join(',');
+const liveKeys = (j) => [...(j.points || []).map((p) => p.k), ...(j.scenes || []), (j.triggers || []).length, (j.states || []).length, j.info?.Model || ''].join(',');
+// A zone plays a state: by itself (the state's name) or as a test ("(test) <state> (<file>)", see kdlink.brs).
+const bsTestOn = (v, n) => v === n || v.startsWith(`(test) ${n} (`);
+const bsActHtml = (act) => act.map(([t, s]) => `<div><span class="muted">${esc(new Date(t * 1000).toLocaleTimeString())}</span>${esc(s)}</div>`).join('')
+  || '<span class="muted">Nothing received yet.</span>';
 
 // ---- global handlers (this page's inputs aren't plain data-p paths) -----------------------
 document.addEventListener('click', async (e) => {

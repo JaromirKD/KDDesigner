@@ -32,7 +32,8 @@ void statusJson(JsonObject o);
 // Device history on the stick for the Monitoring detail view: KD_HISTORY_DIR/YYYY-MM-DD.txt
 // (UTC day), one "epoch state kind name" line per change. state: online|offline (any
 // device), on|off (projector power), p:<key>=1|0 (a show device's on/off reading: Kiss-Box
-// digital I/O, NETIO output/input, KNX DPT 1, Pharos timeline/scene). "boot" when the controller starts and "alive" every
+// digital I/O, NETIO output/input, KNX DPT 1, Pharos timeline/scene), m:<state> (a mode group,
+// name "mode:<group>", see State.cpp). "boot" when the controller starts and "alive" every
 // KD_HISTORY_ALIVE_S, so a gap in the file means the controller was off. Each day file
 // starts with the state of every device, so it reads on its own.
 void record(const char* kind, const String& name, const char* state);   // any thread

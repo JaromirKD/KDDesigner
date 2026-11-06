@@ -1,9 +1,10 @@
 # Next steps
 
-State on 1 Nov 2026: all features in the README are built and tested in the mock. The firmware
-compiles (default build RAM 45 %, flash 67 %; Machine Control RAM 46 %, flash 72 %) but has
-**never run on the Portenta**. `backup-before-tidy.zip` in the project folder is the state
-before the first tidy-up.
+State on 6 Nov 2026: all features in the README are built and tested in the mock. **First run on
+a Portenta Machine Control** on 6 Nov: boot, stick, network, web UI, saving, Art-Net/sACN output,
+effects, UDP triggers and the network update work (see HARDWARE-TEST-PLAN.md for what was found
+and fixed). Firmware 0.1.1: RAM ~25 %, flash ~74 % (Machine Control ~26 % / ~79 %).
+`backup-before-tidy.zip` in the project folder is the state before the first tidy-up.
 
 ## 1. Git - done 2 Nov 2026
 
@@ -107,8 +108,63 @@ panel), sequence triggers, `wait until … [timeout]`, `repeat <n> times [every 
   the output socket via `beginMulticast`), and that reading full Art-Net packets in `Net::poll` (now
   under `g_engine`) doesn't slow the loop with a busy network.
 
+## 5c. First hardware run (6 Nov 2026)
+Fixed on the day (details in HARDWARE-TEST-PLAN.md):
+- **4-socket limit** of Arduino's prebuilt `libmbed.a`: rebuilt with 32 sockets in WSL
+  (`tools/core/`, used through `board_build.variants_dir`; how to rebuild in `tools/core/README.md`).
+- **Out of memory** when saving a project: playback buffers and the log ring moved to the unused
+  D2 SRAM (`src/D2Ram.*`); heap free went from 34 KB to ~205 KB.
+- **UDP packets cut at 508 bytes** (Art-Net / sACN out and in): `-DWIFI_UDP_BUFFER_SIZE=1024`.
+- **Every browser connection spun a thread** (Arduino `MbedClient::readSocket`), starving the DMX
+  thread: patched copy in `lib/SocketWrapper`.
+- Serial log empty when a monitor connects after boot: the log ring is replayed on connect.
+- Web UI with no project on the stick: 7 pages crashed (`emptyProject()` without `normalize()`).
+- Web UI took > 40 s to open (22 KB/s, Nagle + delayed ACK on small writes): replies now go out in
+  whole-segment blocks (`kTxBlock` in Web.cpp); the socket reader no longer sleeps 100 ms before
+  reading a request; updates store the UI gzipped with ETags (`serveWww`). Opens in 1.3 s, reload
+  0.3 s. The stick (~300 KB/s) is now the limit; a bigger TCP send buffer wouldn't help much.
+- `/api/log` with a full ring sometimes arrived empty (a 58 KB body copied once more failed to
+  allocate) and took 1.1 s to build: no copy, space reserved, 0.06 s.
+
+Still open:
+- ~~I/O worker thread stalls~~ - fixed 6 Nov 2026 (TCP answers / HTTP responses seconds late, PLC
+  polls ~1 s, waits of 10-40 s). Causes: the network-bound threads (io, drv-http/udp/push, pjlink,
+  monitor, mail) ran at BelowNormal and only got the CPU when every Normal thread (main loop, web,
+  socket readers) was idle - now Normal; Arduino's `MbedClient::write` switched the socket to
+  blocking, so the reader thread's `recv()` could block holding the lock `read()` needs - the
+  socket now stays non-blocking (`lib/SocketWrapper`); `connect()` had no time limit - now
+  `setSocketTimeout`. `Io.cpp` logs "I/O thread: <job> took N ms" over 500 ms. Afterwards: PLC
+  polled every 500 ms (max gap 506 ms) with the Inloop playing, trigger test 22/25 (the 3 left
+  are the test's own expectations and sACN input), TCP + Modbus reconnect after the peer restarts.
+  Not yet done: a clean 5-minute run on the final build (the network cable/link was lost during it).
+- **No network at start-up**: with the cable out, DHCP fails, the log says "Ethernet cable not
+  connected" and the IP stays 0.0.0.0 (the fallback 192.168.1.50 isn't used). Check that the
+  controller picks the network up when the cable is plugged in later (DHCP retry on link-up).
+- **Start reason after reflashing the same build** says `unexpected`: the build id hashes
+  `KD_VERSION __DATE__ __TIME__` of main.cpp only, which isn't recompiled when other files change.
+  Use a checksum of the flash image instead.
+- **sACN input** (`dmx_in` with protocol sacn, unicast from the PC to universe 1) did not fire; Art-Net
+  input did. Check the sACN receive path in `Net::poll` (multicast join + unicast on 5568).
+- **Engine load with a big show**: the feature demo's Inloop takes ~12 ms of the 25 ms tick (spikes
+  to 23 ms), and then the DMX port drops to ~22 fps. Profile `Show::tick` / `sendOutputs` / effects.
+- **Heap**: ~196 KB is used with an empty show (thread stacks ~80 KB, network, USB); the feature
+  demo leaves ~100 KB free. Trim thread stacks after measuring them (Mbed stack stats are enabled).
+- Small: a timeline master set while it is releasing ends the release early in the mock but not
+  on the controller (the controller is fine; the mock could match).
+- **DMX port at 33-35 fps instead of 40**: `Dmx.cpp` sends byte by byte with a busy-wait at below-normal
+  priority (a full frame is 23 of the 25 ms), so any other work makes it miss its slot. Better: UART
+  TX interrupt (or DMA) per port, the thread only doing break/MAB. Check with a DMX tester/fixture.
+- ~~"Last start" always `other`~~ - fixed: the bootloader clears `RCC->RSR`, so the start reason now
+  comes from the log ring kept in D2 SRAM (`Log::startReason`, breadcrumbs `Log::crumb`).
+- **Engine tick 17-20 ms (budget 25) while an update is uploaded**: the HTTP thread writing to the
+  stick holds the CPU. Uploads run at ~53 KB/s (TCP window 4 × 536 bytes): a 1.8 MB firmware update
+  takes ~50 s. Fine outside show hours; raise `lwip.tcp-mss` / `tcp-wnd` if it matters.
+- **NTP** answered on some tries, "no reply" on others (pool.ntp.org from the office network).
+- Each `EthernetClient` still costs a 4 KB reader-thread stack plus buffers; with ~205 KB free that
+  is fine, but watch the heap line with many TCP devices / projectors.
+
 ## 6. Later
-- **First test on the Portenta** (step by step in [HARDWARE-TEST-PLAN.md](HARDWARE-TEST-PLAN.md)): USB stick mount, Ethernet, DMX timing on the RS485 pins (check `Config.h` against the carrier board), Art-Net/sACN, the web UI from the stick (copy the whole new `www` folder), and effects (`Fx.cpp` has only been checked by reading).
+- **First test on the Portenta** (step by step in [HARDWARE-TEST-PLAN.md](HARDWARE-TEST-PLAN.md); started 6 Nov 2026, see 5c): USB stick mount, Ethernet, DMX timing on the RS485 pins (check `Config.h` against the carrier board), Art-Net/sACN, the web UI from the stick (copy the whole new `www` folder), and effects (`Fx.cpp` has only been checked by reading).
   **Watchdog** (added 1 Nov 2026): after a normal boot "Last start" should say `power on`; a project save with a big rig must not trip it (15 s); a network update must still install (the bootloader runs after a system reset, which stops the watchdog). Test a hang once, e.g. a temporary `while (1) {}` in a command, and check the board comes back with `watchdog`.
 - **Network update on hardware** (`src/Update.cpp`, written from Arduino's Portenta OTA library without having run): bootloader version shown on Settings; QSPI partition 2 created/mounted on first boot; a `.kdupdate` with a raised `KD_VERSION` installs and the log says "installed" after the restart. Check whether the bootloader deletes `UPDATE.BIN` itself (then the "installed / NOT installed" check can't run and needs another way). Also watch the engine during the upload: the HTTP thread writes ~1.4 MB to QSPI and the stick.
 - Ideas mentioned along the way: more effect templates using `y`, e.g. ripple and radar (see the conversation of 31 Oct).

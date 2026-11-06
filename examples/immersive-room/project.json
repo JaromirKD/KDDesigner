@@ -1,0 +1,1869 @@
+{
+  "name": "Immersive room - show cycle",
+  "settings": {
+    "tzOffsetMin": 60,
+    "udpPort": 4000,
+    "sacnPriority": 100,
+    "monitor": {
+      "interval": 60,
+      "timeout": 1000,
+      "failures": 2
+    },
+    "time": {
+      "ntp": "pool.ntp.org",
+      "ntpEnabled": true,
+      "dst": "eu"
+    },
+    "location": {
+      "lat": 52.37,
+      "lon": 4.9
+    },
+    "outputs": {
+      "dmx": true,
+      "artnet": true,
+      "sacn": true,
+      "dmxFps": 40,
+      "artnetFps": 30,
+      "sacnFps": 40,
+      "artnetChangesOnly": true,
+      "sacnChangesOnly": false
+    }
+  },
+  "network": {
+    "dhcp": false,
+    "ip": "192.168.1.50",
+    "mask": "255.255.255.0",
+    "gateway": "192.168.1.1"
+  },
+  "modes": [
+    {
+      "name": "Room",
+      "states": [
+        "Idle",
+        "Show",
+        "Maintenance",
+        "Emergency"
+      ],
+      "startup": "Idle",
+      "stateInfo": {
+        "Idle": {
+          "color": "#3a7bd5",
+          "icon": "⏸"
+        },
+        "Show": {
+          "color": "#2e7d32",
+          "icon": "▶"
+        },
+        "Maintenance": {
+          "color": "#f9a825",
+          "icon": "🔧",
+          "enter": [
+            "release all fade 2",
+            "scene \"Work light\" fade 2"
+          ],
+          "leave": [
+            "release scene \"Work light\" fade 2",
+            "fire trigger \"Start inloop\""
+          ]
+        },
+        "Emergency": {
+          "color": "#b71c1c",
+          "icon": "⚠",
+          "enter": [
+            "release all fade 0",
+            "set 1.1-4 255",
+            "set 1.60-61 255",
+            "panel lbl_status text FIRE ALARM",
+            "panel lbl_status flash red"
+          ],
+          "leave": [
+            "clear overrides",
+            "panel lbl_status reset"
+          ]
+        }
+      }
+    }
+  ],
+  "universes": [
+    {
+      "id": 1,
+      "name": "Room",
+      "dmxPort": 1,
+      "artnet": 0,
+      "sacn": 1,
+      "useDmx": true,
+      "useArtnet": false,
+      "useSacn": false
+    },
+    {
+      "id": 2,
+      "name": "Ceiling pixels",
+      "dmxPort": 2,
+      "artnet": 1,
+      "sacn": 2,
+      "useDmx": false,
+      "useArtnet": true,
+      "useSacn": false
+    }
+  ],
+  "fixtures": [
+    {
+      "id": 1,
+      "name": "House light 1",
+      "universe": 1,
+      "address": 1,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 2,
+      "name": "House light 2",
+      "universe": 1,
+      "address": 2,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 3,
+      "name": "House light 3",
+      "universe": 1,
+      "address": 3,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 4,
+      "name": "House light 4",
+      "universe": 1,
+      "address": 4,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 5,
+      "name": "Wall wash 1",
+      "universe": 1,
+      "address": 10,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 6,
+      "name": "Wall wash 2",
+      "universe": 1,
+      "address": 15,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 7,
+      "name": "Wall wash 3",
+      "universe": 1,
+      "address": 20,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 8,
+      "name": "Wall wash 4",
+      "universe": 1,
+      "address": 25,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 9,
+      "name": "Wall wash 5",
+      "universe": 1,
+      "address": 30,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 10,
+      "name": "Wall wash 6",
+      "universe": 1,
+      "address": 35,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 11,
+      "name": "Wall wash 7",
+      "universe": 1,
+      "address": 40,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 12,
+      "name": "Wall wash 8",
+      "universe": 1,
+      "address": 45,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 13,
+      "name": "Entrance spot",
+      "universe": 1,
+      "address": 60,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 14,
+      "name": "Work light",
+      "universe": 1,
+      "address": 61,
+      "channels": [
+        "dim"
+      ],
+      "curve": "nondim",
+      "icon": "relay"
+    },
+    {
+      "id": 15,
+      "name": "Ceiling 1",
+      "universe": 2,
+      "address": 1,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 16,
+      "name": "Ceiling 2",
+      "universe": 2,
+      "address": 4,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 17,
+      "name": "Ceiling 3",
+      "universe": 2,
+      "address": 7,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 18,
+      "name": "Ceiling 4",
+      "universe": 2,
+      "address": 10,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 19,
+      "name": "Ceiling 5",
+      "universe": 2,
+      "address": 13,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 20,
+      "name": "Ceiling 6",
+      "universe": 2,
+      "address": 16,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 21,
+      "name": "Ceiling 7",
+      "universe": 2,
+      "address": 19,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 22,
+      "name": "Ceiling 8",
+      "universe": 2,
+      "address": 22,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 23,
+      "name": "Ceiling 9",
+      "universe": 2,
+      "address": 25,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 24,
+      "name": "Ceiling 10",
+      "universe": 2,
+      "address": 28,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 25,
+      "name": "Ceiling 11",
+      "universe": 2,
+      "address": 31,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 26,
+      "name": "Ceiling 12",
+      "universe": 2,
+      "address": 34,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 27,
+      "name": "Ceiling 13",
+      "universe": 2,
+      "address": 37,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 28,
+      "name": "Ceiling 14",
+      "universe": 2,
+      "address": 40,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 29,
+      "name": "Ceiling 15",
+      "universe": 2,
+      "address": 43,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 30,
+      "name": "Ceiling 16",
+      "universe": 2,
+      "address": 46,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 31,
+      "name": "Ceiling 17",
+      "universe": 2,
+      "address": 49,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 32,
+      "name": "Ceiling 18",
+      "universe": 2,
+      "address": 52,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 33,
+      "name": "Ceiling 19",
+      "universe": 2,
+      "address": 55,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 34,
+      "name": "Ceiling 20",
+      "universe": 2,
+      "address": 58,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 35,
+      "name": "Ceiling 21",
+      "universe": 2,
+      "address": 61,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 36,
+      "name": "Ceiling 22",
+      "universe": 2,
+      "address": 64,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 37,
+      "name": "Ceiling 23",
+      "universe": 2,
+      "address": 67,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 38,
+      "name": "Ceiling 24",
+      "universe": 2,
+      "address": 70,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "House",
+      "fixtures": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Walls",
+      "fixtures": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Ceiling",
+      "fixtures": [
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "name": "Room loading",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 13,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Show blackout",
+      "levels": [
+        {
+          "fixture": 13,
+          "ch": "dim",
+          "v": 26
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Show end - house up",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 13,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Work light",
+      "levels": [
+        {
+          "fixture": 14,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    }
+  ],
+  "timelines": [
+    {
+      "id": 1,
+      "loop": false,
+      "priority": 0,
+      "name": "Show",
+      "length": 360000,
+      "group": "A",
+      "tracks": [
+        {
+          "name": "Room",
+          "fixtures": [],
+          "groups": []
+        },
+        {
+          "name": "Walls",
+          "fixtures": [],
+          "groups": [
+            2
+          ]
+        },
+        {
+          "name": "Ceiling",
+          "fixtures": [],
+          "groups": [
+            3
+          ]
+        },
+        {
+          "name": "House",
+          "fixtures": [],
+          "groups": [
+            1
+          ]
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 5000,
+          "scene": 2,
+          "path": "damped"
+        },
+        {
+          "t": 5000,
+          "trigger": "Show: start media"
+        },
+        {
+          "t": 5000,
+          "track": 1,
+          "fade": 8000,
+          "len": 85000,
+          "out": 5000,
+          "effect": 1,
+          "params": {},
+          "dim": 100
+        },
+        {
+          "t": 5000,
+          "track": 2,
+          "fade": 8000,
+          "len": 85000,
+          "out": 5000,
+          "effect": 2,
+          "params": {
+            "speed": 0.2,
+            "color": "#0050a0",
+            "back": "#000814"
+          },
+          "dim": 70
+        },
+        {
+          "t": 90000,
+          "track": 1,
+          "fade": 6000,
+          "len": 90000,
+          "out": 4000,
+          "effect": 3,
+          "params": {
+            "speed": 0.05,
+            "a": "#20a040",
+            "b2": "#80c020"
+          },
+          "dim": 80
+        },
+        {
+          "t": 90000,
+          "track": 2,
+          "fade": 6000,
+          "len": 90000,
+          "out": 4000,
+          "effect": 4,
+          "params": {
+            "speed": 0.2,
+            "color": "#d0ff60",
+            "base": "#001000"
+          },
+          "dim": 100
+        },
+        {
+          "t": 180000,
+          "track": 1,
+          "fade": 3000,
+          "len": 90000,
+          "out": 3000,
+          "effect": 5,
+          "params": {
+            "rate": 0.4,
+            "base": 0.05
+          },
+          "dim": 100
+        },
+        {
+          "t": 180000,
+          "track": 2,
+          "fade": 3000,
+          "len": 90000,
+          "out": 3000,
+          "effect": 6,
+          "params": {
+            "speed": 0.6,
+            "sat": 0.3
+          },
+          "dim": 40
+        },
+        {
+          "t": 270000,
+          "track": 1,
+          "fade": 20000,
+          "len": 40000,
+          "out": 10000,
+          "dim": 100,
+          "color": "#ff5a1f",
+          "path": "braked"
+        },
+        {
+          "t": 300000,
+          "track": 1,
+          "fade": 20000,
+          "len": 45000,
+          "out": 5000,
+          "dim": 100,
+          "color": "#ffd7a0",
+          "path": "braked"
+        },
+        {
+          "t": 270000,
+          "track": 2,
+          "fade": 30000,
+          "len": 75000,
+          "out": 5000,
+          "effect": 7,
+          "params": {
+            "angle": 90,
+            "c1": "#ff8030",
+            "c2": "#2040a0"
+          },
+          "dim": 80
+        },
+        {
+          "t": 345000,
+          "track": 3,
+          "fade": 10000,
+          "scene": 3,
+          "path": "damped"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "loop": true,
+      "priority": 0,
+      "name": "Inloop",
+      "length": 60000,
+      "group": "A",
+      "tracks": [
+        {
+          "name": "Room",
+          "fixtures": [],
+          "groups": []
+        },
+        {
+          "name": "Walls",
+          "fixtures": [],
+          "groups": [
+            2
+          ]
+        },
+        {
+          "name": "Ceiling",
+          "fixtures": [],
+          "groups": [
+            3
+          ]
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 5000,
+          "scene": 1,
+          "path": "damped"
+        },
+        {
+          "t": 0,
+          "track": 1,
+          "fade": 5000,
+          "effect": 8,
+          "params": {
+            "speed": 0.05,
+            "color": "#3060ff",
+            "low": 0.3
+          },
+          "dim": 60
+        },
+        {
+          "t": 0,
+          "track": 2,
+          "fade": 5000,
+          "effect": 4,
+          "params": {
+            "speed": 0.1,
+            "color": "#a0c0ff"
+          },
+          "dim": 50
+        }
+      ]
+    }
+  ],
+  "devices": [
+    {
+      "name": "mediaserver",
+      "ip": "192.168.1.20",
+      "port": 8000,
+      "notes": "Media server, OSC in"
+    },
+    {
+      "name": "qlab",
+      "ip": "192.168.1.21",
+      "port": 53000,
+      "notes": "Surround audio (QLab)"
+    }
+  ],
+  "deviceGroups": [
+    {
+      "name": "blend",
+      "kind": "projector",
+      "devices": [
+        "PJ 1",
+        "PJ 2",
+        "PJ 3"
+      ]
+    }
+  ],
+  "pcs": [
+    {
+      "id": 1,
+      "name": "Media server",
+      "ip": "192.168.1.20",
+      "mac": "00:1B:21:3A:50:01",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 2,
+      "name": "Audio Mac",
+      "ip": "192.168.1.21",
+      "mac": "00:1B:21:3A:50:02",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    }
+  ],
+  "email": {
+    "server": "192.168.1.5",
+    "port": 25,
+    "user": "",
+    "password": "",
+    "from": "av@museum.example"
+  },
+  "projectors": [
+    {
+      "id": 1,
+      "name": "PJ 1",
+      "ip": "192.168.1.101",
+      "port": 4352,
+      "password": ""
+    },
+    {
+      "id": 2,
+      "name": "PJ 2",
+      "ip": "192.168.1.102",
+      "port": 4352,
+      "password": ""
+    },
+    {
+      "id": 3,
+      "name": "PJ 3",
+      "ip": "192.168.1.103",
+      "port": 4352,
+      "password": ""
+    }
+  ],
+  "panel": {
+    "theme": {},
+    "panels": [
+      {
+        "id": 1,
+        "name": "Operator",
+        "title": "Immersive room",
+        "start": 1
+      }
+    ],
+    "pages": [
+      {
+        "id": 1,
+        "name": "Show",
+        "columns": 3,
+        "controls": [
+          {
+            "type": "label",
+            "name": "lbl_status",
+            "text": "Status: -",
+            "span": 2
+          },
+          {
+            "type": "clock"
+          },
+          {
+            "type": "button",
+            "name": "Start show",
+            "text": "START SHOW",
+            "color": "#2e7d32",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Stop",
+            "text": "STOP",
+            "color": "#b71c1c",
+            "confirm": "Stop the show?"
+          },
+          {
+            "type": "slider",
+            "name": "Show time",
+            "text": "Show",
+            "follow": 1,
+            "min": 0,
+            "max": 100,
+            "span": 3
+          },
+          {
+            "type": "label",
+            "name": "lbl_left",
+            "text": "Time left",
+            "follow": 1,
+            "timeShow": "left"
+          },
+          {
+            "type": "label",
+            "name": "lbl_today",
+            "text": "Shows today:",
+            "var": "shows_today"
+          },
+          {
+            "type": "button",
+            "name": "Technician",
+            "text": "Technician…",
+            "color": "#424242",
+            "goto": 2
+          }
+        ],
+        "panel": 1
+      },
+      {
+        "id": 2,
+        "name": "Technician",
+        "columns": 3,
+        "pin": "1234",
+        "controls": [
+          {
+            "type": "button",
+            "name": "Chapter 2",
+            "text": "Chapter 2 forest",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Chapter 3",
+            "text": "Chapter 3 storm",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Chapter 4",
+            "text": "Chapter 4 sunrise",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "slider",
+            "name": "House",
+            "text": "House light",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": " %",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "House auto",
+            "text": "House: back to show",
+            "color": "#424242"
+          },
+          {
+            "type": "button",
+            "name": "Work light",
+            "text": "Work light on/off",
+            "color": "#f9a825"
+          },
+          {
+            "type": "label",
+            "name": "lbl_total",
+            "text": "Shows total:",
+            "var": "shows_total",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Back",
+            "text": "← Back",
+            "color": "#424242",
+            "goto": 1,
+            "span": 3
+          }
+        ],
+        "panel": 1
+      }
+    ]
+  },
+  "triggers": [
+    {
+      "id": 10001,
+      "name": "== START & SAFETY",
+      "type": "comment",
+      "color": "red",
+      "actions": [],
+      "conditions": [],
+      "notes": "Fire alarm and door contact come in on the Kiss-Box (slot 1), the start button's LED goes out on slot 2."
+    },
+    {
+      "id": 1,
+      "name": "Startup",
+      "type": "startup",
+      "color": "red",
+      "actions": [
+        "mode Room Idle",
+        "fire trigger \"Start inloop\" after 5"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 2,
+      "name": "Fire alarm",
+      "type": "variable",
+      "variable": "fire_alarm",
+      "value": "on",
+      "color": "red",
+      "actions": [
+        "mode Room Emergency",
+        "send osc mediaserver /stop",
+        "send osc qlab /panic",
+        "email tech@museum.example \"Fire alarm\" Immersive room stopped by the fire alarm"
+      ],
+      "conditions": [],
+      "notes": "Contact from the fire alarm panel on Kiss-Box input 1.3. The Emergency state puts all light on."
+    },
+    {
+      "id": 3,
+      "name": "Fire alarm over",
+      "type": "variable",
+      "variable": "fire_alarm",
+      "value": "off",
+      "color": "red",
+      "actions": [
+        "mode Room Idle",
+        "fire trigger \"Start inloop\""
+      ],
+      "conditions": [
+        "mode Room is Emergency"
+      ]
+    },
+    {
+      "id": 10002,
+      "name": "== SHOW CYCLE",
+      "type": "comment",
+      "color": "purple",
+      "actions": [],
+      "conditions": [],
+      "notes": "Visitors press the start button, or the show starts by itself every 15 minutes during opening hours."
+    },
+    {
+      "id": 4,
+      "name": "Start inloop",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "start timeline \"Inloop\"",
+        "send osc mediaserver /cue/inloop/start",
+        "kissbox io 2.1 on",
+        "panel \"Start show\" reset",
+        "panel lbl_status text Waiting for visitors"
+      ],
+      "conditions": [
+        "mode Room not Emergency"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Start show",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "mode Room Show",
+        "kissbox io 2.1 off",
+        "start timeline Show",
+        "var shows_today ++",
+        "var shows_total ++",
+        "panel \"Start show\" text RUNNING",
+        "panel lbl_status text Show is running"
+      ],
+      "conditions": [
+        "mode Room is Idle",
+        "timeline Show stopped"
+      ],
+      "whileRunning": "ignore"
+    },
+    {
+      "id": 6,
+      "name": "Show: start media",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "send osc mediaserver /cue/show/start",
+        "send osc qlab /cue/show/go"
+      ],
+      "conditions": [],
+      "notes": "Fired by the ◆ cue at 5 s on the Show timeline, after the room has gone dark."
+    },
+    {
+      "id": 7,
+      "name": "Show finished",
+      "type": "timeline_end",
+      "timeline": 1,
+      "color": "purple",
+      "actions": [
+        "mode Room Idle",
+        "fire trigger \"Start inloop\"",
+        "log Show {shows_today} of today finished"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 8,
+      "name": "Stop show",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "stop timeline Show fade 3",
+        "send osc mediaserver /stop",
+        "send osc qlab /cue/show/stop",
+        "mode Room Idle",
+        "fire trigger \"Start inloop\" after 3"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 9,
+      "name": "Start button (Kiss-Box 1.2)",
+      "type": "variable",
+      "variable": "start_button",
+      "value": "on",
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Start show\""
+      ],
+      "conditions": [],
+      "cooldown": 10,
+      "onlyIn": {
+        "group": "Room",
+        "states": [
+          "Idle"
+        ]
+      },
+      "notes": "The big button at the entrance. Ignored while a show runs."
+    },
+    {
+      "id": 10,
+      "name": "Auto start every 15 min",
+      "type": "interval",
+      "seconds": 900,
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Start show\""
+      ],
+      "conditions": [
+        "time between 10:00 16:45",
+        "mode Room is Idle",
+        "calendar Closed inactive"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Door opened during show",
+      "type": "variable",
+      "variable": "door",
+      "value": "on",
+      "color": "purple",
+      "actions": [
+        "log Door opened during the show",
+        "set 1.60 255",
+        "sleep 10",
+        "clear override 1.60"
+      ],
+      "conditions": [],
+      "onlyIn": {
+        "group": "Room",
+        "states": [
+          "Show"
+        ]
+      },
+      "notes": "Lights the entrance spot for 10 s so latecomers find their way."
+    },
+    {
+      "id": 10003,
+      "name": "== OPERATOR PANEL",
+      "type": "comment",
+      "color": "cyan",
+      "actions": [],
+      "conditions": [],
+      "notes": "Front page for the guards, Technician page behind PIN 1234."
+    },
+    {
+      "id": 12,
+      "name": "CLICK Start show",
+      "type": "panel",
+      "control": "Start show",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "fire trigger \"Start show\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 13,
+      "name": "CLICK Stop",
+      "type": "panel",
+      "control": "Stop",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "fire trigger \"Stop show\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 14,
+      "name": "House light slider",
+      "type": "panel",
+      "control": "House",
+      "event": "change",
+      "color": "cyan",
+      "actions": [
+        "set 1.1-4 {=round(value*2.55)}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 15,
+      "name": "CLICK House back to show",
+      "type": "panel",
+      "control": "House auto",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "clear override 1.1-4",
+        "panel House value 0"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 16,
+      "name": "CLICK Chapter 2",
+      "type": "panel",
+      "control": "Chapter 2",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "start timeline Show at 90"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 17,
+      "name": "CLICK Chapter 3",
+      "type": "panel",
+      "control": "Chapter 3",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "start timeline Show at 180"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 18,
+      "name": "CLICK Chapter 4",
+      "type": "panel",
+      "control": "Chapter 4",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "start timeline Show at 270"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 19,
+      "name": "CLICK Work light",
+      "type": "panel",
+      "control": "Work light",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "if mode Room is Maintenance then mode Room Idle else mode Room Maintenance"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10004,
+      "name": "== DAY",
+      "type": "comment",
+      "color": "green",
+      "actions": [],
+      "conditions": [],
+      "notes": "Power the room up before opening and down after closing."
+    },
+    {
+      "id": 20,
+      "name": "Room on 09:30",
+      "type": "time",
+      "at": "09:30:00",
+      "color": "green",
+      "actions": [
+        "pc \"Media server\" wake",
+        "projector blend on",
+        "sleep 120",
+        "fire trigger \"Start inloop\""
+      ],
+      "conditions": [
+        "calendar Closed inactive"
+      ]
+    },
+    {
+      "id": 21,
+      "name": "Room off 17:30",
+      "type": "time",
+      "at": "17:30:00",
+      "color": "green",
+      "actions": [
+        "release all fade 10",
+        "projector blend off",
+        "sleep 30",
+        "pc \"Media server\" shutdown"
+      ],
+      "conditions": [
+        "mode Room is Idle"
+      ]
+    },
+    {
+      "id": 22,
+      "name": "New day: reset counter",
+      "type": "time",
+      "at": "00:00:00",
+      "color": "green",
+      "actions": [
+        "log Shows yesterday: {shows_today}",
+        "var shows_today = 0"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 23,
+      "name": "Media server offline",
+      "type": "device",
+      "device": "Media server",
+      "state": "offline",
+      "color": "green",
+      "actions": [
+        "email tech@museum.example \"Media server offline\" during {mode.Room}"
+      ],
+      "conditions": [
+        "time between 10:00 17:00"
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "shows_today",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    },
+    {
+      "name": "shows_total",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    },
+    {
+      "name": "fire_alarm",
+      "type": "bool",
+      "initial": false
+    },
+    {
+      "name": "start_button",
+      "type": "bool",
+      "initial": false
+    },
+    {
+      "name": "door",
+      "type": "bool",
+      "initial": false
+    }
+  ],
+  "calendar": [
+    {
+      "name": "Closed",
+      "from": "01-01",
+      "to": "01-01"
+    },
+    {
+      "name": "Closed",
+      "from": "12-25",
+      "to": "12-25"
+    }
+  ],
+  "tcp": [],
+  "modbus": [],
+  "maps": [
+    {
+      "id": 1,
+      "name": "Room",
+      "aspect": 1,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [
+        {
+          "fixture": 5,
+          "x": 0.5,
+          "y": 0.05
+        },
+        {
+          "fixture": 6,
+          "x": 0.8182,
+          "y": 0.1818
+        },
+        {
+          "fixture": 7,
+          "x": 0.95,
+          "y": 0.5
+        },
+        {
+          "fixture": 8,
+          "x": 0.8182,
+          "y": 0.8182
+        },
+        {
+          "fixture": 9,
+          "x": 0.5,
+          "y": 0.95
+        },
+        {
+          "fixture": 10,
+          "x": 0.1818,
+          "y": 0.8182
+        },
+        {
+          "fixture": 11,
+          "x": 0.05,
+          "y": 0.5
+        },
+        {
+          "fixture": 12,
+          "x": 0.1818,
+          "y": 0.1818
+        },
+        {
+          "fixture": 15,
+          "x": 0.5,
+          "y": 0.2
+        },
+        {
+          "fixture": 16,
+          "x": 0.5776,
+          "y": 0.2102
+        },
+        {
+          "fixture": 17,
+          "x": 0.65,
+          "y": 0.2402
+        },
+        {
+          "fixture": 18,
+          "x": 0.7121,
+          "y": 0.2879
+        },
+        {
+          "fixture": 19,
+          "x": 0.7598,
+          "y": 0.35
+        },
+        {
+          "fixture": 20,
+          "x": 0.7898,
+          "y": 0.4224
+        },
+        {
+          "fixture": 21,
+          "x": 0.8,
+          "y": 0.5
+        },
+        {
+          "fixture": 22,
+          "x": 0.7898,
+          "y": 0.5776
+        },
+        {
+          "fixture": 23,
+          "x": 0.7598,
+          "y": 0.65
+        },
+        {
+          "fixture": 24,
+          "x": 0.7121,
+          "y": 0.7121
+        },
+        {
+          "fixture": 25,
+          "x": 0.65,
+          "y": 0.7598
+        },
+        {
+          "fixture": 26,
+          "x": 0.5776,
+          "y": 0.7898
+        },
+        {
+          "fixture": 27,
+          "x": 0.5,
+          "y": 0.8
+        },
+        {
+          "fixture": 28,
+          "x": 0.4224,
+          "y": 0.7898
+        },
+        {
+          "fixture": 29,
+          "x": 0.35,
+          "y": 0.7598
+        },
+        {
+          "fixture": 30,
+          "x": 0.2879,
+          "y": 0.7121
+        },
+        {
+          "fixture": 31,
+          "x": 0.2402,
+          "y": 0.65
+        },
+        {
+          "fixture": 32,
+          "x": 0.2102,
+          "y": 0.5776
+        },
+        {
+          "fixture": 33,
+          "x": 0.2,
+          "y": 0.5
+        },
+        {
+          "fixture": 34,
+          "x": 0.2102,
+          "y": 0.4224
+        },
+        {
+          "fixture": 35,
+          "x": 0.2402,
+          "y": 0.35
+        },
+        {
+          "fixture": 36,
+          "x": 0.2879,
+          "y": 0.2879
+        },
+        {
+          "fixture": 37,
+          "x": 0.35,
+          "y": 0.2402
+        },
+        {
+          "fixture": 38,
+          "x": 0.4224,
+          "y": 0.2102
+        },
+        {
+          "fixture": 1,
+          "x": 0.5,
+          "y": 0.35
+        },
+        {
+          "fixture": 2,
+          "x": 0.65,
+          "y": 0.5
+        },
+        {
+          "fixture": 3,
+          "x": 0.5,
+          "y": 0.65
+        },
+        {
+          "fixture": 4,
+          "x": 0.35,
+          "y": 0.5
+        },
+        {
+          "fixture": 13,
+          "x": 0.5,
+          "y": 0.97
+        },
+        {
+          "fixture": 14,
+          "x": 0.5,
+          "y": 0.5
+        }
+      ]
+    }
+  ],
+  "effects": [
+    {
+      "id": 1,
+      "name": "Underwater",
+      "code": "// Slow light under water: waves of colour with a little noise\nparam speed = 0.15 [0, 1]      // waves per second\nparam color = #1aa0ff          // colour of the light\nparam low = 0.25 [0, 1]        // level between the waves\nk = 0.5 + 0.5 * sin((x * 2 + y + t * speed) * tau)\nr, g, b = color\ndim = low + (1 - low) * k * (0.7 + 0.3 * noise(t * 0.8 + i))"
+    },
+    {
+      "id": 2,
+      "name": "XY ripple",
+      "code": "// Rings rippling out from a point on the map, like a stone in water\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.5 [0, 3]       // rings per second\nparam size = 3 [0.5, 10]       // rings from the centre to the edge\nparam color = #00c7be          // colour of the rings\nparam back = #000000           // colour between the rings\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nk = pow(0.5 + 0.5 * sin((d * size - t * speed) * tau), 3)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+    },
+    {
+      "id": 3,
+      "name": "Two-colour fade",
+      "code": "// Fade back and forth between two colours, offset per fixture\nparam speed = 0.15 [0, 2]      // fades there and back per second\nparam offset = 0.5 [0, 1]      // shift along the rig: 0 = all together, 1 = a whole cycle spread out\nparam a = #ff2d92              // first colour\nparam b2 = #0a84ff             // second colour\nk = tri(t * speed + u * offset)\nr = mix(a.r, b2.r, k)\ng = mix(a.g, b2.g, k)\nb = mix(a.b, b2.b, k)"
+    },
+    {
+      "id": 4,
+      "name": "Twinkle",
+      "code": "// Every fixture slowly fades in and out on its own (starry sky)\nparam speed = 0.3 [0.05, 2]    // how fast the stars fade in and out\nparam amount = 0.45 [0, 1]     // how many stars are lit at a time\nparam color = #ffffff          // colour of the stars\nparam base = #000814           // background colour\nk = smoothstep(1 - amount, 1, noise(t * speed + i * 7.31))\nr = mix(base.r, color.r, k)\ng = mix(base.g, color.g, k)\nb = mix(base.b, color.b, k)"
+    },
+    {
+      "id": 5,
+      "name": "Lightning",
+      "code": "// Random lightning flashes over the whole rig\nparam rate = 0.5 [0.05, 4]     // flashes per second, on average\nparam base = 0 [0, 0.3]        // level between the flashes\nparam color = #dfe8ff          // colour of the flash\ns = floor(t * 20)\nhit = rand(s * 0.0137) < rate / 20\nr, g, b = color\ndim = hit ? 0.4 + 0.6 * rand(s * 0.0291 + 0.5) : base"
+    },
+    {
+      "id": 6,
+      "name": "XY plasma",
+      "code": "// Soft colour clouds drifting over the map\nparam speed = 0.3 [0, 2]       // how fast the clouds move\nparam scale = 3 [0.5, 10]      // bigger = more, smaller clouds\nparam sat = 1 [0, 1]           // saturation: 0 = white, 1 = full colour\nv = sin(x * scale * 3 + t * speed * 3) + sin((y * scale + t * speed * 2) * 2) + sin((x + y) * scale * 2 - t * speed * 4)\nr, g, b = hsv(v / 6 + t * speed * 0.2, sat, 1)"
+    },
+    {
+      "id": 7,
+      "name": "XY gradient",
+      "code": "// Two colours blended across the map at an angle, optionally moving\nparam angle = 0 [0, 360]       // direction of the blend in degrees: 0 = left to right, 90 = top to bottom\nparam speed = 0 [-1, 1]        // how fast the colours move (0 = still)\nparam c1 = #ff2d92             // colour at the start\nparam c2 = #0a84ff             // colour at the end\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a) + 0.5\nk = tri((p + t * speed) / 2)\nr = mix(c1.r, c2.r, k)\ng = mix(c1.g, c2.g, k)\nb = mix(c1.b, c2.b, k)"
+    },
+    {
+      "id": 8,
+      "name": "Breathe",
+      "code": "// Slow fade up and down\nparam speed = 0.25 [0.02, 2]   // breaths per second\nparam low = 0.1 [0, 1]         // lowest level (0 = all the way off)\nparam color = #ffb347          // colour\nr, g, b = color\ndim = mix(low, 1, 0.5 - 0.5 * cos(t * speed * tau))"
+    }
+  ],
+  "triggerColorNames": {
+    "red": "Safety",
+    "purple": "Show cycle",
+    "cyan": "Panel",
+    "green": "Day"
+  },
+  "fixtureTypes": [],
+  "drivers": [
+    {
+      "id": 1,
+      "type": "kissbox",
+      "name": "io",
+      "ip": "192.168.1.121",
+      "port": 9813,
+      "listenPort": 9813,
+      "frame": "IO3",
+      "cards": [
+        "DI8DC",
+        "DO4PR",
+        ""
+      ],
+      "names": {
+        "1.1": "Door contact",
+        "1.2": "Start button",
+        "1.3": "Fire alarm",
+        "2.1": "Start button LED"
+      },
+      "vars": {
+        "1.1": "door",
+        "1.2": "start_button",
+        "1.3": "fire_alarm"
+      }
+    }
+  ]
+}

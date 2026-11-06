@@ -19,7 +19,7 @@
 //                  vars {input} {value}
 //   timeline_end   a non-looping timeline reaches its end
 //   mode           a mode group changes ("group" and/or "mode" = state; empty = any).
-//                  vars {group} {mode}
+//                  vars {group} {mode} {old}
 //   panel          a touch-panel control is pressed/released/clicked, or a slider / dial /
 //                  colour wheel / toggle "change"s: vars {control} {event} {value}
 //                  ({r} {g} {b} 0-255 for a colour wheel's #rrggbb, {x} {y} for an XY pad's "x,y")
@@ -45,11 +45,13 @@
 // input: "edge" also hold (on for "hold" s) | double (two presses within "within" s);
 // panel: "event" also hold | double.
 // Every trigger: "cooldown" s (fires that soon after a run are skipped, not by hand) and
-// "whileRunning" again | ignore | restart | queue (a fire while its sleep/wait/loop runs).
+// "whileRunning" again | ignore | restart | queue (a fire while its sleep/wait/loop runs), and
+// "onlyIn" {"group", "states": [...]} (only fires while the mode group is in one of them; by hand always).
 // Actions also: sleep <s> | wait until <condition> [timeout <s>] | repeat <n> times [every <s>] <command> ({i})
 // | repeat <trigger> <n> times [every|for <s>] (fires the trigger n times, {i} and {count} = the round).
 // Every trigger can have "conditions" (all must hold when it fires):
-//   mode <group> is|not <state> | timeline <tl> running | timeline <tl> stopped
+//   mode <group> is|not <state> | mode <group> is <state> for <duration> (90, 30s, 10m, 2h)
+//   timeline <tl> running | timeline <tl> stopped
 //   time between <t> <t> (HH:MM, sunrise, sunset-30) | day is mon,tue,... | device <name> is online|offline
 //   var <name> =|!=|>|<|>=|<= <value> | calendar <name> active|inactive | date between <MM-DD> <MM-DD>
 //   io <point> is on|off | io <point> =|!=|>|<|>=|<= <value>
@@ -61,7 +63,9 @@ void poll(uint32_t nowMs);   // caller must hold g_engine
 void afterTick();            // dmx_change watchers; call right after Show::tick
 void onTimelineEnd(int timelineId);
 void onTimelineCue(int timelineId, const String& trigger);   // a trigger cue on a timeline was reached
-void onModeChanged(const String& group, const String& state);
+// Sets mode group g to state s (State::setMode) and, if it changed, runs the old state's
+// "leave" and the new state's "enter" actions, the mode triggers, and sets the group's variable.
+bool changeMode(int g, int s, String& msg, const char* by);
 void onDeviceState(const String& kind, const String& name, bool online);
 void onProjectorAlarm(const Projectors::Alarm& a);
 void onVariable(const String& name, const String& value, const String& old);

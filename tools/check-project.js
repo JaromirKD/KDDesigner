@@ -2,7 +2,8 @@
 //  - every base effect in fx.js and every effect in the project compiles, and runs on a
 //    test fixture without NaN or errors;
 //  - every trigger: the problems the Triggers page marks with a red ! (actions and conditions
-//    checked with the command grammar of app-grammar.js, missing references etc.).
+//    checked with the command grammar of app-grammar.js, missing references etc.);
+//  - every mode group: its states' start / end actions, power-up state and variable.
 // Usage: node tools/check-project.js [path/to/project.json]   (default data/show/project.json)
 // Exit code 1 when an effect fails (trigger problems are reported, not fatal: they are
 // often half-finished work in the project).
@@ -75,5 +76,11 @@ for (const [id, name, list] of problems) {
   for (const p of list) out(`      ${p}`);
 }
 out(`  ${problems.length} trigger(s) checked, ${bad} with problems`);
+
+// ---- Mode groups (state actions, power-up state, variable) ----
+out('Mode groups');
+const modeProbs = vm.runInContext('P().modes.map((g) => [g.name, modeProblems(g)])', ctx);
+for (const [name, list] of modeProbs) if (list.length) { out(`  ${name}`); for (const p of list) out(`      ${p}`); }
+out(`  ${modeProbs.length} group(s) checked, ${modeProbs.filter(([, l]) => l.length).length} with problems`);
 
 process.exit(failed ? 1 : 0);

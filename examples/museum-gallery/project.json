@@ -1,0 +1,1603 @@
+{
+  "name": "Museum gallery - opening hours",
+  "settings": {
+    "tzOffsetMin": 60,
+    "udpPort": 4000,
+    "sacnPriority": 100,
+    "monitor": {
+      "interval": 60,
+      "timeout": 1000,
+      "failures": 2
+    },
+    "time": {
+      "ntp": "pool.ntp.org",
+      "ntpEnabled": true,
+      "dst": "eu"
+    },
+    "location": {
+      "lat": 52.37,
+      "lon": 4.9
+    },
+    "outputs": {
+      "dmx": true,
+      "artnet": true,
+      "sacn": true,
+      "dmxFps": 40,
+      "artnetFps": 30,
+      "sacnFps": 40,
+      "artnetChangesOnly": true,
+      "sacnChangesOnly": false
+    }
+  },
+  "network": {
+    "dhcp": false,
+    "ip": "192.168.1.50",
+    "mask": "255.255.255.0",
+    "gateway": "192.168.1.1"
+  },
+  "modes": [
+    {
+      "name": "Museum",
+      "states": [
+        "Closed",
+        "Cleaning",
+        "Opening",
+        "Open",
+        "Event"
+      ],
+      "stateInfo": {
+        "Closed": {
+          "color": "#616161",
+          "icon": "🌙",
+          "enter": [
+            "release all fade 30",
+            "scene \"Night (security)\" fade 30",
+            "projector all off",
+            "brightsign \"Screen A\" send stop",
+            "sleep 60",
+            "pc all shutdown",
+            "# projectors need a few minutes to cool down before the power goes",
+            "sleep 240",
+            "netio rack output 2 off"
+          ]
+        },
+        "Cleaning": {
+          "color": "#f9a825",
+          "icon": "🧹",
+          "enter": [
+            "scene Cleaning fade 3"
+          ],
+          "leave": [
+            "release scene Cleaning fade 5"
+          ]
+        },
+        "Opening": {
+          "color": "#d29922",
+          "icon": "⏳",
+          "enter": [
+            "netio rack output 2 on",
+            "release all fade 10",
+            "sleep 20",
+            "pc all wake",
+            "projector all on",
+            "wait until device \"PJ room A\" is online timeout 180",
+            "projector all input 31",
+            "mode Museum Open"
+          ]
+        },
+        "Open": {
+          "color": "#3fb950",
+          "icon": "🟢",
+          "enter": [
+            "start timeline \"Opening hours\"",
+            "brightsign \"Screen A\" send loop",
+            "var days_open ++"
+          ]
+        },
+        "Event": {
+          "color": "#8957e5",
+          "icon": "🥂",
+          "enter": [
+            "scene \"Evening event\" fade 20"
+          ],
+          "leave": [
+            "release scene \"Evening event\" fade 10"
+          ]
+        }
+      }
+    }
+  ],
+  "universes": [
+    {
+      "id": 1,
+      "name": "DMX 1",
+      "dmxPort": 1,
+      "artnet": 0,
+      "sacn": 1,
+      "useDmx": true,
+      "useArtnet": false,
+      "useSacn": false
+    }
+  ],
+  "fixtures": [
+    {
+      "id": 1,
+      "name": "Spot room A 1",
+      "universe": 1,
+      "address": 1,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 2,
+      "name": "Spot room A 2",
+      "universe": 1,
+      "address": 2,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 3,
+      "name": "Spot room A 3",
+      "universe": 1,
+      "address": 3,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 4,
+      "name": "Spot room A 4",
+      "universe": 1,
+      "address": 4,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 5,
+      "name": "Spot room A 5",
+      "universe": 1,
+      "address": 5,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 6,
+      "name": "Spot room A 6",
+      "universe": 1,
+      "address": 6,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 7,
+      "name": "Spot room B 1",
+      "universe": 1,
+      "address": 7,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 8,
+      "name": "Spot room B 2",
+      "universe": 1,
+      "address": 8,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 9,
+      "name": "Spot room B 3",
+      "universe": 1,
+      "address": 9,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 10,
+      "name": "Spot room B 4",
+      "universe": 1,
+      "address": 10,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 11,
+      "name": "Spot room B 5",
+      "universe": 1,
+      "address": 11,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 12,
+      "name": "Spot room B 6",
+      "universe": 1,
+      "address": 12,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 13,
+      "name": "Vitrine 1",
+      "universe": 1,
+      "address": 20,
+      "channels": [
+        "dim",
+        "cct"
+      ],
+      "icon": "dimmer",
+      "type": "Generic / Tunable white",
+      "mode": "dim, cct"
+    },
+    {
+      "id": 14,
+      "name": "Vitrine 2",
+      "universe": 1,
+      "address": 22,
+      "channels": [
+        "dim",
+        "cct"
+      ],
+      "icon": "dimmer",
+      "type": "Generic / Tunable white",
+      "mode": "dim, cct"
+    },
+    {
+      "id": 15,
+      "name": "Vitrine 3",
+      "universe": 1,
+      "address": 24,
+      "channels": [
+        "dim",
+        "cct"
+      ],
+      "icon": "dimmer",
+      "type": "Generic / Tunable white",
+      "mode": "dim, cct"
+    },
+    {
+      "id": 16,
+      "name": "Vitrine 4",
+      "universe": 1,
+      "address": 26,
+      "channels": [
+        "dim",
+        "cct"
+      ],
+      "icon": "dimmer",
+      "type": "Generic / Tunable white",
+      "mode": "dim, cct"
+    },
+    {
+      "id": 17,
+      "name": "Cove 1",
+      "universe": 1,
+      "address": 40,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 18,
+      "name": "Cove 2",
+      "universe": 1,
+      "address": 45,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 19,
+      "name": "Cove 3",
+      "universe": 1,
+      "address": 50,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 20,
+      "name": "Cove 4",
+      "universe": 1,
+      "address": 55,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 21,
+      "name": "Work light room A",
+      "universe": 1,
+      "address": 60,
+      "channels": [
+        "dim"
+      ],
+      "curve": "nondim",
+      "icon": "relay"
+    },
+    {
+      "id": 22,
+      "name": "Work light room B",
+      "universe": 1,
+      "address": 61,
+      "channels": [
+        "dim"
+      ],
+      "curve": "nondim",
+      "icon": "relay"
+    },
+    {
+      "id": 23,
+      "name": "Night light corridor",
+      "universe": 1,
+      "address": 62,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "Room A spots",
+      "fixtures": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Room B spots",
+      "fixtures": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Vitrines",
+      "fixtures": [
+        13,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Coves",
+      "fixtures": [
+        17,
+        18,
+        19,
+        20
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Work lights",
+      "fixtures": [
+        21,
+        22
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "name": "Exhibition",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 10,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 11,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 12,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 13,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 14,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 15,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 16,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 13,
+          "ch": "cct",
+          "v": 90
+        },
+        {
+          "fixture": 14,
+          "ch": "cct",
+          "v": 90
+        },
+        {
+          "fixture": 15,
+          "ch": "cct",
+          "v": 90
+        },
+        {
+          "fixture": 16,
+          "ch": "cct",
+          "v": 90
+        },
+        {
+          "fixture": 17,
+          "ch": "dim",
+          "v": 102
+        },
+        {
+          "fixture": 18,
+          "ch": "dim",
+          "v": 102
+        },
+        {
+          "fixture": 19,
+          "ch": "dim",
+          "v": 102
+        },
+        {
+          "fixture": 20,
+          "ch": "dim",
+          "v": 102
+        },
+        {
+          "fixture": 17,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 18,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 19,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 20,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 17,
+          "ch": "g",
+          "v": 190
+        },
+        {
+          "fixture": 18,
+          "ch": "g",
+          "v": 190
+        },
+        {
+          "fixture": 19,
+          "ch": "g",
+          "v": 190
+        },
+        {
+          "fixture": 20,
+          "ch": "g",
+          "v": 190
+        },
+        {
+          "fixture": 17,
+          "ch": "b",
+          "v": 120
+        },
+        {
+          "fixture": 18,
+          "ch": "b",
+          "v": 120
+        },
+        {
+          "fixture": 19,
+          "ch": "b",
+          "v": 120
+        },
+        {
+          "fixture": 20,
+          "ch": "b",
+          "v": 120
+        },
+        {
+          "fixture": 17,
+          "ch": "w",
+          "v": 200
+        },
+        {
+          "fixture": 18,
+          "ch": "w",
+          "v": 200
+        },
+        {
+          "fixture": 19,
+          "ch": "w",
+          "v": 200
+        },
+        {
+          "fixture": 20,
+          "ch": "w",
+          "v": 200
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Cleaning",
+      "levels": [
+        {
+          "fixture": 21,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 22,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 10,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 11,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 12,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 13,
+          "ch": "dim",
+          "v": 77
+        },
+        {
+          "fixture": 14,
+          "ch": "dim",
+          "v": 77
+        },
+        {
+          "fixture": 15,
+          "ch": "dim",
+          "v": 77
+        },
+        {
+          "fixture": 16,
+          "ch": "dim",
+          "v": 77
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Night (security)",
+      "levels": [
+        {
+          "fixture": 23,
+          "ch": "dim",
+          "v": 77
+        },
+        {
+          "fixture": 13,
+          "ch": "dim",
+          "v": 13
+        },
+        {
+          "fixture": 14,
+          "ch": "dim",
+          "v": 13
+        },
+        {
+          "fixture": 15,
+          "ch": "dim",
+          "v": 13
+        },
+        {
+          "fixture": 16,
+          "ch": "dim",
+          "v": 13
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Evening event",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 10,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 11,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 12,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 13,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 14,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 15,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 16,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 13,
+          "ch": "cct",
+          "v": 40
+        },
+        {
+          "fixture": 14,
+          "ch": "cct",
+          "v": 40
+        },
+        {
+          "fixture": 15,
+          "ch": "cct",
+          "v": 40
+        },
+        {
+          "fixture": 16,
+          "ch": "cct",
+          "v": 40
+        },
+        {
+          "fixture": 17,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 18,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 19,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 20,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 17,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 18,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 19,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 20,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 17,
+          "ch": "g",
+          "v": 120
+        },
+        {
+          "fixture": 18,
+          "ch": "g",
+          "v": 120
+        },
+        {
+          "fixture": 19,
+          "ch": "g",
+          "v": 120
+        },
+        {
+          "fixture": 20,
+          "ch": "g",
+          "v": 120
+        },
+        {
+          "fixture": 17,
+          "ch": "b",
+          "v": 40
+        },
+        {
+          "fixture": 18,
+          "ch": "b",
+          "v": 40
+        },
+        {
+          "fixture": 19,
+          "ch": "b",
+          "v": 40
+        },
+        {
+          "fixture": 20,
+          "ch": "b",
+          "v": 40
+        }
+      ]
+    }
+  ],
+  "timelines": [
+    {
+      "id": 1,
+      "loop": true,
+      "priority": 0,
+      "name": "Opening hours",
+      "length": 600000,
+      "group": "A",
+      "tracks": [
+        {
+          "name": "Base",
+          "fixtures": [],
+          "groups": []
+        },
+        {
+          "name": "Coves",
+          "fixtures": [],
+          "groups": [
+            4
+          ]
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 20000,
+          "scene": 1,
+          "path": "damped"
+        },
+        {
+          "t": 0,
+          "track": 1,
+          "fade": 20000,
+          "effect": 1,
+          "params": {
+            "speed": 0.01,
+            "c1": "#ffb070",
+            "c2": "#ffe0b0"
+          },
+          "dim": 40
+        }
+      ]
+    }
+  ],
+  "devices": [],
+  "deviceGroups": [],
+  "pcs": [
+    {
+      "id": 1,
+      "name": "Media PC room A",
+      "ip": "192.168.1.41",
+      "mac": "00:1B:21:3A:4F:10",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 2,
+      "name": "Kiosk PC room B",
+      "ip": "192.168.1.42",
+      "mac": "00:1B:21:3A:4F:11",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    }
+  ],
+  "email": {
+    "server": "192.168.1.5",
+    "port": 25,
+    "user": "",
+    "password": "",
+    "from": "av@museum.example"
+  },
+  "projectors": [
+    {
+      "id": 1,
+      "name": "PJ room A",
+      "ip": "192.168.1.101",
+      "port": 4352,
+      "password": ""
+    },
+    {
+      "id": 2,
+      "name": "PJ room B",
+      "ip": "192.168.1.102",
+      "port": 4352,
+      "password": ""
+    }
+  ],
+  "panel": {
+    "theme": {},
+    "panels": [
+      {
+        "id": 1,
+        "name": "Front desk",
+        "title": "Gallery",
+        "start": 1
+      }
+    ],
+    "pages": [
+      {
+        "id": 1,
+        "name": "Gallery",
+        "columns": 2,
+        "controls": [
+          {
+            "type": "label",
+            "name": "lbl_state",
+            "text": "Museum:",
+            "span": 2
+          },
+          {
+            "type": "clock",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Open now",
+            "text": "Open now",
+            "color": "#2e7d32"
+          },
+          {
+            "type": "button",
+            "name": "Close now",
+            "text": "Close (hold 3 s)",
+            "color": "#b71c1c"
+          },
+          {
+            "type": "button",
+            "name": "Cleaning",
+            "text": "Cleaning light",
+            "color": "#f9a825"
+          },
+          {
+            "type": "button",
+            "name": "Evening event",
+            "text": "Evening event",
+            "color": "#6a4c93"
+          },
+          {
+            "type": "slider",
+            "name": "Light level",
+            "text": "Light level",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "unit": " %",
+            "value": 100,
+            "var": "light_level",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_days",
+            "text": "Days open:",
+            "var": "days_open",
+            "span": 2
+          }
+        ],
+        "panel": 1
+      }
+    ]
+  },
+  "triggers": [
+    {
+      "id": 10001,
+      "name": "== START",
+      "type": "comment",
+      "color": "red",
+      "actions": [],
+      "conditions": [],
+      "notes": "The Museum mode group holds what each state does (Modes page). The clock and the buttons only change the mode."
+    },
+    {
+      "id": 1,
+      "name": "Startup",
+      "type": "startup",
+      "color": "red",
+      "actions": [
+        "if mode Museum is Open then start timeline \"Opening hours\"",
+        "if mode Museum is Closed then scene \"Night (security)\" fade 5",
+        "panel lbl_state text Museum: {mode.Museum}"
+      ],
+      "conditions": [],
+      "notes": "After a power cut the Museum mode keeps its state; this puts the light back to match."
+    },
+    {
+      "id": 2,
+      "name": "Mode -> panel label",
+      "type": "mode",
+      "group": "Museum",
+      "color": "red",
+      "actions": [
+        "panel lbl_state text Museum: {mode}",
+        "log Museum is now {mode}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10002,
+      "name": "== OPENING HOURS",
+      "type": "comment",
+      "color": "green",
+      "actions": [],
+      "conditions": [],
+      "notes": "Tuesday to Sunday 10:00-17:00, Thursday until 21:00. Closed on Mondays and on the calendar's Closed days."
+    },
+    {
+      "id": 3,
+      "name": "Cleaning 08:30",
+      "type": "time",
+      "at": "08:30:00",
+      "days": [
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "color": "green",
+      "actions": [
+        "mode Museum Cleaning"
+      ],
+      "conditions": [
+        "calendar Closed inactive"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Opening 09:45",
+      "type": "time",
+      "at": "09:45:00",
+      "days": [
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "color": "green",
+      "actions": [
+        "mode Museum Opening"
+      ],
+      "conditions": [
+        "calendar Closed inactive"
+      ],
+      "notes": "15 minutes before the doors open: power, PCs and projectors come up, then the light fades in."
+    },
+    {
+      "id": 5,
+      "name": "Closing 17:00",
+      "type": "time",
+      "at": "17:00:00",
+      "color": "green",
+      "actions": [
+        "mode Museum Closed"
+      ],
+      "conditions": [
+        "mode Museum not Closed",
+        "mode Museum not Event",
+        "day is tue,wed,fri,sat,sun"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Late opening Thursday 21:00",
+      "type": "time",
+      "at": "21:00:00",
+      "days": [
+        "thu"
+      ],
+      "color": "green",
+      "actions": [
+        "mode Museum Closed"
+      ],
+      "conditions": [
+        "mode Museum not Closed",
+        "mode Museum not Event"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Safety net 23:30",
+      "type": "time",
+      "at": "23:30:00",
+      "color": "green",
+      "actions": [
+        "mode Museum Closed"
+      ],
+      "conditions": [
+        "mode Museum not Closed"
+      ],
+      "notes": "Whatever happened during the day: closed at night."
+    },
+    {
+      "id": 8,
+      "name": "Weekly reboot (Monday 07:00)",
+      "type": "time",
+      "at": "07:00:00",
+      "days": [
+        "mon"
+      ],
+      "color": "green",
+      "actions": [
+        "pc all wake",
+        "sleep 180",
+        "pc all reboot",
+        "sleep 300",
+        "pc all shutdown"
+      ],
+      "conditions": [],
+      "notes": "Monday the museum is closed: a weekly restart keeps the media PCs fresh."
+    },
+    {
+      "id": 10003,
+      "name": "== STAFF PANEL",
+      "type": "comment",
+      "color": "cyan",
+      "actions": [],
+      "conditions": [],
+      "notes": "A tablet at the front desk: /panel. Close needs a 3 s hold so it isn't pressed by accident."
+    },
+    {
+      "id": 9,
+      "name": "CLICK Open now",
+      "type": "panel",
+      "control": "Open now",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "mode Museum Opening"
+      ],
+      "conditions": [
+        "mode Museum not Open"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "HOLD Close now",
+      "type": "panel",
+      "control": "Close now",
+      "event": "hold",
+      "hold": 3,
+      "color": "cyan",
+      "actions": [
+        "mode Museum Closed"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 11,
+      "name": "CLICK Cleaning",
+      "type": "panel",
+      "control": "Cleaning",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "if mode Museum is Cleaning then mode Museum back else mode Museum Cleaning"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 12,
+      "name": "CLICK Evening event",
+      "type": "panel",
+      "control": "Evening event",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "mode Museum Event"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 13,
+      "name": "Light level slider",
+      "type": "panel",
+      "control": "Light level",
+      "event": "change",
+      "color": "cyan",
+      "actions": [
+        "master timeline \"Opening hours\" {value} fade 2"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10004,
+      "name": "== MONITORING",
+      "type": "comment",
+      "color": "blue",
+      "actions": [],
+      "conditions": [],
+      "notes": "Emails to the technician when something drops out during opening hours."
+    },
+    {
+      "id": 14,
+      "name": "Device offline",
+      "type": "device",
+      "device": "",
+      "state": "offline",
+      "color": "blue",
+      "actions": [
+        "email tech@museum.example \"{device} offline\" {kind} {device} stopped answering ({mode.Museum})"
+      ],
+      "conditions": [
+        "mode Museum is Open"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "Projector warning",
+      "type": "projector",
+      "projector": "",
+      "alarm": "any",
+      "level": "warning",
+      "color": "blue",
+      "actions": [
+        "email tech@museum.example \"{projector}: {alarm}\" {alarm} is {state}, lamp {lamp} h"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 16,
+      "name": "Lamp hours 18000",
+      "type": "projector",
+      "projector": "",
+      "alarm": "lamp_hours",
+      "hours": 18000,
+      "color": "blue",
+      "actions": [
+        "email tech@museum.example \"{projector} light source\" {hours} h reached, plan a replacement"
+      ],
+      "conditions": []
+    }
+  ],
+  "variables": [
+    {
+      "name": "days_open",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    },
+    {
+      "name": "light_level",
+      "type": "number",
+      "initial": 100
+    }
+  ],
+  "calendar": [
+    {
+      "name": "Closed",
+      "from": "01-01",
+      "to": "01-01"
+    },
+    {
+      "name": "Closed",
+      "from": "12-25",
+      "to": "12-25"
+    }
+  ],
+  "tcp": [],
+  "modbus": [],
+  "maps": [
+    {
+      "id": 1,
+      "name": "Floor plan",
+      "aspect": 2,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [
+        {
+          "fixture": 1,
+          "x": 0.06,
+          "y": 0.2
+        },
+        {
+          "fixture": 2,
+          "x": 0.136,
+          "y": 0.2
+        },
+        {
+          "fixture": 3,
+          "x": 0.212,
+          "y": 0.2
+        },
+        {
+          "fixture": 4,
+          "x": 0.288,
+          "y": 0.2
+        },
+        {
+          "fixture": 5,
+          "x": 0.364,
+          "y": 0.2
+        },
+        {
+          "fixture": 6,
+          "x": 0.44,
+          "y": 0.2
+        },
+        {
+          "fixture": 7,
+          "x": 0.56,
+          "y": 0.2
+        },
+        {
+          "fixture": 8,
+          "x": 0.636,
+          "y": 0.2
+        },
+        {
+          "fixture": 9,
+          "x": 0.712,
+          "y": 0.2
+        },
+        {
+          "fixture": 10,
+          "x": 0.788,
+          "y": 0.2
+        },
+        {
+          "fixture": 11,
+          "x": 0.864,
+          "y": 0.2
+        },
+        {
+          "fixture": 12,
+          "x": 0.94,
+          "y": 0.2
+        },
+        {
+          "fixture": 13,
+          "x": 0.15,
+          "y": 0.55
+        },
+        {
+          "fixture": 14,
+          "x": 0.3833,
+          "y": 0.55
+        },
+        {
+          "fixture": 15,
+          "x": 0.6167,
+          "y": 0.55
+        },
+        {
+          "fixture": 16,
+          "x": 0.85,
+          "y": 0.55
+        },
+        {
+          "fixture": 17,
+          "x": 0.08,
+          "y": 0.85
+        },
+        {
+          "fixture": 18,
+          "x": 0.36,
+          "y": 0.85
+        },
+        {
+          "fixture": 19,
+          "x": 0.64,
+          "y": 0.85
+        },
+        {
+          "fixture": 20,
+          "x": 0.92,
+          "y": 0.85
+        },
+        {
+          "fixture": 21,
+          "x": 0.25,
+          "y": 0.4
+        },
+        {
+          "fixture": 22,
+          "x": 0.75,
+          "y": 0.4
+        },
+        {
+          "fixture": 23,
+          "x": 0.5,
+          "y": 0.95
+        }
+      ]
+    }
+  ],
+  "effects": [
+    {
+      "id": 1,
+      "name": "XY gradient",
+      "code": "// Two colours blended across the map at an angle, optionally moving\nparam angle = 0 [0, 360]       // direction of the blend in degrees: 0 = left to right, 90 = top to bottom\nparam speed = 0 [-1, 1]        // how fast the colours move (0 = still)\nparam c1 = #ff2d92             // colour at the start\nparam c2 = #0a84ff             // colour at the end\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a) + 0.5\nk = tri((p + t * speed) / 2)\nr = mix(c1.r, c2.r, k)\ng = mix(c1.g, c2.g, k)\nb = mix(c1.b, c2.b, k)"
+    }
+  ],
+  "triggerColorNames": {
+    "red": "Start",
+    "green": "Opening hours",
+    "cyan": "Staff panel",
+    "blue": "Monitoring"
+  },
+  "fixtureTypes": [],
+  "drivers": [
+    {
+      "id": 1,
+      "type": "brightsign",
+      "name": "Screen A",
+      "ip": "192.168.1.111",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": false,
+      "vars": {},
+      "commands": [
+        {
+          "name": "Loop",
+          "text": "loop"
+        },
+        {
+          "name": "Stop",
+          "text": "stop"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "netio",
+      "name": "rack",
+      "ip": "192.168.1.120",
+      "port": 80,
+      "user": "netio",
+      "password": "netio",
+      "model": "4PZ",
+      "outputs": 4,
+      "live": true,
+      "vars": {}
+    }
+  ]
+}

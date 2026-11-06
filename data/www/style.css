@@ -66,6 +66,18 @@ h3 { margin: 16px 0 8px; font-size: 13px; text-transform: uppercase; letter-spac
 }
 .brand { font-weight: 700; font-size: 17px; color: var(--accent); }
 .brand span { color: var(--text); font-weight: 400; margin-left: 2px; }
+/* PC editor or live controller (applyWhere in app-core.js) */
+.where { font-size: 12px; font-weight: 700; letter-spacing: .06em; padding: 3px 10px; border-radius: 4px; white-space: nowrap; cursor: help; }
+.where:empty { display: none; }
+.where.pc { color: var(--muted); border: 1px dashed var(--border2); }
+.where.on { background: var(--live); color: var(--live-fg); }
+.narrow .where .long { display: none; }
+body.live .top { box-shadow: inset 0 -3px 0 var(--live); }
+body.live #save.primary { background: var(--live); border-color: var(--live); color: var(--live-fg); }
+body.live.live-frame::after { content: ""; position: fixed; inset: 0; border: 3px solid var(--live); pointer-events: none; z-index: 9000; }
+.live-colors { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.live-colors button { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; }
+.live-colors button.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
 .proj { color: var(--muted); }
 .proj.dirty::after { content: " ● unsaved"; color: var(--accent); }
 .spacer { flex: 1; }
@@ -270,6 +282,10 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 /* trigger list */
 .trig-list { max-height: calc(var(--main-h, 100 * var(--vh)) - 200px); overflow-y: auto; }
 .list .item.sep { font-weight: 600; font-size: 12px; letter-spacing: .04em; color: var(--muted); background: var(--bg); padding: 10px 12px 4px; border-bottom: 2px solid var(--tc, var(--border)); }
+/* main section = big heading; sub section = smaller, indented with its triggers */
+.list .item.sep.main { font-size: 13.5px; font-weight: 700; padding: 12px 12px 4px; border-bottom-width: 3px; }
+.list .item.sep.sub { font-size: 11.5px; padding: 8px 12px 3px 26px; border-bottom: 1px dashed var(--tc, var(--border)); }
+.list .item.in-sub { padding-left: 26px; }
 .list .item.disabled { opacity: .45; }
 .trig-search { gap: 6px; margin-bottom: 6px; }
 .trig-list .item mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 2px; }
@@ -526,6 +542,18 @@ input[type=range].cw-grad::-moz-range-track { background: transparent; }
 .col-filter.some .swatch:not(.on) { opacity: .45; }
 .col-filter .swatch.unused:not(.on) { opacity: .25; transform: scale(.8); }
 .col-filter { flex-wrap: wrap; }
+/* trigger colour tabs: the name above a bar in the colour */
+.trig-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+.trig-tab { --tc: var(--border2); display: inline-flex; align-items: baseline; gap: 5px; max-width: 160px; padding: 3px 8px 4px; font: inherit; font-size: 12px;
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-bottom: 4px solid var(--tc); border-radius: 5px 5px 2px 2px; cursor: pointer; }
+.trig-tab .tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trig-tab .tab-n { font-size: 10px; color: var(--muted); }
+.trig-tab.unnamed .tab-name { color: var(--muted); font-style: italic; }
+.trig-tab.nocol { border-bottom-style: dashed; }
+.trig-tab:hover { background: color-mix(in srgb, var(--tc) 12%, var(--panel2)); }
+.trig-tab.on { background: color-mix(in srgb, var(--tc) 28%, var(--panel)); border-color: var(--tc); }
+.trig-tab.all.on { border-color: var(--text); background: var(--panel); }
+.trig-tab .tab-edit { width: 120px; padding: 0 3px; font-size: 12px; }
 
 /* trigger notes */
 .trig-notes { width: 100%; margin-top: 8px; resize: vertical; font-size: 13px; line-height: 1.45; color: var(--text); background: color-mix(in srgb, #ffd23f 5%, var(--panel)); border-left: 3px solid color-mix(in srgb, #ffd23f 55%, transparent); }
@@ -574,6 +602,24 @@ table.sched td:first-child { white-space: nowrap; }
 .mode-group > b { min-width: 120px; font-size: 15px; }
 .mode-group .toggle { min-width: 84px; justify-content: center; padding: 8px 16px; font-size: 14px; }
 .mode-group .toggle.on::before { content: "●"; font-size: 10px; }
+/* a state with its own colour (Modes page "Look") */
+.mode-group .toggle.mcol { border-color: var(--mc); }
+.mode-group .toggle.mcol.on { background: var(--mc); border-color: var(--mc); color: #fff; text-shadow: 0 1px 2px #0008; }
+.mode-card .form { max-width: 900px; }
+.mode-states { width: 100%; margin-top: 10px; }
+.mode-states td { vertical-align: top; }
+.mode-states td .cmd { min-width: 180px; }
+.mode-look { gap: 4px; min-width: 390px; }
+.mode-look .swatch { width: 18px; height: 18px; }
+.mode-icon-btn { min-width: 44px; font-size: 16px; }
+.icon-pick { position: relative; }
+.icon-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; width: 300px; padding: 8px; background: var(--panel); border: 1px solid var(--border2); border-radius: 8px; box-shadow: 0 6px 20px #0006; font-size: 12px; }
+.icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin: 2px 0 6px; }
+.icon-grid button { font-size: 18px; padding: 3px 0; background: none; border: 1px solid transparent; border-radius: 4px; cursor: pointer; }
+.icon-grid button:hover { background: var(--hover); }
+.icon-grid button.on { border-color: var(--accent); }
+.mode-changes { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; max-height: 220px; overflow: auto; font-size: 13px; }
+.mode-changes .row { gap: 10px; }
 
 /* monitoring */
 .mon-bar { margin-bottom: 4px; }
@@ -597,6 +643,11 @@ table.sched td:first-child { white-space: nowrap; }
 .drv-row .btn.small { padding: 1px 7px; }
 .kiss { display: inline-block; min-width: 20px; text-align: center; border-radius: 3px; background: var(--panel2); color: var(--muted); font-size: 11px; padding: 1px 3px; }
 .kiss.on { background: var(--ok); color: #111; }
+/* BrightSign test buttons (the state playing now is lit) and the Activity list */
+.btn.bs-test.on { background: var(--ok); border-color: var(--ok); color: #111; }
+.bs-act { background: var(--panel2); border-radius: 4px; padding: 4px 8px; max-height: 220px; overflow: auto; font-size: 12px; }
+.bs-act div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-act .muted { margin-right: 8px; }
 .devtabs { margin: 0 0 14px; flex-wrap: wrap; }
 .devtabs button { padding: 6px 14px; font-size: 13px; }
 .devtabs small { opacity: .7; }

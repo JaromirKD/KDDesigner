@@ -3,16 +3,37 @@
 #include <stdarg.h>
 #include <time.h>
 #include <vector>
+#include "D2Ram.h"
 #include "Storage.h"
 
 namespace {
 const char* const kCatNames[] = {"SYS", "USB", "NET", "DMX", "ARTNET", "SACN", "SHOW", "TRIG", "WEB", "CMD", "PJLINK"};
 const char* const kLvlNames[] = {"DEBUG", "INFO", "WARN", "ERROR"};
 
-LogEntry ring[KD_LOG_RING];
-uint32_t nextSeq = 1;            // seq of the next entry to be written
+// The ring (~68 KB) lives in D2 SRAM and survives a reset (D2Ram::keep): after a watchdog or
+// crash restart the last lines before it are still there, and the ones that never reached
+// the stick are written then. After power-on the magic doesn't match and it starts empty.
+struct Store {
+  uint32_t magic, size;
+  uint32_t nextSeq;   // seq of the next entry to be written
+  uint32_t fileSeq;   // next seq to append to the USB file
+  uint32_t build;     // firmware that wrote it (Log::setBuild)
+  uint32_t planned;   // kPlanned: the firmware restarted on purpose (Log::markPlannedRestart)
+  const char* crumbs[3];   // where the main loop / web thread / project load last were (Log::crumb)
+  LogEntry ring[KD_LOG_RING];
+};
+const uint32_t kMagic = 0x4B444C47;   // "KDLG"
+const uint32_t kPlanned = 0x504C4E44;
+const uint32_t kUpload = 0x55534255;   // reset into the bootloader for a USB upload
+bool wasKept = false, wasPlanned = false, wasUpload = false;
+uint32_t prevBuild = 0;
+Store& st = *static_cast<Store*>(D2Ram::keep(sizeof(Store)));
+LogEntry* const ring = st.ring;
+uint32_t& nextSeq = st.nextSeq;
+uint32_t& fileSeq = st.fileSeq;
 uint32_t serialSeq = 1;          // next seq to print on Serial
-uint32_t fileSeq = 1;            // next seq to append to the USB file
+bool serialOpen = false;         // a serial monitor has the USB port open
+uint32_t keptLines = 0, keptUnsaved = 0;
 Lvl levels[(int)Cat::COUNT];
 rtos::Mutex mtx;
 }  // namespace
@@ -21,6 +42,53 @@ namespace Log {
 
 void begin() {
   for (auto& l : levels) l = Lvl::Info;
+  bool kept = st.magic == kMagic && st.size == sizeof(Store) && st.nextSeq >= 1 && st.nextSeq < 0x7FFFFFFF &&
+              st.fileSeq >= 1 && st.fileSeq <= st.nextSeq;
+  if (!kept) {
+    memset(&st, 0, sizeof(st));
+    st.magic = kMagic;
+    st.size = sizeof(Store);
+    st.nextSeq = st.fileSeq = 1;
+    return;
+  }
+  for (int i = 0; i < KD_LOG_RING; i++) ring[i].msg[KD_LOG_MSG_LEN - 1] = 0;   // never read past a line
+  keptLines = lastSeq() - firstSeq() + 1;
+  keptUnsaved = nextSeq - max(fileSeq, firstSeq());
+  wasKept = true;
+  wasPlanned = st.planned == kPlanned;
+  wasUpload = st.planned == kUpload;
+  prevBuild = st.build;
+  st.planned = 0;
+}
+
+uint32_t keptFromBefore(uint32_t& notOnStick) { notOnStick = keptUnsaved; return keptLines; }
+
+const char* startReason(uint32_t build) {
+  bool newFirmware = wasKept && prevBuild != build;
+  st.build = build;
+  if (!wasKept) return "power on";
+  if (wasPlanned) return "restart";
+  if (newFirmware) return "new firmware";
+  if (wasUpload) return "USB upload";
+  return "unexpected";
+}
+
+void markPlannedRestart() { st.planned = kPlanned; }
+}  // namespace Log
+
+// Called by the core (our variant.cpp) on the 1200-baud touch, just before it resets into
+// the bootloader: a USB upload, even of the same build, is not an unexpected restart.
+// Runs in the USB thread: only a word is written.
+void kdBeforeBootloader() { st.planned = kUpload; }
+
+namespace Log {
+
+void crumb(int slot, const char* where) { st.crumbs[slot] = where; }
+
+// String literals of the same build (startReason checked the build), else nothing.
+const char* lastCrumb(int slot) {
+  const char* c = wasKept && prevBuild == st.build ? st.crumbs[slot] : nullptr;
+  return c && (uintptr_t)c >= 0x08000000 && (uintptr_t)c < 0x08200000 ? c : "?";
 }
 
 void write(Lvl lvl, Cat cat, const char* fmt, ...) {
@@ -117,9 +185,14 @@ void flush() {
   LogEntry e;
   char line[KD_LOG_MSG_LEN + 48];
 
-  // Serial: entries that fell out of the ring are skipped.
+  // Serial: entries that fell out of the ring are skipped. USB serial drops what is
+  // printed while no monitor is open (the boot log, usually), so when one opens the
+  // port it gets the whole ring again.
+  bool open = (bool)Serial;
+  if (open && !serialOpen) serialSeq = firstSeq();
+  serialOpen = open;
   if (serialSeq < firstSeq()) serialSeq = firstSeq();
-  while (serialSeq <= lastSeq()) {
+  while (open && serialSeq <= lastSeq()) {
     if (get(serialSeq++, e)) {
       formatLine(e, line, sizeof(line));
       Serial.print(line);

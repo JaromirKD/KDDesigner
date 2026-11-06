@@ -11,6 +11,7 @@
 #include "Log.h"
 #include "Projectors.h"
 #include "Show.h"
+#include "State.h"
 #include "Storage.h"
 
 using namespace std::chrono_literals;
@@ -44,7 +45,7 @@ std::vector<Rec> lastRec;
 uint32_t histDay = 0, histLastWrite = 0;
 bool histBooted = false;
 rtos::Mutex mtx;
-rtos::Thread thread(osPriorityBelowNormal, 6 * 1024, nullptr, "monitor");
+rtos::Thread thread(osPriorityNormal, 6 * 1024, nullptr, "monitor");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 uint32_t intervalS = 60, timeoutMs = 1000, failLimit = 2;
 uint32_t lastRunMs = 0, lastRunEpoch = 0;
 volatile bool forceRun = false;
@@ -218,6 +219,7 @@ void record(const char* kind, const String& name, const char* state) {
   if (recQueue.size() >= 160) recQueue.pop_front();   // no stick or no clock for a long time (a KNX tunnel reads all addresses at once)
   recQueue.push_back({kind, name, state, now()});
   mtx.unlock();
+  State::changed();   // online/offline, projector power, show-device on/off, mode: show it at once
 }
 
 void flushHistory() {
@@ -272,9 +274,9 @@ void historyJson(const String& name, uint32_t from, uint32_t to, String& out) {
       char* p = line;
       uint32_t e = strtoul(p, &p, 10);
       if (e > to) { past = true; break; }
-      char state[32], kind[16];
+      char state[64], kind[16];
       int used = 0;
-      if (sscanf(p, " %31s %15s %n", state, kind, &used) < 2 || !used) continue;
+      if (sscanf(p, " %63s %15s %n", state, kind, &used) < 2 || !used) continue;
       String n = String(p + used);
       n.trim();
       bool ctl = !strcmp(state, "boot") || !strcmp(state, "alive");

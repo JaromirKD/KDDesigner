@@ -68,7 +68,16 @@ struct Trigger {
   int dmxIn = -1;               // dmx_in: input slot in Net, channels/lastValues as dmx_change
   uint8_t when = 0;             // dmx_in: 0 any change, 1 goes above level, 2 goes below level
   uint32_t inFrames = 0;
+  String onlyGroup;             // "onlyIn": only fires (not by hand) while this group is in one of onlyStates
+  std::vector<String> onlyStates;
+  bool internal = false;        // a mode state's enter / leave actions (not in the project's list)
 };
+
+// A mode state's "enter" / "leave" actions run as hidden Manual triggers (so sleep, wait and
+// repeat work in them), numbered from kModeActId.
+const int kModeActId = 20001;
+struct ModeActs { String group, state; int enter = 0, leave = 0; };
+std::vector<ModeActs> modeActs;
 
 struct UdpListener {
   uint16_t port = 0;
@@ -113,7 +122,7 @@ size_t histCount = 0, histNext = 0;
 
 void remember(const Trigger& t, const char* reason) {
   // One per channel per frame: they would push everything else out.
-  if (t.type == Type::DmxChange || (t.type == Type::DmxIn && t.when == 0)) return;
+  if (t.type == Type::DmxChange || (t.type == Type::DmxIn && t.when == 0) || t.internal) return;
   uint16_t src = 0;
   if (!strcmp(reason, "repeat")) src = kSrcRepeat;
   else if (!strcmp(reason, "delayed")) src = kSrcDelayed;
@@ -135,6 +144,17 @@ bool isSeconds(const String& s) {
     else if (!isdigit(s[i])) return false;
   }
   return dots <= 1 && s != ".";
+}
+
+// A duration: "90" / "90s" seconds, "10m" minutes, "2h" / "1.5h" hours.
+bool parseDuration(const String& s, uint32_t& secs) {
+  if (!s.length()) return false;
+  char u = tolower(s[s.length() - 1]);
+  bool unit = u == 's' || u == 'm' || u == 'h';
+  String n = unit ? s.substring(0, s.length() - 1) : s;
+  if (!isSeconds(n)) return false;
+  secs = (uint32_t)(n.toFloat() * (u == 'h' ? 3600 : u == 'm' ? 60 : 1) + 0.5f);
+  return true;
 }
 
 // A run of trigger id is still going: the rest of its actions waits in a sleep, wait or loop.
@@ -349,6 +369,14 @@ void runTrigger(Trigger& t, const char* reason, const Vars* vars) {
     }
   }
   if (depth > 8) { LOGE(Trig, "Trigger %d: nesting too deep (loop?)", t.id); return; }
+  // "Only active in": like a switched-off trigger while the group is in another state. Fired by
+  // hand still runs, so it can be tested.
+  if (t.onlyGroup.length() && !(userRun && !running)) {
+    const String& cur = State::current(State::findGroup(t.onlyGroup));
+    bool in = false;
+    for (auto& s : t.onlyStates) if (s.equalsIgnoreCase(cur)) in = true;
+    if (!in) { LOGD(Trig, "Trigger %d '%s' skipped (%s): only active when %s is %s", t.id, t.name.c_str(), reason, t.onlyGroup.c_str(), t.onlyStates.empty() ? "?" : t.onlyStates[0].c_str()); return; }
+  }
   uint32_t now = millis();
   // Fired by hand ("Fire now", the console) skips the cooldown, so it can be tested.
   if (t.cooldownMs && t.lastRun && now - t.lastRun < t.cooldownMs && !(userRun && !running)) {
@@ -477,6 +505,20 @@ void handleUdp(UdpListener& l, int listener, bool isCommandPort) {
     String address;
     std::vector<String> args;
     if (pkt[0] == '/' && Osc::decode(pkt, n, address, args)) {
+      // OSC "/kd/cmd" <command> on the command port runs it, like "cmd:" (e.g. "mode Museum Open").
+      if (isCommandPort && address == "/kd/cmd" && !args.empty()) {
+        String line, reply;
+        for (auto& a : args) {
+          if (line.length()) line += ' ';
+          line += a;
+        }
+        Vars vars;
+        senderVars(vars, from, fromPort, listener);
+        bool ok = Cmd::exec(line, reply, "osc", &vars);
+        reply = (ok ? "OK " : "ERR ") + reply;
+        sendPacket(l, from, fromPort, (const uint8_t*)reply.c_str(), reply.length());
+        continue;
+      }
       handleOsc(l, listener, from, fromPort, address, args);
       continue;
     }
@@ -556,6 +598,10 @@ void load() {
     t.holdMs = (uint32_t)((float)(o["hold"] | 2.0f) * 1000);
     t.withinMs = (uint32_t)((float)(o["within"] | (t.type == Type::Sequence ? 5.0f : 0.5f)) * 1000);
     for (JsonVariantConst a : o["actions"].as<JsonArrayConst>()) t.actions.push_back(a.as<const char*>());
+    // "onlyIn": {"group": "Museum", "states": ["Open", "Starting up"]}
+    t.onlyGroup = o["onlyIn"]["group"] | "";
+    for (JsonVariantConst s : o["onlyIn"]["states"].as<JsonArrayConst>()) t.onlyStates.push_back(s.as<const char*>());
+    if (t.onlyStates.empty()) t.onlyGroup = "";
     for (JsonVariantConst c : o["conditions"].as<JsonArrayConst>()) {
       String s = c.as<const char*>();
       s.trim();
@@ -677,7 +723,31 @@ void load() {
       else t.steps.push_back(id);
     }
   }
-  LOGI(Trig, "%d trigger(s) loaded", (int)triggers.size());
+  // Mode states' enter / leave actions: "modes": [{"name": "Museum", "states": [...],
+  //   "stateInfo": {"Open": {"enter": ["start timeline Inloop"], "leave": [...]}}}]
+  modeActs.clear();
+  int nextId = kModeActId;
+  for (JsonObjectConst g : Show::projectDoc()["modes"].as<JsonArrayConst>()) {
+    for (JsonPairConst p : g["stateInfo"].as<JsonObjectConst>()) {
+      ModeActs m;
+      m.group = g["name"] | "";
+      m.state = p.key().c_str();
+      for (int leave = 0; leave < 2; leave++) {
+        JsonArrayConst acts = p.value()[leave ? "leave" : "enter"];
+        if (acts.isNull() || !acts.size()) continue;
+        Trigger t;
+        t.id = nextId++;
+        t.name = m.group + " " + m.state + (leave ? " (leave)" : " (enter)");
+        t.type = Type::Manual;
+        t.internal = true;
+        for (JsonVariantConst a : acts) t.actions.push_back(a.as<const char*>());
+        (leave ? m.leave : m.enter) = t.id;
+        triggers.push_back(t);
+      }
+      if (m.enter || m.leave) modeActs.push_back(m);
+    }
+  }
+  LOGI(Trig, "%d trigger(s) loaded", (int)triggers.size() - (nextId - kModeActId));
 }
 
 void begin() {
@@ -848,17 +918,44 @@ void onTimelineCue(int timelineId, const String& ref) {
   runTrigger(*byId(id), ("timeline " + String(timelineId) + " cue").c_str(), &vars);
 }
 
-void onModeChanged(const String& group, const String& state) {
+bool changeMode(int g, int s, String& msg, const char* by) {
+  String old = State::current(g);
+  if (!State::setMode(g, s, msg, by)) return true;   // already in that state: nothing runs
+  String group = State::groupName(g), state = State::current(g);
   Vars vars;
   vars.set("group", group);
   vars.set("mode", state);
+  vars.set("old", old);
+  // The old state's leave actions, the new one's enter actions, then the Mode change triggers.
+  for (auto& m : modeActs)
+    if (m.leave && m.group == group && m.state == old) if (Trigger* t = byId(m.leave)) runTrigger(*t, "mode leave", &vars);
+  for (auto& m : modeActs)
+    if (m.enter && m.group == group && m.state == state) if (Trigger* t = byId(m.enter)) runTrigger(*t, "mode enter", &vars);
   for (auto& t : triggers)
     if (t.enabled && t.type == Type::Mode && (!t.event.length() || t.event.equalsIgnoreCase(group)) &&
         (!t.match.length() || t.match.equalsIgnoreCase(state)))
       runTrigger(t, "mode change", &vars);
+  // The linked variable follows: the state's name, or its number for a number variable.
+  const String& v = State::groupVar(g);
+  String vm;
+  if (v.length() && !Globals::set(v, state, vm) && !Globals::set(v, String(s + 1), vm)) LOGW(Trig, "Mode %s: %s", group.c_str(), vm.c_str());
+  return true;
 }
 
 void onVariable(const String& name, const String& value, const String& old) {
+  // A mode group linked to this variable goes to the state it names (or numbers), but only
+  // for the variable's current value: changes are queued, and acting on an older one made a
+  // mode and a variable linked to a PLC register flip each other forever (each mode change
+  // sets the variable again, behind the newer queued value). The newer change decides.
+  String current;
+  bool stale = Globals::get(name, current) && current != value;
+  for (int g = 0; g < State::groupCount() && !stale; g++) {
+    if (!State::groupVar(g).equalsIgnoreCase(name)) continue;
+    int s = State::findState(g, value);
+    if (s < 0) { LOGW(Trig, "Variable %s = '%s' is not a state of mode %s", name.c_str(), value.c_str(), State::groupName(g).c_str()); continue; }
+    String msg, by = "variable " + name;
+    changeMode(g, s, msg, by.c_str());
+  }
   Vars vars;
   vars.set("variable", name);
   vars.set("value", value);
@@ -933,7 +1030,7 @@ int findId(const String& ref, String& err) {
   bool numeric = isNumber(ref);
   int found = -1, hits = 0;
   for (auto& t : triggers) {
-    if (t.type == Type::Comment) continue;
+    if (t.type == Type::Comment || t.internal) continue;
     if (numeric ? t.id == ref.toInt() : t.name.equalsIgnoreCase(ref)) { if (!hits) found = t.id; hits++; }
   }
   if (!hits) { err = "unknown trigger '" + ref + "'"; return -1; }
@@ -1036,14 +1133,26 @@ bool checkCondition(const String& cond, String& err) {
   err = "";
   std::vector<String> t = Cmd::tokenize(cond);
   auto is = [&](size_t i, const char* w) { return t.size() > i && t[i].equalsIgnoreCase(w); };
-  // mode <group> is|not <state>   (old form: mode is|not <state>, state unique across groups)
-  if (is(0, "mode") && ((t.size() == 4 && (is(2, "is") || is(2, "not"))) || (t.size() == 3 && (is(1, "is") || is(1, "not"))))) {
-    int g, s;
-    bool full = t.size() == 4;
-    if (!State::findMode(full ? &t[1] : nullptr, t[full ? 3 : 2], g, s, err)) return false;
-    bool wantIs = is(full ? 2 : 1, "is");
-    bool eq = State::current(g) == State::stateName(g, s);
-    return wantIs ? eq : !eq;
+  // mode <group> is|not <state> [for <duration>]   (old form: mode is|not <state>, state unique across groups)
+  // "for": has been in that state at least that long (10m, 2h, 90 = seconds).
+  if (is(0, "mode") && t.size() >= 3) {
+    uint32_t need = 0;
+    size_t n = t.size();
+    bool forPart = n >= 5 && is(n - 2, "for");
+    if (forPart) {
+      if (!parseDuration(t[n - 1], need)) { err = "expected a duration after 'for' (90, 30s, 10m, 2h)"; return false; }
+      n -= 2;
+    }
+    if ((n == 4 && (is(2, "is") || is(2, "not"))) || (n == 3 && (is(1, "is") || is(1, "not")))) {
+      int g, s;
+      bool full = n == 4;
+      if (!State::findMode(full ? &t[1] : nullptr, t[full ? 3 : 2], g, s, err)) return false;
+      bool wantIs = is(full ? 2 : 1, "is");
+      if (forPart && !wantIs) { err = "'for' only works with 'is'"; return false; }
+      bool eq = State::current(g) == State::stateName(g, s);
+      if (forPart) return eq && State::secondsIn(g) >= need;
+      return wantIs ? eq : !eq;
+    }
   }
   if (is(0, "timeline") && t.size() == 3 && (is(2, "running") || is(2, "stopped"))) {
     int idx = Show::findTimeline(t[1]);

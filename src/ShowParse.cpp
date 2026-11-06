@@ -1,5 +1,6 @@
 // Reading project.json into the engine tables (see ShowInternal.h).
 #include <algorithm>
+#include "BigRam.h"
 #include "Dmx.h"
 #include "Log.h"
 #include "ShowInternal.h"
@@ -56,7 +57,7 @@ inline int channelOf(const Fixture& f, const Slot& s) { return f.address - 1 + s
 // Track preset (Pharos-style "intensity + colour") turned into levels for one fixture.
 // dim: 0-100 or -1 (leave intensity alone); colour: RGB, or hasColor false.
 // Fixtures without a dimmer channel get their RGB scaled by dim; RGBW takes white = min(r,g,b).
-void presetLevels(const Fixture& f, int dim, bool hasColor, uint8_t r, uint8_t g, uint8_t b, std::vector<Level>& out) {
+void presetLevels(const Fixture& f, int dim, bool hasColor, uint8_t r, uint8_t g, uint8_t b, BigRam::Vec<Level>& out) {
   const ColorSlots c = colorSlots(f);
   auto put = [&](const Slot* s, int v255) {
     Level l;
@@ -94,7 +95,7 @@ FxTarget effectTarget(const Fixture& f, size_t k, size_t n, const std::vector<st
   return x;
 }
 
-int universeRef(const std::vector<UniverseCfg>& list, JsonVariantConst v) { return indexOfUniverse(list, v | 0); }
+int universeRef(const BigRam::Vec<UniverseCfg>& list, JsonVariantConst v) { return indexOfUniverse(list, v | 0); }
 }  // namespace
 
 namespace Show {
@@ -103,7 +104,8 @@ const Settings& settings() { return cfg; }
 JsonDocument& projectDoc() { return doc; }
 
 bool parse(const char* json, size_t len, String& err) {
-  JsonDocument d;
+  JsonDocument d(BigRam::json());   // in SDRAM: a big show doesn't fit the heap next to the old one
+  Log::crumb(Log::kCrumbLoad, "parse: JSON");
   DeserializationError de = deserializeJson(d, json, len);
   if (de) { err = String("JSON error: ") + de.c_str(); return false; }
 
@@ -123,12 +125,12 @@ bool parse(const char* json, size_t len, String& err) {
   s.sacnChangesOnly = outs["sacnChangesOnly"] | true;
   JsonObjectConst n = d["network"];
   s.net.dhcp = n["dhcp"] | true;
-  s.net.ip.fromString(n["ip"] | "192.168.1.50");
+  s.net.ip.fromString(n["ip"] | "172.16.1.111");
   s.net.mask.fromString(n["mask"] | "255.255.255.0");
-  s.net.gateway.fromString(n["gateway"] | "192.168.1.1");
+  s.net.gateway.fromString(n["gateway"] | "172.16.1.1");
 
   // Everything is parsed into new tables and only swapped in when valid.
-  std::vector<UniverseCfg> nu;
+  BigRam::Vec<UniverseCfg> nu;
   for (JsonObjectConst o : d["universes"].as<JsonArrayConst>()) {
     if ((int)nu.size() >= U) { err = "Too many universes (max " + String(U) + ")"; return false; }
     UniverseCfg c;
@@ -145,7 +147,8 @@ bool parse(const char* json, size_t len, String& err) {
     nu.push_back(c);
   }
 
-  std::vector<Fixture> nf;
+  BigRam::Vec<Fixture> nf;
+  Log::crumb(Log::kCrumbLoad, "parse: fixtures");
   for (JsonObjectConst o : d["fixtures"].as<JsonArrayConst>()) {
     Fixture f;
     f.id = o["id"] | 0;
@@ -166,7 +169,7 @@ bool parse(const char* json, size_t len, String& err) {
     nf.push_back(f);
   }
 
-  std::vector<Scene> ns;
+  BigRam::Vec<Scene> ns;
   for (JsonObjectConst o : d["scenes"].as<JsonArrayConst>()) {
     Scene sc;
     sc.id = o["id"] | 0;
@@ -207,7 +210,8 @@ bool parse(const char* json, size_t len, String& err) {
     grp.push_back({g["id"] | 0, ids});
   }
   // Effects: compile them all; a script error rejects the project with its line number.
-  std::vector<Fx::Program> nfp;
+  Log::crumb(Log::kCrumbLoad, "parse: effects");
+  BigRam::Vec<Fx::Program> nfp;
   std::vector<int> fxIds;
   size_t maxSlots = 16;
   for (JsonObjectConst o : d["effects"].as<JsonArrayConst>()) {
@@ -226,10 +230,11 @@ bool parse(const char* json, size_t len, String& err) {
       if (std::none_of(mapPos.begin(), mapPos.end(), [&](const std::pair<int, std::pair<float, float>>& q) { return q.first == id; }))
         mapPos.push_back({id, {it["x"] | 0.5f, it["y"] | 0.5f}});
     }
-  std::vector<FxCue> nfc;
+  BigRam::Vec<FxCue> nfc;
 
-  std::vector<Timeline> nt;
-  std::vector<Scene> ncs;
+  BigRam::Vec<Timeline> nt;
+  BigRam::Vec<Scene> ncs;
+  Log::crumb(Log::kCrumbLoad, "parse: timelines");
   for (JsonObjectConst o : d["timelines"].as<JsonArrayConst>()) {
     Timeline t;
     t.id = o["id"] | 0;
@@ -343,6 +348,7 @@ bool parse(const char* json, size_t len, String& err) {
     nt.push_back(t);
   }
 
+  Log::crumb(Log::kCrumbLoad, "parse: commit");
   // Commit.
   stopAllPlaybacks();
   clearOverrides();
@@ -376,15 +382,18 @@ bool parse(const char* json, size_t len, String& err) {
   fxScratch.assign(maxSlots, 0);
   cfg = s;
   // Trigger notes are documentation only: they stay in project.json on the stick, not in RAM.
-  for (JsonObject o : d["triggers"].as<JsonArray>()) o.remove("notes");
+  for (JsonObject o : d["triggers"].as<JsonArray>()) { o.remove("notes"); o.remove("level"); }   // + separator level (main/sub heading)
   // Fixture type, mode and icon are for the web UI; the engine only needs the channels.
   for (JsonObject o : d["fixtures"].as<JsonArray>()) { o.remove("type"); o.remove("mode"); o.remove("icon"); }
   d.remove("fixtureTypes");   // the project's own fixture definitions (web UI only)
+  d.remove("triggerColorNames");   // tab names of the trigger colours (web UI only)
   d.remove("maps");      // fixture maps are only used by the web UI (positions are copied above)
   d.remove("effects");   // compiled into fxProgs
   // Device drivers: channel names and command buttons are for the web UI only.
   for (JsonObject o : d["drivers"].as<JsonArray>()) { o.remove("names"); o.remove("commands"); }
+  Log::crumb(Log::kCrumbLoad, "parse: keep JSON");
   doc = std::move(d);
+  Log::crumb(Log::kCrumbLoad, "parse: done");
   Dmx::setEnabled(cfg.outDmx);
   Dmx::setFps(cfg.dmxFps);
   projectVersion++;
@@ -394,9 +403,9 @@ bool parse(const char* json, size_t len, String& err) {
 }
 
 bool loadFile(const char* path, String& err) {
-  String json;
+  BigRam::Buffer json;
   if (!Storage::readFile(path, json)) { err = String("Cannot read ") + path; return false; }
-  return parse(json.c_str(), json.length(), err);
+  return parse(json.data, json.len, err);
 }
 
 }  // namespace Show

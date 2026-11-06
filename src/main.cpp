@@ -5,6 +5,7 @@
 #include <mbed_boot.h>
 #include <drivers/ResetReason.h>
 #include <drivers/Watchdog.h>
+#include "BigRam.h"
 #include "Board.h"
 #include "Config.h"
 #include "Dmx.h"
@@ -28,6 +29,7 @@
 using namespace std::chrono_literals;
 
 Stats g_stats;
+#define CRUMB(where) Log::crumb(Log::kCrumbMain, where)   // where the loop is, kept through a reset
 
 namespace {
 uint32_t nextTick = 0;
@@ -38,17 +40,16 @@ uint32_t lastUdp = 0;
 uint32_t tickUsMax = 0, loopUsMax = 0;
 uint32_t lastLowMemWarn = 0;
 
-// Why the board last started; a watchdog restart means the firmware hung.
-const char* resetReason() {
-  switch (mbed::ResetReason::get()) {
-    case RESET_REASON_POWER_ON: return "power on";
-    case RESET_REASON_PIN_RESET: return "reset button";
-    case RESET_REASON_BROWN_OUT: return "power dip";
-    case RESET_REASON_SOFTWARE: return "restart";
-    case RESET_REASON_WATCHDOG: return "watchdog";
-    case RESET_REASON_LOCKUP: return "crash";
-    default: return "other";
-  }
+// Identifies this build (Log::startReason tells a restart after flashing from a hang): a
+// hash of the firmware in flash (code + initial data, ~10 ms). __DATE__/__TIME__ only
+// changed when main.cpp itself was recompiled, so other changes looked like the same build.
+extern "C" uint32_t __etext, __data_start__, __data_end__;
+uint32_t buildId() {
+  const uint32_t* p = (const uint32_t*)0x08040000;
+  const uint32_t* end = (const uint32_t*)((uintptr_t)&__etext + ((uintptr_t)&__data_end__ - (uintptr_t)&__data_start__));
+  uint32_t h = 2166136261u;
+  while (p < end) h = (h ^ *p++) * 16777619u;
+  return h;
 }
 
 // Watchdog/crash restarts in a row, kept in an RTC backup register: it survives a
@@ -116,11 +117,15 @@ void updateStats(uint32_t now) {
 void setup() {
   Serial.begin(115200);
   Log::begin();
-  g_stats.resetReason = resetReason();
-  bool crashed = !strcmp(g_stats.resetReason, "watchdog") || !strcmp(g_stats.resetReason, "crash");
-  if (crashed)
-    LOGW(Sys, "KD Designer %s booting - restarted by the %s (the firmware had stopped)", KD_VERSION, g_stats.resetReason);
-  else
+  g_stats.resetReason = Log::startReason(buildId());
+  bool crashed = !strcmp(g_stats.resetReason, "unexpected");
+  uint32_t unsaved, kept = Log::keptFromBefore(unsaved);
+  if (kept) LOGI(Sys, "---- restart: the %lu lines above are from before it (%lu weren't on the stick yet) ----", (unsigned long)kept, (unsigned long)unsaved);
+  if (crashed) {
+    LOGW(Sys, "KD Designer %s booting - unexpected restart: the firmware hung or crashed (or the reset button was pressed). The lines above show what happened before.", KD_VERSION);
+    LOGW(Sys, "Before the restart: main loop at '%s', web at '%s', project load at '%s'", Log::lastCrumb(Log::kCrumbMain),
+         Log::lastCrumb(Log::kCrumbWeb), Log::lastCrumb(Log::kCrumbLoad));
+  } else
     LOGI(Sys, "KD Designer %s booting (%s)", KD_VERSION, g_stats.resetReason);
   // A project that crashes the board (often from its Startup trigger) would do it
   // again on every start, and the web UI would never stay up long enough to fix it.
@@ -130,6 +135,9 @@ void setup() {
     LOGE(Sys, "SAFE MODE: %d crash restarts in a row - triggers only run when fired by hand (no Startup). Fix the project and save it, or restart the controller.", crashes);
   }
 
+  // The project (text + parsed JSON) is loaded in the 8 MB SDRAM: it doesn't fit the heap.
+  if (BigRam::begin()) LOGI(Sys, "SDRAM: %lu KB for project loading", (unsigned long)(BigRam::freeBytes() / 1024));
+  else LOGW(Sys, "No SDRAM on this Portenta: big projects may not load");
   Storage::begin(5000);
   Update::begin();          // logs whether a firmware update was just installed
 
@@ -172,20 +180,29 @@ void loop() {
   mbed::Watchdog::get_instance().kick();   // a hung loop or a stuck g_engine restarts the board
   if (!crashesCleared && now > KD_SAFE_MODE_OK_MS) { crashesCleared = true; countCrash(false); }   // runs fine: not crashing any more
 
+  CRUMB("Storage::poll");
   Storage::poll();
+  CRUMB("Net::maintain");
+  Net::maintain(now);
 
+  CRUMB("waiting for g_engine");
   g_engine.lock();
+  CRUMB("Net::poll");
   Net::poll();   // under the lock: DMX-input frames are read by Triggers, set up by a project (re)load
+  CRUMB("Triggers::poll");
   Triggers::poll(now);
   if ((int32_t)(now - nextTick) >= 0) {
     nextTick += 1000 / Show::engineHz();
     if ((int32_t)(now - nextTick) > 200) nextTick = now;  // don't try to catch up after a stall
     uint32_t tt = micros();
+    CRUMB("Show::tick");
     Show::tick(now);
+    CRUMB("Show::sendOutputs");
     Show::sendOutputs(now);
     Triggers::afterTick();
     tickUsMax = max(tickUsMax, micros() - tt);
     ticks++;
+    CRUMB("engine events");
     int id;
     while (Show::takeEndedTimeline(id)) Triggers::onTimelineEnd(id);
     String cueTrig;
@@ -209,10 +226,13 @@ void loop() {
   }
   g_engine.unlock();
 
+  CRUMB("Log::flush");
   Log::flush();
+  CRUMB("history / variables / update");
   Monitor::flushHistory();
   Globals::flush();
   Update::poll();
+  CRUMB("stats / sleep");
   updateStats(now);
   loopUsMax = max(loopUsMax, micros() - t0);
   rtos::ThisThread::sleep_for(1ms);

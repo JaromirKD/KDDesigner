@@ -29,15 +29,49 @@ function trigVisibleIdx() {
   const p = P(), words = trigSearchWords(), cf = S.trigColors || new Set();
   if (!words.length && !cf.size) return p.triggers.map((_, i) => i);
   const own = (x) => (!words.length || trigMatches(x, words)) && (!cf.size || cf.has(trigColor(x.color) ? x.color : ''));
+  // A sub section's heading also brings its main section's heading along. In a colour tab
+  // only headings of that colour count (a lime trigger under the red section shows without
+  // the red heading).
   const out = [];
-  let sep = -1;
+  let main = -1, sub = -1;   // headings not shown yet
+  const heads = () => { if (main >= 0) out.push(main); if (sub >= 0) out.push(sub); main = sub = -1; };
   p.triggers.forEach((x, i) => {
-    if (x.type === 'comment') { sep = own(x) ? (out.push(i), -1) : i; return; }
+    if (x.type === 'comment') {
+      const head = !cf.size || cf.has(trigColor(x.color) ? x.color : '') ? i : -1;
+      if (x.level === 2) sub = head; else { main = head; sub = -1; }
+      if (own(x)) heads();
+      return;
+    }
     if (!own(x)) return;
-    if (sep >= 0) { out.push(sep); sep = -1; }
+    heads();
     out.push(i);
   });
   return out;
+}
+// Where "+ Trigger" / "+ Separator" put a new item: with one colour tab open, that colour
+// (color: '' = the no-colour tab) right after the tab's last item; otherwise at the end.
+function trigAddSpot() {
+  const p = P(), cf = S.trigColors || new Set();
+  if (cf.size !== 1) return { at: p.triggers.length };
+  const c = [...cf][0];
+  let last = -1;
+  p.triggers.forEach((x, i) => { if ((trigColor(x.color) ? x.color : '') === c) last = i; });
+  return { color: c, at: last >= 0 ? last + 1 : p.triggers.length };
+}
+// The first main section of a colour (added in its tab) becomes the tab's header: it goes on top
+// of that colour's triggers, which are gathered under it, just before the next main section after
+// the first of them (so the section they were in stays whole). Returns the separator's index.
+function insertColorHead(c, s) {
+  const p = P(), key = (x) => (trigColor(x.color) ? x.color : '');
+  const first = p.triggers.findIndex((x) => key(x) === c);
+  if (first < 0) { p.triggers.push(s); return p.triggers.length - 1; }
+  let next = p.triggers.findIndex((x, i) => i > first && x.type === 'comment' && x.level !== 2 && key(x) !== c);
+  if (next < 0) next = p.triggers.length;
+  const mine = p.triggers.filter((x) => key(x) === c);
+  const before = p.triggers.slice(0, next).filter((x) => key(x) !== c);
+  const after = p.triggers.slice(next).filter((x) => key(x) !== c);
+  p.triggers = [...before, s, ...mine, ...after];
+  return before.length;
 }
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const markWords = (s, words) => (words.length
@@ -192,11 +226,13 @@ views.triggers = () => {
   const f = S.trigFilter || '';
   // Colour filter: show only triggers with one of the picked colours ('' = no colour).
   const cf = S.trigColors || (S.trigColors = new Set());
-  // Every colour of the palette (unused ones dimmed), plus custom colours that are in use.
+  // One tab per colour that a trigger uses or that has a name (palette order, then custom
+  // colours); the tab shows its name above the colour.
   const colKey = (x) => (trigColor(x.color) ? x.color : '');
-  const colCount = {};
-  for (const x of p.triggers) colCount[colKey(x)] = (colCount[colKey(x)] || 0) + 1;
-  const usedCols = [...Object.keys(TRIGGER_COLORS), ...Object.keys(colCount).filter((c) => !(c in TRIGGER_COLORS))];
+  const colCount = {}, inUse = new Set(p.triggers.map(colKey));   // separators count as "in use", not in the numbers
+  for (const x of p.triggers) if (x.type !== 'comment') colCount[colKey(x)] = (colCount[colKey(x)] || 0) + 1;
+  const named = Object.keys(p.triggerColorNames || {}).map((k) => (k === 'none' ? '' : k)).filter((k) => k === '' || trigColor(k));
+  const usedCols = [...Object.keys(TRIGGER_COLORS), ...inUse, ...named].filter((c, i, a) => a.indexOf(c) === i && (inUse.has(c) || named.includes(c)));
   for (const c of cf) if (!usedCols.includes(c)) cf.delete(c);
   const filtering = f || cf.size;
   const words = trigSearchWords();
@@ -207,6 +243,9 @@ views.triggers = () => {
   const isSel = (x, i) => (multi ? S.trigSel.has(x) : i === ti);
   const selT = t && t.type !== 'comment' ? t : null;
   const links = selT ? triggerLinks(selT) : null;
+  // A sub separator (level 2) and the triggers under it are indented, up to the next main one.
+  const inSub = [];
+  { let sub = false; p.triggers.forEach((x, i) => { if (x.type === 'comment') sub = x.level === 2; inSub[i] = sub; }); }
   const listItem = (x, i) => {
     const col = trigColor(x.color);
     if (!shown.has(i)) return '';
@@ -216,7 +255,7 @@ views.triggers = () => {
     const sel = isSel(x, i) ? ' sel' : '';
     const note = x.notes?.trim() ? `<span class="note-mark" title="${esc(x.notes.trim())}">✎</span>` : '';
     if (x.type === 'comment')
-      return `<div class="item sep${sel}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col};color:${col}` : ''}">${grip}<span class="tname" style="flex:1">${markWords(x.name || '—', words)}</span>${note}</div>`;
+      return `<div class="item sep ${x.level === 2 ? 'sub' : 'main'}${sel}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col};color:${col}` : ''}">${grip}<span class="tname" style="flex:1">${markWords(x.name || '—', words)}</span>${note}</div>`;
     // Connections of the selected trigger: → it sets this one off, ← this one sets it off.
     const lo = links?.out.find((l) => l.t === x), li = links?.in.find((l) => l.t === x);
     const linkCls = lo || li ? ` linked${lo ? ' link-out' : ''}${li ? ' link-in' : ''}` : '';
@@ -225,8 +264,8 @@ views.triggers = () => {
     const probs = triggerProblems(x);
     const bang = probs.length ? `<span class="trig-err" title="${esc(probs.join('\n'))}">!</span>` : '';
     const from = `<span class="trig-io">${trigIoHtml(x)}</span>`;
-    return `<div class="item${sel}${x.enabled === false ? ' disabled' : ''}${col ? ' tinted' : ''}${linkCls}${probs.length ? ' has-err' : ''}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col}` : ''}">
-      ${grip}<span class="id">${x.id}</span>${bang}<span class="tname" style="flex:1;min-width:0">${markWords(x.name, words)}${words.length ? trigHitLines(x, words) : ''}</span>${note}${from}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
+    return `<div class="item${sel}${inSub[i] ? ' in-sub' : ''}${x.enabled === false ? ' disabled' : ''}${col ? ' tinted' : ''}${linkCls}${probs.length ? ' has-err' : ''}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col}` : ''}">
+      ${grip}<span class="id">${x.id}</span>${bang}<span class="tname" style="flex:1;min-width:0">${markWords(x.name, words)}${words.length ? trigHitLines(x, words) : ''}</span>${note}${from}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.onlyIn?.group ? `<span class="tag" title="Only active when ${esc(x.onlyIn.group)} is ${esc((x.onlyIn.states || []).join(' or '))}">◇ ${esc((x.onlyIn.states || []).join('/'))}</span>` : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
   };
   const custom = t && t.color && !TRIGGER_COLORS[t.color] ? t.color : '';
   const vars = t && TRIGGER_VARS[t.type];
@@ -239,9 +278,10 @@ views.triggers = () => {
     <div><div class="row nowrap trig-search"><input id="trigFilter" type="search" placeholder="Search triggers: name, command, IP, port… (Ctrl+F)" value="${esc(f)}" style="flex:1"
         title="Shows the triggers that contain all the words, anywhere: name, notes, conditions, actions, steps or settings. Enter opens the first one, Esc clears.">
       ${filtering ? `<span class="muted" style="white-space:nowrap">${nShown} of ${nReal}</span>` : ''}${f ? '<button class="btn small ghost" id="trigFilterClear" title="Clear the search (Esc)">✕</button>' : ''}</div>
-    ${`<div class="row col-filter${cf.size ? ' some' : ''}" title="Show only triggers with these colours (click several; click again to turn off)">
-      ${usedCols.map((c) => `<button class="swatch${cf.has(c) ? ' on' : ''}${colCount[c] ? '' : ' unused'}" data-colfilter="${esc(c)}" title="${esc(c || 'no colour')} (${colCount[c] || 0} trigger${colCount[c] === 1 ? '' : 's'})" style="${c ? `background:${trigColor(c)}` : ''}">${c ? '' : '∅'}</button>`).join('')}
-      ${cf.size ? '<button class="btn small ghost" data-colfilter-clear>all colours</button>' : ''}</div>`}
+    ${usedCols.length > 1 || named.length ? `<div class="trig-tabs" title="Click a tab to show only its triggers, Ctrl+click to add more tabs. Double-click a tab to give it a name.">
+      <button class="trig-tab all${cf.size ? '' : ' on'}" data-colfilter-clear><span class="tab-name">All</span><span class="tab-n">${nReal}</span></button>
+      ${usedCols.map((c) => `<button class="trig-tab${cf.has(c) ? ' on' : ''}${trigColorName(c) ? '' : ' unnamed'}${c ? '' : ' nocol'}" data-colfilter="${esc(c)}" style="${c ? `--tc:${trigColor(c)}` : ''}"
+        title="${esc(trigColorLabel(c))}: ${colCount[c] || 0} trigger${colCount[c] === 1 ? '' : 's'}. Double-click to ${trigColorName(c) ? 'rename' : 'name'}."><span class="tab-name">${esc(trigColorLabel(c))}</span><span class="tab-n">${colCount[c] || 0}</span></button>`).join('')}</div>` : ''}
     <div class="list trig-list">${p.triggers.map(listItem).join('')}${filtering && !nShown ? '<p class="muted" style="margin:8px">No trigger matches.</p>' : ''}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="trigger">+ Trigger</button><button class="btn small" data-add="separator">+ Separator</button><button class="btn small" data-trigtool="templates">+ From template</button>
       ${t ? `<button class="btn small ghost" data-move="-1" title="Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} up (Alt+↑)">▲</button><button class="btn small ghost" data-move="1" title="Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} down (Alt+↓)">▼</button>` : ''}</div>
@@ -261,8 +301,13 @@ views.triggers = () => {
       <div class="form" style="margin-top:12px">
         ${t.type === 'comment' ? '' : `<label>Enabled</label><input type="checkbox" data-p="${base}.enabled" data-t="bool"${t.enabled !== false ? ' checked' : ''} data-r>`}
         <label>Type</label><select data-p="${base}.type" data-r>${TRIGGER_TYPES.map(([v, n]) => `<option value="${v}"${t.type === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
+        ${t.type === 'comment' ? `<label title="Main section = big heading. Sub section = smaller heading, indented with its triggers, under the main section above it.">Level</label>
+          <select data-p="${base}.level" data-t="num" data-r style="max-width:260px"><option value="1"${t.level === 2 ? '' : ' selected'}>Main section (big heading)</option><option value="2"${t.level === 2 ? ' selected' : ''}>Sub section (indented)</option></select>` : ''}
         <label>Colour</label><div class="row swatches">${Object.entries(TRIGGER_COLORS).map(([k, c]) => `<label class="swatch${(t.color || '') === k ? ' on' : ''}" title="${k || 'none'}" style="${k ? `background:${c}` : ''}"><input type="radio" name="tcol" data-p="${base}.color" value="${k}"${(t.color || '') === k ? ' checked' : ''} data-r>${k ? '' : '∅'}</label>`).join('')}
           <label class="swatch custom${custom ? ' on' : ''}" title="Custom colour" style="${custom ? `background:${custom}` : ''}">${custom ? '' : '+'}<input type="color" data-p="${base}.color" value="${custom || '#4aa3ff'}" data-r></label></div>
+        ${trigColorHead(t.color) === t ? '<label>Tab</label><span class="muted">This section names the colour tab above the list (renaming one renames the other).</span>'
+          : `<label title="The name of this colour's tab above the trigger list. It counts for every trigger with this colour.${trigColorHead(t.color) ? ' It is also the name of the main section with this colour.' : ''}">Tab name</label>
+        <input id="trigTabName" value="${esc(trigColorName(t.color))}" placeholder="${esc(trigColorLabel(t.color))}, e.g. Projectors" style="max-width:260px">`}
         ${params}
         ${t.type === 'comment' ? '' : behaviourFields(t, base)}
       </div>
@@ -288,6 +333,29 @@ views.triggers = () => {
       <button class="btn small" data-add="action">+ Action</button>`}`
     : '<span class="muted">Select or create a trigger.</span>'}</div></div>`;
 };
+// Type a name into a colour tab (Enter or leaving the box keeps it, Esc cancels, empty = no name).
+function renameColorTab(c) {
+  const b = $$('.trig-tab[data-colfilter]').find((x) => x.dataset.colfilter === c);
+  if (!b) return;
+  const box = document.createElement('div');
+  box.className = 'trig-tab on editing';
+  box.style.cssText = b.style.cssText;
+  const inp = document.createElement('input');
+  inp.className = 'tab-edit';
+  inp.value = trigColorName(c);
+  inp.placeholder = trigColorLabel(c);
+  box.append(inp);
+  b.replaceWith(box);
+  inp.focus();
+  inp.select();
+  let done = false;
+  const finish = (keep) => { if (done) return; done = true; if (keep) setTrigColorName(c, inp.value); render(); };
+  inp.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  inp.addEventListener('blur', () => finish(true));
+}
 views.triggers.after = () => {
   // Keep the list's own scroll position across re-renders; bring a newly
   // added/selected trigger into view.
@@ -344,12 +412,25 @@ views.triggers.after = () => {
     // Fields only commit on "change": take the line as typed so far (like Save does).
     flowTimer = setTimeout(() => { if (e.target.isConnected) { onBound({ target: e.target, type: 'input' }); refreshTrigIcons(); if ($('.trig-flow-wrap')) refreshTrigFlow(); } }, 600);
   });
-  $$('[data-colfilter]').forEach((b) => b.addEventListener('click', () => {
-    const c = b.dataset.colfilter;
-    if (S.trigColors.has(c)) S.trigColors.delete(c); else S.trigColors.add(c);
-    render();
-  }));
-  $('[data-colfilter-clear]')?.addEventListener('click', () => { S.trigColors.clear(); render(); });
+  // Colour tabs: click = only this tab (clicking it again keeps it, so a double-click can
+  // rename), Ctrl/Shift+click = add or remove a tab, All = everything.
+  $$('[data-colfilter]').forEach((b) => {
+    b.addEventListener('click', (e) => {
+      const c = b.dataset.colfilter;
+      if (e.ctrlKey || e.metaKey || e.shiftKey) { if (S.trigColors.has(c)) S.trigColors.delete(c); else S.trigColors.add(c); }
+      else if (S.trigColors.size === 1 && S.trigColors.has(c)) return;
+      else S.trigColors = new Set([c]);
+      render();
+    });
+    b.addEventListener('dblclick', (e) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+      renameColorTab(b.dataset.colfilter);
+    });
+  });
+  $('[data-colfilter-clear]')?.addEventListener('click', () => { if (!S.trigColors.size) return; S.trigColors.clear(); render(); });
+  const tabName = $('#trigTabName');
+  tabName?.addEventListener('change', () => { setTrigColorName(P().triggers[S.sel.trigger].color, tabName.value); render(); });
+  tabName?.addEventListener('keydown', (e) => { if (e.key === 'Enter') tabName.blur(); });
   // Name: update the list while typing; references follow when the field is left (change).
   const nameIn = $(`[data-p="triggers.${S.sel.trigger}.name"]`);
   if (nameIn) {
@@ -359,6 +440,13 @@ views.triggers.after = () => {
       t.name = nameIn.value;
       const item = $(`.trig-list [data-sel="trigger:${S.sel.trigger}"]`);
       if (item) item.querySelector('.tname').textContent = t.name || (t.type === 'comment' ? '—' : '');
+      // A main section names its colour's tab: follow while typing.
+      const key = trigColor(t.color) ? t.color : '';
+      const tab = t.type === 'comment' && $$('.trig-tab[data-colfilter]').find((b) => b.dataset.colfilter === key);
+      if (tab) {
+        tab.querySelector('.tab-name').textContent = trigColorLabel(key);
+        tab.classList.toggle('unnamed', !trigColorName(key));
+      }
       nameIn.classList.toggle('invalid', dupName(t));
       markDirty();
     });
@@ -418,6 +506,7 @@ views.triggers.after = () => {
     if (t.days.length === 7) delete t.days;
     markDirty();
   }));
+  wireOnlyIn();
 };
 
 // "Hold for" / "within" fields of an input or panel trigger with edge/event hold or double.
@@ -435,7 +524,35 @@ function behaviourFields(t, base) {
       <span class="muted">s · ${t.cooldown > 0 ? `fires within ${t.cooldown} s after a run are skipped (e.g. visitors pressing a button again and again)` : 'none'}</span></div>
     <label title="A trigger with a sleep, wait or repeat … every is still running until its last line">While running</label>
     <div class="row nowrap"><select data-p="${base}.whileRunning" data-r>${WHILE_RUNNING.map(([k, n]) => `<option value="${k}"${(t.whileRunning || 'again') === k ? ' selected' : ''}>${n}</option>`).join('')}</select>
-      <span class="muted">${waits ? 'when it fires again before its last line has run' : 'only matters with a sleep, wait or repeat … every in the actions'}</span></div>`;
+      <span class="muted">${waits ? 'when it fires again before its last line has run' : 'only matters with a sleep, wait or repeat … every in the actions'}</span></div>
+    ${onlyInField(t)}`;
+}
+// "Only active in" a mode group's states (Triggers.cpp onlyIn): like switched off in the other states.
+function onlyInField(t) {
+  const p = P();
+  if (!p.modes.length && !t.onlyIn) return '';
+  const g = p.modes.find((x) => x.name === t.onlyIn?.group), on = t.onlyIn?.states || [];
+  return `<label title="Fires only while this mode group is in one of the ticked states, as if switched off in the others. Fire now still works.">Only active in</label>
+    <div class="row" style="gap:6px"><select id="onlyGroup"><option value="">always (any mode)</option>${p.modes.map((x) =>
+      `<option${x === g ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}${t.onlyIn?.group && !g ? `<option selected>${esc(t.onlyIn.group)} (missing)</option>` : ''}</select>
+      ${g ? g.states.map((s) => `<label class="chk"><input type="checkbox" data-onlys="${esc(s)}"${on.includes(s) ? ' checked' : ''}> ${esc(s)}</label>`).join('') : ''}
+      ${g && !on.length ? '<span class="bad">tick at least one state</span>' : ''}</div>`;
+}
+function wireOnlyIn() {
+  const t = P().triggers[S.sel.trigger];
+  $('#onlyGroup')?.addEventListener('change', (e) => {
+    const g = P().modes.find((x) => x.name === e.target.value);
+    if (g) t.onlyIn = { group: g.name, states: g.states.slice(0, 1) };
+    else delete t.onlyIn;
+    markDirty();
+    render();
+  });
+  $$('[data-onlys]').forEach((el) => el.addEventListener('change', () => {
+    const g = P().modes.find((x) => x.name === t.onlyIn?.group);
+    t.onlyIn.states = (g?.states || []).filter((s) => $$('[data-onlys]').some((x) => x.dataset.onlys === s && x.checked));
+    markDirty();
+    render();
+  }));
 }
 
 // Moves the triggers at idxs (any selection, also with gaps) so they sit together in front
@@ -713,6 +830,12 @@ function triggerProblems(t) {
   if (dupName(t)) out.push(`Another trigger is also called '${t.name}': fire trigger by name can't tell them apart`);
   const loop = triggerLoop(t);
   if (loop) out.push(loop);
+  if (t.onlyIn?.group) {
+    const g = p.modes.find((x) => x.name === t.onlyIn.group);
+    if (!g) out.push(`Only active in: mode group '${t.onlyIn.group}' doesn't exist`);
+    else if (!t.onlyIn.states?.length) out.push(`Only active in ${g.name}: no state ticked, so it never fires`);
+    else for (const s of t.onlyIn.states) if (!g.states.includes(s)) out.push(`Only active in: '${s}' is not a state of ${g.name}`);
+  }
   switch (t.type) {
     case 'udp': if (!t.match) out.push('No message to react to'); break;
     case 'osc': if (!t.address) out.push('No OSC address to react to'); break;
@@ -1455,7 +1578,7 @@ function trigFlowHtml(selT) {
   const tools = `<div class="flow-tools">${only}<button class="btn small ghost" data-flowzoom="-1" title="Smaller">−</button><button class="btn small ghost" data-flowzoom="0" title="Back to 100 %">${Math.round(z * 100)} %</button><button class="btn small ghost" data-flowzoom="1" title="Bigger">+</button>
     <button class="btn small" id="flowBig" title="${big ? 'Back to the trigger list (Esc)' : 'Show the flow on the whole screen'}">${big ? '✕ Close' : '⤢ Expand'}</button></div>`;
   const colRow = focus || colList.length < 2 ? '' : `<div class="row col-filter flow-cols${fc.size ? ' some' : ''}" title="Show only the flow of triggers with these colours (click several; click again to turn off)">
-    <span class="muted">Colours:</span>${colList.map((c) => `<button class="swatch${fc.has(c) ? ' on' : ''}" data-flowcol="${esc(c)}" title="${esc(c || 'no colour')} (${cols.get(c)} trigger${cols.get(c) === 1 ? '' : 's'} in the flow)" style="${c ? `background:${trigColor(c)}` : ''}">${c ? '' : '∅'}</button>`).join('')}
+    <span class="muted">Colours:</span>${colList.map((c) => `<button class="swatch${fc.has(c) ? ' on' : ''}" data-flowcol="${esc(c)}" title="${esc(trigColorLabel(c))} (${cols.get(c)} trigger${cols.get(c) === 1 ? '' : 's'} in the flow)" style="${c ? `background:${trigColor(c)}` : ''}">${c ? '' : '∅'}</button>`).join('')}
     ${fc.size ? '<button class="btn small ghost" data-flowcol-clear>all colours</button>' : ''}</div>`;
   const box = (inner, help = '') => `<div class="trig-flow-wrap${big ? ' big' : ''}">${big ? '<h3>Trigger flow</h3>' : ''}${tools}${colRow}<div class="trig-flow"${big ? '' : ` style="height:${h || 320}px"`}>${inner}</div>${help}</div>`;
   if (!g.nodes.size) return box(`<p class="muted" style="margin:12px">${focus ? `#${selT.id} ${esc(selT.name)} isn't linked to anything: no event source, and it doesn't set off or get set off by another trigger.` : 'No trigger or timeline sets off another trigger yet (fire trigger, a mode or variable change, a trigger cue on a timeline, a timeline end…).'}</p>`);

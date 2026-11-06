@@ -2,7 +2,10 @@
 #include <ArduinoJson.h>
 #include <Ethernet.h>
 #include <mbed.h>
+#include <sys/stat.h>
 #include <time.h>
+#include <vector>
+#include "BigRam.h"
 #include "Board.h"
 #include "Cmd.h"
 #include "Config.h"
@@ -54,6 +57,8 @@ rtos::Thread sseThread(osPriorityNormal, 8 * 1024, nullptr, "sse");
 struct Request {
   String method, path, query;
   size_t contentLength = 0;
+  bool gzip = false;     // Accept-Encoding has gzip
+  String ifNoneMatch;    // ETag the browser already has
 };
 
 bool readLine(EthernetClient& c, String& line, uint32_t timeoutMs) {
@@ -87,28 +92,71 @@ String queryParam(const String& q, const char* key) {
   return out;
 }
 
-void sendHeader(EthernetClient& c, int code, const char* type, long len = -1, const char* extra = nullptr) {
-  const char* text = code == 200 ? "OK" : code == 400 ? "Bad Request" : code == 404 ? "Not Found" : code == 503 ? "Service Unavailable" : "Error";
-  c.print("HTTP/1.1 "); c.print(code); c.print(' '); c.print(text); c.print("\r\n");
-  c.print("Content-Type: "); c.print(type); c.print("\r\n");
-  if (len >= 0) { c.print("Content-Length: "); c.print(len); c.print("\r\n"); }
-  if (extra) c.print(extra);
-  c.print("Cache-Control: no-cache\r\nConnection: close\r\n\r\n");
+// Replies go out in as few writes as possible, in blocks of whole TCP segments. lwIP holds
+// back a part-filled segment while one is unacknowledged (Nagle) and Windows delays the ACK
+// of a single segment, so small or odd-sized writes made every 1 KB wait ~50 ms: the web UI
+// loaded at ~22 KB/s. Mbed has no TCP_NODELAY, so the sizes avoid it instead.
+const size_t kTxBlock = 8 * MBED_CONF_LWIP_TCP_MSS;
+uint8_t txBuf[kTxBlock];   // HTTP thread only
+
+String headerText(int code, const char* type, long len = -1, const char* extra = nullptr) {
+  const char* text = code == 200 ? "OK" : code == 304 ? "Not Modified" : code == 400 ? "Bad Request" : code == 404 ? "Not Found" : code == 503 ? "Service Unavailable" : "Error";
+  String h = "HTTP/1.1 " + String(code) + ' ' + text + "\r\nContent-Type: " + type + "\r\n";
+  if (len >= 0) h += "Content-Length: " + String(len) + "\r\n";
+  if (extra) h += extra;
+  h += "Cache-Control: no-cache\r\nConnection: close\r\n\r\n";
+  return h;
 }
 
-void sendText(EthernetClient& c, int code, const char* type, const String& body) {
-  sendHeader(c, code, type, body.length());
-  c.write((const uint8_t*)body.c_str(), body.length());
+// One huge write (a 58 KB log) never arrived: only the header got out. In blocks it does.
+// Data in SDRAM (BigRam) is copied to internal RAM first: sent straight from SDRAM it
+// arrived garbled from the second block on (seen on the hardware; the SDRAM itself tests fine).
+bool writeAll(EthernetClient& c, const uint8_t* p, size_t len) {
+  const bool sdram = (uintptr_t)p >= 0x60000000 && (uintptr_t)p < 0x60800000;
+  uint8_t bounce[2 * MBED_CONF_LWIP_TCP_MSS];
+  const size_t block = sdram ? sizeof(bounce) : kTxBlock;
+  for (size_t at = 0; at < len; at += block) {
+    size_t n = min(block, len - at);
+    const uint8_t* src = p + at;
+    if (sdram) { memcpy(bounce, src, n); src = bounce; }
+    if (c.write(src, n) != n) return false;
+  }
+  return true;
+}
+
+void sendHeader(EthernetClient& c, int code, const char* type, long len = -1, const char* extra = nullptr) {
+  String h = headerText(code, type, len, extra);
+  writeAll(c, (const uint8_t*)h.c_str(), h.length());
+}
+
+// Header and the start of the body share the first block; no copy of the body (a big log
+// copied once more could fail to allocate, and then only the header went out).
+void sendText(EthernetClient& c, int code, const char* type, const char* body, size_t len) {
+  String h = headerText(code, type, len);
+  size_t hl = min(h.length(), kTxBlock), first = min(len, kTxBlock - hl);
+  memcpy(txBuf, h.c_str(), hl);
+  memcpy(txBuf + hl, body, first);
+  if (c.write(txBuf, hl + first) != hl + first) return;
+  writeAll(c, (const uint8_t*)body + first, len - first);
+}
+void sendText(EthernetClient& c, int code, const char* type, const String& body) { sendText(c, code, type, body.c_str(), body.length()); }
+
+// Big replies are built in SDRAM (BigRam::Text): a 6 KB status String on a fragmented heap
+// came out cut off. If even that fails, say so instead of sending broken JSON.
+void sendText(EthernetClient& c, int code, const char* type, const BigRam::Text& t) {
+  if (t.failed) sendText(c, 503, "application/json", "{\"ok\":false,\"reply\":\"out of memory\"}");
+  else sendText(c, code, type, t.data ? t.data : "", t.len);
 }
 
 void sendJson(EthernetClient& c, JsonDocument& d, int code = 200) {
-  String s;
-  serializeJson(d, s);
-  sendText(c, code, "application/json", s);
+  BigRam::Text t;
+  serializeJson(d, t);
+  if (d.overflowed()) t.failed = true;
+  sendText(c, code, "application/json", t);
 }
 
 void sendResult(EthernetClient& c, bool ok, const String& msg) {
-  JsonDocument d;
+  JsonDocument d(BigRam::json());
   d["ok"] = ok;
   d["reply"] = msg;
   sendJson(c, d, ok ? 200 : 400);
@@ -128,6 +176,20 @@ bool readBody(EthernetClient& c, size_t len, String& body) {
   return body.length() == len;
 }
 
+// The same into SDRAM, for a project upload (a heap String of that size often can't be had).
+bool readBody(EthernetClient& c, size_t len, BigRam::Buffer& body) {
+  if (!body.reserve(len)) return false;
+  uint32_t t0 = millis();
+  while (body.len < len && millis() - t0 < 5000) {
+    int n = c.read((uint8_t*)body.data + body.len, min((size_t)1024, len - body.len));
+    if (n > 0) { body.len += n; t0 = millis(); }
+    else if (!c.connected()) break;
+    else rtos::ThisThread::sleep_for(1ms);
+  }
+  body.data[body.len] = 0;
+  return body.len == len;
+}
+
 const char* mimeType(const String& p) {
   if (p.endsWith(".html")) return "text/html; charset=utf-8";
   if (p.endsWith(".js")) return "application/javascript";
@@ -142,19 +204,77 @@ const char* mimeType(const String& p) {
   return "application/octet-stream";
 }
 
-void sendFile(EthernetClient& c, const String& path, const char* type) {
+void sendFile(EthernetClient& c, const String& path, const char* type, const char* extra = nullptr) {
   FILE* f = Storage::mounted() ? fopen(path.c_str(), "rb") : nullptr;
   if (!f) { sendText(c, 404, "text/plain", "Not found"); return; }
   fseek(f, 0, SEEK_END);
   long size = ftell(f);
   fseek(f, 0, SEEK_SET);
-  sendHeader(c, 200, type, size);
-  uint8_t buf[1024];
-  size_t n;
-  while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-    if (c.write(buf, n) != n) break;
+  // The header shares the first block with the file, so every write but the last is full.
+  String h = headerText(200, type, size, extra);
+  size_t fill = min(h.length(), kTxBlock);
+  memcpy(txBuf, h.c_str(), fill);
+  for (;;) {
+    size_t n = fread(txBuf + fill, 1, kTxBlock - fill, f);
+    fill += n;
+    if (!fill) break;
+    if (c.write(txBuf, fill) != fill) break;
+    if (fill < kTxBlock) break;   // end of file
+    fill = 0;
   }
   fclose(f);
+}
+
+// ---- Web UI files: gzipped copies and ETags from a network update (tools/make_update.py) ----
+// The stick reads at ~300 KB/s, so the update stores text files as <name>.gz (a quarter of
+// the bytes) and www/etags.txt with "<url> <stored size> <crc>" per file. A reload then only
+// asks "changed?" (If-None-Match -> 304). A stick filled by hand has plain files and no list,
+// and is served as before. The list is re-read on every page open ("/" or "/panel"), so a
+// swapped stick or a new update is picked up; a tag only counts while the size still matches.
+struct WwwTag { String url; long size; String tag; };
+std::vector<WwwTag> wwwTags;
+
+long fileSize(const String& path) {
+  struct stat st;
+  return Storage::mounted() && stat(path.c_str(), &st) == 0 ? (long)st.st_size : -1;
+}
+
+void loadWwwTags() {
+  wwwTags.clear();
+  String txt;
+  if (!Storage::readFile(KD_WWW_ROOT "/etags.txt", txt, 16384)) return;
+  for (int i = 0; i < (int)txt.length();) {
+    int end = txt.indexOf('\n', i);
+    if (end < 0) end = txt.length();
+    String l = txt.substring(i, end);
+    i = end + 1;
+    int a = l.indexOf(' '), b = l.lastIndexOf(' ');
+    if (a > 0 && b > a) wwwTags.push_back({l.substring(0, a), l.substring(a + 1, b).toInt(), "\"" + l.substring(b + 1) + "\""});
+  }
+}
+
+// Sends /www<rel> (or its .gz), or a 304 when the browser has it. False = no such file.
+bool serveWww(EthernetClient& c, const Request& req, const String& rel) {
+  if (rel == "/index.html" || rel == "/panel.html") loadWwwTags();
+  String path = String(KD_WWW_ROOT) + rel;
+  long size = req.gzip ? fileSize(path + ".gz") : -1;
+  bool gz = size >= 0;
+  if (gz) path += ".gz";
+  else size = fileSize(path);
+  if (size < 0) return false;
+  String extra = gz ? "Content-Encoding: gzip\r\nVary: Accept-Encoding\r\n" : "";
+  for (auto& t : wwwTags) {
+    if (t.url != rel || t.size != size) continue;
+    if (req.ifNoneMatch == t.tag) {
+      String h = headerText(304, mimeType(rel), -1, ("ETag: " + t.tag + "\r\n").c_str());
+      writeAll(c, (const uint8_t*)h.c_str(), h.length());
+      return true;
+    }
+    extra += "ETag: " + t.tag + "\r\n";
+    break;
+  }
+  sendFile(c, path, mimeType(rel), extra.c_str());
+  return true;
 }
 
 void buildStatus(JsonDocument& d) {
@@ -175,6 +295,7 @@ void buildStatus(JsonDocument& d) {
   s["loopUs"] = g_stats.loopUsMax;
   s["http"] = g_stats.httpRequests;
   JsonObject heap = s["heap"].to<JsonObject>();
+  heap["sdramFree"] = BigRam::freeBytes();
   heap["size"] = g_stats.heapSize;
   heap["used"] = g_stats.heapUsed;
   heap["free"] = g_stats.heapFree;
@@ -199,28 +320,34 @@ void buildStatus(JsonDocument& d) {
 
 void handleProjectPut(EthernetClient& c, size_t len) {
   if (!Storage::mounted()) { sendResult(c, false, "No USB stick"); return; }
-  String body;
-  if (!readBody(c, len, body)) { sendResult(c, false, "Upload incomplete"); return; }
+  BigRam::Buffer body;
+  Log::crumb(Log::kCrumbWeb, "save: receiving");
+  if (!readBody(c, len, body)) { sendResult(c, false, body.data ? "Upload incomplete" : "Project too big for the memory"); return; }
   String err;
+  Log::crumb(Log::kCrumbWeb, "save: waiting for g_engine");
   g_engine.lock();
-  bool ok = Show::parse(body.c_str(), body.length(), err);
+  Log::crumb(Log::kCrumbWeb, "save: Show::parse");
+  bool ok = Show::parse(body.data, body.len, err);
   if (ok) {
+    Log::crumb(Log::kCrumbWeb, "save: loadModules");
     Project::loadModules();
     Triggers::setSafeMode(false);   // the project was fixed (or the user takes the risk)
+    Log::crumb(Log::kCrumbWeb, "save: Startup trigger");
     Triggers::startup();
   }
   g_engine.unlock();
+  Log::crumb(Log::kCrumbWeb, "save: writing the stick");
   if (!ok) { LOGW(Web, "Rejected project upload: %s", err.c_str()); sendResult(c, false, err); return; }
 
   // Atomic-ish save: write tmp, keep the previous version as .bak, swap.
-  if (!Storage::writeFile(KD_PROJECT_TMP, body.c_str(), body.length())) {
+  if (!Storage::writeFile(KD_PROJECT_TMP, body.data, body.len)) {
     sendResult(c, false, "Write to USB failed");
     return;
   }
   remove(KD_PROJECT_BAK);
   rename(KD_PROJECT_PATH, KD_PROJECT_BAK);
   rename(KD_PROJECT_TMP, KD_PROJECT_PATH);
-  LOGI(Web, "Project saved to USB (%u bytes)", (unsigned)body.length());
+  LOGI(Web, "Project saved to USB (%u bytes)", (unsigned)body.len);
   sendResult(c, true, "Saved and loaded");
 }
 
@@ -276,8 +403,14 @@ void handle(EthernetClient& c) {
   req.path = q < 0 ? target : target.substring(0, q);
   req.query = q < 0 ? "" : target.substring(q + 1);
   while (readLine(c, line, 2000) && line.length()) {
-    if (line.startsWith("Content-Length:") || line.startsWith("content-length:"))
-      req.contentLength = line.substring(15).toInt();
+    int colon = line.indexOf(':');
+    if (colon < 0) continue;
+    String name = line.substring(0, colon), value = line.substring(colon + 1);
+    name.toLowerCase();
+    value.trim();
+    if (name == "content-length") req.contentLength = value.toInt();
+    else if (name == "accept-encoding") req.gzip = value.indexOf("gzip") >= 0;
+    else if (name == "if-none-match") req.ifNoneMatch = value;
   }
   g_stats.httpRequests++;
   LOGD(Web, "%s %s", req.method.c_str(), target.c_str());
@@ -304,7 +437,7 @@ void handle(EthernetClient& c) {
   }
 
   if (p == "/api/status") {
-    JsonDocument d;
+    JsonDocument d(BigRam::json());
     buildStatus(d);
     sendJson(c, d);
   } else if (p == "/api/project" && req.method == "GET") {
@@ -330,6 +463,27 @@ void handle(EthernetClient& c) {
     g_engine.unlock();
     reply.trim();
     sendResult(c, ok, reply);
+  } else if (p == "/api/mode") {
+    // For other systems (a plain GET is all some can send): no group = every group's state as
+    // JSON, ?group=X = its state as text, &state=Y (or next/previous/toggle/back) sets it.
+    String group = queryParam(req.query, "group"), state = queryParam(req.query, "state"), r;
+    g_engine.lock();
+    int g = State::findGroup(group);
+    if (state.length()) {
+      bool ok = Cmd::exec("mode \"" + group + "\" \"" + state + "\"", r, "http");
+      g_engine.unlock();
+      sendResult(c, ok, r);
+    } else if (group.length()) {
+      r = g >= 0 ? State::current(g) : String("");
+      g_engine.unlock();
+      if (g < 0) sendText(c, 404, "text/plain", "unknown mode group '" + group + "'");
+      else sendText(c, 200, "text/plain", r);
+    } else {
+      JsonDocument d(BigRam::json());
+      for (int i = 0; i < State::groupCount(); i++) d[State::groupName(i)] = State::current(i);
+      g_engine.unlock();
+      sendJson(c, d);
+    }
   } else if (p == "/api/trigger" && req.method == "POST") {
     String msg;
     g_engine.lock();
@@ -363,16 +517,16 @@ void handle(EthernetClient& c) {
     sendResult(c, ok, msg);
   } else if (p == "/api/log") {
     uint32_t since = queryParam(req.query, "since").toInt();
-    String out = "[";
+    BigRam::Text out;   // up to ~60 KB: in SDRAM (growing a heap String took ~1 s and could fail)
+    out.add('[');
     LogEntry e;
     char buf[KD_LOG_MSG_LEN * 2 + 96];
     for (uint32_t s = max(since + 1, Log::firstSeq()); s <= Log::lastSeq(); s++) {
       if (!Log::get(s, e)) continue;
-      if (out.length() > 1) out += ',';
-      Log::toJson(e, buf, sizeof(buf));
-      out += buf;
+      if (out.len > 1) out.add(',');
+      out.add(buf, Log::toJson(e, buf, sizeof(buf)));
     }
-    out += "]";
+    out.add(']');
     sendText(c, 200, "application/json", out);
   } else if (p == "/api/history") {
     // One device's on/off history (Monitoring detail view); reads the stick, no engine lock.
@@ -385,7 +539,7 @@ void handle(EthernetClient& c) {
     Log::search(queryParam(req.query, "name"), queryParam(req.query, "ip"), queryParam(req.query, "from").toInt(), queryParam(req.query, "to").toInt(), 300, out);
     sendText(c, 200, "application/json", out);
   } else if (p == "/api/loglevels") {
-    JsonDocument d;
+    JsonDocument d(BigRam::json());
     for (int i = 0; i < (int)Cat::COUNT; i++) d[Log::catName((Cat)i)] = Log::lvlName(Log::level((Cat)i));
     sendJson(c, d);
   } else if (p == "/api/dmx") {
@@ -428,7 +582,7 @@ void handle(EthernetClient& c) {
     String msg;
     bool restart;
     bool ok = Update::receive(c, req.contentLength, msg, restart);
-    JsonDocument d;
+    JsonDocument d(BigRam::json());
     d["ok"] = ok;
     d["reply"] = msg;
     d["restart"] = restart;
@@ -443,7 +597,7 @@ void handle(EthernetClient& c) {
     // Static file from the stick.
     String rel = p == "/" ? "/index.html" : p == "/panel" ? "/panel.html" : p;
     if (rel.indexOf("..") >= 0) { sendText(c, 400, "text/plain", "Bad path"); }
-    else if (Storage::exists((String(KD_WWW_ROOT) + rel).c_str())) sendFile(c, String(KD_WWW_ROOT) + rel, mimeType(rel));
+    else if (serveWww(c, req, rel)) {}
     else if (rel == "/index.html") sendText(c, 200, "text/html; charset=utf-8", kFallbackPage);
     else sendText(c, 404, "text/plain", "Not found");
   }
@@ -455,7 +609,7 @@ void httpLoop() {
   LOGI(Web, "Web UI on http://%s/", Net::localIP().toString().c_str());
   for (;;) {
     EthernetClient c = server.accept();
-    if (c) handle(c);
+    if (c) { Log::crumb(Log::kCrumbWeb, "handling a request"); handle(c); Log::crumb(Log::kCrumbWeb, "idle"); }
     else rtos::ThisThread::sleep_for(5ms);
   }
 }
@@ -464,15 +618,21 @@ void sseLoop() {
   char buf[KD_LOG_MSG_LEN * 2 + 128];
   uint32_t lastStatus = 0, lastVersion = 0;
   for (;;) {
-    // Push immediately when a mode or panel label changes, else once a second.
-    bool statusDue = millis() - lastStatus >= 1000 || State::version() != lastVersion;
-    String status;
+    // Push as soon as something changed (State::changed: commands, variables, inputs, devices,
+    // modes, labels), at most 10 times a second so a busy trigger can't eat the CPU; else once a second.
+    uint32_t since = millis() - lastStatus;
+    bool statusDue = since >= 1000 || (State::version() != lastVersion && since >= 100);
+    // The whole status event in SDRAM and sent in one go (see kTxBlock / BigRam::Text).
+    BigRam::Text ev;
     if (statusDue) {
       lastStatus = millis();
       lastVersion = State::version();
-      JsonDocument d;
+      JsonDocument d(BigRam::json());
       buildStatus(d);
-      serializeJson(d, status);
+      ev.add("event: status\ndata: ");
+      serializeJson(d, ev);
+      ev.add("\n\n");
+      if (ev.failed || d.overflowed()) statusDue = false;   // skip this one rather than send broken JSON
     }
     sseMtx.lock();
     for (auto& s : sse) {
@@ -495,16 +655,14 @@ void sseLoop() {
         s.seq++;
         sent++;
       }
-      if (ok && statusDue) {
-        ok = s.c.print("event: status\ndata: ") > 0 && s.c.print(status) > 0 && s.c.print("\n\n") > 0;
-      }
+      if (ok && statusDue) ok = writeAll(s.c, (const uint8_t*)ev.data, ev.len);
       if (!ok) {
         s.c.stop();
         s.used = false;
       }
     }
     sseMtx.unlock();
-    rtos::ThisThread::sleep_for(50ms);
+    rtos::ThisThread::sleep_for(20ms);
   }
 }
 }  // namespace

@@ -1,0 +1,1086 @@
+{
+  "name": "Museum building - start-up and shut-down",
+  "settings": {
+    "tzOffsetMin": 60,
+    "udpPort": 4000,
+    "sacnPriority": 100,
+    "monitor": {
+      "interval": 60,
+      "timeout": 1000,
+      "failures": 2
+    },
+    "time": {
+      "ntp": "pool.ntp.org",
+      "ntpEnabled": true,
+      "dst": "eu"
+    },
+    "location": {
+      "lat": 52.37,
+      "lon": 4.9
+    },
+    "outputs": {
+      "dmx": true,
+      "artnet": true,
+      "sacn": true,
+      "dmxFps": 40,
+      "artnetFps": 30,
+      "sacnFps": 40,
+      "artnetChangesOnly": true,
+      "sacnChangesOnly": false
+    }
+  },
+  "network": {
+    "dhcp": false,
+    "ip": "192.168.1.50",
+    "mask": "255.255.255.0",
+    "gateway": "192.168.1.1"
+  },
+  "modes": [
+    {
+      "name": "Building",
+      "states": [
+        "Off",
+        "Starting",
+        "Open",
+        "Event",
+        "Stopping"
+      ],
+      "var": "building_state",
+      "stateInfo": {
+        "Off": {
+          "color": "#616161",
+          "icon": "🌙"
+        },
+        "Starting": {
+          "color": "#d29922",
+          "icon": "⏳",
+          "enter": [
+            "netio pdus output all on",
+            "log Racks powered",
+            "sleep 60",
+            "pc floor0 wake",
+            "pc floor1 wake",
+            "pc floor2 wake",
+            "sleep 30",
+            "projector all on",
+            "release all fade 20",
+            "scene \"Lobby open\" fade 20",
+            "sleep 180",
+            "monitor check",
+            "sleep 15",
+            "fire trigger \"Start-up report\"",
+            "mode Building Open"
+          ]
+        },
+        "Open": {
+          "color": "#3fb950",
+          "icon": "🟢"
+        },
+        "Event": {
+          "color": "#8957e5",
+          "icon": "🥂"
+        },
+        "Stopping": {
+          "color": "#ff9f43",
+          "icon": "⏬",
+          "enter": [
+            "projector all off",
+            "pc all shutdown",
+            "release all fade 60",
+            "scene \"Lobby night\" fade 60",
+            "# projectors cool down and Windows shuts down before the power goes",
+            "sleep 300",
+            "netio pdus output all off",
+            "mode Building Off"
+          ]
+        }
+      }
+    }
+  ],
+  "universes": [
+    {
+      "id": 1,
+      "name": "DMX 1",
+      "dmxPort": 1,
+      "artnet": 0,
+      "sacn": 1,
+      "useDmx": true,
+      "useArtnet": false,
+      "useSacn": false
+    }
+  ],
+  "fixtures": [
+    {
+      "id": 1,
+      "name": "Entrance downlight 1",
+      "universe": 1,
+      "address": 1,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 2,
+      "name": "Entrance downlight 2",
+      "universe": 1,
+      "address": 2,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 3,
+      "name": "Entrance downlight 3",
+      "universe": 1,
+      "address": 3,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 4,
+      "name": "Entrance downlight 4",
+      "universe": 1,
+      "address": 4,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 5,
+      "name": "Lobby wall 1",
+      "universe": 1,
+      "address": 10,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 6,
+      "name": "Lobby wall 2",
+      "universe": 1,
+      "address": 15,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    }
+  ],
+  "groups": [],
+  "scenes": [
+    {
+      "id": 1,
+      "name": "Lobby open",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 229
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 229
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 229
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 229
+        },
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 5,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 6,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 5,
+          "ch": "g",
+          "v": 210
+        },
+        {
+          "fixture": 6,
+          "ch": "g",
+          "v": 210
+        },
+        {
+          "fixture": 5,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 6,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 5,
+          "ch": "w",
+          "v": 255
+        },
+        {
+          "fixture": 6,
+          "ch": "w",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Lobby night",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 38
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 38
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 38
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 38
+        }
+      ]
+    }
+  ],
+  "timelines": [],
+  "devices": [],
+  "deviceGroups": [
+    {
+      "name": "floor0",
+      "kind": "pc",
+      "devices": [
+        "PC Entrance",
+        "PC Ticketing",
+        "PC Shop"
+      ]
+    },
+    {
+      "name": "floor0",
+      "kind": "projector",
+      "devices": [
+        "PJ Entrance"
+      ]
+    },
+    {
+      "name": "floor1",
+      "kind": "pc",
+      "devices": [
+        "PC Room 1.1",
+        "PC Room 1.2",
+        "PC Room 1.3"
+      ]
+    },
+    {
+      "name": "floor1",
+      "kind": "projector",
+      "devices": [
+        "PJ Room 1.1",
+        "PJ Room 1.2"
+      ]
+    },
+    {
+      "name": "floor2",
+      "kind": "pc",
+      "devices": [
+        "PC Room 2.1",
+        "PC Room 2.2",
+        "PC Room 2.3"
+      ]
+    },
+    {
+      "name": "floor2",
+      "kind": "projector",
+      "devices": [
+        "PJ Room 2.1",
+        "PJ Room 2.2",
+        "PJ Room 2.3"
+      ]
+    },
+    {
+      "name": "pdus",
+      "kind": "netio",
+      "devices": [
+        "pdu0",
+        "pdu1",
+        "pdu2"
+      ]
+    }
+  ],
+  "pcs": [
+    {
+      "id": 1,
+      "name": "PC Entrance",
+      "ip": "192.168.10.41",
+      "mac": "00:1B:21:10:00:41",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 2,
+      "name": "PC Ticketing",
+      "ip": "192.168.10.42",
+      "mac": "00:1B:21:10:00:42",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 3,
+      "name": "PC Shop",
+      "ip": "192.168.10.43",
+      "mac": "00:1B:21:10:00:43",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 4,
+      "name": "PC Room 1.1",
+      "ip": "192.168.11.41",
+      "mac": "00:1B:21:11:00:41",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 5,
+      "name": "PC Room 1.2",
+      "ip": "192.168.11.42",
+      "mac": "00:1B:21:11:00:42",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 6,
+      "name": "PC Room 1.3",
+      "ip": "192.168.11.43",
+      "mac": "00:1B:21:11:00:43",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 7,
+      "name": "PC Room 2.1",
+      "ip": "192.168.12.41",
+      "mac": "00:1B:21:12:00:41",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 8,
+      "name": "PC Room 2.2",
+      "ip": "192.168.12.42",
+      "mac": "00:1B:21:12:00:42",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    },
+    {
+      "id": 9,
+      "name": "PC Room 2.3",
+      "ip": "192.168.12.43",
+      "mac": "00:1B:21:12:00:43",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    }
+  ],
+  "email": {
+    "server": "192.168.1.5",
+    "port": 25,
+    "user": "",
+    "password": "",
+    "from": "av@museum.example"
+  },
+  "projectors": [
+    {
+      "id": 1,
+      "name": "PJ Entrance",
+      "ip": "192.168.10.101",
+      "port": 4352,
+      "password": ""
+    },
+    {
+      "id": 2,
+      "name": "PJ Room 1.1",
+      "ip": "192.168.11.101",
+      "port": 4352,
+      "password": ""
+    },
+    {
+      "id": 3,
+      "name": "PJ Room 1.2",
+      "ip": "192.168.11.102",
+      "port": 4352,
+      "password": ""
+    },
+    {
+      "id": 4,
+      "name": "PJ Room 2.1",
+      "ip": "192.168.12.101",
+      "port": 4352,
+      "password": ""
+    },
+    {
+      "id": 5,
+      "name": "PJ Room 2.2",
+      "ip": "192.168.12.102",
+      "port": 4352,
+      "password": ""
+    },
+    {
+      "id": 6,
+      "name": "PJ Room 2.3",
+      "ip": "192.168.12.103",
+      "port": 4352,
+      "password": ""
+    }
+  ],
+  "panel": {
+    "theme": {},
+    "panels": [
+      {
+        "id": 1,
+        "name": "Front desk",
+        "title": "Museum A/V",
+        "start": 1
+      }
+    ],
+    "pages": [
+      {
+        "id": 1,
+        "name": "Building",
+        "columns": 2,
+        "controls": [
+          {
+            "type": "label",
+            "name": "lbl_building",
+            "text": "Building: -"
+          },
+          {
+            "type": "clock"
+          },
+          {
+            "type": "button",
+            "name": "Start building",
+            "text": "Start building",
+            "color": "#2e7d32"
+          },
+          {
+            "type": "button",
+            "name": "Shut down",
+            "text": "Shut down (hold 3 s)",
+            "color": "#b71c1c"
+          },
+          {
+            "type": "button",
+            "name": "Evening event",
+            "text": "Evening event",
+            "color": "#6a4c93",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_report",
+            "text": "Start-up report: -",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Floors",
+            "text": "Per floor…",
+            "color": "#424242",
+            "goto": 2,
+            "span": 2
+          }
+        ],
+        "panel": 1
+      },
+      {
+        "id": 2,
+        "name": "Floors",
+        "columns": 2,
+        "pin": "1234",
+        "controls": [
+          {
+            "type": "button",
+            "name": "Ground floor on",
+            "text": "Ground floor on",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Ground floor off",
+            "text": "Ground floor off (hold)",
+            "color": "#5a2a2a"
+          },
+          {
+            "type": "button",
+            "name": "First floor on",
+            "text": "First floor on",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "First floor off",
+            "text": "First floor off (hold)",
+            "color": "#5a2a2a"
+          },
+          {
+            "type": "button",
+            "name": "Second floor on",
+            "text": "Second floor on",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Second floor off",
+            "text": "Second floor off (hold)",
+            "color": "#5a2a2a"
+          },
+          {
+            "type": "button",
+            "name": "Back",
+            "text": "← Back",
+            "color": "#424242",
+            "goto": 1,
+            "span": 2
+          }
+        ],
+        "panel": 1
+      }
+    ]
+  },
+  "triggers": [
+    {
+      "id": 10001,
+      "name": "== START-UP",
+      "type": "comment",
+      "color": "green",
+      "actions": [],
+      "conditions": [],
+      "notes": "Tuesday to Sunday. Order matters: power first, then PCs, then projectors; and the other way round at night, with time for the projectors to cool down."
+    },
+    {
+      "id": 1,
+      "name": "Startup",
+      "type": "startup",
+      "color": "green",
+      "actions": [
+        "if mode Building is Open then scene \"Lobby open\" fade 5 else scene \"Lobby night\" fade 5",
+        "panel lbl_building text Building: {mode.Building}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 2,
+      "name": "Start building 08:30",
+      "type": "time",
+      "at": "08:30:00",
+      "days": [
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "color": "green",
+      "actions": [
+        "mode Building Starting"
+      ],
+      "conditions": [
+        "calendar Closed inactive",
+        "mode Building is Off"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Start-up report",
+      "type": "manual",
+      "color": "green",
+      "actions": [
+        "var problems = \"\"",
+        "if device \"PC Entrance\" is offline then var problems = \"{problems} [PC Entrance]\"",
+        "if device \"PC Ticketing\" is offline then var problems = \"{problems} [PC Ticketing]\"",
+        "if device \"PC Shop\" is offline then var problems = \"{problems} [PC Shop]\"",
+        "if device \"PC Room 1.1\" is offline then var problems = \"{problems} [PC Room 1.1]\"",
+        "if device \"PC Room 1.2\" is offline then var problems = \"{problems} [PC Room 1.2]\"",
+        "if device \"PC Room 1.3\" is offline then var problems = \"{problems} [PC Room 1.3]\"",
+        "if device \"PC Room 2.1\" is offline then var problems = \"{problems} [PC Room 2.1]\"",
+        "if device \"PC Room 2.2\" is offline then var problems = \"{problems} [PC Room 2.2]\"",
+        "if device \"PC Room 2.3\" is offline then var problems = \"{problems} [PC Room 2.3]\"",
+        "if device \"PJ Entrance\" is offline then var problems = \"{problems} [PJ Entrance]\"",
+        "if device \"PJ Room 1.1\" is offline then var problems = \"{problems} [PJ Room 1.1]\"",
+        "if device \"PJ Room 1.2\" is offline then var problems = \"{problems} [PJ Room 1.2]\"",
+        "if device \"PJ Room 2.1\" is offline then var problems = \"{problems} [PJ Room 2.1]\"",
+        "if device \"PJ Room 2.2\" is offline then var problems = \"{problems} [PJ Room 2.2]\"",
+        "if device \"PJ Room 2.3\" is offline then var problems = \"{problems} [PJ Room 2.3]\"",
+        "if var problems = \"\" then log Start-up OK: all devices online else email tech@museum.example \"Start-up: devices offline\" Not answering:{problems}",
+        "if var problems = \"\" then panel lbl_report text All devices online else panel lbl_report text Offline: {problems}"
+      ],
+      "conditions": [],
+      "notes": "Every PC and projector is checked once; one email lists all that are missing."
+    },
+    {
+      "id": 4,
+      "name": "Stop building 17:30",
+      "type": "time",
+      "at": "17:30:00",
+      "color": "green",
+      "actions": [
+        "mode Building Stopping"
+      ],
+      "conditions": [
+        "mode Building is Open"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Weekly reboot (Monday 07:00)",
+      "type": "time",
+      "at": "07:00:00",
+      "days": [
+        "mon"
+      ],
+      "color": "green",
+      "actions": [
+        "netio pdus output all on",
+        "sleep 60",
+        "pc all wake",
+        "sleep 300",
+        "pc all reboot",
+        "sleep 300",
+        "pc all shutdown",
+        "sleep 120",
+        "netio pdus output all off"
+      ],
+      "conditions": [],
+      "notes": "Monday the museum is closed: the PCs get their Windows updates and a fresh start."
+    },
+    {
+      "id": 10002,
+      "name": "== FAÇADE",
+      "type": "comment",
+      "color": "orange",
+      "actions": [],
+      "conditions": [],
+      "notes": "The façade lighting runs on a Pharos controller; KD only tells it when."
+    },
+    {
+      "id": 6,
+      "name": "Sunset: façade on",
+      "type": "time",
+      "at": "sunset",
+      "offset": -10,
+      "color": "orange",
+      "actions": [
+        "pharos facade timeline 1 start fade 5"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 7,
+      "name": "King's Day: orange façade",
+      "type": "time",
+      "at": "sunset",
+      "offset": -5,
+      "color": "orange",
+      "actions": [
+        "pharos facade timeline 2 start fade 5"
+      ],
+      "conditions": [
+        "calendar \"King's Day\" active"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Façade off 23:00",
+      "type": "time",
+      "at": "23:00:00",
+      "color": "orange",
+      "actions": [
+        "pharos facade release all fade 10"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10003,
+      "name": "== FRONT DESK",
+      "type": "comment",
+      "color": "cyan",
+      "actions": [],
+      "conditions": [],
+      "notes": "A tablet at the front desk: start or stop the building by hand, per floor if needed."
+    },
+    {
+      "id": 9,
+      "name": "CLICK Start building",
+      "type": "panel",
+      "control": "Start building",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "mode Building Starting"
+      ],
+      "conditions": [
+        "mode Building is Off"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "HOLD Shut down",
+      "type": "panel",
+      "control": "Shut down",
+      "event": "hold",
+      "hold": 3,
+      "color": "cyan",
+      "actions": [
+        "mode Building Stopping"
+      ],
+      "conditions": [
+        "mode Building not Off"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "CLICK Evening event",
+      "type": "panel",
+      "control": "Evening event",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "if mode Building is Event then mode Building Open else mode Building Event"
+      ],
+      "conditions": [],
+      "notes": "Event: the 17:30 shut-down is skipped. Press again (or Shut down) when the event is over."
+    },
+    {
+      "id": 12,
+      "name": "CLICK Ground floor on",
+      "type": "panel",
+      "control": "Ground floor on",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "netio pdu0 output all on",
+        "sleep 30",
+        "pc floor0 wake",
+        "projector floor0 on"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 13,
+      "name": "HOLD Ground floor off",
+      "type": "panel",
+      "control": "Ground floor off",
+      "event": "hold",
+      "hold": 2,
+      "color": "cyan",
+      "actions": [
+        "projector floor0 off",
+        "pc floor0 shutdown",
+        "sleep 240",
+        "netio pdu0 output all off"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 14,
+      "name": "CLICK First floor on",
+      "type": "panel",
+      "control": "First floor on",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "netio pdu1 output all on",
+        "sleep 30",
+        "pc floor1 wake",
+        "projector floor1 on"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 15,
+      "name": "HOLD First floor off",
+      "type": "panel",
+      "control": "First floor off",
+      "event": "hold",
+      "hold": 2,
+      "color": "cyan",
+      "actions": [
+        "projector floor1 off",
+        "pc floor1 shutdown",
+        "sleep 240",
+        "netio pdu1 output all off"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 16,
+      "name": "CLICK Second floor on",
+      "type": "panel",
+      "control": "Second floor on",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "netio pdu2 output all on",
+        "sleep 30",
+        "pc floor2 wake",
+        "projector floor2 on"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 17,
+      "name": "HOLD Second floor off",
+      "type": "panel",
+      "control": "Second floor off",
+      "event": "hold",
+      "hold": 2,
+      "color": "cyan",
+      "actions": [
+        "projector floor2 off",
+        "pc floor2 shutdown",
+        "sleep 240",
+        "netio pdu2 output all off"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 18,
+      "name": "Mode -> panel",
+      "type": "mode",
+      "group": "Building",
+      "color": "cyan",
+      "actions": [
+        "panel lbl_building text Building: {mode}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10004,
+      "name": "== MONITORING",
+      "type": "comment",
+      "color": "blue",
+      "actions": [],
+      "conditions": [],
+      "notes": "Email when a device drops out while the building is open. The Monitoring page shows the full picture."
+    },
+    {
+      "id": 19,
+      "name": "Device offline",
+      "type": "device",
+      "device": "",
+      "state": "offline",
+      "color": "blue",
+      "actions": [
+        "email tech@museum.example \"{device} offline\" {kind} {device} stopped answering"
+      ],
+      "conditions": [
+        "mode Building is Open"
+      ]
+    },
+    {
+      "id": 20,
+      "name": "Projector warning",
+      "type": "projector",
+      "projector": "",
+      "alarm": "any",
+      "level": "warning",
+      "color": "blue",
+      "actions": [
+        "email tech@museum.example \"{projector}: {alarm}\" {alarm} is {state}, lamp {lamp} h"
+      ],
+      "conditions": []
+    }
+  ],
+  "variables": [
+    {
+      "name": "problems",
+      "type": "text",
+      "initial": ""
+    },
+    {
+      "name": "building_state",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    }
+  ],
+  "calendar": [
+    {
+      "name": "Closed",
+      "from": "01-01",
+      "to": "01-01"
+    },
+    {
+      "name": "Closed",
+      "from": "12-25",
+      "to": "12-25"
+    },
+    {
+      "name": "King's Day",
+      "from": "04-27",
+      "to": "04-27"
+    }
+  ],
+  "tcp": [],
+  "modbus": [],
+  "maps": [
+    {
+      "id": 1,
+      "name": "Lobby",
+      "aspect": 2,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [
+        {
+          "fixture": 1,
+          "x": 0.2,
+          "y": 0.3
+        },
+        {
+          "fixture": 2,
+          "x": 0.4,
+          "y": 0.3
+        },
+        {
+          "fixture": 3,
+          "x": 0.6,
+          "y": 0.3
+        },
+        {
+          "fixture": 4,
+          "x": 0.8,
+          "y": 0.3
+        },
+        {
+          "fixture": 5,
+          "x": 0.1,
+          "y": 0.7
+        },
+        {
+          "fixture": 6,
+          "x": 0.9,
+          "y": 0.7
+        }
+      ]
+    }
+  ],
+  "effects": [],
+  "triggerColorNames": {
+    "green": "Start-up",
+    "orange": "Façade",
+    "cyan": "Front desk",
+    "blue": "Monitoring"
+  },
+  "fixtureTypes": [],
+  "drivers": [
+    {
+      "id": 1,
+      "type": "netio",
+      "name": "pdu0",
+      "ip": "192.168.10.120",
+      "port": 80,
+      "user": "netio",
+      "password": "netio",
+      "model": "4PZ",
+      "outputs": 4,
+      "live": true,
+      "vars": {}
+    },
+    {
+      "id": 2,
+      "type": "netio",
+      "name": "pdu1",
+      "ip": "192.168.11.120",
+      "port": 80,
+      "user": "netio",
+      "password": "netio",
+      "model": "4PZ",
+      "outputs": 4,
+      "live": true,
+      "vars": {}
+    },
+    {
+      "id": 3,
+      "type": "netio",
+      "name": "pdu2",
+      "ip": "192.168.12.120",
+      "port": 80,
+      "user": "netio",
+      "password": "netio",
+      "model": "4PZ",
+      "outputs": 4,
+      "live": true,
+      "vars": {}
+    },
+    {
+      "id": 4,
+      "type": "pharos",
+      "name": "facade",
+      "ip": "192.168.1.128",
+      "port": 80,
+      "live": true,
+      "vars": {}
+    }
+  ]
+}

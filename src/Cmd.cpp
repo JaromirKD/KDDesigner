@@ -19,6 +19,8 @@
 
 namespace {
 
+const char* cmdSource = "";   // who runs the command now (exec's source), for "mode" in the log
+
 uint32_t seconds(const String& s) { return (uint32_t)(s.toFloat() * 1000); }
 
 // Parses an optional trailing "fade <seconds>" at position i.
@@ -165,11 +167,16 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     r = String("Blackout ") + (is(1, "on") ? "on" : "off");
     return true;
   }
+  // mode <group> <state> | mode <group> next|previous|toggle|back | mode <state> (old form)
   if (is(0, "mode") && (t.size() == 2 || t.size() == 3)) {
     int g, s;
-    if (!State::findMode(t.size() == 3 ? &t[1] : nullptr, t.back(), g, s, r)) return false;
-    if (State::setMode(g, s, r)) Triggers::onModeChanged(State::groupName(g), State::current(g));
-    return true;
+    if (!State::findMode(t.size() == 3 ? &t[1] : nullptr, t.back(), g, s, r)) {
+      // A state with that name wins over the step words.
+      if (t.size() != 3 || (g = State::findGroup(t[1])) < 0) return false;
+      String err;
+      if ((s = State::stepState(g, t[2], err)) < 0) { r = err; return false; }
+    }
+    return Triggers::changeMode(g, s, r, cmdSource);
   }
   if (is(0, "label") && t.size() >= 3) {
     if (is(2, "color") && t.size() == 4) { State::setControl(t[1], "color", t[3]); r = "Label " + t[1] + " colour " + t[3]; }
@@ -273,25 +280,35 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     return true;
   }
   if (is(0, "projector") && t.size() >= 3) {
-    int pj = -1;
-    if (!is(1, "all")) {
-      pj = Projectors::find(t[1]);
-      if (pj < 0) { r = "unknown projector '" + t[1] + "'"; return false; }
-    }
     String body;
     if (t.size() == 3 && (is(2, "on") || is(2, "off"))) body = is(2, "on") ? "POWR 1" : "POWR 0";
     else if (is(2, "mute") && t.size() == 4 && (is(3, "on") || is(3, "off"))) body = is(3, "on") ? "AVMT 31" : "AVMT 30";
     else if (is(2, "input") && t.size() == 4) body = "INPT " + t[3];
     else if (is(2, "send") && t.size() >= 4) body = rest(t, 3);
     else { r = "expected: on|off, mute on|off, input <code> or send <command>"; return false; }
+    if (is(1, "all")) return Projectors::queue(-1, body, r);
+    int pj = Projectors::find(t[1]);
+    std::vector<String> group;
+    if (pj < 0 && State::groupMembers("projector", t[1], group))
+      return State::forMembers(t[1], group, [&](const String& n, String& m) {
+        int k = Projectors::find(n);
+        if (k < 0) { m = "unknown projector"; return false; }
+        return Projectors::queue(k, body, m);
+      }, r);
+    if (pj < 0) { r = "unknown projector '" + t[1] + "'"; return false; }
     return Projectors::queue(pj, body, r);
   }
   if (is(0, "pc") && t.size() == 3) {
-    int idx = -1;
-    if (!is(1, "all")) {
-      idx = Pcs::find(t[1]);
-      if (idx < 0) { r = "unknown PC '" + t[1] + "'"; return false; }
-    }
+    if (is(1, "all")) return Pcs::run(-1, t[2], r);
+    int idx = Pcs::find(t[1]);
+    std::vector<String> group;
+    if (idx < 0 && State::groupMembers("pc", t[1], group))
+      return State::forMembers(t[1], group, [&](const String& n, String& m) {
+        int k = Pcs::find(n);
+        if (k < 0) { m = "unknown PC"; return false; }
+        return Pcs::run(k, t[2], m);
+      }, r);
+    if (idx < 0) { r = "unknown PC '" + t[1] + "'"; return false; }
     return Pcs::run(idx, t[2], r);
   }
   // var <name> = <value...> | + - * / <n> (or += -= *= /=) | ++ | -- | toggle
@@ -310,7 +327,13 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     r = "expected: var <name> = <value> | + - * / <n> | ++ | -- | toggle";
     return false;
   }
-  if (is(0, "send") && is(1, "tcp") && t.size() >= 4) return Tcp::send(t[2], rest(t, 3), r);
+  if (is(0, "send") && is(1, "tcp") && t.size() >= 4) {
+    String text = rest(t, 3);
+    if (Tcp::send(t[2], text, r)) return true;
+    std::vector<String> group;
+    if (!State::groupMembers("tcp", t[2], group)) return false;   // r says: unknown TCP device
+    return State::forMembers(t[2], group, [&](const String& n, String& m) { return Tcp::send(n, text, m); }, r);
+  }
   if (is(0, "http") && t.size() >= 3) {
     String m;
     if (!httpMethod(t[1], m, r)) return false;
@@ -413,7 +436,11 @@ bool exec(const String& line, String& reply, const char* source, const Vars* var
     return true;
   }
   std::vector<String> t = tokenize(trimmed);
+  const char* was = cmdSource;
+  cmdSource = source;
   bool ok = run(t, reply, vars);
+  cmdSource = was;
+  if (ok) State::changed();   // the browser sees what the command did at once
   if (ok) LOGD(Cmd, "[%s] %s -> %s", source, trimmed.c_str(), reply.c_str());
   else LOGW(Cmd, "[%s] '%s' failed: %s", source, trimmed.c_str(), reply.c_str());
   return ok;

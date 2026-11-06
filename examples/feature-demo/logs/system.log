@@ -1,0 +1,241 @@
+2026-11-04 13:09:29 [INFO ] SYS    KD Designer mock booting
+2026-11-04 13:09:29 [INFO ] USB    USB stick mounted at /usb
+2026-11-04 13:09:29 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-04 13:09:29 [INFO ] SYS    Mode System starts in Idle
+2026-11-04 13:09:29 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-04 13:09:29 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 13:09:29 [INFO ] SYS    pc 'Media PC' (192.168.1.41) is online (6 ms)
+2026-11-04 13:09:29 [WARN ] SYS    pc 'Kiosk PC' (192.168.1.199) is OFFLINE
+2026-11-04 13:09:29 [INFO ] SYS    device 'mediaserver' (192.168.1.52) is online (5 ms)
+2026-11-04 13:09:29 [INFO ] SYS    device 'qlab' (192.168.1.51) is online (10 ms)
+2026-11-04 13:09:29 [INFO ] SYS    device 'motors' (192.168.1.70) is online (5 ms)
+2026-11-04 13:09:29 [INFO ] SYS    device 'screen1' (192.168.1.61) is online (5 ms)
+2026-11-04 13:09:29 [INFO ] SYS    device 'screen2' (192.168.1.62) is online (9 ms)
+2026-11-04 13:09:29 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-04 13:09:29 [WARN ] PJLINK PJ left: filter warning
+2026-11-04 13:09:29 [INFO ] TRIG   Trigger 55 'Projector error' fired (projector alarm)
+2026-11-04 13:09:29 [INFO ] SYS    Email 'PJ left: filter warning' sent to tech@example.com (simulated)
+2026-11-04 13:09:29 [INFO ] PJLINK PJ left (192.168.1.101) online
+2026-11-04 13:09:29 [INFO ] PJLINK PJ right (192.168.1.102) online
+2026-11-04 13:09:29 [WARN ] PJLINK PJ foyer (192.168.1.199) offline: no connection
+2026-11-04 13:09:29 [INFO ] SYS    Kiss-Box io (192.168.1.121) online
+2026-11-04 13:09:29 [INFO ] SYS    KNX gw (192.168.1.123) online
+2026-11-04 13:09:29 [INFO ] SYS    BrightSign lobby (192.168.1.125) online
+2026-11-04 13:09:29 [INFO ] SYS    DiGidot c4 (192.168.1.126) online
+2026-11-04 13:09:29 [INFO ] SYS    NETIO rack (192.168.1.127) online
+2026-11-04 13:09:29 [INFO ] SYS    Pharos lpc (192.168.1.128) online
+2026-11-04 13:09:29 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:09:29 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:09:30 [INFO ] SYS    Clock set from browser
+2026-11-04 13:09:34 [INFO ] TRIG   Trigger 13 'Start inloop' fired (delayed from trigger 1)
+2026-11-04 13:09:34 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-04 13:09:42 [INFO ] SYS    Mode System changed: Idle -> Maintenance (by web)
+2026-11-04 13:09:42 [INFO ] TRIG   Trigger 20001 'System Maintenance (enter)' fired (mode enter)
+2026-11-04 13:09:42 [INFO ] SHOW   Grand master 100%
+2026-11-04 13:09:42 [INFO ] CMD    Maintenance: work light on
+2026-11-04 13:09:42 [INFO ] TRIG   Trigger 4 'Mode changed -> label' fired (mode change)
+2026-11-04 13:09:43 [INFO ] SYS    Mode System changed: Maintenance -> Show (by web)
+2026-11-04 13:09:43 [INFO ] TRIG   Trigger 20002 'System Maintenance (leave)' fired (mode leave)
+2026-11-04 13:09:43 [INFO ] TRIG   Trigger 4 'Mode changed -> label' fired (mode change)
+2026-11-04 13:09:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:09:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:10:05 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:10:07 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:10:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:10:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:10:30 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (9 ms)
+2026-11-04 13:10:31 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:10:31 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:10:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:10:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:10:58 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:11:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:11:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:11:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:11:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:12:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:12:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:12:31 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:12:31 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:12:42 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:12:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:12:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:13:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:13:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:13:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:13:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:14:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:14:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:14:32 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:14:32 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:14:35 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:14:42 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:14:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:14:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:15:00 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:15:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:15:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:15:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:15:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:16:04 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:16:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:16:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:16:33 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:16:33 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:16:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:16:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:16:53 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:17:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:17:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:17:41 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-04 13:17:41 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 13:17:41 [INFO ] SYS    Mode System changed: Show -> Idle (by trigger 1)
+2026-11-04 13:17:41 [INFO ] TRIG   Trigger 4 'Mode changed -> label' fired (mode change from trigger 1)
+2026-11-04 13:17:41 [INFO ] WEB    Project saved to USB (78069 bytes)
+2026-11-04 13:17:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:17:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:17:46 [INFO ] TRIG   Trigger 13 'Start inloop' fired (delayed from trigger 1)
+2026-11-04 13:17:46 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-04 13:18:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:18:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:18:32 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-04 13:18:32 [INFO ] TRIG   Trigger 53 'Device offline -> email' fired (device offline)
+2026-11-04 13:18:32 [INFO ] CMD    device Wi-Fi bridge is offline
+2026-11-04 13:18:32 [INFO ] SYS    Email 'Wi-Fi bridge offline' sent to tech@example.com (simulated)
+2026-11-04 13:18:33 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:18:33 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:18:33 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:18:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:18:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:19:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:19:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:19:32 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (2 ms)
+2026-11-04 13:19:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:19:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:20:11 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:20:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:20:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:20:34 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:20:34 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:20:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:20:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:21:07 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-04 13:21:07 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 13:21:07 [INFO ] WEB    Project saved to USB (78676 bytes)
+2026-11-04 13:21:12 [INFO ] TRIG   Trigger 13 'Start inloop' fired (delayed from trigger 1)
+2026-11-04 13:21:12 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-04 13:21:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:21:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:21:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:21:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:21:58 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:22:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:22:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:22:34 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:22:34 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:22:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:22:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:23:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:23:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:23:46 [INFO ] SYS    KD Designer mock booting
+2026-11-04 13:23:46 [INFO ] USB    USB stick mounted at /usb
+2026-11-04 13:23:46 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-04 13:23:46 [INFO ] SYS    Mode System starts in Idle
+2026-11-04 13:23:46 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-04 13:23:46 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 13:23:46 [INFO ] SYS    pc 'Media PC' (192.168.1.41) is online (6 ms)
+2026-11-04 13:23:46 [WARN ] SYS    pc 'Kiosk PC' (192.168.1.199) is OFFLINE
+2026-11-04 13:23:46 [INFO ] SYS    device 'mediaserver' (192.168.1.52) is online (7 ms)
+2026-11-04 13:23:46 [INFO ] SYS    device 'qlab' (192.168.1.51) is online (12 ms)
+2026-11-04 13:23:46 [INFO ] SYS    device 'motors' (192.168.1.70) is online (2 ms)
+2026-11-04 13:23:46 [INFO ] SYS    device 'screen1' (192.168.1.61) is online (5 ms)
+2026-11-04 13:23:46 [INFO ] SYS    device 'screen2' (192.168.1.62) is online (6 ms)
+2026-11-04 13:23:46 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (12 ms)
+2026-11-04 13:23:46 [WARN ] PJLINK PJ left: filter warning
+2026-11-04 13:23:46 [INFO ] TRIG   Trigger 55 'Projector error' fired (projector alarm)
+2026-11-04 13:23:46 [INFO ] SYS    Email 'PJ left: filter warning' sent to tech@example.com (simulated)
+2026-11-04 13:23:46 [INFO ] PJLINK PJ left (192.168.1.101) online
+2026-11-04 13:23:46 [INFO ] PJLINK PJ right (192.168.1.102) online
+2026-11-04 13:23:46 [WARN ] PJLINK PJ foyer (192.168.1.199) offline: no connection
+2026-11-04 13:23:46 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:23:46 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:23:46 [INFO ] SYS    Kiss-Box io (192.168.1.121) online
+2026-11-04 13:23:46 [INFO ] SYS    KNX gw (192.168.1.123) online
+2026-11-04 13:23:46 [INFO ] SYS    BrightSign lobby (192.168.1.125) online
+2026-11-04 13:23:46 [INFO ] SYS    DiGidot c4 (192.168.1.126) online
+2026-11-04 13:23:46 [INFO ] SYS    NETIO rack (192.168.1.127) online
+2026-11-04 13:23:46 [INFO ] SYS    Pharos lpc (192.168.1.128) online
+2026-11-04 13:23:47 [INFO ] SYS    Clock set from browser
+2026-11-04 13:23:51 [INFO ] TRIG   Trigger 13 'Start inloop' fired (delayed from trigger 1)
+2026-11-04 13:23:51 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-04 13:24:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:24:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:24:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:24:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:24:47 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:24:47 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:25:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:25:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:25:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:25:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:25:55 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-04 13:25:55 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 13:25:55 [INFO ] WEB    Project saved to USB (78798 bytes)
+2026-11-04 13:26:00 [INFO ] TRIG   Trigger 13 'Start inloop' fired (delayed from trigger 1)
+2026-11-04 13:26:00 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-04 13:26:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:26:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:26:37 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:26:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:26:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:26:48 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:26:48 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:27:05 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:27:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:27:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:27:44 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:27:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:27:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:27:57 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:28:32 [INFO ] SYS    KD Designer mock booting
+2026-11-04 13:28:32 [INFO ] USB    USB stick mounted at /usb
+2026-11-04 13:28:32 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-04 13:28:32 [INFO ] SYS    Mode System starts in Idle
+2026-11-04 13:28:32 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-04 13:28:32 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 13:28:33 [INFO ] SYS    pc 'Media PC' (192.168.1.41) is online (4 ms)
+2026-11-04 13:28:33 [WARN ] SYS    pc 'Kiosk PC' (192.168.1.199) is OFFLINE
+2026-11-04 13:28:33 [INFO ] SYS    device 'mediaserver' (192.168.1.52) is online (11 ms)
+2026-11-04 13:28:33 [INFO ] SYS    device 'qlab' (192.168.1.51) is online (6 ms)
+2026-11-04 13:28:33 [INFO ] SYS    device 'motors' (192.168.1.70) is online (6 ms)
+2026-11-04 13:28:33 [INFO ] SYS    device 'screen1' (192.168.1.61) is online (1 ms)
+2026-11-04 13:28:33 [INFO ] SYS    device 'screen2' (192.168.1.62) is online (5 ms)
+2026-11-04 13:28:33 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (1 ms)
+2026-11-04 13:28:33 [WARN ] PJLINK PJ left: filter warning
+2026-11-04 13:28:33 [INFO ] TRIG   Trigger 55 'Projector error' fired (projector alarm)
+2026-11-04 13:28:33 [INFO ] SYS    Email 'PJ left: filter warning' sent to tech@example.com (simulated)
+2026-11-04 13:28:33 [INFO ] PJLINK PJ left (192.168.1.101) online
+2026-11-04 13:28:33 [INFO ] PJLINK PJ right (192.168.1.102) online
+2026-11-04 13:28:33 [WARN ] PJLINK PJ foyer (192.168.1.199) offline: no connection
+2026-11-04 13:28:33 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:28:33 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:28:33 [INFO ] SYS    Kiss-Box io (192.168.1.121) online
+2026-11-04 13:28:33 [INFO ] SYS    KNX gw (192.168.1.123) online
+2026-11-04 13:28:33 [INFO ] SYS    BrightSign lobby (192.168.1.125) online
+2026-11-04 13:28:33 [INFO ] SYS    DiGidot c4 (192.168.1.126) online
+2026-11-04 13:28:33 [INFO ] SYS    NETIO rack (192.168.1.127) online
+2026-11-04 13:28:33 [INFO ] SYS    Pharos lpc (192.168.1.128) online
+2026-11-04 13:28:33 [INFO ] SYS    Clock set from browser
+2026-11-04 13:28:34 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:28:37 [INFO ] TRIG   Trigger 13 'Start inloop' fired (delayed from trigger 1)
+2026-11-04 13:28:37 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-04 13:28:45 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:28:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:29:03 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-04 13:29:15 [INFO ] TRIG   Trigger 57 'Door opened (PLC)' fired (variable)
+2026-11-04 13:29:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-04 13:29:25 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-04 13:29:25 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 13:29:25 [INFO ] WEB    Project saved to USB (78800 bytes)
+2026-11-04 13:29:30 [INFO ] TRIG   Trigger 13 'Start inloop' fired (delayed from trigger 1)
+2026-11-04 13:29:30 [INFO ] SHOW   Started timeline 1 'Inloop'

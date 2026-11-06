@@ -26,6 +26,7 @@ const GRAMMAR = [
   ['grandmaster {pct}', 'Set the grand master'],
   ['blackout {onoff}', 'Blackout on or off'],
   ['mode {mgroup} {mstate}', 'Set the state of a mode group, e.g. mode Curtains Open'],
+  ['mode {mgroup} {mstep}', 'Step a mode group: next / previous state (wraps around), toggle between its two states, or back to the state it was in before'],
   ['mode {mode}', 'Set a mode by state name (must be unique across groups)', { hidden: true }],
   ['label {label} {text...}', 'Set the text of a panel label'],
   ['label {label} color {color}', 'Set the colour of a panel label'],
@@ -99,7 +100,8 @@ const GRAMMAR = [
   ['knx {knx} write {knxga} {knxval} {dpt}', 'KNX: write a group address with this DPT'],
   ['knx {knx} read {knxga}', 'KNX: ask for the value of a group address'],
   ['brightsign {bsign} send {text...}', 'BrightSign: send a UDP command to the presentation'],
-  ['brightsign {bsign} event {text...}', 'BrightSign (KD plugin): a Plugin Message to the presentation - use it on a transition to go to any state'],
+  ['brightsign {bsign} test {bszone} {bsstate}', 'BrightSign (KD plugin): play the file of a state in a zone, for testing (the presentation carries on after it)'],
+  ['brightsign {bsign} event {text...}','BrightSign (KD plugin): a Plugin Message to the presentation - use it on a transition to go to any state'],
   ['brightsign {bsign} var {bsvar} {text...}', 'BrightSign (KD plugin): set a user variable of the presentation'],
   ['brightsign {bsign} play {bszone} {bsfile}','BrightSign (KD plugin): play a file in a zone directly'],
   ['brightsign {bsign} stop {bszone}', 'BrightSign (KD plugin): stop the video/audio of a zone'],
@@ -156,6 +158,7 @@ const GRAMMAR = [
 const COND_GRAMMAR = [
   ['mode {mgroup} is {mstate}', 'Only when this mode group is in this state'],
   ['mode {mgroup} not {mstate}', 'Only when this mode group is not in this state'],
+  ['mode {mgroup} is {mstate} for {dur}', 'Only when this mode group has been in this state for at least this long: 90 (seconds), 30s, 10m, 2h'],
   ['mode is {mode}', 'Only when this mode is active', { hidden: true }],
   ['mode not {mode}', 'Only when this mode is not active', { hidden: true }],
   ['timeline {tl} running', 'Only while the timeline runs'],
@@ -220,7 +223,14 @@ const monitoredNames = () => [...P().pcs.filter((x) => x.monitor !== false), ...
 const DRV_PART = { '{kiss}': 'kissbox', '{knx}': 'knx', '{bsign}': 'brightsign', '{digi}': 'digidot', '{netio}': 'netio', '{pharos}': 'pharos' };
 const drvList = (type) => P().drivers.filter((d) => d.type === type);
 const drvStatusOf = (d) => S.status?.drivers?.find((x) => x.id === d?.id && x.type === d?.type);
-const ctxDrv = (type) => findRef(drvList(type), CTX[1] ?? '');
+// Device groups of one kind (network = no kind; pc, projector, tcp, or a show-device type): the group
+// name works wherever a device name of that kind goes (State::groupMembers).
+const kindGroups = (kind) => P().deviceGroups.filter((g) => (g.kind || 'network') === kind);
+const findKindGroup = (kind, tok) => kindGroups(kind).find((g) => g.name.toLowerCase() === String(tok).toLowerCase());
+const groupDesc = (g) => `group · ${g.devices.length} device${g.devices.length === 1 ? '' : 's'}`;
+const groupTip = (g, label) => `${label} group ${g.name} → ${g.devices.join(', ') || 'no devices'}`;
+// A show device named on the line, or the first one of the group named there (for its outputs, addresses…).
+const ctxDrv = (type) => findRef(drvList(type), CTX[1] ?? '') || findRef(drvList(type), findKindGroup(type, CTX[1] ?? '')?.devices[0] ?? '');
 const knxAddr = (tok) => (ctxDrv('knx')?.addresses || []).find((a) => a.ga === tok || (a.name || '').toLowerCase() === String(tok).toLowerCase());
 // Panel controls that fire Panel triggers (everything with a name except labels).
 const panelButtons = () => [...new Set(P().panel.pages.flatMap((pg) => pg.controls).filter((c) => c.name && ['button', ...PANEL_VALUE_TYPES].includes(c.type)).map((c) => c.name))];
@@ -235,6 +245,8 @@ function matchPart(part, tok) {
     case '{mode}': return !!findMode(tok);
     case '{mgroup}': return !!findGroup(tok);
     case '{mstate}': return !!findState(findGroup(CTX[1] ?? ''), tok);
+    case '{mstep}': return /^(next|previous|toggle|back)$/i.test(tok) && !findState(findGroup(CTX[1] ?? ''), tok);
+    case '{dur}': return /^\d+(\.\d+)?[smh]?$/i.test(tok);
     case '{label}': return tok.length > 0;
     case '{pctl}': return panelControls().some((n) => n.toLowerCase() === tok.toLowerCase());
     case '{flash}': return tok.length > 0;
@@ -243,13 +255,13 @@ function matchPart(part, tok) {
     case '{trig}': return findTrigs(tok).length === 1;
     case '{count}': return /^\d+$/.test(tok) && +tok > 0;
     case '{email}': return /^[^@\s]+@[^@\s]+$/.test(tok);
-    case '{device}': return [...p.devices, ...p.deviceGroups].some((d) => d.name.toLowerCase() === tok.toLowerCase());
+    case '{device}': return [...p.devices, ...kindGroups('network')].some((d) => d.name.toLowerCase() === tok.toLowerCase());
     case '{oscaddr}': return tok.startsWith('/');
     case '{hhmm}': return /^\d{1,2}:\d{2}$/.test(tok) || /^(sunrise|sunset)([+-]\d+)?$/i.test(tok);
     case '{var}': return p.variables.some((v) => v.name.toLowerCase() === tok.toLowerCase());
     case '{num}': return /^-?\d+(\.\d+)?$/.test(tok);
     case '{op}': return ['=', '==', '!=', '>', '<', '>=', '<='].includes(tok);
-    case '{tcpdev}': return p.tcp.some((d) => d.name.toLowerCase() === tok.toLowerCase());
+    case '{tcpdev}': return p.tcp.some((d) => d.name.toLowerCase() === tok.toLowerCase()) || !!findKindGroup('tcp', tok);
     case '{httpmethod}': return /^(get|post|put|delete)$/i.test(tok);
     case '{url}': return /^http:\/\/[^\s]+$/i.test(tok);
     case '{mbdev}': return p.modbus.some((d) => d.name.toLowerCase() === tok.toLowerCase());
@@ -269,9 +281,9 @@ function matchPart(part, tok) {
     case '{logcat}': return tok.toLowerCase() === 'all' || LOG_CATS.includes(tok.toUpperCase());
     case '{loglvl}': return LOG_LVLS.includes(tok.toUpperCase());
     case '{proto}': return /^(dmx|artnet|sacn)$/i.test(tok);
-    case '{pj}': return tok.toLowerCase() === 'all' || !!findRef(p.projectors, tok);
+    case '{pj}': return tok.toLowerCase() === 'all' || !!findRef(p.projectors, tok) || !!findKindGroup('projector', tok);
     case '{pjinput}': return /^\d{2}$/.test(tok);
-    case '{pc}': return tok.toLowerCase() === 'all' || !!findRef(p.pcs, tok);
+    case '{pc}': return tok.toLowerCase() === 'all' || !!findRef(p.pcs, tok) || !!findKindGroup('pc', tok);
     case '{pcaction}': return /^(wake|startup|shutdown|reboot)$/i.test(tok);
     case '{devname}': return monitoredNames().some((n) => n.toLowerCase() === tok.toLowerCase());
     case '{updown}': return /^(online|offline)$/i.test(tok);
@@ -279,12 +291,12 @@ function matchPart(part, tok) {
       const m = /^(\d+)\.(\d+)(?:-(\d+))?$/.exec(tok);
       return !!m && !!p.universes.find((u) => u.id === +m[1]) && +m[2] >= 1 && +(m[3] || m[2]) <= 512 && +(m[3] || m[2]) >= +m[2];
     }
-    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': return !!findRef(drvList(DRV_PART[part]), tok);
+    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': return !!findRef(drvList(DRV_PART[part]), tok) || !!findKindGroup(DRV_PART[part], tok);
     case '{kisspoint}': return /^[1-8]\.[1-8]$/.test(tok);
     case '{kissval}': return /^(on|off)$/i.test(tok) || (/^\d+$/.test(tok) && +tok <= 255);
     case '{slot}': return /^[1-8]$/.test(tok);
     case '{knxga}': return /^\d+\/\d+(\/\d+)?$/.test(tok) || !!knxAddr(tok);
-    case '{knxval}': case '{word}': case '{path}': case '{digiscene}': case '{bszone}': case '{bsvar}': case '{bsfile}': return tok.length > 0;
+    case '{knxval}': case '{word}': case '{path}': case '{digiscene}': case '{bszone}': case '{bsvar}': case '{bsfile}': case '{bsstate}': return tok.length > 0;
     case '{dpt}': return /^\d+(\.\d+)?$/.test(tok);
     case '{netioout}': return /^(all|\d+)$/i.test(tok) || (drvStatusOf(ctxDrv('netio'))?.points || []).some((x) => /^out\d+$/.test(x.k) && (x.n || '').toLowerCase() === tok.toLowerCase());
     case '{netioact}': return /^(on|off|toggle|restart|pulse)$/i.test(tok);
@@ -316,6 +328,7 @@ function candidates(part, partial) {
         : { insert: quote(o.name), label: o.name, desc: `${kind} #${o.id}${o.ip ? ' · ' + o.ip : ''}`, key: kind + o.id });
   };
   const names = (list, desc, k) => list.filter((n) => n.toLowerCase().includes(pl)).map((n) => ({ insert: quote(n), label: n, desc, key: k + n }));
+  const groups = (kind) => kindGroups(kind).filter((g) => g.name.toLowerCase().includes(pl)).map((g) => ({ insert: quote(g.name), label: g.name, desc: groupDesc(g), key: 'dg' + kind + g.name }));
   switch (part) {
     case '{mode}': return p.modes.flatMap((g) => g.states.map((s) => ({ g, s }))).filter(({ s }) => s.toLowerCase().includes(pl))
       .map(({ g, s }) => ({ insert: quote(s), label: s, desc: g.name, key: 'm' + g.name + s }));
@@ -327,6 +340,9 @@ function candidates(part, partial) {
       return (g?.states || []).filter((s) => s.toLowerCase().includes(pl))
         .map((s) => ({ insert: quote(s), label: s, desc: s === cur ? 'current' : g.name, key: 'ms' + s }));
     }
+    case '{mstep}': return [['next', 'the next state (after the last: the first)'], ['previous', 'the state before (before the first: the last)'], ['toggle', 'the other state (groups with 2 states)'], ['back', 'the state it was in before']]
+      .filter(([v]) => v.startsWith(pl)).map(([v, d]) => ({ insert: v, label: v, desc: d, key: 'mx' + v }));
+    case '{dur}': return presets(['30s', '5m', '10m', '1h'], '90 = seconds, 10m, 2h');
     case '{label}': return [...names(panelLabels(), 'panel label', 'lb'), ...hint('<label name>')];
     case '{pctl}': return names(panelControls(), 'panel control', 'pc').map((x) => ({ ...x, desc: panelControlType(x.label) }));
     case '{flash}': return [...[['on', 'flash'], ['off', 'stop flashing'], ['red', 'flash red'], ['orange', 'flash orange']].filter(([v]) => v.startsWith(pl))
@@ -346,8 +362,7 @@ function candidates(part, partial) {
           : { insert: quote(t.name), label: t.name, desc: `#${t.id} · ${t.type}`, key: 't' + t.id });
     }
     case '{count}': return presets(['1', '2', '5', '10'], '<count>');
-    case '{device}': return [...names(p.devices.map((d) => d.name), 'device', 'dv'),
-      ...p.deviceGroups.filter((g) => g.name.toLowerCase().includes(pl)).map((g) => ({ insert: quote(g.name), label: g.name, desc: `group · ${g.devices.length} device${g.devices.length === 1 ? '' : 's'}`, key: 'dg' + g.name }))];
+    case '{device}': return [...names(p.devices.map((d) => d.name), 'device', 'dv'), ...groups('network')];
     case '{oscaddr}': return hint('</osc/address>');
     case '{hhmm}': return presets(['sunrise', 'sunset', 'sunset-30', '08:00', '12:00', '18:00', '22:00'], '<HH:MM | sunrise±min | sunset±min>');
     case '{var}': {
@@ -357,7 +372,7 @@ function candidates(part, partial) {
     }
     case '{num}': return presets(['1', '5', '10', '0'], '<number>');
     case '{op}': return ['=', '!=', '>', '<', '>=', '<='].filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'op' + v }));
-    case '{tcpdev}': return names(p.tcp.map((d) => d.name), 'TCP device', 'td');
+    case '{tcpdev}': return [...names(p.tcp.map((d) => d.name), 'TCP device', 'td'), ...groups('tcp')];
     case '{httpmethod}': return ['get', 'post', 'put', 'delete'].filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'hm' + v }));
     case '{url}': return [...(pl ? [] : [{ insert: 'http://', label: 'http://', desc: 'start a URL', key: 'url', noSpace: true }]), ...hint('<http://host/path>')];
     case '{mbdev}': return names(p.modbus.map((d) => d.name), 'Modbus device', 'md');
@@ -376,16 +391,16 @@ function candidates(part, partial) {
     case '{logcat}': return ['all', ...LOG_CATS.map((c) => c.toLowerCase())].filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'c' + v }));
     case '{loglvl}': return LOG_LVLS.map((c) => c.toLowerCase()).filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'l' + v }));
     case '{proto}': return PROTOCOLS.filter(([v]) => v.startsWith(pl)).map(([v, n]) => ({ insert: v, label: v, desc: n, key: 'p' + v }));
-    case '{pj}': return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every projector', key: 'pjall' }] : []), ...named(p.projectors, 'projector')];
-    case '{pc}': return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every PC', key: 'pcall' }] : []), ...named(p.pcs, 'pc')];
+    case '{pj}': return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every projector', key: 'pjall' }] : []), ...named(p.projectors, 'projector'), ...groups('projector')];
+    case '{pc}': return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every PC', key: 'pcall' }] : []), ...named(p.pcs, 'pc'), ...groups('pc')];
     case '{devname}': return names(monitoredNames(), 'monitored', 'mn');
     case '{updown}': return ['online', 'offline'].filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'ud' + v }));
     case '{pcaction}': return PC_ACTIONS.filter(([v]) => v.startsWith(pl)).map(([v, d]) => ({ insert: v, label: v, desc: d, key: 'pa' + v }));
     case '{pjinput}': return [...PJ_INPUTS.filter(([v, n]) => !pl || v.startsWith(pl) || n.toLowerCase().includes(pl)).map(([v, n]) => ({ insert: v, label: v, desc: n, key: 'i' + v })), ...hint('<input code>')];
     case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': {
       const ty = DRV_PART[part];
-      return drvList(ty).filter((d) => !pl || String(d.id).startsWith(pl) || (d.name || '').toLowerCase().includes(pl))
-        .map((d) => ({ insert: quote(d.name || String(d.id)), label: d.name || String(d.id), desc: `${DRIVERS[ty].label} · ${d.ip}`, key: 'dr' + d.id }));
+      return [...drvList(ty).filter((d) => !pl || String(d.id).startsWith(pl) || (d.name || '').toLowerCase().includes(pl))
+        .map((d) => ({ insert: quote(d.name || String(d.id)), label: d.name || String(d.id), desc: `${DRIVERS[ty].label} · ${d.ip}`, key: 'dr' + d.id })), ...groups(ty)];
     }
     case '{kisspoint}': {
       const d = ctxDrv('kissbox');
@@ -416,6 +431,14 @@ function candidates(part, partial) {
     case '{bsvar}': return [...(drvStatusOf(ctxDrv('brightsign'))?.points || []).filter((x) => x.k.startsWith('var.') && (x.n || x.k).toLowerCase().includes(pl))
       .map((x) => ({ insert: quote(x.n || x.k.slice(4)), label: x.n || x.k.slice(4), desc: `user variable · now ${x.v}`, key: 'bv' + x.k })), ...hint('<user variable>')];
     case '{bsfile}': return hint('<file on the card, e.g. clip.mp4>');
+    case '{bsstate}': {
+      // The states of the zone typed before (by name or number), as the plugin read them from the presentation.
+      const st = drvStatusOf(ctxDrv('brightsign')), zt = String(CTX[3] || '').replace(/^"|"$/g, '').toLowerCase();
+      const zp = (st?.points || []).find((x) => /^z\d+$/.test(x.k) && (x.k.slice(1) === zt || (x.n || '').replace(/^Zone \d+ ?/, '').toLowerCase() === zt));
+      const zn = zp ? +zp.k.slice(1) : 0;
+      return [...(st?.states || []).filter((s) => (!zn || s.z === zn) && s.n.toLowerCase().includes(pl))
+        .map((s) => ({ insert: quote(s.n), label: s.n, desc: `zone ${s.z}${s.f ? ' · ' + s.f : ' · no media file'}`, key: `bt${s.z}|${s.n}` })), ...hint('<state>')];
+    }
     case '{digiscene}': return [...(drvStatusOf(ctxDrv('digidot'))?.scenes || []).filter((s) => s.toLowerCase().includes(pl))
       .map((s) => ({ insert: quote(s), label: s, desc: 'DiGidot scene', key: 'ds' + s })), ...hint('<scene name or #>')];
     case '{netioout}': {
@@ -752,7 +775,7 @@ function classify(line, grammar) {
 // Typing "{name" (or a name inside "{=maths"): offer the project's variables, what the
 // selected trigger provides ({message}, {value}…) and {i} in a repeat loop. Null otherwise.
 function completeVar(text) {
-  const brace = /\{([A-Za-z_]\w*)?$/.exec(text);
+  const brace = /\{([A-Za-z_][\w.]*)?$/.exec(text);
   const maths = !brace && /\{=[^}]*?([A-Za-z_]\w*)$/.exec(text);
   if (!brace && !maths) return null;
   const partial = brace ? brace[0] : maths[1], pl = (brace ? brace[1] || '' : maths[1]).toLowerCase();
@@ -764,6 +787,7 @@ function completeVar(text) {
     ...(/^\s*repeat\s+\d+\s+times\b/i.test(text) ? [['i', 'counts 1, 2, 3… in this repeat']] : []),
     ...own.map((n) => [n, `from this ${t.type} trigger`]),
     ...P().variables.map((v) => [v.name, `${v.type}${vals[v.name] != null ? ' = ' + vals[v.name] : ''}`]),
+    ...(brace ? P().modes.map((g) => [`mode.${g.name}`, `state of ${g.name}${S.status?.modes?.[g.name] ? ' = ' + S.status.modes[g.name] : ''}`]) : []),
   ];
   const seen = new Set();
   const items = list.filter(([n]) => n.toLowerCase().includes(pl) && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()))
@@ -930,13 +954,13 @@ const KEYWORD_HELP = {
   io: 'An input or output of the Portenta Machine Control (Devices → Machine Control): in0-7, out0-7, io0-11, ai0-2, ao0-3 or the name you gave it.',
 };
 const PART_CLASS = {
-  '{tl}': 'ref', '{sc}': 'ref', '{trig}': 'ref', '{mode}': 'ref', '{mgroup}': 'ref', '{mstate}': 'ref', '{device}': 'ref', '{pj}': 'ref', '{label}': 'ref', '{pctl}': 'ref', '{flash}': 'kw', '{pval}': 'num', '{logcat}': 'ref', '{proto}': 'kw',
+  '{tl}': 'ref', '{sc}': 'ref', '{trig}': 'ref', '{mode}': 'ref', '{mgroup}': 'ref', '{mstate}': 'ref', '{mstep}': 'kw', '{dur}': 'num', '{device}': 'ref', '{pj}': 'ref', '{label}': 'ref', '{pctl}': 'ref', '{flash}': 'kw', '{pval}': 'num', '{logcat}': 'ref', '{proto}': 'kw',
   '{sec}': 'num', '{pct}': 'num', '{dmx}': 'num', '{port}': 'num', '{count}': 'num', '{pjinput}': 'num',
   '{ip}': 'addr', '{chan}': 'addr', '{oscaddr}': 'addr', '{email}': 'addr', '{hhmm}': 'addr', '{days}': 'addr', '{color}': 'addr',
   '{onoff}': 'kw', '{loglvl}': 'kw', '{text...}': 'str', '{pc}': 'ref', '{pcaction}': 'kw', '{devname}': 'ref', '{updown}': 'kw',
   '{var}': 'ref', '{num}': 'num', '{op}': 'kw', '{tcpdev}': 'ref', '{httpmethod}': 'kw', '{url}': 'addr', '{mbdev}': 'ref', '{mbtable}': 'kw',
   '{calname}': 'ref', '{activity}': 'kw', '{date}': 'addr',
-  '{kiss}': 'ref', '{knx}': 'ref', '{bsign}': 'ref', '{digi}': 'ref', '{netio}': 'ref', '{pharos}': 'ref', '{digiscene}': 'ref', '{word}': 'ref', '{bszone}': 'ref', '{bsvar}': 'ref', '{bsfile}': 'str',
+  '{kiss}': 'ref', '{knx}': 'ref', '{bsign}': 'ref', '{digi}': 'ref', '{netio}': 'ref', '{pharos}': 'ref', '{digiscene}': 'ref', '{word}': 'ref', '{bszone}': 'ref', '{bsvar}': 'ref', '{bsfile}': 'str', '{bsstate}': 'ref',
   '{kisspoint}': 'addr', '{knxga}': 'addr', '{path}': 'addr', '{kissval}': 'num', '{slot}': 'num', '{dpt}': 'num', '{netioout}': 'num', '{knxval}': 'str',
   '{netioact}': 'kw', '{pharostl}': 'kw', '{pharossc}': 'kw', '{fixgrp}': 'kw', '{pharosproto}': 'kw',
   '{iopoint}': 'addr', '{ioval}': 'num',
@@ -959,14 +983,20 @@ function partHelp(part, tok, g) {
       return gr ? `Mode group ${gr.name}: ${gr.states.join(' · ')}${S.status?.modes?.[gr.name] ? `\nNow: ${S.status.modes[gr.name]}` : ''}` : `Unknown mode group '${tok}'`;
     }
     case '{mstate}': { const gr = findGroup(CTX[1] ?? ''); return findState(gr, tok) ? `State “${findState(gr, tok)}” of ${gr.name}` : `Not a state of ${gr?.name || 'this group'}`; }
+    case '{mstep}': {
+      const gr = findGroup(CTX[1] ?? ''), n = gr?.states.length || 0, w = tok.toLowerCase();
+      if (w === 'toggle' && gr && n !== 2) return `toggle only works with 2 states - ${gr.name} has ${n}: use next`;
+      return { next: 'The next state; after the last one the first again', previous: 'The state before; before the first one the last', toggle: 'Switches between the two states', back: 'Back to the state it was in before the last change' }[w] || '';
+    }
+    case '{dur}': return 'How long: 90 = seconds, 30s, 10m, 2h';
     case '{device}': {
       const d = p.devices.find((x) => x.name.toLowerCase() === tok.toLowerCase());
       if (d) return `Device ${d.name} → ${d.ip}:${d.port}${d.notes ? ' · ' + d.notes : ''}`;
-      const g = p.deviceGroups.find((x) => x.name.toLowerCase() === tok.toLowerCase());
+      const g = findKindGroup('network', tok);
       if (g) return `Device group ${g.name} → ${g.devices.map((n) => { const x = p.devices.find((y) => y.name === n); return x ? `${n} (${x.ip}:${x.port})` : `${n} (missing)`; }).join(', ') || 'no devices'}`;
       return `Unknown device or group '${tok}'`;
     }
-    case '{pj}': return tok.toLowerCase() === 'all' ? 'All projectors' : ref(p.projectors, 'Projector', (o) => ` · ${o.ip}`);
+    case '{pj}': return tok.toLowerCase() === 'all' ? 'All projectors' : findRef(p.projectors, tok) || !findKindGroup('projector', tok) ? ref(p.projectors, 'Projector', (o) => ` · ${o.ip}`) : groupTip(findKindGroup('projector', tok), 'Projector');
     case '{label}': return `Panel label “${tok}”`;
     case '{pctl}': { const ty = panelControlType(tok); return ty ? `Panel ${{ color: 'colour wheel', xy: 'XY pad' }[ty] || ty} “${tok}”` : `No panel control named '${tok}' (Panel page)`; }
     case '{var}': {
@@ -975,7 +1005,7 @@ function partHelp(part, tok, g) {
       const cur = S.status?.vars?.[v.name];
       return `Variable ${v.name} (${v.type})${cur != null ? ` = ${cur}` : ''}${v.modbus?.device ? `\nLinked to ${v.modbus.device} ${v.modbus.table} ${v.modbus.address}` : ''}`;
     }
-    case '{tcpdev}': { const d = p.tcp.find((x) => x.name.toLowerCase() === tok.toLowerCase()); const st = S.status?.io?.tcp?.find((x) => x.name === d?.name); return d ? `TCP ${d.name} → ${d.ip}:${d.port}${st ? ' · ' + st.state : ''}` : `Unknown TCP device '${tok}'`; }
+    case '{tcpdev}': { const d = p.tcp.find((x) => x.name.toLowerCase() === tok.toLowerCase()); if (!d && findKindGroup('tcp', tok)) return groupTip(findKindGroup('tcp', tok), 'TCP'); const st = S.status?.io?.tcp?.find((x) => x.name === d?.name); return d ? `TCP ${d.name} → ${d.ip}:${d.port}${st ? ' · ' + st.state : ''}` : `Unknown TCP device '${tok}'`; }
     case '{mbdev}': { const d = p.modbus.find((x) => x.name.toLowerCase() === tok.toLowerCase()); return d ? `Modbus ${d.name} → ${d.ip}:${d.port || 502} unit ${d.unit || 1}` : `Unknown Modbus device '${tok}'`; }
     case '{mbtable}': return tok === 'coil' ? 'Coil: on/off output (value 0 or 1)' : 'Holding register: 16-bit value (0-65535)';
     case '{httpmethod}': return { get: 'Read', post: 'Send/create (body)', put: 'Replace (body)', delete: 'Delete' }[tok.toLowerCase()] || '';
@@ -985,7 +1015,7 @@ function partHelp(part, tok, g) {
     case '{date}': return /^\d{4}-/.test(tok) ? `${tok} (that date only)` : `${tok} (every year)`;
     case '{devname}': { const h = hostState(tok); return `Monitored: ${tok}${h ? ` · currently ${h}` : ''}`; }
     case '{updown}': return tok === 'online' ? 'Answered the last check.' : 'Failed the configured number of checks in a row.';
-    case '{pc}': return tok.toLowerCase() === 'all' ? 'All PCs' : ref(p.pcs, 'PC', (o) => ` · ${o.ip}${o.mac ? ' · ' + o.mac : ''}`);
+    case '{pc}': return tok.toLowerCase() === 'all' ? 'All PCs' : findRef(p.pcs, tok) || !findKindGroup('pc', tok) ? ref(p.pcs, 'PC', (o) => ` · ${o.ip}${o.mac ? ' · ' + o.mac : ''}`) : groupTip(findKindGroup('pc', tok), 'PC');
     case '{pcaction}': {
       const pcHelp = {
         wake: 'Wake-on-LAN: broadcasts a magic packet so the PC powers on (needs its MAC address, WoL enabled in the BIOS/network card).',
@@ -997,6 +1027,7 @@ function partHelp(part, tok, g) {
     }
     case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': {
       const ty = DRV_PART[part], d = findRef(drvList(ty), tok);
+      if (!d && findKindGroup(ty, tok)) return groupTip(findKindGroup(ty, tok), DRIVERS[ty].label);
       if (!d) return `Unknown ${DRIVERS[ty].label} device '${tok}' (Devices page)`;
       const st = drvStatusOf(d);
       return `${DRIVERS[ty].label} ${d.name} → ${d.ip}${d.port ? ':' + d.port : ''}${st ? ` · ${!st.seen ? 'not checked yet' : st.online ? 'online' : 'offline'}` : ''}`;
@@ -1022,6 +1053,10 @@ function partHelp(part, tok, g) {
     }
     case '{ioval}': return /^\d/.test(tok) ? `${tok} V` : `Switch ${tok}`;
     case '{digiscene}': return `DiGidot scene “${tok}”${/^\d+$/.test(tok) ? ' (by position in the list)' : ''}`;
+    case '{bsstate}': {
+      const s = (drvStatusOf(ctxDrv('brightsign'))?.states || []).find((x) => x.n.toLowerCase() === tok.toLowerCase());
+      return s ? `State “${s.n}” in zone ${s.z}${s.f ? ` · plays ${s.f}` : ' · has no media file'}` : `State “${tok}” (not reported by the player yet)`;
+    }
     case '{bszone}': case '{bsvar}': {
       const zone = part === '{bszone}', t = tok.toLowerCase();
       const p = (drvStatusOf(ctxDrv('brightsign'))?.points || []).find((x) => (zone ? /^z\d+$/.test(x.k) && (x.k.slice(1) === t || (x.n || '').replace(/^Zone \d+ ?/, '').toLowerCase() === t)
@@ -1106,7 +1141,10 @@ function attachHighlight(input, grammar) {
       let last = 0, buf = '';
       for (const m of text.matchAll(/\{[^}]*\}/g)) {
         buf += text.slice(last, m.index) ? span(r.cls, text.slice(last, m.index), r.tip) : '';
-        buf += span('var', m[0], m[0].startsWith('{=') ? 'Calculated when the trigger fires.' : `Variable ${m[0]}: filled in when the trigger fires.`);
+        const mg = /^\{mode\.(.+)\}$/.exec(m[0]);
+        buf += span('var', m[0], m[0].startsWith('{=') ? 'Calculated when the trigger fires.'
+          : mg ? (findGroup(mg[1]) ? `The state of mode group ${findGroup(mg[1]).name} when the trigger fires.` : `Unknown mode group '${mg[1]}'`)
+          : `Variable ${m[0]}: filled in when the trigger fires.`);
         last = m.index + m[0].length;
       }
       html += last ? buf + (text.slice(last) ? span(r.cls, text.slice(last), r.tip) : '') : span(r.cls, text, r.tip);
@@ -1164,16 +1202,17 @@ function category(g) {
   if (/^monitor/.test(p)) return 'Devices & outputs';
   return 'System';
 }
-const DEFAULTS = { '{sec}': '2', '{pct}': '100', '{dmx}': '255', '{port}': '7000', '{count}': '3', '{ip}': '192.168.1.20', '{oscaddr}': '/cue/1/start', '{hhmm}': '08:00' };
+const DEFAULTS = { '{dur}': '10m', '{sec}': '2', '{pct}': '100', '{dmx}': '255', '{port}': '7000', '{count}': '3', '{ip}': '192.168.1.20', '{oscaddr}': '/cue/1/start', '{hhmm}': '08:00' };
 function builderField(part, val, i) {
   const p = P();
   const sel = (list) => `<select data-bi="${i}">${list.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
   // Projector/PC by name (by number when the name is ambiguous); an existing number or name selects the same one.
-  const refSel = (list, all) => {
+  const groupOpts = (kind) => kindGroups(kind).map((g) => [quote(g.name), `group ${g.name} (${g.devices.length} devices)`]);
+  const refSel = (list, all, kind) => {
     const cur = findRef(list, String(val ?? '').replace(/^"|"$/g, ''));
     const v = (o) => (o.name && !/^\d+$/.test(o.name) && list.filter((x) => (x.name || '').toLowerCase() === o.name.toLowerCase()).length === 1 ? quote(o.name) : o.id);
     if (cur) val = v(cur);
-    return sel([...(all ? [['all', all]] : []), ...list.map((x) => [v(x), `${x.name} (#${x.id})`])]);
+    return sel([...(all ? [['all', all]] : []), ...list.map((x) => [v(x), `${x.name} (#${x.id})`]), ...(kind ? groupOpts(kind) : [])]);
   };
   const num = (min, max, step = 1) => `<input type="number" data-bi="${i}" min="${min}" max="${max}" step="${step}" value="${esc(val)}" style="width:90px">`;
   switch (part) {
@@ -1186,20 +1225,20 @@ function builderField(part, val, i) {
       const gr = findGroup(String(builderGroup ?? '').replace(/^"|"$/g, '')) || p.modes[0];
       return sel((gr?.states || []).map((s) => [quote(s), s]));
     }
-    case '{device}': return sel([...p.devices.map((d) => [quote(d.name), `${d.name} (${d.ip}:${d.port})`]),
-      ...p.deviceGroups.map((g) => [quote(g.name), `group ${g.name} (${g.devices.length} devices)`])]);
-    case '{pj}': return refSel(p.projectors, 'all projectors');
+    case '{mstep}': return sel([['next', 'next'], ['previous', 'previous'], ['toggle', 'toggle (2 states)'], ['back', 'back (the state before)']]);
+    case '{device}': return sel([...p.devices.map((d) => [quote(d.name), `${d.name} (${d.ip}:${d.port})`]), ...groupOpts('network')]);
+    case '{pj}': return refSel(p.projectors, 'all projectors', 'projector');
     case '{proto}': return sel(PROTOCOLS);
     case '{onoff}': return sel([['on', 'on'], ['off', 'off']]);
     case '{logcat}': return sel([['all', 'all'], ...LOG_CATS.map((c) => [c.toLowerCase(), c])]);
     case '{loglvl}': return sel(LOG_LVLS.map((c) => [c.toLowerCase(), c]));
     case '{pjinput}': return sel(PJ_INPUTS.map(([v, n]) => [v, `${v} · ${n}`]));
-    case '{pc}': return refSel(p.pcs, 'all PCs');
+    case '{pc}': return refSel(p.pcs, 'all PCs', 'pc');
     case '{pcaction}': return sel(PC_ACTIONS.map(([v, d]) => [v, `${v} · ${d}`]));
     case '{devname}': return sel(monitoredNames().map((n) => [quote(n), n]));
     case '{var}': return sel(p.variables.map((v) => [quote(v.name), `${v.name} (${v.type})`]));
     case '{op}': return sel([['=', '= equals'], ['!=', '!= not equal'], ['>', '> greater'], ['<', '< less'], ['>=', '>= at least'], ['<=', '<= at most']]);
-    case '{tcpdev}': return sel(p.tcp.map((d) => [quote(d.name), `${d.name} (${d.ip}:${d.port})`]));
+    case '{tcpdev}': return sel([...p.tcp.map((d) => [quote(d.name), `${d.name} (${d.ip}:${d.port})`]), ...groupOpts('tcp')]);
     case '{httpmethod}': return sel([['get', 'GET'], ['post', 'POST'], ['put', 'PUT'], ['delete', 'DELETE']]);
     case '{mbdev}': return sel(p.modbus.map((d) => [quote(d.name), `${d.name} (${d.ip})`]));
     case '{mbtable}': return sel([['coil', 'coil (0/1)'], ['holding', 'holding register']]);
@@ -1208,7 +1247,7 @@ function builderField(part, val, i) {
     case '{num}': return num(-1000000, 1000000);
     case '{updown}': return sel([['online', 'online'], ['offline', 'offline']]);
     case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}':
-      return sel(drvList(DRV_PART[part]).map((d) => [quote(d.name), `${d.name} (${d.ip})`]));
+      return sel([...drvList(DRV_PART[part]).map((d) => [quote(d.name), `${d.name} (${d.ip})`]), ...groupOpts(DRV_PART[part])]);
     case '{kissval}': return sel([['on', 'on'], ['off', 'off'], ['0', '0'], ['128', '128'], ['255', '255']]);
     case '{slot}': return num(1, 8);
     case '{netioact}': return sel([['on', 'on'], ['off', 'off'], ['toggle', 'toggle'], ['restart', 'restart (short off)'], ['pulse', 'pulse (short on)']]);

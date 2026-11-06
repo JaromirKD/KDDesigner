@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <vector>
+#include "BigRam.h"
 
 // Effects: a tiny shader-like language, compiled once when the project loads and run
 // per fixture per frame. Same language, opcodes and results as data/www/fx.js (the web
@@ -15,10 +16,10 @@ struct Param {
 };
 
 struct Program {
-  std::vector<uint8_t> ops;
-  std::vector<double> args;
+  BigRam::Vec<uint8_t> ops;
+  BigRam::Vec<double> args;
   int slots = 0;
-  std::vector<Param> params;
+  BigRam::Vec<Param> params;
 };
 
 // Slots 0..7 are the inputs, 8..12 the outputs (same order as fx.js).

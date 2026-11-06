@@ -1,0 +1,2203 @@
+{
+  "name": "Story diorama - 3 languages",
+  "settings": {
+    "tzOffsetMin": 60,
+    "udpPort": 4000,
+    "sacnPriority": 100,
+    "monitor": {
+      "interval": 60,
+      "timeout": 1000,
+      "failures": 2
+    },
+    "time": {
+      "ntp": "pool.ntp.org",
+      "ntpEnabled": true,
+      "dst": "eu"
+    },
+    "location": {
+      "lat": 52.37,
+      "lon": 4.9
+    },
+    "outputs": {
+      "dmx": true,
+      "artnet": true,
+      "sacn": true,
+      "dmxFps": 40,
+      "artnetFps": 30,
+      "sacnFps": 40,
+      "artnetChangesOnly": true,
+      "sacnChangesOnly": false
+    }
+  },
+  "network": {
+    "dhcp": false,
+    "ip": "192.168.1.50",
+    "mask": "255.255.255.0",
+    "gateway": "192.168.1.1"
+  },
+  "modes": [
+    {
+      "name": "Diorama",
+      "states": [
+        "Rest",
+        "Playing",
+        "Maintenance",
+        "Closed"
+      ],
+      "startup": "Rest",
+      "stateInfo": {
+        "Rest": {
+          "color": "#3a7bd5",
+          "icon": "⏸"
+        },
+        "Playing": {
+          "color": "#2e7d32",
+          "icon": "🔊"
+        },
+        "Closed": {
+          "color": "#616161",
+          "icon": "🌙"
+        },
+        "Maintenance": {
+          "color": "#f9a825",
+          "icon": "🔧",
+          "enter": [
+            "release all fade 2",
+            "brightsign audio stop Audio",
+            "set 1.1-10 255"
+          ],
+          "leave": [
+            "clear overrides"
+          ]
+        }
+      }
+    }
+  ],
+  "universes": [
+    {
+      "id": 1,
+      "name": "DMX 1",
+      "dmxPort": 1,
+      "artnet": 0,
+      "sacn": 1,
+      "useDmx": true,
+      "useArtnet": false,
+      "useSacn": false
+    }
+  ],
+  "fixtures": [
+    {
+      "id": 1,
+      "name": "Spot ship",
+      "universe": 1,
+      "address": 1,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 2,
+      "name": "Spot warehouse",
+      "universe": 1,
+      "address": 2,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 3,
+      "name": "Spot market",
+      "universe": 1,
+      "address": 3,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 4,
+      "name": "Spot church",
+      "universe": 1,
+      "address": 4,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 5,
+      "name": "Spot windmill",
+      "universe": 1,
+      "address": 5,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 6,
+      "name": "Spot city gate",
+      "universe": 1,
+      "address": 6,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 7,
+      "name": "Spot town hall",
+      "universe": 1,
+      "address": 7,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 8,
+      "name": "General light",
+      "universe": 1,
+      "address": 10,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 9,
+      "name": "Sky 1",
+      "universe": 1,
+      "address": 20,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 10,
+      "name": "Sky 2",
+      "universe": 1,
+      "address": 23,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 11,
+      "name": "Sky 3",
+      "universe": 1,
+      "address": 26,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 12,
+      "name": "Sky 4",
+      "universe": 1,
+      "address": 29,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 13,
+      "name": "Sky 5",
+      "universe": 1,
+      "address": 32,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 14,
+      "name": "Sky 6",
+      "universe": 1,
+      "address": 35,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 15,
+      "name": "Sky 7",
+      "universe": 1,
+      "address": 38,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 16,
+      "name": "Sky 8",
+      "universe": 1,
+      "address": 41,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 17,
+      "name": "Sky 9",
+      "universe": 1,
+      "address": 44,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 18,
+      "name": "Sky 10",
+      "universe": 1,
+      "address": 47,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 19,
+      "name": "Sky 11",
+      "universe": 1,
+      "address": 50,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 20,
+      "name": "Sky 12",
+      "universe": 1,
+      "address": 53,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 21,
+      "name": "Water 1",
+      "universe": 1,
+      "address": 60,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 22,
+      "name": "Water 2",
+      "universe": 1,
+      "address": 63,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 23,
+      "name": "Water 3",
+      "universe": 1,
+      "address": 66,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 24,
+      "name": "Water 4",
+      "universe": 1,
+      "address": 69,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 25,
+      "name": "Fire glow",
+      "universe": 1,
+      "address": 80,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "Sky",
+      "fixtures": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Water",
+      "fixtures": [
+        21,
+        22,
+        23,
+        24
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Object spots",
+      "fixtures": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "name": "Diorama day",
+      "levels": [
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 153
+        },
+        {
+          "fixture": 9,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 10,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 11,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 12,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 13,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 14,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 15,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 16,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 17,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 18,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 19,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 20,
+          "ch": "r",
+          "v": 120
+        },
+        {
+          "fixture": 9,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 10,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 11,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 12,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 13,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 14,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 15,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 16,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 17,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 18,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 19,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 20,
+          "ch": "g",
+          "v": 170
+        },
+        {
+          "fixture": 9,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 10,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 11,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 12,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 13,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 14,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 15,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 16,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 17,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 18,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 19,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 20,
+          "ch": "b",
+          "v": 255
+        },
+        {
+          "fixture": 21,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 22,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 23,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 24,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 21,
+          "ch": "g",
+          "v": 60
+        },
+        {
+          "fixture": 22,
+          "ch": "g",
+          "v": 60
+        },
+        {
+          "fixture": 23,
+          "ch": "g",
+          "v": 60
+        },
+        {
+          "fixture": 24,
+          "ch": "g",
+          "v": 60
+        },
+        {
+          "fixture": 21,
+          "ch": "b",
+          "v": 120
+        },
+        {
+          "fixture": 22,
+          "ch": "b",
+          "v": 120
+        },
+        {
+          "fixture": 23,
+          "ch": "b",
+          "v": 120
+        },
+        {
+          "fixture": 24,
+          "ch": "b",
+          "v": 120
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Rest",
+      "levels": [
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 102
+        },
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 9,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 10,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 11,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 12,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 13,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 14,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 15,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 16,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 17,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 18,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 19,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 20,
+          "ch": "r",
+          "v": 60
+        },
+        {
+          "fixture": 9,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 10,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 11,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 12,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 13,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 14,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 15,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 16,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 17,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 18,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 19,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 20,
+          "ch": "g",
+          "v": 90
+        },
+        {
+          "fixture": 9,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 10,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 11,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 12,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 13,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 14,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 15,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 16,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 17,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 18,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 19,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 20,
+          "ch": "b",
+          "v": 160
+        },
+        {
+          "fixture": 21,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 22,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 23,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 24,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 21,
+          "ch": "g",
+          "v": 30
+        },
+        {
+          "fixture": 22,
+          "ch": "g",
+          "v": 30
+        },
+        {
+          "fixture": 23,
+          "ch": "g",
+          "v": 30
+        },
+        {
+          "fixture": 24,
+          "ch": "g",
+          "v": 30
+        },
+        {
+          "fixture": 21,
+          "ch": "b",
+          "v": 70
+        },
+        {
+          "fixture": 22,
+          "ch": "b",
+          "v": 70
+        },
+        {
+          "fixture": 23,
+          "ch": "b",
+          "v": 70
+        },
+        {
+          "fixture": 24,
+          "ch": "b",
+          "v": 70
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Night",
+      "levels": [
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 20
+        },
+        {
+          "fixture": 21,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 22,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 23,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 24,
+          "ch": "r",
+          "v": 0
+        },
+        {
+          "fixture": 21,
+          "ch": "g",
+          "v": 10
+        },
+        {
+          "fixture": 22,
+          "ch": "g",
+          "v": 10
+        },
+        {
+          "fixture": 23,
+          "ch": "g",
+          "v": 10
+        },
+        {
+          "fixture": 24,
+          "ch": "g",
+          "v": 10
+        },
+        {
+          "fixture": 21,
+          "ch": "b",
+          "v": 30
+        },
+        {
+          "fixture": 22,
+          "ch": "b",
+          "v": 30
+        },
+        {
+          "fixture": 23,
+          "ch": "b",
+          "v": 30
+        },
+        {
+          "fixture": 24,
+          "ch": "b",
+          "v": 30
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Highlight ship",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Highlight warehouse",
+      "levels": [
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Highlight market",
+      "levels": [
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Highlight church",
+      "levels": [
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Highlight windmill",
+      "levels": [
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Highlight city gate",
+      "levels": [
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Highlight town hall",
+      "levels": [
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    }
+  ],
+  "timelines": [
+    {
+      "id": 1,
+      "loop": false,
+      "priority": 0,
+      "name": "Story NL",
+      "length": 250000,
+      "group": "A",
+      "tracks": [
+        {
+          "name": "Base",
+          "fixtures": [],
+          "groups": []
+        },
+        {
+          "name": "Sky",
+          "fixtures": [],
+          "groups": [
+            1
+          ]
+        },
+        {
+          "name": "Water",
+          "fixtures": [],
+          "groups": [
+            2
+          ]
+        },
+        {
+          "name": "Spots",
+          "fixtures": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "groups": []
+        },
+        {
+          "name": "Fire",
+          "fixtures": [
+            25
+          ],
+          "groups": []
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 3000,
+          "scene": 1
+        },
+        {
+          "t": 0,
+          "track": 2,
+          "fade": 3000,
+          "effect": 1,
+          "params": {},
+          "dim": 100
+        },
+        {
+          "t": 20000,
+          "track": 3,
+          "fade": 1500,
+          "len": 25000,
+          "out": 1500,
+          "scene": 4
+        },
+        {
+          "t": 45000,
+          "track": 3,
+          "fade": 1500,
+          "len": 25000,
+          "out": 1500,
+          "scene": 5
+        },
+        {
+          "t": 70000,
+          "track": 3,
+          "fade": 1500,
+          "len": 25000,
+          "out": 1500,
+          "scene": 6
+        },
+        {
+          "t": 95000,
+          "track": 3,
+          "fade": 1500,
+          "len": 25000,
+          "out": 1500,
+          "scene": 7
+        },
+        {
+          "t": 120000,
+          "track": 1,
+          "fade": 10000,
+          "len": 50000,
+          "out": 5000,
+          "effect": 2,
+          "params": {
+            "angle": 90,
+            "c1": "#ff7020",
+            "c2": "#301060"
+          },
+          "dim": 100
+        },
+        {
+          "t": 140000,
+          "track": 4,
+          "fade": 2000,
+          "len": 30000,
+          "out": 8000,
+          "effect": 4,
+          "params": {
+            "speed": 4
+          },
+          "dim": 100
+        },
+        {
+          "t": 170000,
+          "fade": 5000,
+          "scene": 3
+        },
+        {
+          "t": 170000,
+          "track": 1,
+          "fade": 5000,
+          "len": 20000,
+          "out": 8000,
+          "effect": 3,
+          "params": {
+            "speed": 0.3,
+            "amount": 0.5
+          },
+          "dim": 100
+        },
+        {
+          "t": 190000,
+          "track": 3,
+          "fade": 1500,
+          "len": 15000,
+          "out": 1500,
+          "scene": 8
+        },
+        {
+          "t": 190000,
+          "fade": 10000,
+          "scene": 1,
+          "path": "braked"
+        },
+        {
+          "t": 205000,
+          "track": 3,
+          "fade": 1500,
+          "len": 15000,
+          "out": 1500,
+          "scene": 9
+        },
+        {
+          "t": 220000,
+          "track": 3,
+          "fade": 1500,
+          "len": 20000,
+          "out": 1500,
+          "scene": 10
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "loop": false,
+      "priority": 0,
+      "name": "Story EN",
+      "length": 230000,
+      "group": "A",
+      "tracks": [
+        {
+          "name": "Base",
+          "fixtures": [],
+          "groups": []
+        },
+        {
+          "name": "Sky",
+          "fixtures": [],
+          "groups": [
+            1
+          ]
+        },
+        {
+          "name": "Water",
+          "fixtures": [],
+          "groups": [
+            2
+          ]
+        },
+        {
+          "name": "Spots",
+          "fixtures": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "groups": []
+        },
+        {
+          "name": "Fire",
+          "fixtures": [
+            25
+          ],
+          "groups": []
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 3000,
+          "scene": 1
+        },
+        {
+          "t": 0,
+          "track": 2,
+          "fade": 3000,
+          "effect": 1,
+          "params": {},
+          "dim": 100
+        },
+        {
+          "t": 18000,
+          "track": 3,
+          "fade": 1500,
+          "len": 23000,
+          "out": 1500,
+          "scene": 4
+        },
+        {
+          "t": 41000,
+          "track": 3,
+          "fade": 1500,
+          "len": 23000,
+          "out": 1500,
+          "scene": 5
+        },
+        {
+          "t": 64000,
+          "track": 3,
+          "fade": 1500,
+          "len": 23000,
+          "out": 1500,
+          "scene": 6
+        },
+        {
+          "t": 87000,
+          "track": 3,
+          "fade": 1500,
+          "len": 23000,
+          "out": 1500,
+          "scene": 7
+        },
+        {
+          "t": 110000,
+          "track": 1,
+          "fade": 10000,
+          "len": 46000,
+          "out": 5000,
+          "effect": 2,
+          "params": {
+            "angle": 90,
+            "c1": "#ff7020",
+            "c2": "#301060"
+          },
+          "dim": 100
+        },
+        {
+          "t": 129000,
+          "track": 4,
+          "fade": 2000,
+          "len": 28000,
+          "out": 8000,
+          "effect": 4,
+          "params": {
+            "speed": 4
+          },
+          "dim": 100
+        },
+        {
+          "t": 156000,
+          "fade": 5000,
+          "scene": 3
+        },
+        {
+          "t": 156000,
+          "track": 1,
+          "fade": 5000,
+          "len": 18000,
+          "out": 8000,
+          "effect": 3,
+          "params": {
+            "speed": 0.3,
+            "amount": 0.5
+          },
+          "dim": 100
+        },
+        {
+          "t": 175000,
+          "track": 3,
+          "fade": 1500,
+          "len": 14000,
+          "out": 1500,
+          "scene": 8
+        },
+        {
+          "t": 175000,
+          "fade": 10000,
+          "scene": 1,
+          "path": "braked"
+        },
+        {
+          "t": 189000,
+          "track": 3,
+          "fade": 1500,
+          "len": 13000,
+          "out": 1500,
+          "scene": 9
+        },
+        {
+          "t": 202000,
+          "track": 3,
+          "fade": 1500,
+          "len": 19000,
+          "out": 1500,
+          "scene": 10
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "loop": false,
+      "priority": 0,
+      "name": "Story DE",
+      "length": 280000,
+      "group": "A",
+      "tracks": [
+        {
+          "name": "Base",
+          "fixtures": [],
+          "groups": []
+        },
+        {
+          "name": "Sky",
+          "fixtures": [],
+          "groups": [
+            1
+          ]
+        },
+        {
+          "name": "Water",
+          "fixtures": [],
+          "groups": [
+            2
+          ]
+        },
+        {
+          "name": "Spots",
+          "fixtures": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "groups": []
+        },
+        {
+          "name": "Fire",
+          "fixtures": [
+            25
+          ],
+          "groups": []
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 3000,
+          "scene": 1
+        },
+        {
+          "t": 0,
+          "track": 2,
+          "fade": 3000,
+          "effect": 1,
+          "params": {},
+          "dim": 100
+        },
+        {
+          "t": 22000,
+          "track": 3,
+          "fade": 1500,
+          "len": 28000,
+          "out": 1500,
+          "scene": 4
+        },
+        {
+          "t": 50000,
+          "track": 3,
+          "fade": 1500,
+          "len": 28000,
+          "out": 1500,
+          "scene": 5
+        },
+        {
+          "t": 78000,
+          "track": 3,
+          "fade": 1500,
+          "len": 28000,
+          "out": 1500,
+          "scene": 6
+        },
+        {
+          "t": 106000,
+          "track": 3,
+          "fade": 1500,
+          "len": 28000,
+          "out": 1500,
+          "scene": 7
+        },
+        {
+          "t": 134000,
+          "track": 1,
+          "fade": 10000,
+          "len": 56000,
+          "out": 5000,
+          "effect": 2,
+          "params": {
+            "angle": 90,
+            "c1": "#ff7020",
+            "c2": "#301060"
+          },
+          "dim": 100
+        },
+        {
+          "t": 157000,
+          "track": 4,
+          "fade": 2000,
+          "len": 34000,
+          "out": 8000,
+          "effect": 4,
+          "params": {
+            "speed": 4
+          },
+          "dim": 100
+        },
+        {
+          "t": 190000,
+          "fade": 5000,
+          "scene": 3
+        },
+        {
+          "t": 190000,
+          "track": 1,
+          "fade": 5000,
+          "len": 22000,
+          "out": 8000,
+          "effect": 3,
+          "params": {
+            "speed": 0.3,
+            "amount": 0.5
+          },
+          "dim": 100
+        },
+        {
+          "t": 213000,
+          "track": 3,
+          "fade": 1500,
+          "len": 17000,
+          "out": 1500,
+          "scene": 8
+        },
+        {
+          "t": 213000,
+          "fade": 10000,
+          "scene": 1,
+          "path": "braked"
+        },
+        {
+          "t": 230000,
+          "track": 3,
+          "fade": 1500,
+          "len": 16000,
+          "out": 1500,
+          "scene": 9
+        },
+        {
+          "t": 246000,
+          "track": 3,
+          "fade": 1500,
+          "len": 23000,
+          "out": 1500,
+          "scene": 10
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "loop": true,
+      "priority": 0,
+      "name": "Rest",
+      "length": 40000,
+      "group": "A",
+      "tracks": [
+        {
+          "name": "Base",
+          "fixtures": [],
+          "groups": []
+        },
+        {
+          "name": "Sky",
+          "fixtures": [],
+          "groups": [
+            1
+          ]
+        },
+        {
+          "name": "Water",
+          "fixtures": [],
+          "groups": [
+            2
+          ]
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 5000,
+          "scene": 2
+        },
+        {
+          "t": 0,
+          "track": 1,
+          "fade": 5000,
+          "effect": 5,
+          "params": {
+            "speed": 0.04,
+            "color": "#6080c0",
+            "low": 0.6
+          },
+          "dim": 80
+        },
+        {
+          "t": 0,
+          "track": 2,
+          "fade": 5000,
+          "effect": 1,
+          "params": {
+            "speed": 0.1
+          },
+          "dim": 60
+        }
+      ]
+    }
+  ],
+  "devices": [],
+  "deviceGroups": [],
+  "pcs": [],
+  "email": {
+    "server": "192.168.1.5",
+    "port": 25,
+    "user": "",
+    "password": "",
+    "from": "av@museum.example"
+  },
+  "projectors": [],
+  "panel": {
+    "theme": {},
+    "panels": [],
+    "pages": []
+  },
+  "triggers": [
+    {
+      "id": 10001,
+      "name": "== START",
+      "type": "comment",
+      "color": "red",
+      "actions": [],
+      "conditions": [],
+      "notes": "Needs the Machine Control build: three language buttons on in0-in2 with their LEDs on out0-out2, a staff key switch on in3."
+    },
+    {
+      "id": 1,
+      "name": "Startup",
+      "type": "startup",
+      "color": "red",
+      "actions": [
+        "fire trigger \"Back to rest\" after 3"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 2,
+      "name": "Back to rest",
+      "type": "manual",
+      "color": "red",
+      "actions": [
+        "mode Diorama Rest",
+        "release all fade 5",
+        "start timeline Rest",
+        "brightsign audio stop Audio",
+        "io out0 on",
+        "io out1 on",
+        "io out2 on"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10002,
+      "name": "== LANGUAGES",
+      "type": "comment",
+      "color": "purple",
+      "actions": [],
+      "conditions": [],
+      "notes": "One timeline per language: same light cues, timed to its own narration. Change the story in tools/make-examples.js and all three follow."
+    },
+    {
+      "id": 3,
+      "name": "Button Dutch (in0)",
+      "type": "input",
+      "io": "in0",
+      "edge": "rising",
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Story NL\""
+      ],
+      "conditions": [],
+      "cooldown": 2,
+      "onlyIn": {
+        "group": "Diorama",
+        "states": [
+          "Rest"
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "name": "Story NL",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "mode Diorama Playing",
+        "start timeline \"Story NL\"",
+        "brightsign audio play Audio story_nl.mp3",
+        "io all off",
+        "io out0 on",
+        "var plays_nl ++"
+      ],
+      "conditions": [
+        "mode Diorama is Rest"
+      ],
+      "whileRunning": "ignore"
+    },
+    {
+      "id": 5,
+      "name": "Story NL finished",
+      "type": "timeline_end",
+      "timeline": 1,
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Back to rest\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 6,
+      "name": "Button English (in1)",
+      "type": "input",
+      "io": "in1",
+      "edge": "rising",
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Story EN\""
+      ],
+      "conditions": [],
+      "cooldown": 2,
+      "onlyIn": {
+        "group": "Diorama",
+        "states": [
+          "Rest"
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "name": "Story EN",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "mode Diorama Playing",
+        "start timeline \"Story EN\"",
+        "brightsign audio play Audio story_en.mp3",
+        "io all off",
+        "io out1 on",
+        "var plays_en ++"
+      ],
+      "conditions": [
+        "mode Diorama is Rest"
+      ],
+      "whileRunning": "ignore"
+    },
+    {
+      "id": 8,
+      "name": "Story EN finished",
+      "type": "timeline_end",
+      "timeline": 2,
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Back to rest\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 9,
+      "name": "Button German (in2)",
+      "type": "input",
+      "io": "in2",
+      "edge": "rising",
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Story DE\""
+      ],
+      "conditions": [],
+      "cooldown": 2,
+      "onlyIn": {
+        "group": "Diorama",
+        "states": [
+          "Rest"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "name": "Story DE",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "mode Diorama Playing",
+        "start timeline \"Story DE\"",
+        "brightsign audio play Audio story_de.mp3",
+        "io all off",
+        "io out2 on",
+        "var plays_de ++"
+      ],
+      "conditions": [
+        "mode Diorama is Rest"
+      ],
+      "whileRunning": "ignore"
+    },
+    {
+      "id": 11,
+      "name": "Story DE finished",
+      "type": "timeline_end",
+      "timeline": 3,
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Back to rest\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 12,
+      "name": "Invite: blink the buttons",
+      "type": "interval",
+      "seconds": 30,
+      "color": "purple",
+      "actions": [
+        "repeat 3 times every 0.4 io out{=i-1} off",
+        "sleep 1",
+        "io out0 on",
+        "io out1 on",
+        "io out2 on"
+      ],
+      "conditions": [
+        "mode Diorama is Rest",
+        "time between 10:00 17:00"
+      ]
+    },
+    {
+      "id": 10003,
+      "name": "== STAFF",
+      "type": "comment",
+      "color": "cyan",
+      "actions": [],
+      "conditions": [],
+      "notes": "Key switch on in3: maintenance light on all objects (aiming the spots, cleaning the glass)."
+    },
+    {
+      "id": 13,
+      "name": "Key switch on",
+      "type": "input",
+      "io": "in3",
+      "edge": "rising",
+      "color": "cyan",
+      "actions": [
+        "mode Diorama Maintenance"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 14,
+      "name": "Key switch off",
+      "type": "input",
+      "io": "in3",
+      "edge": "falling",
+      "color": "cyan",
+      "actions": [
+        "fire trigger \"Back to rest\""
+      ],
+      "conditions": [
+        "mode Diorama is Maintenance"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "Closing 17:00",
+      "type": "time",
+      "at": "17:00:00",
+      "color": "cyan",
+      "actions": [
+        "mode Diorama Closed",
+        "release all fade 10",
+        "brightsign audio stop Audio",
+        "io all off"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 16,
+      "name": "Opening 10:00",
+      "type": "time",
+      "at": "10:00:00",
+      "color": "cyan",
+      "actions": [
+        "fire trigger \"Back to rest\""
+      ],
+      "conditions": [
+        "calendar Closed inactive"
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "plays_nl",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    },
+    {
+      "name": "plays_en",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    },
+    {
+      "name": "plays_de",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    }
+  ],
+  "calendar": [
+    {
+      "name": "Closed",
+      "from": "01-01",
+      "to": "01-01"
+    },
+    {
+      "name": "Closed",
+      "from": "12-25",
+      "to": "12-25"
+    }
+  ],
+  "tcp": [],
+  "modbus": [],
+  "maps": [
+    {
+      "id": 1,
+      "name": "Diorama",
+      "aspect": 2,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [
+        {
+          "fixture": 1,
+          "x": 0.15,
+          "y": 0.7
+        },
+        {
+          "fixture": 2,
+          "x": 0.3,
+          "y": 0.55
+        },
+        {
+          "fixture": 3,
+          "x": 0.45,
+          "y": 0.6
+        },
+        {
+          "fixture": 4,
+          "x": 0.55,
+          "y": 0.35
+        },
+        {
+          "fixture": 5,
+          "x": 0.8,
+          "y": 0.3
+        },
+        {
+          "fixture": 6,
+          "x": 0.9,
+          "y": 0.6
+        },
+        {
+          "fixture": 7,
+          "x": 0.65,
+          "y": 0.55
+        },
+        {
+          "fixture": 9,
+          "x": 0.05,
+          "y": 0.08
+        },
+        {
+          "fixture": 10,
+          "x": 0.1318,
+          "y": 0.08
+        },
+        {
+          "fixture": 11,
+          "x": 0.2136,
+          "y": 0.08
+        },
+        {
+          "fixture": 12,
+          "x": 0.2955,
+          "y": 0.08
+        },
+        {
+          "fixture": 13,
+          "x": 0.3773,
+          "y": 0.08
+        },
+        {
+          "fixture": 14,
+          "x": 0.4591,
+          "y": 0.08
+        },
+        {
+          "fixture": 15,
+          "x": 0.5409,
+          "y": 0.08
+        },
+        {
+          "fixture": 16,
+          "x": 0.6227,
+          "y": 0.08
+        },
+        {
+          "fixture": 17,
+          "x": 0.7045,
+          "y": 0.08
+        },
+        {
+          "fixture": 18,
+          "x": 0.7864,
+          "y": 0.08
+        },
+        {
+          "fixture": 19,
+          "x": 0.8682,
+          "y": 0.08
+        },
+        {
+          "fixture": 20,
+          "x": 0.95,
+          "y": 0.08
+        },
+        {
+          "fixture": 21,
+          "x": 0.05,
+          "y": 0.9
+        },
+        {
+          "fixture": 22,
+          "x": 0.1333,
+          "y": 0.9
+        },
+        {
+          "fixture": 23,
+          "x": 0.2167,
+          "y": 0.9
+        },
+        {
+          "fixture": 24,
+          "x": 0.3,
+          "y": 0.9
+        },
+        {
+          "fixture": 25,
+          "x": 0.32,
+          "y": 0.45
+        },
+        {
+          "fixture": 8,
+          "x": 0.5,
+          "y": 0.95
+        }
+      ]
+    }
+  ],
+  "effects": [
+    {
+      "id": 1,
+      "name": "Water shimmer",
+      "code": "// Light on water: slow waves with sparkles\nparam speed = 0.2 [0, 1]       // waves per second\nparam color = #1060a0          // colour of the water\nk = 0.6 + 0.4 * sin((u * 3 + t * speed) * tau)\nr, g, b = color\ndim = k * (0.85 + 0.15 * noise(t * 4 + i * 7))"
+    },
+    {
+      "id": 2,
+      "name": "XY gradient",
+      "code": "// Two colours blended across the map at an angle, optionally moving\nparam angle = 0 [0, 360]       // direction of the blend in degrees: 0 = left to right, 90 = top to bottom\nparam speed = 0 [-1, 1]        // how fast the colours move (0 = still)\nparam c1 = #ff2d92             // colour at the start\nparam c2 = #0a84ff             // colour at the end\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a) + 0.5\nk = tri((p + t * speed) / 2)\nr = mix(c1.r, c2.r, k)\ng = mix(c1.g, c2.g, k)\nb = mix(c1.b, c2.b, k)"
+    },
+    {
+      "id": 3,
+      "name": "Twinkle",
+      "code": "// Every fixture slowly fades in and out on its own (starry sky)\nparam speed = 0.3 [0.05, 2]    // how fast the stars fade in and out\nparam amount = 0.45 [0, 1]     // how many stars are lit at a time\nparam color = #ffffff          // colour of the stars\nparam base = #000814           // background colour\nk = smoothstep(1 - amount, 1, noise(t * speed + i * 7.31))\nr = mix(base.r, color.r, k)\ng = mix(base.g, color.g, k)\nb = mix(base.b, color.b, k)"
+    },
+    {
+      "id": 4,
+      "name": "Fire",
+      "code": "// Flickering flame, every fixture its own\nparam speed = 3 [0.5, 10]      // how fast the flames flicker\nf = noise(t * speed + i * 17.3) * 0.7 + noise(t * speed * 2.7 + i * 5.1) * 0.3\nr = 1\ng = 0.25 + f * 0.35\nb = 0\ndim = 0.35 + f * 0.65"
+    },
+    {
+      "id": 5,
+      "name": "Breathe",
+      "code": "// Slow fade up and down\nparam speed = 0.25 [0.02, 2]   // breaths per second\nparam low = 0.1 [0, 1]         // lowest level (0 = all the way off)\nparam color = #ffb347          // colour\nr, g, b = color\ndim = mix(low, 1, 0.5 - 0.5 * cos(t * speed * tau))"
+    }
+  ],
+  "triggerColorNames": {
+    "red": "Start",
+    "purple": "Languages",
+    "cyan": "Staff"
+  },
+  "fixtureTypes": [],
+  "drivers": [
+    {
+      "id": 1,
+      "type": "brightsign",
+      "name": "audio",
+      "ip": "192.168.1.125",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": true,
+      "pluginPort": 5010,
+      "vars": {},
+      "commands": []
+    }
+  ],
+  "machineControl": {
+    "in0": {
+      "name": "Button Dutch"
+    },
+    "in1": {
+      "name": "Button English"
+    },
+    "in2": {
+      "name": "Button German"
+    },
+    "in3": {
+      "name": "Staff key switch"
+    },
+    "out0": {
+      "name": "LED Dutch"
+    },
+    "out1": {
+      "name": "LED English"
+    },
+    "out2": {
+      "name": "LED German"
+    }
+  }
+}

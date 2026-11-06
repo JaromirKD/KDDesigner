@@ -1,11 +1,73 @@
 #include "Net.h"
 #include <EthernetUdp.h>
+#include <events/mbed_shared_queues.h>
+#include "stm32xx_emac.h"
 #include "Config.h"
 #include "Log.h"
 
 namespace {
 const uint16_t kArtPort = 6454;
 const uint16_t kSacnPort = 5568;
+
+// ---- Link and address ----------------------------------------------------------------
+// Arduino's Ethernet.linkStatus() only says whether the interface has an address, so "no
+// DHCP answer" looked like "cable not connected". The cable link is read from the PHY chip
+// (LAN8742, address 0) instead, on Mbed's shared event queue: the Ethernet driver polls the
+// chip from that thread too, so the two never talk to it at the same time.
+volatile int8_t cable = -1;   // -1 not read yet, 0 no link, 1 link
+void readPhy() {
+  ETH_HandleTypeDef* h = &STM32_EMAC::get_instance().EthHandle;
+  uint32_t v = 0;
+  HAL_ETH_ReadPHYRegister(h, 0, 1, &v);   // the link bit latches low: the first read clears it
+  if (HAL_ETH_ReadPHYRegister(h, 0, 1, &v) == HAL_OK && v != 0xffff) cable = (v & 4) ? 1 : 0;
+}
+void askPhy() { mbed::mbed_event_queue()->call(readPhy); }
+
+// The same interface Arduino's Ethernet object uses (the core makes it this way).
+EthernetInterface* eth() { return static_cast<EthernetInterface*>(EthInterface::get_default_instance()); }
+bool hasAddress() { return eth()->get_connection_status() == NSAPI_STATUS_GLOBAL_UP; }
+SocketAddress sockAddr(IPAddress a) {
+  uint8_t b[4] = {a[0], a[1], a[2], a[3]};
+  return SocketAddress(b, NSAPI_IPv4);
+}
+
+NetConfig want;               // from the project
+bool onFallback = false;      // DHCP wanted but nobody answered: on KD_FALLBACK_IP
+bool dhcpTrying = false;      // a background DHCP try is running (no address meanwhile)
+uint32_t tryStart = 0, nextTry = 0, fallbackSince = 0, notUpSince = 0, lastPhy = 0;
+int8_t lastCable = -1;
+IPAddress lastIp;
+
+IPAddress fixedIp() { return want.dhcp ? IPAddress(KD_FALLBACK_IP) : want.ip; }
+IPAddress fixedMask() { return want.dhcp ? IPAddress(KD_FALLBACK_MASK) : want.mask; }
+IPAddress fixedGw() { return want.dhcp ? IPAddress(KD_FALLBACK_GW) : want.gateway; }
+
+// Fixed (or fallback) address without waiting. Disconnect first: a connect() while the
+// DHCP one is still running is ignored, which is why the fallback never took before.
+void useFixed() {
+  EthernetInterface* e = eth();
+  e->disconnect();
+  e->set_dhcp(false);
+  e->set_network(sockAddr(fixedIp()), sockAddr(fixedMask()), sockAddr(fixedGw()));
+  e->set_blocking(false);
+  e->connect();
+}
+
+// Asks for DHCP again in the background; maintain() goes back to the fallback after 10 s.
+// The interface has no address meanwhile, so this is only done while on the fallback.
+void tryDhcp(uint32_t now) {
+  EthernetInterface* e = eth();
+  e->disconnect();
+  e->set_dhcp(true);
+  e->set_blocking(false);
+  e->connect();
+  dhcpTrying = true;
+  tryStart = now;
+}
+
+// Retry every minute for the first 10 minutes (a router that boots slower than the
+// controller after a power cut), then every 10 minutes.
+void scheduleTry(uint32_t now) { nextTry = now + (now - fallbackSince < 600000 ? 60000 : 600000); }
 
 // beginMulticast is protected in MbedUDP; the sACN socket joins a group for DMX input.
 struct McastUDP : public EthernetUDP {
@@ -89,19 +151,32 @@ namespace Net {
 Counters counters = {};
 
 void begin(const NetConfig& cfg) {
+  want = cfg;
   int ok = 0;
   if (cfg.dhcp) {
     LOGI(Net, "Requesting DHCP lease...");
     ok = Ethernet.begin(nullptr, 10000);
-    if (!ok) LOGW(Net, "DHCP failed, using fallback address");
   }
+  // The PHY is only powered once begin() ran; give the event queue a moment to read it.
+  askPhy();
+  for (int i = 0; i < 20 && cable < 0; i++) delay(5);
+  IPAddress fip = fixedIp();
   if (!ok) {
-    IPAddress ip = cfg.dhcp ? IPAddress(KD_FALLBACK_IP) : cfg.ip;
-    IPAddress mask = cfg.dhcp ? IPAddress(KD_FALLBACK_MASK) : cfg.mask;
-    IPAddress gw = cfg.dhcp ? IPAddress(KD_FALLBACK_GW) : cfg.gateway;
-    Ethernet.begin(nullptr, ip, gw, gw, mask);
+    Ethernet.disconnect();
+    // A short wait: with no cable the address comes up by itself once the link does.
+    Ethernet.begin(nullptr, fip, fixedGw(), fixedGw(), fixedMask(), 3000);
   }
-  if (Ethernet.linkStatus() == LinkOFF) LOGW(Net, "Ethernet cable not connected");
+  if (cable == 0)
+    LOGW(Net, "No Ethernet link: check the cable, the switch port and its link light. Address %s once the link is there%s",
+         fip.toString().c_str(), cfg.dhcp ? " (DHCP is asked again first)" : "");
+  else if (cfg.dhcp && !ok)
+    LOGW(Net, "Cable OK, but no DHCP answer (is the router / DHCP server on?): using the fallback address %s for now. DHCP is asked again every minute",
+         fip.toString().c_str());
+  onFallback = cfg.dhcp && !ok;
+  fallbackSince = millis();
+  scheduleTry(fallbackSince);
+  lastCable = cable;
+  lastIp = Ethernet.localIP();
 
   Ethernet.macAddress(mac);
   // Stable sACN CID derived from the MAC address (RFC 4122 v4 layout).
@@ -115,6 +190,54 @@ void begin(const NetConfig& cfg) {
   IPAddress ip = Ethernet.localIP();
   LOGI(Net, "IP %d.%d.%d.%d  MAC %02X:%02X:%02X:%02X:%02X:%02X", ip[0], ip[1], ip[2], ip[3], mac[0],
        mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
+void maintain(uint32_t now) {
+  if (!isUp || now - lastPhy < 1000) return;
+  lastPhy = now;
+  askPhy();   // read now, used next second
+  int8_t c = cable;
+  if (c != lastCable && lastCable >= 0) {
+    if (c) LOGI(Net, "Ethernet cable connected");
+    else LOGW(Net, "Ethernet cable disconnected (or the switch went off)");
+    if (c && onFallback && !dhcpTrying) nextTry = now;   // a DHCP server may be there now
+  }
+  lastCable = c;
+
+  bool upNow = hasAddress();
+  if (dhcpTrying) {
+    if (upNow) {
+      dhcpTrying = onFallback = false;
+      LOGI(Net, "DHCP answered");
+    } else if (now - tryStart > 10000) {
+      dhcpTrying = false;
+      onFallback = true;
+      useFixed();
+      scheduleTry(now);
+    }
+  } else if (onFallback && c == 1 && (int32_t)(now - nextTry) >= 0) {
+    tryDhcp(now);
+  } else if (c == 1 && !upNow) {
+    // Cable in but no address for 15 s (a lost DHCP lease, or the stack didn't come back
+    // after the link returned): DHCP again (falls back after 10 s) or the fixed address.
+    if (!notUpSince) notUpSince = now;
+    else if (now - notUpSince > 15000) {
+      notUpSince = 0;
+      if (want.dhcp) {
+        LOGW(Net, "No network address: asking DHCP again");
+        fallbackSince = now;
+        tryDhcp(now);
+      } else useFixed();
+    }
+  }
+  if (upNow || c != 1) notUpSince = 0;
+
+  IPAddress ip = Ethernet.localIP();
+  if (ip != lastIp) {
+    lastIp = ip;
+    if (ip != IPAddress(0, 0, 0, 0))
+      LOGI(Net, "Network address now %s (%s)", ip.toString().c_str(), onFallback ? "fallback - no DHCP answer" : want.dhcp ? "DHCP" : "fixed");
+  }
 }
 
 bool up() { return isUp; }

@@ -292,6 +292,7 @@ void poll() {
   if (!restartAt || (int32_t)(millis() - restartAt) < 0) return;
   Log::flush();
   otafs.unmount();
+  Log::markPlannedRestart();   // "Last start: restart", not "unexpected"
   NVIC_SystemReset();
 }
 

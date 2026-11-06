@@ -14,7 +14,7 @@ struct Message { String to, subject, body; };
 Smtp cfg;
 std::deque<Message> outbox;
 rtos::Mutex mtx;
-rtos::Thread thread(osPriorityBelowNormal, 8 * 1024, nullptr, "mail");
+rtos::Thread thread(osPriorityNormal, 8 * 1024, nullptr, "mail");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 
 String base64(const String& in) {
   static const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

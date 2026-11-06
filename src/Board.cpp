@@ -5,6 +5,7 @@
 #include "Globals.h"
 #include "Log.h"
 #include "Show.h"
+#include "State.h"
 #ifdef KD_BOARD_PMC
 #include <Arduino_PortentaMachineControl.h>
 #include <Wire.h>
@@ -131,7 +132,7 @@ void run() {
     mtx.lock();
     for (auto& p : pts) {
       if (p.output) {
-        if (p.pulseUntil && (int32_t)(now - p.pulseUntil) >= 0) { p.pulseUntil = 0; p.value = p.target = 0; p.fadeMs = 0; }
+        if (p.pulseUntil && (int32_t)(now - p.pulseUntil) >= 0) { p.pulseUntil = 0; p.value = p.target = 0; p.fadeMs = 0; State::changed(); }
         if (p.fadeMs) {
           float f = min(1.0f, (now - p.fadeAt) / (float)p.fadeMs);
           p.value = p.from + (p.target - p.from) * f;
@@ -167,7 +168,7 @@ void run() {
       if (digitalIn) {
         bool r = p.kind == In ? (din >> kDinRead[p.ch]) & 1 : (ioIn >> kIoRead[p.ch]) & 1;
         if (r != p.raw || !p.known) { p.raw = r; p.rawAt = now; }
-        if (!p.known || (now - p.rawAt >= kDebounceMs && (p.value >= 0.5f) != r)) { p.value = r ? 1 : 0; p.known = true; }
+        if (!p.known || (now - p.rawAt >= kDebounceMs && (p.value >= 0.5f) != r)) { p.value = r ? 1 : 0; p.known = true; State::changed(); }
       } else if (p.kind == Ai && aiDue) {
         // A little smoothing: the inputs are noisy at 16 bits.
         p.value = p.known ? p.value + (aiNow[p.ch] - p.value) * 0.3f : aiNow[p.ch];

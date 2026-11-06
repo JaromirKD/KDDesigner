@@ -31,6 +31,7 @@ let seq = 0;
 const levels = Object.fromEntries(CATS.map((c) => [c, 1]));
 let t0 = Date.now();   // reset by a simulated restart after a firmware update
 const sse = new Set();
+let statusAt = 0, statusDue = null;   // last status push / a push waiting (statusChanged)
 function log(l, c, m) {
   if (l < levels[c]) return;
   const e = { s: ++seq, t: Date.now() - t0, e: Math.floor(Date.now() / 1000), l, c, m };
@@ -93,6 +94,7 @@ const histLane = (s) => (s === 'on' || s === 'off' ? 'power' : s.startsWith('p:'
 function histRecord(kind, name, state) {
   if (histQueue.length >= 160) histQueue.shift();
   histQueue.push({ kind, name, state, at: epoch() });
+  statusChanged();
 }
 function flushHistory() {
   const t = epoch();
@@ -306,8 +308,13 @@ function drv(d) {
   } else if (d.type === 'brightsign') {
     st.info = { Model: 'XT1144', Serial: 'D7E8A1000123', Firmware: '8.5.47', 'Boot version': '8.5.47', Connection: 'Ethernet', 'Player name': d.name };
     // The simulated presentation behind the kdlink plugin (data/www/brightsign/kdlink.brs).
-    st.zones = [{ name: 'Video', state: 'Intro', file: 'intro.mp4' }, { name: 'Ticker', state: 'News', file: 'news.png' }, { name: 'Audio', state: 'Music', file: 'bgm.mp3' }];
+    // Video: Video 1 -> Video 2 -> Video 1 ... every 20 s, the UDP command "video3" goes to Video 3, the test pattern only by hand.
+    st.zones = [{ name: 'Video', state: 'Video 1', file: 'video1.mp4' }, { name: 'Ticker', state: 'News', file: 'news.png' }, { name: 'Audio', state: 'Music', file: 'bgm.mp3' }];
+    st.states = [[1, 'Video 1', 'video1.mp4'], [1, 'Video 2', 'video2.mp4'], [1, 'Testpattern', 'testpattern.png'], [1, 'Video 3', 'video3.mp4'],
+      [2, 'News', 'news.png'], [2, 'Weather', 'weather.png'], [3, 'Music', 'bgm.mp3']];
     st.uvars = { mode: 'day', visitors: '0', language: 'NL' };
+    st.activity = [];
+    st.gpio = 0;
   } else if (d.type === 'digidot') {
     st.info = { 'Device name': 'DiGidot C4', Serial: 'C4--20170803-4AFAE-9288B', Memory: '7984 of 46960 bytes', 'Frame rates': 'Art-Net 16 fps · scenes 24 fps' };
     st.scenes = ['Rainbow', 'Warm white', 'Fire', 'Ocean'];
@@ -341,6 +348,7 @@ function drvOnOff(d, k, v) {
   if (d.type === 'kissbox') { const t = kissKinds(d)[parseInt(k, 10) - 1]; bin = k.includes('.') && (t === 'out' || t === 'in'); }
   else if (d.type === 'netio') bin = /^(out|in)\d+$/.test(k);
   else if (d.type === 'knx') bin = parseInt((d.addresses || []).find((a) => a.ga === k)?.dpt || '1', 10) === 1;
+  else if (d.type === 'brightsign') bin = /^gpio\d$/.test(k);
   else if (d.type === 'pharos' && /^(tl|sc)/.test(k)) return v === '' ? -1 : v === 'none' || v === 'released' ? 0 : 1;
   if (!bin) return -1;
   return v === '1' ? 1 : v === '0' ? 0 : -1;
@@ -352,6 +360,7 @@ function drvSet(d, k, v, n) {
   if (p.v === String(v)) return;
   const was = drvOnOff(d, k, p.v);
   p.v = String(v);
+  statusChanged();
   const now = drvOnOff(d, k, p.v);
   if (now >= 0 && now !== was) histRecord(d.type, d.name, `p:${k}=${now}`);
   const vn = drvLinks(d)[k];
@@ -407,25 +416,73 @@ function bsPlugin(d) {
   st.pluginSeen = epoch();
   st.live = 'live';
   st.liveNote = undefined;
-  // The simulated presentation: the ticker changes every 15 s, visitors counts up per minute.
-  st.zones[1].state = Math.floor(Date.now() / 15000) % 2 ? 'Weather' : 'News';
-  st.zones[1].file = st.zones[1].state.toLowerCase() + '.png';
-  st.uvars.visitors = String(Math.floor(Date.now() / 60000) % 500);
-  st.info['KD plugin'] = `kdlink v1 · ${st.zones.length} zones · ${Object.keys(st.uvars).length} user variables`;
+  st.info['KD plugin'] = `kdlink v2 · ${st.zones.length} zones · ${Object.keys(st.uvars).length} user variables · GPIO · serial port`;
   bsReport(d);
+}
+// Like pluginPacket in Drivers.cpp: zone changes and what the player receives go into the Activity list.
+function bsActivity(st, text) {
+  st.activity.push([epoch(), String(text).slice(0, 160)]);
+  if (st.activity.length > 30) st.activity.shift();
 }
 function bsReport(d) {
   const st = drv(d);
   drvSet(d, 'zones', st.zones.length, 'Zones');
-  st.zones.forEach((z, i) => { const n = `Zone ${i + 1} ${z.name}`; drvSet(d, `z${i + 1}`, z.state, n); drvSet(d, `z${i + 1}.file`, z.file, n + ' file'); });
+  st.zones.forEach((z, i) => {
+    const n = `Zone ${i + 1} ${z.name}`, old = st.points.find((p) => p.k === `z${i + 1}`);
+    if (old && old.v !== z.state) bsActivity(st, `${z.name}: ${z.state}`);
+    drvSet(d, `z${i + 1}`, z.state, n); drvSet(d, `z${i + 1}.file`, z.file, n + ' file');
+  });
   for (const [k, v] of Object.entries(st.uvars)) drvSet(d, 'var.' + k, v, k);
+  for (let i = 0; i < 8; i++) drvSet(d, 'gpio' + i, (st.gpio >> i) & 1, 'GPIO ' + i);
 }
+// The simulated presentation runs by itself, every second (the plugin pushes its changes at once):
+// the Video zone plays Video 1 / Video 2 (20 s each) unless a UDP command or a test play took it elsewhere,
+// the ticker changes every 15 s, a motion sensor on GPIO 0 and a temperature probe on serial.
+setInterval(() => {
+  for (const d of project.drivers || []) {
+    if (d.type !== 'brightsign' || !d.plugin) continue;
+    const st = drv(d);
+    if (!st.online || !st.pluginSeen) continue;
+    const now = Date.now(), v = st.zones[0];
+    if (v.until && now >= v.until) { v.until = 0; v.state = v.state === 'Video 1' ? 'Video 2' : 'Video 1'; if (/^\(test\)|Video 3/.test(v.state)) v.state = 'Video 1'; }
+    if (!v.until) v.until = now + 20000;
+    v.file = (st.states.find(([z, n]) => z === 1 && n === v.state) || [])[2] || v.file;
+    st.zones[1].state = Math.floor(now / 15000) % 2 ? 'Weather' : 'News';
+    st.zones[1].file = st.zones[1].state.toLowerCase() + '.png';
+    st.uvars.visitors = String(Math.floor(now / 60000) % 500);
+    const motion = Math.floor(now / 10000) % 2;
+    if (motion !== (st.gpio & 1)) { st.gpio = (st.gpio & ~1) | motion; bsActivity(st, `gpio: input 0 ${motion ? 'on' : 'off'}`); }
+    if (Math.floor(now / 1000) % 7 === 0) {
+      const line = `TEMP ${(21 + Math.sin(now / 60000) * 1.5).toFixed(1)}`;
+      bsActivity(st, 'serial: ' + line);
+      drvSet(d, 'serial', line, 'Serial in (last line)');
+    }
+    bsReport(d);
+  }
+}, 1000);
 // Checked at the monitoring interval, like Drivers.cpp (Monitor::intervalMs()).
 let drvLastPoll = 0;
 setInterval(() => { if (Date.now() - drvLastPoll >= monInterval * 1000) { drvLastPoll = Date.now(); drvPoll(); } }, 500);
 setTimeout(() => { drvLastPoll = Date.now(); drvPoll(); }, 1500);
-// "kissbox|knx|brightsign|digidot|netio|pharos <device> ..." like Drivers::command.
+// A device group of another kind than network (pc, projector, tcp, netio…), like State::groupMembers.
+const kindGroup = (kind, name) => (project.deviceGroups || []).find((g) => g.kind === kind && g.name.toLowerCase() === String(name).toLowerCase());
+// one(name) for every member; like State::forMembers: counts what worked, names the first failure.
+function forMembers(g, one) {
+  if (!g.devices.length) throw new Error(`group '${g.name}' has no devices`);
+  let ok = 0, err = '';
+  for (const n of g.devices) {
+    try { one(n); ok++; } catch (e) { err = err || `${n}: ${e.message}`; }
+  }
+  const msg = `${g.name}: ${ok} of ${g.devices.length} done${err ? ` (${err})` : ''}`;
+  if (err) throw new Error(msg);
+  return msg;
+}
+// "kissbox|knx|brightsign|digidot|netio|pharos <device|group> ..." like Drivers::command.
 function drvCommand(t) {
+  const type = t[0].toLowerCase(), g = t.length >= 3 && !ref((project.drivers || []).filter((d) => d.type === type), t[1]) && kindGroup(type, t[1]);
+  return g ? forMembers(g, (n) => drvCommandOne([t[0], n, ...t.slice(2)])) : drvCommandOne(t);
+}
+function drvCommandOne(t) {
   const w = t.map((x) => x.toLowerCase()), type = w[0], tn = DRV_NAMES[type];
   if (t.length < 3) throw new Error(`expected: ${type} <device> ...`);
   const list = (project.drivers || []).filter((d) => d.type === type);
@@ -510,24 +567,38 @@ function drvCommand(t) {
         return [true, `${k} = ${rest(4)}`];
       });
     }
-    if ((w[2] === 'play' && t.length === 5) || (w[2] === 'stop' && t.length === 4)) {
-      return plug(`${w[2]} ${t[3]}${t[4] ? ' ' + t[4] : ''}`, () => {
+    // A test or direct play shows as "(test) …" until the zone moves on (the simulated file lasts 8 s).
+    if ((w[2] === 'play' && t.length === 5) || (w[2] === 'stop' && t.length === 4) || (w[2] === 'test' && t.length >= 5)) {
+      const what = w[2] === 'test' ? rest(4) : t[4];
+      return plug(`${w[2]} ${t[3]}${what ? ' ' + what : ''}`, () => {
         const z = zone(t[3]);
         if (!z) return [false, `no zone '${t[3]}'`];
-        if (w[2] === 'play') { z.state = '(direct) ' + t[4]; z.file = t[4]; return [true, `play ${t[4]} in ${t[3]}`]; }
-        z.state = 'stopped'; z.file = '';
-        return [true, `stop ${t[3]}`];
+        if (w[2] === 'stop') { z.state = 'stopped'; z.file = ''; return [true, `stop ${t[3]}`]; }
+        let file = what, label = what;
+        if (w[2] === 'test') {
+          const s = st.states.find(([n, name]) => n === st.zones.indexOf(z) + 1 && name.toLowerCase() === what.toLowerCase());
+          if (!s || !s[2]) return [false, `state '${what}' in zone '${t[3]}' has no media file to play`];
+          file = s[2]; label = `${s[1]} (${file})`;
+        }
+        z.state = '(test) ' + label; z.file = file; z.until = Date.now() + 8000;
+        return [true, `play ${label} in ${t[3]}`];
       });
     }
+    if (w[2] === 'reboot' && t.length === 3 && d.plugin) return plug('reboot', () => { st.bootAt = epoch() + 20; return [true, 'rebooting']; });
     if (w[2] === 'send' && t.length >= 4) {
       st.last = `UDP '${rest(3)}'`;
+      // The simulated presentation's own UDP input: "video3" goes to Video 3; the plugin logs what came in.
+      if (d.plugin && answers(d.ip) && st.pluginSeen) {
+        bsActivity(st, `udp: from 127.0.0.1: ${rest(3)}`);
+        if (w[3] === 'video3') Object.assign(st.zones[0], { state: 'Video 3', file: 'video3.mp4', until: Date.now() + 20000 });
+      }
       // Simulated presentation: answers with a UDP message to the controller ("Player says").
       if (answers(d.ip)) setTimeout(() => { drvSet(d, 'msg', `playing ${rest(3)}`, 'Player says'); drvSet(d, 'msgAt', epoch()); }, 600);
       return `BrightSign ${d.name}: sent UDP '${rest(3)}' to port ${d.udpPort || 5000}`;
     }
     if (w[2] === 'reboot' && t.length === 3) return later('reboot', () => { st.bootAt = epoch() + 20; return '200 {"data":{"result":{"success":true,"reboot":true}}}'; });
     if (w[2] === 'api') return api(3, '/api/v1/');
-    throw new Error('expected: event <text>, var <name> <value>, play <zone> <file>, stop <zone>, send <text>, reboot or api get|put|post|delete <path> [body]');
+    throw new Error('expected: test <zone> <state>, play <zone> <file>, stop <zone>, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]');
   }
   if (type === 'digidot') {
     if (w[2] === 'scene' && t.length >= 4) {
@@ -606,7 +677,9 @@ function drvStatus() {
       history: st.history, checks: st.checks, info: st.info, points: st.points, onlineSince: st.online ? st.onlineSince : 0, dropouts: st.dropouts,
       restarts: st.restarts, ...(st.lastRestart ? { lastRestart: st.lastRestart } : {}), ...(st.uptime ? { uptime: st.uptime } : {}),
       ...(st.lastError ? { lastError: st.lastError, lastErrorAt: st.lastErrorAt } : {}),
-      ...(st.live ? { live: st.live } : {}), ...(st.liveNote ? { liveNote: st.liveNote } : {}), ...(st.triggers ? { triggers: st.triggers } : {}), ...(st.scenes.length ? { scenes: st.scenes } : {}), ...(d.type === 'knx' ? { tunnel: !!st.tunnel } : {}) };
+      ...(st.live ? { live: st.live } : {}), ...(st.liveNote ? { liveNote: st.liveNote } : {}), ...(st.triggers ? { triggers: st.triggers } : {}), ...(st.scenes.length ? { scenes: st.scenes } : {}), ...(d.type === 'knx' ? { tunnel: !!st.tunnel } : {}),
+      ...(d.plugin && st.pluginSeen && st.states ? { states: st.states.map(([z, n, f]) => ({ z, n, ...(f ? { f } : {}) })) } : {}),
+      ...(st.activity?.length ? { activity: st.activity } : {}) };
   });
 }
 const overrides = new Map();
@@ -771,7 +844,7 @@ function tick() {
       pb.catchUp = 0;
       if (t.length && el >= t.length) {
         if (t.loop) { pb.start += t.length; pb.next = 0; log(0, 'SHOW', `Timeline ${t.id} '${t.name}' looped`); }
-        else { pb.ended = true; log(1, 'SHOW', `Timeline ${t.id} '${t.name}' reached end (holding)`); onTimelineEnd(t.id); }
+        else { pb.ended = true; statusChanged(); log(1, 'SHOW', `Timeline ${t.id} '${t.name}' reached end (holding)`); onTimelineEnd(t.id); }
       }
     }
     // Running effects: new targets every frame (the track's fade blends them in).
@@ -785,7 +858,7 @@ function tick() {
     }
     const mk = pb.mLen ? Math.min(1, (now - pb.mStart) / pb.mLen) : 1;
     pb.master = pb.mFrom + (pb.mTo - pb.mFrom) * mk;
-    if (pb.releasing && mk >= 1) pb.dead = true;
+    if (pb.releasing && mk >= 1) { pb.dead = true; statusChanged(); }
   }
   pbs = pbs.filter((p) => !p.dead);
   const next = {};
@@ -894,7 +967,15 @@ function setVar(name, raw, fromDevice) {
   varVals[v.name] = val;
   if (!fromDevice && v.modbus?.device) { plcMem[`${v.modbus.device}:${v.modbus.table}:${v.modbus.address}`] = +val; log(0, 'SYS', `Modbus ${v.modbus.device}: wrote ${v.modbus.table} ${v.modbus.address} = ${val} (simulated)`); }
   if (old !== val) {
+    statusChanged();
     boardOnVariable(v.name, val);
+    // A mode group linked to this variable goes to the state it names or numbers (Triggers::onVariable).
+    for (const g of modeGroups()) {
+      if (!g.var || g.var.toLowerCase() !== v.name.toLowerCase()) continue;
+      const s = byRef(g.states, val);
+      if (!s) log(2, 'TRIG', `Variable ${v.name} = '${val}' is not a state of mode ${g.name}`);
+      else changeMode(g, s, `variable ${v.name}`);
+    }
     for (const t of project.triggers)
       if (t.enabled !== false && t.type === 'variable' && (!t.variable || t.variable.toLowerCase() === v.name.toLowerCase()) &&
           (!t.value || t.value === val || (t.value === 'on' && val === '1') || (t.value === 'off' && val === '0')))
@@ -904,6 +985,10 @@ function setVar(name, raw, fromDevice) {
 }
 function expandVars(line, vars) {
   const all = { ...varVals, ...(vars || {}) };   // trigger vars win, like the firmware
+  for (const [, k] of line.matchAll(/\{mode\.([^}]+)\}/g)) {   // {mode.Museum}: the group's state
+    const g = byRef(modeGroups(), k, (x) => x.name);
+    if (g) all['mode.' + k] ??= modeCur[g.name] || '';
+  }
   return expand(line, all);
 }
 
@@ -975,7 +1060,7 @@ const boardTrig = new Map();   // trigger id -> last state
 setInterval(() => {
   const now = Date.now();
   for (const [k, p] of board) {
-    if (p.pulseUntil && now >= p.pulseUntil) Object.assign(p, { pulseUntil: 0, value: 0, target: 0, fadeMs: 0 });
+    if (p.pulseUntil && now >= p.pulseUntil) { Object.assign(p, { pulseUntil: 0, value: 0, target: 0, fadeMs: 0 }); statusChanged(); }
     if (p.fadeMs) { const f = Math.min(1, (now - p.fadeAt) / p.fadeMs); p.value = p.from + (p.target - p.from) * f; if (f >= 1) p.fadeMs = 0; }
     // Linked variable follows the point (analog only on a real change).
     const vn = boardCfg(k).var, v = boardFmt(k);
@@ -1057,6 +1142,78 @@ let ntpLast = 0;
 // ---- modes, labels, triggers by name (src/State.cpp, src/Triggers.cpp) -------------
 // Mode groups, like src/State.cpp. Old projects: a plain list = one group "Mode".
 const modeCur = {};   // group name -> current state
+const modePrev = {}, modeSince = {};   // group name -> the state before ("mode <group> back"), ms it was set
+let modeBooted = false;   // the first load: "startup" states apply (State::load)
+// A mode state's enter / leave actions run as hidden manual triggers (Triggers.cpp kModeActId).
+const MODE_ACT_ID = 20001;
+let modeActs = [];   // {group, state, enter: trigger, leave: trigger}
+const trigById = (id) => project.triggers.find((x) => x.id === id) || modeActs.flatMap((m) => [m.enter, m.leave]).find((x) => x?.id === id);
+function loadModeActs() {
+  modeActs = [];
+  let id = MODE_ACT_ID;
+  for (const g of modeGroups()) for (const [state, info] of Object.entries(g.stateInfo || {})) {
+    const m = { group: g.name, state };
+    for (const k of ['enter', 'leave']) if (info?.[k]?.length) m[k] = { id: id++, name: `${g.name} ${state} (${k})`, type: 'manual', internal: true, actions: info[k], conditions: [] };
+    if (m.enter || m.leave) modeActs.push(m);
+  }
+}
+// History line state "m:<state>" (State.cpp record): space % " \ escaped.
+const modeHist = (g) => histRecord('mode', 'mode:' + g, 'm:' + modeCur[g].replace(/[ %"\\]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')));
+// Startup states at power-up; a reload keeps every state (State::load).
+function modeLoad() {
+  for (const k of Object.keys(modeCur)) {
+    const g = modeGroups().find((x) => x.name === k);
+    if (!g || !g.states.includes(modeCur[k])) delete modeCur[k];
+  }
+  if (!modeBooted) for (const g of modeGroups()) {
+    const start = g.startup && g.states.find((s) => s.toLowerCase() === g.startup.toLowerCase());
+    if (g.startup && !start) log(2, 'SYS', `Mode ${g.name}: startup state '${g.startup}' is not one of its states`);
+    else if (start && start !== modeCur[g.name]) { log(1, 'SYS', `Mode ${g.name} starts in ${start}`); modeCur[g.name] = start; modeSince[g.name] = Date.now(); }
+    if (modeCur[g.name]) modeHist(g.name);
+  }
+  modeBooted = true;
+  loadModeActs();
+}
+const modeSecs = (g) => Math.floor((Date.now() - (modeSince[g] ?? t0)) / 1000);
+// next / previous / toggle / back, like State::stepState.
+function stepState(g, how) {
+  const n = g.states.length, cur = g.states.indexOf(modeCur[g.name]);
+  const h = String(how).toLowerCase();
+  if (h === 'next') return g.states[cur < 0 ? 0 : (cur + 1) % n];
+  if (h === 'previous') return g.states[cur < 0 ? n - 1 : (cur + n - 1) % n];
+  if (h === 'toggle') {
+    if (n !== 2) throw new Error(`toggle needs a group with 2 states (${g.name} has ${n}) - use next`);
+    return g.states[cur === 0 ? 1 : 0];
+  }
+  if (h === 'back') {
+    if (!g.states.includes(modePrev[g.name])) throw new Error(`${g.name} has no state to go back to`);
+    return modePrev[g.name];
+  }
+  throw new Error(`'${how}' is not a state of ${g.name}`);
+}
+// Triggers::changeMode: set it, then leave / enter actions, mode triggers and the linked variable.
+function changeMode(g, s, by) {
+  const old = modeCur[g.name] || '';
+  if (old === s) return `${g.name} already ${s}`;
+  log(1, 'SYS', `Mode ${g.name} changed: ${old || '(none)'} -> ${s}${by ? ` (by ${by})` : ''}`);
+  modePrev[g.name] = old;
+  modeCur[g.name] = s;
+  modeSince[g.name] = Date.now();
+  modeHist(g.name);
+  const vars = { group: g.name, mode: s, old };
+  for (const m of modeActs) if (m.leave && m.group === g.name && m.state === old) runTrigger(m.leave, 'mode leave', vars);
+  for (const m of modeActs) if (m.enter && m.group === g.name && m.state === s) runTrigger(m.enter, 'mode enter', vars);
+  for (const tr of project.triggers)
+    if (tr.enabled !== false && tr.type === 'mode' && (!tr.group || tr.group.toLowerCase() === g.name.toLowerCase()) && (!tr.mode || tr.mode.toLowerCase() === s.toLowerCase()))
+      runTrigger(tr, 'mode change', vars);
+  if (g.var) {
+    try { setVar(g.var, s); } catch {
+      try { setVar(g.var, String(g.states.indexOf(s) + 1)); } catch (e) { log(2, 'TRIG', `Mode ${g.name}: ${e.message}`); }
+    }
+  }
+  pushStatus();
+  return `${g.name}: ${s}`;
+}
 function modeGroups() {
   const list = project.modes || [];
   const legacy = list.filter((m) => typeof m === 'string');
@@ -1103,7 +1260,30 @@ function splitIf(s) {
   return { cond: s.slice(2, thenT.index).trim(), a: s.slice(end(thenT), elseT ? elseT.index : s.length).trim(), b: elseT ? s.slice(end(elseT)).trim() : '' };
 }
 // ---- commands (mirrors src/Cmd.cpp; device commands are in drvCommand above) -------
+// send tcp <device> <text> (Tcp::send): queued; a reachable simulated device answers "ACK <text>".
+function tcpSend(name, text) {
+  const d = (project.tcp || []).find((x) => x.name.toLowerCase() === String(name).toLowerCase());
+  if (!d) throw new Error(`unknown TCP device '${name}'`);
+  if (answersIp(d.ip)) setTimeout(() => {
+    const reply = 'ACK ' + text;
+    tcpLast[d.name] = { line: reply, at: Math.floor(Date.now() / 1000) };
+    log(0, 'SYS', `TCP ${d.name} <- ${reply}`);
+    for (const tr of project.triggers) {
+      if (tr.enabled === false || tr.type !== 'tcp' || (tr.device && tr.device !== d.name)) continue;
+      const m = tr.match ?? '*', vars = { device: d.name, message: reply };
+      if (m === '*' || m === '' || m === reply) runTrigger(tr, 'tcp', vars);
+      else if (m.endsWith('*') && reply.startsWith(m.slice(0, -1))) runTrigger(tr, 'tcp', { ...vars, 1: reply.slice(m.length - 1).trim() });
+    }
+  }, 300);
+  return `TCP ${d.name}${answersIp(d.ip) ? '' : ' (not connected, queued)'} <- ${text}`;
+}
+// Every command that worked: the browser sees its result at once (Cmd::exec -> State::changed).
 function exec(line, src, vars) {
+  const r = execLine(line, src, vars);
+  statusChanged();
+  return r;
+}
+function execLine(line, src, vars) {
   line = expandVars(line.trim(), vars);
   if (!line || line.startsWith('#')) return '';
   if (/^sleep\b/i.test(line)) throw new Error("sleep only works on its own line in a trigger's actions");
@@ -1185,17 +1365,14 @@ function exec(line, src, vars) {
   else if (w[0] === 'blackout' && (w[1] === 'on' || w[1] === 'off')) { blackout = w[1] === 'on'; log(2, 'SHOW', `Blackout ${blackout ? 'ON' : 'off'}`); r = `Blackout ${w[1]}`; }
   else if (w[0] === 'log' && t.length > 1) { log(1, 'CMD', t.slice(1).join(' ')); r = 'Logged'; }
   else if (w[0] === 'mode' && (t.length === 2 || t.length === 3)) {
-    const { g, s } = t.length === 3 ? groupState(t[1], t[2]) : anyState(t[1]);
-    if (modeCur[g.name] === s) r = `${g.name} already ${s}`;
-    else {
-      log(1, 'SYS', `Mode ${g.name} changed: ${modeCur[g.name] || '(none)'} -> ${s}`);
-      modeCur[g.name] = s;
-      r = `${g.name}: ${s}`;
-      for (const tr of project.triggers)
-        if (tr.enabled !== false && tr.type === 'mode' && (!tr.group || tr.group === g.name) && (!tr.mode || tr.mode === s))
-          runTrigger(tr, 'mode change', { group: g.name, mode: s });
-      pushStatus();
+    let g, s;
+    try { ({ g, s } = t.length === 3 ? groupState(t[1], t[2]) : anyState(t[1])); } catch (e) {
+      // A state with that name wins over next / previous / toggle / back.
+      g = t.length === 3 && byRef(modeGroups(), t[1], (x) => x.name);
+      if (!g) throw e;
+      s = stepState(g, t[2]);
     }
+    r = changeMode(g, s, src);
   } else if (w[0] === 'output' && t.length === 4 && w[2] === 'fps' && /^(dmx|artnet|sacn)$/.test(w[1])) {
     const max = w[1] === 'dmx' ? 44 : 60;
     if (!(+t[3] >= 1 && +t[3] <= max)) throw new Error(`${w[1]} fps must be 1-${max}`);
@@ -1245,7 +1422,7 @@ function exec(line, src, vars) {
     if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(t[2] || '')) {
       const devs = project.devices || [];
       const d = devs.find((x) => x.name.toLowerCase() === (w[2] || ''));
-      const g = !d && (project.deviceGroups || []).find((x) => x.name.toLowerCase() === (w[2] || ''));
+      const g = !d && (project.deviceGroups || []).find((x) => (!x.kind || x.kind === 'network') && x.name.toLowerCase() === (w[2] || ''));
       if (d) { to = [[d.ip, d.port]]; what = `${d.name} (${d.ip}:${d.port})`; }
       else if (g) {
         to = g.devices.map((n) => devs.find((x) => x.name.toLowerCase() === n.toLowerCase())).filter(Boolean).map((x) => [x.ip, x.port]);
@@ -1284,21 +1461,26 @@ function exec(line, src, vars) {
   } else if (w[0] === 'projector' && t.length >= 3) {
     const list = project.projectors || [];
     const targets = w[1] === 'all' ? list : [ref(list, t[1])].filter(Boolean);
-    if (!targets.length) throw new Error(`unknown projector '${t[1]}'`);
+    const g = !targets.length && w[1] !== 'all' && kindGroup('projector', t[1]);
+    if (!targets.length && !g) throw new Error(`unknown projector '${t[1]}'`);
     let body;
     if (t.length === 3 && /^(on|off)$/.test(w[2])) body = w[2] === 'on' ? 'POWR 1' : 'POWR 0';
     else if (w[2] === 'mute' && t.length === 4 && /^(on|off)$/.test(w[3])) body = w[3] === 'on' ? 'AVMT 31' : 'AVMT 30';
     else if (w[2] === 'input' && t.length === 4) body = 'INPT ' + t[3];
     else if (w[2] === 'send' && t.length >= 4) body = t.slice(3).join(' ');
     else throw new Error('expected: on|off, mute on|off, input <code> or send <command>');
-    targets.forEach((x) => pjSend(x, body));
-    r = `PJLink '${body}' queued for ${w[1] === 'all' ? 'all projectors' : targets[0].name}`;
+    if (g) r = forMembers(g, (n) => { const x = ref(list, n); if (!x) throw new Error('unknown projector'); pjSend(x, body); });
+    else {
+      targets.forEach((x) => pjSend(x, body));
+      r = `PJLink '${body}' queued for ${w[1] === 'all' ? 'all projectors' : targets[0].name}`;
+    }
   } else if (w[0] === 'pc' && t.length === 3) {
     const list = project.pcs || [];
+    const g = w[1] !== 'all' && !ref(list, t[1]) && kindGroup('pc', t[1]);
     const targets = w[1] === 'all' ? list : [ref(list, t[1])].filter(Boolean);
-    if (!targets.length) throw new Error(list.length ? `unknown PC '${t[1]}'` : 'no PCs configured');
+    if (!targets.length && !g) throw new Error(list.length ? `unknown PC '${t[1]}'` : 'no PCs configured');
     if (!/^(wake|startup|shutdown|reboot)$/.test(w[2])) throw new Error('action must be wake|startup|shutdown|reboot');
-    for (const pc of targets) {
+    const one = (pc) => {
       if (w[2] === 'wake') {
         const mac = (pc.mac || '').replace(/[^0-9a-f]/gi, '');
         if (mac.length !== 12) throw new Error(`${pc.name}: no MAC address`);
@@ -1307,8 +1489,12 @@ function exec(line, src, vars) {
         log(1, 'SYS', `PC ${pc.name}: '${pc[w[2]] ?? w[2]}' sent to ${pc.ip}:${pc.port ?? 7} (simulated)`);
       }
       pcLast[pc.id] = `${w[2]} @ ${new Date().toLocaleTimeString()}`;
+    };
+    if (g) r = forMembers(g, (n) => { const pc = ref(list, n); if (!pc) throw new Error('unknown PC'); one(pc); });
+    else {
+      targets.forEach(one);
+      r = `${w[2] === 'wake' ? 'Wake-on-LAN' : `'${w[2]}'`} sent to ${w[1] === 'all' ? targets.length + ' PC(s)' : targets[0].name}`;
     }
-    r = `${w[2] === 'wake' ? 'Wake-on-LAN' : `'${w[2]}'`} sent to ${w[1] === 'all' ? targets.length + ' PC(s)' : targets[0].name}`;
   } else if (w[0] === 'var' && t.length >= 3) {
     // Like Cmd.cpp + Globals::calc: + - * / <n> (or += -= *= /=), ++ and -- (= + 1 / - 1).
     const op = (t[2] === '++' || t[2] === '--') && t.length === 3 ? t[2][0] : /^[-+*/]=?$/.test(t[2]) && t.length === 4 ? t[2][0] : null;
@@ -1328,21 +1514,9 @@ function exec(line, src, vars) {
       r = setVar(t[1], varVals[v.name] === '1' ? '0' : '1');
     } else throw new Error('expected: var <name> = <value> | + - * / <n> | ++ | -- | toggle');
   } else if (w[0] === 'send' && w[1] === 'tcp' && t.length >= 4) {
-    const d = (project.tcp || []).find((x) => x.name.toLowerCase() === w[2]);
-    if (!d) throw new Error(`unknown TCP device '${t[2]}'`);
     const text = t.slice(3).join(' ');
-    r = `TCP ${d.name}${answersIp(d.ip) ? '' : ' (not connected, queued)'} <- ${text}`;
-    if (answersIp(d.ip)) setTimeout(() => {   // simulated device: answers "ACK <text>"
-      const reply = 'ACK ' + text;
-      tcpLast[d.name] = { line: reply, at: Math.floor(Date.now() / 1000) };
-      log(0, 'SYS', `TCP ${d.name} <- ${reply}`);
-      for (const tr of project.triggers) {
-        if (tr.enabled === false || tr.type !== 'tcp' || (tr.device && tr.device !== d.name)) continue;
-        const m = tr.match ?? '*', vars = { device: d.name, message: reply };
-        if (m === '*' || m === '' || m === reply) runTrigger(tr, 'tcp', vars);
-        else if (m.endsWith('*') && reply.startsWith(m.slice(0, -1))) runTrigger(tr, 'tcp', { ...vars, 1: reply.slice(m.length - 1).trim() });
-      }
-    }, 300);
+    const g = !(project.tcp || []).some((x) => x.name.toLowerCase() === w[2]) && kindGroup('tcp', t[2]);
+    r = g ? forMembers(g, (n) => tcpSend(n, text)) : tcpSend(t[2], text);
   } else if (w[0] === 'http' && t.length >= 3) {
     const method = t[1].toUpperCase(), url = t[2];
     if (!['GET', 'POST', 'PUT', 'DELETE'].includes(method)) throw new Error('method must be get|post|put|delete');
@@ -1387,10 +1561,22 @@ function safeExec(line, src, vars) {
 function checkCondition(c) {
   const t = tokenize(c), w = t.map((x) => x.toLowerCase());
   const now = new Date();
-  if (w[0] === 'mode' && ((t.length === 4 && /^(is|not)$/.test(w[2])) || (t.length === 3 && /^(is|not)$/.test(w[1])))) {
+  // mode <group> is|not <state> [for <duration>]: "for" = in that state at least that long.
+  const forPart = w[0] === 'mode' && t.length >= 5 && w[t.length - 2] === 'for';
+  const n = forPart ? t.length - 2 : t.length;
+  if (w[0] === 'mode' && ((n === 4 && /^(is|not)$/.test(w[2])) || (n === 3 && /^(is|not)$/.test(w[1])))) {
+    let need = 0;
+    if (forPart) {
+      const d = /^(\d+(?:\.\d+)?)([smh]?)$/i.exec(t[t.length - 1]);
+      if (!d) return "expected a duration after 'for' (90, 30s, 10m, 2h)";
+      need = Math.round(+d[1] * ({ h: 3600, m: 60 }[d[2].toLowerCase()] || 1));
+    }
     try {
-      const { g, s } = t.length === 4 ? groupState(t[1], t[3]) : anyState(t[2]);
-      return (modeCur[g.name] === s) === ((t.length === 4 ? w[2] : w[1]) === 'is');
+      const { g, s } = n === 4 ? groupState(t[1], t[3]) : anyState(t[2]);
+      const wantIs = (n === 4 ? w[2] : w[1]) === 'is';
+      if (forPart && !wantIs) return "'for' only works with 'is'";
+      if (forPart) return modeCur[g.name] === s && modeSecs(g.name) >= need;
+      return (modeCur[g.name] === s) === wantIs;
     } catch (e) { return e.message; }
   }
   if (w[0] === 'timeline' && t.length === 3 && (w[2] === 'running' || w[2] === 'stopped')) {
@@ -1493,7 +1679,7 @@ const isRunningT = (id) => scheduled.some((s) => s.id === id && s.line != null);
 const TRIG_HISTORY = 512, SRC_HAND = 0xffff, SRC_REPEAT = 0xfffe, SRC_DELAYED = 0xfffd, SRC_QUEUED = 0xfffc;
 const trigHistory = [];
 function remember(t, why) {
-  if (t.type === 'dmx_change' || (t.type === 'dmx_in' && (t.when || 'change') === 'change')) return;
+  if (t.type === 'dmx_change' || (t.type === 'dmx_in' && (t.when || 'change') === 'change') || t.internal) return;
   const tl = /^timeline (\d+)/.exec(why);
   const src = why === 'repeat' ? SRC_REPEAT : why === 'delayed' ? SRC_DELAYED : why === 'queued' ? SRC_QUEUED
     : running && running !== t.id ? running : userRun ? SRC_HAND : tl ? 0x8000 | +tl[1] : 0;
@@ -1537,6 +1723,12 @@ function runTrigger(t, why, vars, quiet) {
     }
   }
   if (depth > 8) { log(3, 'TRIG', `Trigger ${t.id}: nesting too deep (loop?)`); return; }
+  // "Only active in" a mode group's states (not when fired by hand).
+  const only = t.onlyIn;
+  if (only?.group && only.states?.length && !(userRun && !running)) {
+    const g = byRef(modeGroups(), only.group, (x) => x.name), cur = (g && modeCur[g.name]) || '';
+    if (!only.states.some((s) => s.toLowerCase() === cur.toLowerCase())) { log(0, 'TRIG', `Trigger ${t.id} '${t.name}' skipped (${why}): only active when ${only.group} is ${only.states[0]}`); return; }
+  }
   const now = Date.now(), r = rt(t), cd = secs(t.cooldown, 0);
   // Fired by hand skips the cooldown, so it can be tested.
   if (cd && r.lastRun && now - r.lastRun < cd && !(userRun && !running)) {
@@ -1623,7 +1815,7 @@ setInterval(() => {   // delayed and repeating fires, waits, loops
   const now = Date.now();
   for (const s of [...scheduled]) {
     if (!scheduled.includes(s) || s.kind === 'queued') continue;
-    const tr = project.triggers.find((x) => x.id === s.id);
+    const tr = trigById(s.id);
     if (s.kind === 'wait') {
       const ok = checkCondition(s.text) === true;
       if (!ok && !(s.due && now >= s.due)) continue;
@@ -1710,10 +1902,7 @@ function loadProject() {
   projectVersion++;
   watched.clear();
   for (const k in labels) delete labels[k];
-  for (const k of Object.keys(modeCur)) {
-    const g = modeGroups().find((x) => x.name === k);
-    if (!g || !g.states.includes(modeCur[k])) delete modeCur[k];
-  }
+  modeLoad();
   monInterval = project.settings?.monitor?.interval || 60;
   loadVars();
   boardLoad();
@@ -1786,6 +1975,13 @@ http.createServer(async (req, res) => {
     const lines = (await body(req)).split('\n').filter((l) => l.trim());
     const rs = lines.map((l) => safeExec(l, 'web'));
     return json(res, rs.every((r) => r.ok) ? 200 : 400, { ok: rs.every((r) => r.ok), reply: rs.map((r) => r.reply).join('\n') });
+  }
+  if (p === '/api/mode') {   // Web.cpp: all states as JSON, ?group= its state as text, &state= sets it
+    const group = url.searchParams.get('group') || '', state = url.searchParams.get('state') || '';
+    if (state) { const r = safeExec(`mode "${group}" "${state}"`, 'http'); return json(res, r.ok ? 200 : 400, r); }
+    const g = group && byRef(modeGroups(), group, (x) => x.name);
+    if (group) { res.writeHead(g ? 200 : 404, { 'Content-Type': 'text/plain' }); return res.end(g ? modeCur[g.name] || '' : `unknown mode group '${group}'`); }
+    return json(res, 200, Object.fromEntries(modeGroups().map((x) => [x.name, modeCur[x.name] || ''])));
   }
   if (p === '/api/trigger') {
     const t = project.triggers.find((x) => x.id === +url.searchParams.get('id'));
@@ -1930,6 +2126,7 @@ function status() {
     stats: { engineFps: 40, dmxFps: 40, artTx: 80, artRx: 1, sacnTx: 80, udpRx: 0, tickUs: 180 + Math.floor(Math.random() * 40), loopUs: 900, http: httpCount, heap: sampleHeap() },
     logSeq: seq, project: project.name, projectVersion, gm: Math.round(gm * 100), blackout, outputs, labels,
     modes: Object.fromEntries(modeGroups().map((g) => [g.name, modeCur[g.name] || ''])), mode: modeCur[modeGroups()[0]?.name] || '',
+    modeFor: Object.fromEntries(modeGroups().filter((g) => modeCur[g.name]).map((g) => [g.name, modeSecs(g.name)])),
     pcs: (project.pcs || []).map((x) => ({ id: x.id, last: pcLast[x.id] || '' })),
     vars: { ...varVals },
     clock: (() => {
@@ -1975,5 +2172,16 @@ function status() {
     }),
   };
 }
-function pushStatus() { const s = JSON.stringify(status()); for (const res of sse) res.write(`event: status\ndata: ${s}\n\n`); }
-setInterval(pushStatus, 1000);
+function pushStatus() {
+  clearTimeout(statusDue);
+  statusDue = null;
+  statusAt = Date.now();
+  const s = JSON.stringify(status());
+  for (const res of sse) res.write(`event: status\ndata: ${s}\n\n`);
+}
+// Something the UI shows changed: push at once, at most 10 times a second (State::changed + sseLoop).
+function statusChanged() {
+  if (statusDue) return;
+  statusDue = setTimeout(pushStatus, Math.max(0, 100 - (Date.now() - statusAt)));
+}
+setInterval(() => { if (Date.now() - statusAt >= 1000) pushStatus(); }, 50);

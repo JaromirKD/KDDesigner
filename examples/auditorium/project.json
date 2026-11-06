@@ -1,0 +1,1170 @@
+{
+  "name": "Auditorium - lecture hall",
+  "settings": {
+    "tzOffsetMin": 60,
+    "udpPort": 4000,
+    "sacnPriority": 100,
+    "monitor": {
+      "interval": 60,
+      "timeout": 1000,
+      "failures": 2
+    },
+    "time": {
+      "ntp": "pool.ntp.org",
+      "ntpEnabled": true,
+      "dst": "eu"
+    },
+    "location": {
+      "lat": 52.37,
+      "lon": 4.9
+    },
+    "outputs": {
+      "dmx": true,
+      "artnet": true,
+      "sacn": true,
+      "dmxFps": 40,
+      "artnetFps": 30,
+      "sacnFps": 40,
+      "artnetChangesOnly": true,
+      "sacnChangesOnly": false
+    }
+  },
+  "network": {
+    "dhcp": false,
+    "ip": "192.168.1.50",
+    "mask": "255.255.255.0",
+    "gateway": "192.168.1.1"
+  },
+  "modes": [
+    {
+      "name": "Hall",
+      "states": [
+        "Off",
+        "Walk-in",
+        "Lecture",
+        "Film",
+        "Break",
+        "Cleaning"
+      ],
+      "stateInfo": {
+        "Off": {
+          "color": "#616161",
+          "icon": "⏻",
+          "enter": [
+            "clear overrides",
+            "release all fade 5",
+            "projector \"Laser PJ\" off",
+            "netio stage output 2 pulse 25",
+            "knx building write \"Blinds hall\" off",
+            "netio stage output 3 off"
+          ]
+        },
+        "Walk-in": {
+          "color": "#3a7bd5",
+          "icon": "🚶",
+          "enter": [
+            "clear overrides",
+            "release all fade 3",
+            "scene \"Walk-in\" fade 3",
+            "netio stage output 3 on",
+            "projector \"Laser PJ\" on",
+            "pc \"Lectern PC\" wake"
+          ]
+        },
+        "Lecture": {
+          "color": "#2e7d32",
+          "icon": "🎤",
+          "enter": [
+            "clear overrides",
+            "release all fade 3",
+            "scene \"Lecture\" fade 3",
+            "netio stage output 3 on",
+            "projector \"Laser PJ\" on",
+            "projector \"Laser PJ\" mute off",
+            "netio stage output 1 pulse 25"
+          ]
+        },
+        "Film": {
+          "color": "#6a4c93",
+          "icon": "🎬",
+          "enter": [
+            "clear overrides",
+            "release all fade 3",
+            "scene \"Film\" fade 3",
+            "netio stage output 3 on",
+            "projector \"Laser PJ\" on",
+            "projector \"Laser PJ\" mute off",
+            "netio stage output 1 pulse 25",
+            "knx building write \"Blinds hall\" on"
+          ]
+        },
+        "Break": {
+          "color": "#d29922",
+          "icon": "☕",
+          "enter": [
+            "clear overrides",
+            "release all fade 3",
+            "scene \"Break\" fade 3",
+            "projector \"Laser PJ\" mute on",
+            "knx building write \"Blinds hall\" off"
+          ]
+        },
+        "Cleaning": {
+          "color": "#f9a825",
+          "icon": "🧹",
+          "enter": [
+            "clear overrides",
+            "release all fade 3",
+            "scene \"Cleaning\" fade 3",
+            "projector \"Laser PJ\" off",
+            "netio stage output 2 pulse 25"
+          ]
+        }
+      }
+    }
+  ],
+  "universes": [
+    {
+      "id": 1,
+      "name": "DMX 1",
+      "dmxPort": 1,
+      "artnet": 0,
+      "sacn": 1,
+      "useDmx": true,
+      "useArtnet": false,
+      "useSacn": false
+    }
+  ],
+  "fixtures": [
+    {
+      "id": 1,
+      "name": "House 1",
+      "universe": 1,
+      "address": 1,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 2,
+      "name": "House 2",
+      "universe": 1,
+      "address": 2,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 3,
+      "name": "House 3",
+      "universe": 1,
+      "address": 3,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 4,
+      "name": "House 4",
+      "universe": 1,
+      "address": 4,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 5,
+      "name": "Stage wash 1",
+      "universe": 1,
+      "address": 10,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 6,
+      "name": "Stage wash 2",
+      "universe": 1,
+      "address": 15,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 7,
+      "name": "Podium spot",
+      "universe": 1,
+      "address": 20,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 8,
+      "name": "Lectern light",
+      "universe": 1,
+      "address": 21,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 9,
+      "name": "Aisle lights",
+      "universe": 1,
+      "address": 22,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 10,
+      "name": "Cleaning light",
+      "universe": 1,
+      "address": 23,
+      "channels": [
+        "dim"
+      ],
+      "curve": "nondim",
+      "icon": "relay"
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "House",
+      "fixtures": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Stage",
+      "fixtures": [
+        5,
+        6,
+        7
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "name": "Walk-in",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 127
+        },
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 127
+        },
+        {
+          "fixture": 5,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 6,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 5,
+          "ch": "g",
+          "v": 200
+        },
+        {
+          "fixture": 6,
+          "ch": "g",
+          "v": 200
+        },
+        {
+          "fixture": 5,
+          "ch": "b",
+          "v": 150
+        },
+        {
+          "fixture": 6,
+          "ch": "b",
+          "v": 150
+        },
+        {
+          "fixture": 5,
+          "ch": "w",
+          "v": 127
+        },
+        {
+          "fixture": 6,
+          "ch": "w",
+          "v": 127
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 127
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Lecture",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 77
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 77
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 77
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 77
+        },
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 5,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 6,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 5,
+          "ch": "g",
+          "v": 200
+        },
+        {
+          "fixture": 6,
+          "ch": "g",
+          "v": 200
+        },
+        {
+          "fixture": 5,
+          "ch": "b",
+          "v": 150
+        },
+        {
+          "fixture": 6,
+          "ch": "b",
+          "v": 150
+        },
+        {
+          "fixture": 5,
+          "ch": "w",
+          "v": 255
+        },
+        {
+          "fixture": 6,
+          "ch": "w",
+          "v": 255
+        },
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 179
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 51
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Film",
+      "levels": [
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 38
+        },
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 26
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Break",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 5,
+          "ch": "dim",
+          "v": 102
+        },
+        {
+          "fixture": 6,
+          "ch": "dim",
+          "v": 102
+        },
+        {
+          "fixture": 5,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 6,
+          "ch": "r",
+          "v": 255
+        },
+        {
+          "fixture": 5,
+          "ch": "g",
+          "v": 200
+        },
+        {
+          "fixture": 6,
+          "ch": "g",
+          "v": 200
+        },
+        {
+          "fixture": 5,
+          "ch": "b",
+          "v": 150
+        },
+        {
+          "fixture": 6,
+          "ch": "b",
+          "v": 150
+        },
+        {
+          "fixture": 5,
+          "ch": "w",
+          "v": 102
+        },
+        {
+          "fixture": 6,
+          "ch": "w",
+          "v": 102
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 127
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Cleaning",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 10,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    }
+  ],
+  "timelines": [],
+  "devices": [],
+  "deviceGroups": [],
+  "pcs": [
+    {
+      "id": 1,
+      "name": "Lectern PC",
+      "ip": "192.168.1.41",
+      "mac": "00:1B:21:3A:60:01",
+      "port": 9,
+      "startup": "startup",
+      "shutdown": "shutdown",
+      "reboot": "reboot"
+    }
+  ],
+  "email": {
+    "server": "192.168.1.5",
+    "port": 25,
+    "user": "",
+    "password": "",
+    "from": "av@museum.example"
+  },
+  "projectors": [
+    {
+      "id": 1,
+      "name": "Laser PJ",
+      "ip": "192.168.1.101",
+      "port": 4352,
+      "password": ""
+    }
+  ],
+  "panel": {
+    "theme": {},
+    "panels": [
+      {
+        "id": 1,
+        "name": "Lectern",
+        "title": "Auditorium",
+        "start": 1
+      }
+    ],
+    "pages": [
+      {
+        "id": 1,
+        "name": "Presets",
+        "columns": 3,
+        "controls": [
+          {
+            "type": "label",
+            "name": "lbl_hall",
+            "text": "Hall: -",
+            "span": 2
+          },
+          {
+            "type": "clock"
+          },
+          {
+            "type": "button",
+            "name": "Walk-in",
+            "text": "Walk-in",
+            "color": "#3a7bd5"
+          },
+          {
+            "type": "button",
+            "name": "Lecture",
+            "text": "Lecture",
+            "color": "#2e7d32"
+          },
+          {
+            "type": "button",
+            "name": "Film",
+            "text": "Film",
+            "color": "#6a4c93"
+          },
+          {
+            "type": "button",
+            "name": "Break",
+            "text": "Break",
+            "color": "#d29922"
+          },
+          {
+            "type": "button",
+            "name": "Cleaning",
+            "text": "Cleaning",
+            "color": "#f9a825"
+          },
+          {
+            "type": "button",
+            "name": "Hall off",
+            "text": "Off (hold)",
+            "color": "#b71c1c"
+          },
+          {
+            "type": "button",
+            "name": "More",
+            "text": "Screen, blinds, levels…",
+            "color": "#424242",
+            "goto": 2,
+            "span": 3
+          }
+        ],
+        "panel": 1
+      },
+      {
+        "id": 2,
+        "name": "Controls",
+        "columns": 4,
+        "controls": [
+          {
+            "type": "slider",
+            "name": "House level",
+            "text": "House",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": " %",
+            "vertical": true,
+            "rows": 3
+          },
+          {
+            "type": "slider",
+            "name": "Podium level",
+            "text": "Podium",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": " %",
+            "vertical": true,
+            "rows": 3
+          },
+          {
+            "type": "button",
+            "name": "Screen down",
+            "text": "Screen ↓",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Screen up",
+            "text": "Screen ↑",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Blinds down",
+            "text": "Blinds ↓",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Blinds up",
+            "text": "Blinds ↑",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "toggle",
+            "name": "Picture mute",
+            "text": "Picture mute",
+            "var": "pj_mute"
+          },
+          {
+            "type": "button",
+            "name": "Lectern PC",
+            "text": "Wake PC",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Back",
+            "text": "← Presets",
+            "color": "#424242",
+            "goto": 1,
+            "span": 4
+          }
+        ],
+        "panel": 1
+      }
+    ]
+  },
+  "triggers": [
+    {
+      "id": 10001,
+      "name": "== PRESETS",
+      "type": "comment",
+      "color": "purple",
+      "actions": [],
+      "conditions": [],
+      "notes": "Every preset is a state of the Hall mode group: what it does is on the Modes page (light, screen, blinds, projector). The buttons only pick the state."
+    },
+    {
+      "id": 1,
+      "name": "Startup",
+      "type": "startup",
+      "color": "purple",
+      "actions": [
+        "panel lbl_hall text Hall: {mode.Hall}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 2,
+      "name": "CLICK Walk-in",
+      "type": "panel",
+      "control": "Walk-in",
+      "event": "click",
+      "color": "purple",
+      "actions": [
+        "mode Hall Walk-in"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 3,
+      "name": "CLICK Lecture",
+      "type": "panel",
+      "control": "Lecture",
+      "event": "click",
+      "color": "purple",
+      "actions": [
+        "mode Hall Lecture"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 4,
+      "name": "CLICK Film",
+      "type": "panel",
+      "control": "Film",
+      "event": "click",
+      "color": "purple",
+      "actions": [
+        "mode Hall Film"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 5,
+      "name": "CLICK Break",
+      "type": "panel",
+      "control": "Break",
+      "event": "click",
+      "color": "purple",
+      "actions": [
+        "mode Hall Break"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 6,
+      "name": "CLICK Cleaning",
+      "type": "panel",
+      "control": "Cleaning",
+      "event": "click",
+      "color": "purple",
+      "actions": [
+        "mode Hall Cleaning"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 7,
+      "name": "HOLD Hall off",
+      "type": "panel",
+      "control": "Hall off",
+      "event": "hold",
+      "hold": 2,
+      "color": "purple",
+      "actions": [
+        "mode Hall Off"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 8,
+      "name": "Mode -> panel",
+      "type": "mode",
+      "group": "Hall",
+      "color": "purple",
+      "actions": [
+        "panel lbl_hall text Hall: {mode}",
+        "panel Walk-in reset",
+        "panel Lecture reset",
+        "panel Film reset",
+        "panel Break reset",
+        "panel Cleaning reset",
+        "if mode Hall not Off then panel {mode} flash on"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10002,
+      "name": "== LECTERN CONTROLS",
+      "type": "comment",
+      "color": "cyan",
+      "actions": [],
+      "conditions": [],
+      "notes": "Fine-tuning during a talk. A preset clears these overrides again."
+    },
+    {
+      "id": 9,
+      "name": "House slider",
+      "type": "panel",
+      "control": "House level",
+      "event": "change",
+      "color": "cyan",
+      "actions": [
+        "set 1.1-4 {=round(value*2.55)}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10,
+      "name": "Podium slider",
+      "type": "panel",
+      "control": "Podium level",
+      "event": "change",
+      "color": "cyan",
+      "actions": [
+        "set 1.20 {=round(value*2.55)}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 11,
+      "name": "CLICK Screen down",
+      "type": "panel",
+      "control": "Screen down",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "netio stage output 1 pulse 25"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 12,
+      "name": "CLICK Screen up",
+      "type": "panel",
+      "control": "Screen up",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "netio stage output 2 pulse 25"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 13,
+      "name": "CLICK Blinds down",
+      "type": "panel",
+      "control": "Blinds down",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "knx building write \"Blinds hall\" on"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 14,
+      "name": "CLICK Blinds up",
+      "type": "panel",
+      "control": "Blinds up",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "knx building write \"Blinds hall\" off"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 15,
+      "name": "Picture mute",
+      "type": "panel",
+      "control": "Picture mute",
+      "event": "change",
+      "color": "cyan",
+      "actions": [
+        "if var pj_mute = on then projector \"Laser PJ\" mute on else projector \"Laser PJ\" mute off"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 16,
+      "name": "CLICK Lectern PC",
+      "type": "panel",
+      "control": "Lectern PC",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "pc \"Lectern PC\" wake"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10003,
+      "name": "== BUILDING",
+      "type": "comment",
+      "color": "orange",
+      "actions": [],
+      "conditions": [],
+      "notes": "Fire alarm from KNX, room booking system over UDP, a safety switch-off at night."
+    },
+    {
+      "id": 17,
+      "name": "Fire alarm (KNX)",
+      "type": "variable",
+      "variable": "fire_alarm",
+      "value": "on",
+      "color": "orange",
+      "actions": [
+        "mode Hall Break",
+        "projector \"Laser PJ\" mute on",
+        "netio stage output 2 pulse 25"
+      ],
+      "conditions": [],
+      "notes": "All house light on, picture off, screen up."
+    },
+    {
+      "id": 18,
+      "name": "UDP HALL LECTURE",
+      "type": "udp",
+      "match": "HALL LECTURE",
+      "color": "orange",
+      "actions": [
+        "mode Hall Lecture",
+        "reply OK\\r"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 19,
+      "name": "UDP HALL OFF",
+      "type": "udp",
+      "match": "HALL OFF",
+      "color": "orange",
+      "actions": [
+        "mode Hall Off",
+        "reply OK\\r"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 20,
+      "name": "Auto off 23:00",
+      "type": "time",
+      "at": "23:00:00",
+      "color": "orange",
+      "actions": [
+        "mode Hall Off"
+      ],
+      "conditions": [
+        "mode Hall not Off"
+      ]
+    },
+    {
+      "id": 21,
+      "name": "Projector warning",
+      "type": "projector",
+      "projector": "Laser PJ",
+      "alarm": "any",
+      "level": "warning",
+      "color": "orange",
+      "actions": [
+        "email tech@museum.example \"Auditorium projector: {alarm}\" {alarm} is {state}"
+      ],
+      "conditions": []
+    }
+  ],
+  "variables": [
+    {
+      "name": "pj_mute",
+      "type": "bool",
+      "initial": false
+    },
+    {
+      "name": "fire_alarm",
+      "type": "bool",
+      "initial": false
+    }
+  ],
+  "calendar": [],
+  "tcp": [],
+  "modbus": [],
+  "maps": [
+    {
+      "id": 1,
+      "name": "Hall",
+      "aspect": 1.5,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [
+        {
+          "fixture": 1,
+          "x": 0.2,
+          "y": 0.6
+        },
+        {
+          "fixture": 2,
+          "x": 0.4,
+          "y": 0.6
+        },
+        {
+          "fixture": 3,
+          "x": 0.6,
+          "y": 0.6
+        },
+        {
+          "fixture": 4,
+          "x": 0.8,
+          "y": 0.6
+        },
+        {
+          "fixture": 5,
+          "x": 0.3,
+          "y": 0.2
+        },
+        {
+          "fixture": 6,
+          "x": 0.7,
+          "y": 0.2
+        },
+        {
+          "fixture": 7,
+          "x": 0.5,
+          "y": 0.25
+        },
+        {
+          "fixture": 8,
+          "x": 0.75,
+          "y": 0.25
+        },
+        {
+          "fixture": 9,
+          "x": 0.5,
+          "y": 0.9
+        },
+        {
+          "fixture": 10,
+          "x": 0.5,
+          "y": 0.5
+        }
+      ]
+    }
+  ],
+  "effects": [],
+  "triggerColorNames": {
+    "purple": "Presets",
+    "cyan": "Lectern",
+    "orange": "Building"
+  },
+  "fixtureTypes": [],
+  "drivers": [
+    {
+      "id": 1,
+      "type": "netio",
+      "name": "stage",
+      "ip": "192.168.1.127",
+      "port": 80,
+      "user": "netio",
+      "password": "netio",
+      "model": "4PZ",
+      "outputs": 4,
+      "live": true,
+      "vars": {}
+    },
+    {
+      "id": 2,
+      "type": "knx",
+      "name": "building",
+      "ip": "192.168.1.123",
+      "port": 3671,
+      "vars": {},
+      "addresses": [
+        {
+          "ga": "2/1/1",
+          "dpt": "1",
+          "name": "Blinds hall"
+        },
+        {
+          "ga": "3/1/1",
+          "dpt": "5.001",
+          "name": "Ventilation hall"
+        },
+        {
+          "ga": "9/0/1",
+          "dpt": "1",
+          "name": "Fire alarm",
+          "var": "fire_alarm"
+        }
+      ]
+    }
+  ]
+}

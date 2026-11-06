@@ -11,6 +11,9 @@ struct NetConfig {
 // Ethernet bring-up plus Art-Net and sACN (E1.31) transmitters.
 namespace Net {
 void begin(const NetConfig& cfg);
+// Call from the main loop: watches the cable link (logged), and when DHCP is on but nobody
+// answered (fallback address) asks DHCP again now and then and when the cable comes back.
+void maintain(uint32_t now);
 bool up();
 IPAddress localIP();
 void macAddress(uint8_t mac[6]);

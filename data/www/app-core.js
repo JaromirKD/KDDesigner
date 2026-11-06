@@ -56,7 +56,7 @@ function deviceKind(name) {
   const has = (list) => (list || []).some((x) => (x.name || '').toLowerCase() === n);
   if (has(p.projectors)) return 'projector';
   if (has(p.pcs)) return 'pc';
-  if (has(p.devices) || has(p.deviceGroups)) return 'network';
+  if (has(p.devices) || has((p.deviceGroups || []).filter((g) => !g.kind))) return 'network';
   if (has(p.tcp)) return 'tcp';
   if (has(p.modbus)) return 'modbus';
   return (p.drivers || []).find((d) => (d.name || '').toLowerCase() === n)?.type || '';
@@ -83,7 +83,7 @@ const TRIGGER_TYPES = [
 const TRIGGER_VARS = {
   udp: ['message', '1 (text after a prefix*)', 'sender_ip', 'sender_port'],
   osc: ['address', '1 … n (arguments)', 'sender_ip', 'sender_port'],
-  mode: ['group', 'mode'], panel: ['control', 'event', 'value (slider, dial, toggle 1/0, wheel #rrggbb, XY pad x,y)', 'r', 'g', 'b (colour wheel, 0-255)', 'x', 'y (XY pad)'], device: ['device', 'kind', 'state'],
+  mode: ['group', 'mode', 'old (the state before)'], panel: ['control', 'event', 'value (slider, dial, toggle 1/0, wheel #rrggbb, XY pad x,y)', 'r', 'g', 'b (colour wheel, 0-255)', 'x', 'y (XY pad)'], device: ['device', 'kind', 'state'],
   projector: ['projector', 'alarm', 'state', 'lamp (hours)', 'hours (the limit)'],
   variable: ['variable', 'value', 'old'], tcp: ['device', 'message', '1 (text after a prefix*)'], http: ['url', 'method', 'status', 'body'],
   dmx_change: ['channel', 'index', 'value', '+ your table names'], input: ['input', 'value'], dmx_in: ['channel', 'index', 'value', 'old'],
@@ -95,13 +95,39 @@ const TRIGGER_COLORS = {
 };
 // Named colour or a custom "#rrggbb".
 const trigColor = (c) => (c ? TRIGGER_COLORS[c] || (/^#[0-9a-f]{6}$/i.test(c) ? c : '') : '');
+// Tab names of the trigger colours. The first main-section separator in a colour is that tab's
+// header: the tab shows its name (without the leading "== ") and renaming the tab renames it.
+// Colours without one use a typed name (project.triggerColorNames, UI only:
+// { red: 'Projectors', '#12ab34': 'Audio', none: 'Misc' }; no colour is stored as "none").
+const trigColorHead = (c) => P().triggers.find((x) => x.type === 'comment' && x.level !== 2 && (trigColor(x.color) ? x.color : '') === (c || ''));
+const sepTitle = (name) => String(name || '').replace(/^[\s=#*\-–—_]+/, '').trim();
+function trigColorName(c) {
+  const h = trigColorHead(c);
+  return (h && sepTitle(h.name)) || (P().triggerColorNames || {})[c || 'none'] || '';
+}
+const trigColorLabel = (c) => trigColorName(c) || (!c ? 'no colour' : TRIGGER_COLORS[c] ? c : 'custom colour');
+function setTrigColorName(c, name) {
+  const p = P(), k = c || 'none';
+  name = String(name || '').trim();
+  if (name === trigColorName(c)) return;
+  const h = trigColorHead(c);
+  if (h && name) {   // keep the header's own prefix ("== ")
+    h.name = (h.name.match(/^[\s=#*\-–—_]+/) || [''])[0] + name;
+    markDirty();
+    return;
+  }
+  p.triggerColorNames = p.triggerColorNames || {};
+  if (name) p.triggerColorNames[k] = name; else delete p.triggerColorNames[k];
+  if (!Object.keys(p.triggerColorNames).length) delete p.triggerColorNames;
+  markDirty();
+}
 const CURVES = [['linear', 'Linear'], ['square', 'Square law'], ['nondim', 'Non-dim (switch)'], ['preheat5', '5% preheat'], ['preheat10', '10% preheat']];
 const PATHS = [['linear', 'Linear'], ['accelerated', 'Accelerated'], ['braked', 'Braked'], ['damped', 'Damped (S-curve)'], ['overshoot', 'Overshoot']];
 const TL_GROUPS = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
 const PANEL_TYPES = ['button', 'toggle', 'slider', 'dial', 'color', 'xy', 'label', 'clock', 'spacer', 'group'];
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PLACEHOLDER = {
-  '{mode}': '<mode>', '{mgroup}': '<mode group>', '{mstate}': '<state>', '{label}': '<label>', '{pctl}': '<panel control>', '{flash}': 'on|off|<colour>', '{pval}': '<value | #rrggbb | x,y>', '{color}': '<colour>', '{trig}': '<trigger name or #>', '{count}': '<count>',
+  '{mode}': '<mode>', '{mgroup}': '<mode group>', '{mstate}': '<state>', '{mstep}': 'next|previous|toggle|back', '{dur}': '<time: 90, 30s, 10m, 2h>','{label}': '<label>', '{pctl}': '<panel control>', '{flash}': 'on|off|<colour>', '{pval}': '<value | #rrggbb | x,y>', '{color}': '<colour>', '{trig}': '<trigger name or #>', '{count}': '<count>',
   '{email}': '<to address>', '{device}': '<device>', '{oscaddr}': '</osc/address>', '{hhmm}': '<HH:MM>', '{days}': '<mon,tue,…>',
   '{tl}': '<timeline>', '{sc}': '<scene>', '{sec}': '<seconds>', '{pct}': '<0-100>', '{dmx}': '<0-255>',
   '{chan}': '<universe>.<ch>[-<ch>]', '{ip}': '<ip address>', '{port}': '<port>', '{text...}': '<text>',
@@ -115,7 +141,7 @@ const PLACEHOLDER = {
   '{kisspoint}': '<slot>.<channel>', '{kissval}': 'on|off|0-255', '{slot}': '<slot 1-8>', '{knxga}': '<group address or name>', '{knxval}': '<value>',
   '{dpt}': '<dpt, e.g. 1 / 5.001 / 9>', '{path}': '<path>', '{digiscene}': '<scene name or #>', '{netioout}': '<output|all>',
   '{netioact}': 'on|off|toggle|restart|pulse', '{pharostl}': 'start|release|toggle|pause|resume', '{pharossc}': 'start|release|toggle',
-  '{fixgrp}': 'fixture|group', '{pharosproto}': '<protocol>', '{word}': '<name>', '{bszone}': '<zone>', '{bsvar}': '<user variable>', '{bsfile}': '<file>',
+  '{fixgrp}': 'fixture|group', '{pharosproto}': '<protocol>', '{word}': '<name>', '{bszone}': '<zone>', '{bsvar}': '<user variable>', '{bsfile}': '<file>', '{bsstate}': '<state>',
   '{iopoint}': '<point, e.g. out3, or its name>', '{ioval}': 'on|off|toggle|<volts>',
 };
 
@@ -140,7 +166,7 @@ const P = () => S.project;
 function emptyProject() {
   return {
     name: 'New show', settings: { tzOffsetMin: 60, udpPort: 4000, sacnPriority: 100, outputs: { dmx: true, artnet: true, sacn: true } },
-    network: { dhcp: true, ip: '192.168.1.50', mask: '255.255.255.0', gateway: '192.168.1.1' },
+    network: { dhcp: true, ip: '172.16.1.111', mask: '255.255.255.0', gateway: '172.16.1.1' },
     universes: [{ id: 1, name: 'Universe 1', dmxPort: 1, artnet: 0, sacn: 1, useDmx: true, useArtnet: true, useSacn: true }],
     fixtures: [], groups: [], scenes: [], timelines: [], triggers: [], projectors: [], pcs: [], devices: [], modes: [],
     panel: { pages: [] }, email: { server: '', port: 25, user: '', password: '', from: '' },
@@ -170,7 +196,9 @@ function normalize(p) {
   p.groups.forEach((g) => (g.fixtures = g.fixtures || []));
   // Old projects: "modes": ["EMERGENCY", ...] becomes one group "Mode" (same as the firmware).
   const legacy = p.modes.filter((m) => typeof m === 'string');
-  p.modes = p.modes.filter((m) => m && typeof m === 'object').map((g) => ({ name: g.name || 'Mode', states: g.states || [] }));
+  // Per group also startup (state at power-up, "" = keep the last), var (linked variable) and
+  // stateInfo: {<state>: {color, icon, enter: [actions], leave: [actions]}}.
+  p.modes = p.modes.filter((m) => m && typeof m === 'object').map((g) => ({ ...g, name: g.name || 'Mode', states: g.states || [], stateInfo: g.stateInfo || {} }));
   if (legacy.length) p.modes.unshift({ name: 'Mode', states: legacy });
   p.settings = Object.assign(e.settings, p.settings);
   p.settings.outputs = Object.assign({ dmx: true, artnet: true, sacn: true, dmxFps: 40, artnetFps: 40, sacnFps: 40, artnetChangesOnly: true, sacnChangesOnly: true }, p.settings.outputs);
@@ -218,6 +246,15 @@ async function save() {
   // commits on "change", which hasn't fired yet).
   const el = document.activeElement;
   if (el?.dataset?.p) onBound({ target: el, type: 'input' });
+  // On a controller: ask once per browser tab, the first save changes the running show.
+  if (isLive()) {
+    let asked = false;
+    try { asked = sessionStorage.getItem('kd.liveSaveOk') === '1'; } catch { /* private mode */ }
+    if (!asked) {
+      if (!confirm(`Save to the controller at ${S.status.ip}?\n\nThis changes the running show right away (the project reloads and the Startup trigger runs).\n\nYou are only asked once in this tab.`)) return;
+      try { sessionStorage.setItem('kd.liveSaveOk', '1'); } catch { /* private mode */ }
+    }
+  }
   try {
     const r = await api('/api/project', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(P(), null, 1) });
     S.dirty = false;
@@ -456,12 +493,14 @@ function onBound(e) {
   const orig = rename ? (el.dataset.orig ?? oldName?.name) : null;
   const before = oldName && oldName.type !== 'comment' && orig &&
     !P().triggers.some((x) => x !== oldName && x.type !== 'comment' && (x.name || '').toLowerCase() === orig.toLowerCase()) ? orig : null;
-  // Renaming a device keeps it in its device groups.
-  const devRename = /^devices\.(\d+)\.name$/.exec(el.dataset.p);
-  const devOld = devRename && P().devices[+devRename[1]]?.name;
+  // Renaming a device (of any kind) keeps it in its device groups.
+  const devRename = /^(devices|tcp|pcs|projectors|drivers)\.(\d+)\.name$/.exec(el.dataset.p);
+  const devItem = devRename && P()[devRename[1]][+devRename[2]];
+  const devOld = devItem?.name;
+  const devKind = devRename && ({ devices: 'network', tcp: 'tcp', pcs: 'pc', projectors: 'projector' }[devRename[1]] || devItem?.type);
   setPath(P(), el.dataset.p, readInput(el));
   if (devOld && devOld !== el.value)
-    P().deviceGroups.forEach((g) => (g.devices = g.devices.map((n) => (n === devOld ? el.value : n))));
+    P().deviceGroups.filter((g) => (g.kind || 'network') === devKind).forEach((g) => (g.devices = g.devices.map((n) => (n === devOld ? el.value : n))));
   // Renaming a timeline: references by name follow (the name before editing is on the field).
   const tlRename = /^timelines\.(\d+)\.name$/.exec(el.dataset.p);
   if (tlRename && e.type === 'change' && el.dataset.orig != null) {
@@ -544,9 +583,10 @@ function previewLevels(levels) {
     cmd(lines.join('\n'));
   }, 40);
 }
-// Why the controller last started (status "started"); watchdog / crash = the firmware had hung and restarted itself.
-const startedText = (why) => (!why ? '—' : /^(watchdog|crash)$/.test(why)
-  ? `<span class="bad" title="The firmware stopped responding and restarted itself. Check the log from before the restart.">${esc(why)} restart</span>` : esc(why));
+// Why the controller last started (status "started"); unexpected (older firmware: watchdog /
+// crash) = the firmware had hung or crashed and restarted itself.
+const startedText = (why) => (!why ? '—' : /^(unexpected|watchdog|crash)$/.test(why)
+  ? `<span class="bad" title="The controller restarted without being asked: the firmware hung or crashed (or the reset button was pressed). The log keeps the lines from before the restart: look above '---- restart ----'.">${esc(why)} restart</span>` : esc(why));
 const fmtTime = (ms) => {
   ms = Math.max(0, ms | 0);
   const s = Math.floor(ms / 1000);
@@ -599,6 +639,7 @@ function updateHeader() {
     $('#bo').classList.toggle('active-bo', !!st.blackout);
   }
   $('#chips').innerHTML = chips.join('');
+  applyWhere();
   $('#logBadge').textContent = S.logUnseen ? (S.logUnseen > 99 ? '99+' : S.logUnseen) : '';
 }
 function onStatus(st) {
@@ -609,6 +650,7 @@ function onStatus(st) {
   }
   updateHeader();
   if (S.view === 'dashboard') renderPlaybacks();
+  if (S.view === 'modes') renderModes();
   if (S.view === 'devices') renderProjectorStates();
   if (S.view === 'monitor') renderMonitor();
   if (S.view === 'variables') renderVarValues();
@@ -700,7 +742,7 @@ function render() {
   // The page in the address (#timelines) and the title: a reload stays there, and two windows
   // can be told apart in the taskbar.
   if (location.hash !== '#' + S.view) history.replaceState(null, '', '#' + S.view);
-  document.title = `${$(`#nav button[data-view="${S.view}"]`)?.textContent.trim() || S.view} - KD Designer`;
+  document.title = pageTitle();
   const main = $('#main');
   const scroll = main.scrollTop;
   main.innerHTML = views[S.view]();
@@ -792,6 +834,47 @@ function setUiPref(k, v) {
   try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, String(v)); } catch { /* private mode */ }
   applyUi();
 }
+// ---- PC editor or live controller ----
+// The mock (PC editor, also what the launcher runs) reports version "mock"; a board reports its
+// firmware version. Live gets a coloured badge, top line, frame, tab title/icon and "Save to
+// controller", so you never change a running show thinking it is your PC copy.
+const LIVE_COLORS = [   // key, colour, text on it
+  ['red', '#e5484d', '#fff'], ['magenta', '#d63ad6', '#fff'], ['orange', '#ff7a1a', '#111'],
+  ['green', '#2fbf71', '#111'], ['blue', '#3b82f6', '#fff'],
+];
+const liveColor = () => LIVE_COLORS.find(([k]) => k === uiPref('kd.liveColor', 'red')) || LIVE_COLORS[0];
+// null until the first status: nothing is shown rather than a wrong guess.
+const isLive = () => (S.status ? S.status.version !== 'mock' : null);
+function pageTitle() {
+  const page = $(`#nav button[data-view="${S.view}"]`)?.textContent.trim() || S.view;
+  const live = isLive();
+  return `${live ? '● LIVE · ' : live === false ? 'PC · ' : ''}${page} - KD Designer`;
+}
+let whereKey = '';
+function applyWhere(force) {
+  const live = isLive(), st = S.status;
+  const key = `${live}|${st?.ip}|${liveColor()[0]}`;
+  if (!force && key === whereKey) return;
+  whereKey = key;
+  document.body.classList.toggle('live', live === true);
+  const w = $('#where'), sv = $('#save');
+  if (!w || !sv) return;   // applyUi runs once before the page is complete
+  w.className = 'where' + (live ? ' on' : live === false ? ' pc' : '');
+  w.innerHTML = live == null ? '' : live
+    ? `● LIVE<span class="long"> ON CONTROLLER · ${esc(st.ip || '')}</span>`
+    : `PC EDITOR<span class="long"> · offline copy</span>`;
+  w.title = live == null ? '' : live
+    ? `You are editing the controller itself (${st.ip}, firmware ${st.version}). Save changes the running show.`
+    : 'You are editing the show on this PC (offline). Nothing on a controller changes until you send the show to it (launcher or Settings).';
+  sv.textContent = live ? 'Save to controller' : 'Save';
+  sv.title = live ? 'Save the project to the controller: the running show changes (Ctrl+S)' : live === false ? 'Save the project on this PC (Ctrl+S)' : 'Save project to USB (Ctrl+S)';
+  document.title = pageTitle();
+  // Tab icon: a filled coloured dot when live, a grey ring on the PC.
+  const ic = live ? `<circle cx="8" cy="8" r="7" fill="${liveColor()[1]}"/>` : '<circle cx="8" cy="8" r="5.5" fill="none" stroke="#8a90a0" stroke-width="3"/>';
+  let link = $('link[rel=icon]');
+  if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+  link.href = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${ic}</svg>`);
+}
 let uiZoomNow = 1;
 const uiZoom = () => uiZoomNow;
 // Auto size: as big as the window allows while a 1600 x 900 working area still fits
@@ -805,6 +888,11 @@ function applyUi() {
   html.style.setProperty('--zoom', uiZoomNow);   // style.css: --vh = a real 1 % of the window height
   const th = uiPref('kd.theme', 'dark');
   html.dataset.theme = THEMES.some(([k]) => k === th) ? th : 'dark';
+  const lc = liveColor();
+  html.style.setProperty('--live', lc[1]);
+  html.style.setProperty('--live-fg', lc[2]);
+  document.body.classList.toggle('live-frame', uiPref('kd.liveFrame', '1') === '1');
+  applyWhere(true);
   // The compact (phone) layout follows the width the page really has after zooming;
   // a media query would only see the window.
   document.body.classList.toggle('narrow', innerWidth / uiZoomNow < 760);

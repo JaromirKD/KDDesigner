@@ -14,7 +14,10 @@
   body { background: var(--bg); color: var(--text); font: 16px/1.3 system-ui, "Segoe UI", sans-serif; display: flex; flex-direction: column; user-select: none; touch-action: manipulation; }
   header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
   header h1 { font-size: 18px; margin: 0; flex: 1; }
+  header #mode { display: flex; flex-wrap: wrap; gap: 6px; }
+  header #mode[hidden] { display: none; }
   header .mode { font-size: 13px; padding: 3px 10px; border-radius: 12px; background: var(--panel); color: var(--muted); }
+  header .mode.mcol { background: var(--mc); color: #fff; text-shadow: 0 1px 2px #0008; }
   header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
   header .dot.ok { background: var(--ok); }
   main { flex: 1; overflow: auto; padding: 16px; }
@@ -35,7 +38,7 @@
 </style>
 </head>
 <body>
-<header><h1 id="title">KD Panel</h1><span class="mode" id="mode" hidden></span><span class="dot" id="conn" title="connection"></span></header>
+<header><h1 id="title">KD Panel</h1><span id="mode" hidden></span><span class="dot" id="conn" title="connection"></span></header>
 <main id="main"><p class="empty">Loading…</p></main>
 <script src="panel-ui.js"></script>
 <script>
@@ -197,10 +200,13 @@ function connect() {
       projectVersion = status.projectVersion;
       if (!first) { reloadProject(); return; }
     }
-    // One pill per mode group: "Curtains: Open · Museum: Closed"
+    // One pill per mode group ("Curtains: Open"), in the state's colour and icon (Modes page).
     const modes = Object.entries(status.modes || {}).filter(([, v]) => v);
     $('#mode').hidden = !modes.length;
-    $('#mode').textContent = modes.map(([g, v]) => (modes.length > 1 ? `${g}: ${v}` : v)).join(' · ');
+    $('#mode').innerHTML = modes.map(([g, v]) => {
+      const info = (project.modes || []).find((x) => x?.name === g)?.stateInfo?.[v] || {};
+      return `<span class="mode${info.color ? ' mcol' : ''}"${info.color ? ` style="--mc:${esc(info.color)}"` : ''}>${info.icon ? esc(info.icon) + ' ' : ''}${esc(modes.length > 1 ? `${g}: ${v}` : v)}</span>`;
+    }).join('');
     // Patched in place, so a slider being dragged or an open confirm question stays.
     if (showing()) panelUpdate($('#main'), page(), status);
   });

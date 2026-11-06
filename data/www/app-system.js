@@ -39,18 +39,30 @@ function devicesNetwork(p) {
     <td><button class="btn small ghost" data-del="devices.${i}">✕</button></td></tr>`).join('')}</table>
   <div class="row" style="margin-top:6px"><button class="btn small" data-add="device">+ Device</button>
     <span class="muted">Use by name: <code>send osc mediaserver /play</code>, <code>send udp motors "K1P200\\r"</code>.</span></div>
-  <h3>Device groups <span class="muted" style="text-transform:none;letter-spacing:0">send to several devices at once</span></h3>
-  ${p.deviceGroups.length ? `<table><tr><th style="width:180px">Name</th><th>Devices</th><th></th></tr>
-  ${p.deviceGroups.map((g, i) => {
-    const clash = p.devices.some((d) => d.name.toLowerCase() === g.name.toLowerCase()) || p.deviceGroups.some((x) => x !== g && x.name.toLowerCase() === g.name.toLowerCase());
+  ${groupsSection('network', 'Device groups', '<code>send udp screens "PLAY\\r"</code> sends to every device in group <i>screens</i>, each on its own port. Works for <code>send osc</code> too.')}`;
+}
+// Device groups per kind ("kind" in deviceGroups; none = network): the group name works wherever
+// a device name of that kind goes in a command (State::groupMembers in the firmware).
+const groupKind = (g) => g.kind || 'network';
+function groupMemberNames(kind, p = P()) {
+  const list = { network: p.devices, tcp: p.tcp, pc: p.pcs, projector: p.projectors }[kind] || p.drivers.filter((d) => d.type === kind);
+  return list.map((x) => x.name).filter(Boolean);
+}
+function groupsSection(kind, title, help) {
+  const p = P(), names = groupMemberNames(kind, p), lc = (s) => String(s || '').toLowerCase();
+  const rows = p.deviceGroups.map((g, i) => [g, i]).filter(([g]) => groupKind(g) === kind);
+  return `<h3>${title} <span class="muted" style="text-transform:none;letter-spacing:0">one command for several at once</span></h3>
+  ${rows.length ? `<table><tr><th style="width:180px">Name</th><th>Members</th><th></th></tr>
+  ${rows.map(([g, i]) => {
+    const clash = lc(g.name) === 'all' || names.some((n) => lc(n) === lc(g.name)) || rows.some(([x]) => x !== g && lc(x.name) === lc(g.name));
     return `<tr>
-    <td><input data-p="deviceGroups.${i}.name" value="${esc(g.name)}" placeholder="screens" class="${clash ? 'invalid' : ''}" title="${clash ? 'A device or another group has this name' : ''}" data-r></td>
-    <td><div class="row">${p.devices.map((d) => `<label class="chk"><input type="checkbox" data-devgrp="${i}" value="${esc(d.name)}"${g.devices.includes(d.name) ? ' checked' : ''}>${esc(d.name)}</label>`).join('') || '<span class="muted">Add devices first</span>'}
-      ${g.devices.filter((n) => !p.devices.some((d) => d.name === n)).map((n) => `<span class="tag mon-warn" title="This device doesn't exist (any more)">${esc(n)}?</span>`).join('')}</div></td>
+    <td><input data-p="deviceGroups.${i}.name" value="${esc(g.name)}" placeholder="screens" class="${clash ? 'invalid' : ''}" title="${clash ? 'A device or another group has this name (or it is “all”)' : ''}" data-r></td>
+    <td><div class="row">${names.map((n) => `<label class="chk"><input type="checkbox" data-devgrp="${i}" value="${esc(n)}"${g.devices.includes(n) ? ' checked' : ''}>${esc(n)}</label>`).join('') || '<span class="muted">Add devices first</span>'}
+      ${g.devices.filter((n) => !names.includes(n)).map((n) => `<span class="tag mon-warn" title="This device doesn't exist (any more)">${esc(n)}?</span>`).join('')}</div></td>
     <td><button class="btn small ghost" data-del="deviceGroups.${i}">✕</button></td></tr>`;
   }).join('')}</table>` : ''}
-  <div class="row" style="margin-top:6px"><button class="btn small" data-add="devgroup">+ Device group</button>
-    <span class="muted"><code>send udp screens "PLAY\\r"</code> sends to every device in group <i>screens</i>, each on its own port. Works for <code>send osc</code> too.</span></div>`;
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="devgroup-${kind}">+ Group</button>
+    <span class="muted">${help}</span></div>`;
 }
 function devicesTcp(p) {
   return `<h3>TCP devices <span class="muted" style="text-transform:none;letter-spacing:0">kept connected · replies fire TCP triggers</span></h3>
@@ -68,6 +80,7 @@ function devicesTcp(p) {
   }).join('')}</table>
   <div class="row" style="margin-top:6px"><button class="btn small" data-add="tcpdev">+ TCP device</button>
     <span class="muted"><code>send tcp watchout run</code> · trigger "TCP message received" · HTTP needs no setup: <code>http get http://10.0.0.20/api/play</code></span></div>
+  ${groupsSection('tcp', 'TCP groups', '<code>send tcp walls run</code> sends to every TCP device in group <i>walls</i>.')}
   <h3>Modbus TCP <span class="muted" style="text-transform:none;letter-spacing:0">PLCs · link points to variables</span></h3>
   <table><tr><th>Name</th><th>IP address</th><th class="narrow">Port</th><th class="narrow">Unit ID</th><th class="narrow">Poll (ms)</th><th>Linked variables</th><th>Status</th><th></th></tr>
   ${p.modbus.map((d, i) => {
@@ -103,7 +116,8 @@ function devicesPcs(p) {
   <div class="row" style="margin-top:6px"><button class="btn small" data-add="pc">+ PC</button>
     ${p.pcs.length ? `<span class="muted">All PCs:</span>${pcButtons('all')}` : ''}</div>
   <p class="muted">Wake-on-LAN is broadcast on the controller's subnet (ports 9 and 7). Enable WoL in the PC's BIOS and network card.
-    Use in triggers: <code>pc 1 wake</code>, <code>pc all shutdown</code>, <code>pc "Media PC" reboot</code>.</p>`;
+    Use in triggers: <code>pc 1 wake</code>, <code>pc all shutdown</code>, <code>pc "Media PC" reboot</code>.</p>
+  ${groupsSection('pc', 'PC groups', '<code>pc foyer wake</code> wakes every PC in group <i>foyer</i>.')}`;
 }
 function devicesEmail(p) {
   return `<h3>Email <span class="muted" style="text-transform:none;letter-spacing:0">plain SMTP, no TLS</span></h3>
@@ -135,17 +149,18 @@ function devicesProjectors(p) {
   <div class="row" style="margin-top:6px"><button class="btn small" data-add="projector">+ Projector</button>
     <span class="muted">Checked at the Monitoring page's interval (power, lamp, input, errors). Hover a status for the last reply. Save before testing a new projector.</span></div>
   <h3>All projectors</h3><div class="row">${pjButtons('all')}</div>
+  ${groupsSection('projector', 'Projector groups', '<code>projector zaal1 on</code> switches on every projector in group <i>zaal1</i>; every projector command works on a group.')}
   <h3>Raw command</h3>
   <div class="row nowrap"><input class="cmd" id="pjRaw" value="projector all send LAMP ?" spellcheck="false" autocomplete="off"><button class="btn" id="pjSend">Send</button></div>
   <p class="muted">In triggers: <code>projector 1 on</code>, <code>projector all off</code>, <code>projector "Left" input 31</code>, <code>projector 2 mute on</code>.</p>`;
 }
 views.devices.after = () => {
-  if (DRIVERS[S.devTab]) return driverPageAfter();
   $$('[data-devgrp]').forEach((el) => el.addEventListener('change', () => {
     const g = P().deviceGroups[+el.dataset.devgrp];
     g.devices = el.checked ? [...new Set([...g.devices, el.value])] : g.devices.filter((n) => n !== el.value);
     markDirty();
   }));
+  if (DRIVERS[S.devTab]) return driverPageAfter();
   $('#pjSend')?.addEventListener('click', async () => { const r = await cmd($('#pjRaw').value); toast(r.reply, !r.ok); });
 };
 function renderProjectorStates() {
@@ -625,6 +640,8 @@ function upcomingEvents() {
           if (!w.slice(2).join(',').split(',').map((x) => x.trim()).includes(wd)) skip = 'other weekday';
         } else notes.push(c);
       }
+      // The mode then isn't known yet: shown as a condition.
+      if (t.onlyIn?.group && t.onlyIn.states?.length) notes.push(`${t.onlyIn.group} is ${t.onlyIn.states.join(' or ')}`);
       out.push({ date: day, min, t, skip, notes });
     }
   }
@@ -749,7 +766,7 @@ function monSummary(st) {
 }
 views.monitor = () => {
   const m = P().settings.monitor;
-  return `<h2>Monitoring</h2>
+  return `<h2>Monitoring</h2>${monTabs()}
   <div class="card mon-bar">
     <div class="row">
       <label class="muted">Check every</label><input type="number" id="monInterval" min="5" max="3600" value="${m.interval}" style="width:80px"><span class="muted">s</span>
@@ -761,7 +778,6 @@ views.monitor = () => {
     </div>
     <div class="row" id="monSummary" style="margin-top:8px"></div>
   </div>
-  ${monTabs()}
   <div id="monBody"></div>
   <p class="muted">PCs and network devices are pinged (ICMP); projectors are polled over PJLink for power, lamp hours, input, mute and error status.
     Kiss-Box, KNX, BrightSign, DiGidot, NETIO and Pharos devices are asked for their status in their own protocol at this same interval; with live updates they report changes at once.
@@ -906,7 +922,9 @@ async function monDetailLoad(it) {
 }
 // [[t0, t1, state], ...] over from..min(to, now); state = up/down value or null (unknown:
 // not checked yet, or the controller was off).
+// upVal can also be a function: state line -> the lane's value, or undefined (not this lane).
 function histSegments(lines, from, to, now, upVal, downVal) {
+  const pick = typeof upVal === 'function' ? upVal : (s) => (s === upVal || s === downVal ? s : undefined);
   const end = Math.min(to, now), segs = [];
   let state = null, since = from, lastLine = -Infinity;
   const change = (t, s) => {
@@ -920,8 +938,7 @@ function histSegments(lines, from, to, now, upVal, downVal) {
     if (t - lastLine > HIST_GAP && state !== null) change(lastLine + 600, null);
     lastLine = t;
     if (s === 'boot') change(t, null);
-    else if (s === upVal) change(t, upVal);
-    else if (s === downVal) change(t, downVal);
+    else if (pick(s) !== undefined) change(t, pick(s));
   }
   if (end - lastLine > HIST_GAP && state !== null) change(lastLine + 600, null);
   if (end > since) segs.push([since, end, state]);
@@ -967,8 +984,9 @@ function histStats(up, pw, from, end) {
   }
   return html;
 }
-// lanes: [{name, segs, cls: {state: class}, on: the "on" state (shows on-time and switch count), small}]
-function histGraph(lanes, logs, from, to, now) {
+// lanes: [{name, segs, cls: {state: class}, fill: {state: colour} (instead of a class), on: the "on"
+// state (shows on-time and switch count), small}]. legend: HTML instead of the device legend.
+function histGraph(lanes, logs, from, to, now, legend) {
   const W = 1000, L = 170, R = 110, gap = 6;
   const x = (t) => L + ((t - from) / (to - from)) * (W - L - R);
   let y = 0;
@@ -991,7 +1009,7 @@ function histGraph(lanes, logs, from, to, now) {
     const ty = ln.y + ln.h / 2 + 4, short = ln.name.length > 26 ? ln.name.slice(0, 25) + '…' : ln.name;
     svg += `<text class="hist-lbl" x="0" y="${ty}"><title>${esc(ln.name)}</title>${esc(short)}</text><rect class="h-none" x="${L}" y="${ln.y}" width="${W - L - R}" height="${ln.h}" rx="3"/>`;
     for (const [a, b, s] of ln.segs)
-      svg += `<rect class="${s ? ln.cls[s] : 'h-unk'}" x="${x(a)}" y="${ln.y}" width="${Math.max(1, x(b) - x(a))}" height="${ln.h}"><title>${esc(ln.name)}: ${fmt(a, b, s)}</title></rect>`;
+      svg += `<rect class="${s ? ln.cls?.[s] || '' : 'h-unk'}"${s && ln.fill?.[s] ? ` style="fill:${esc(ln.fill[s])}"` : ''} x="${x(a)}" y="${ln.y}" width="${Math.max(1, x(b) - x(a))}" height="${ln.h}"><title>${esc(ln.name)}: ${fmt(a, b, s)}</title></rect>`;
     if (ln.on) {   // at the right: how often it went on, and for how long in total
       const n = ln.segs.filter(([, , s], i) => s === ln.on && ln.segs[i - 1]?.[2] !== ln.on).length;
       const t = ln.segs.reduce((sum, [a, b, s]) => sum + (s === ln.on ? b - a : 0), 0);
@@ -1006,7 +1024,7 @@ function histGraph(lanes, logs, from, to, now) {
   });
   if (now > from && now < to) svg += `<line class="hist-now" x1="${x(now)}" x2="${x(now)}" y1="0" y2="${logY + 14}"><title>now</title></line>`;
   return `<svg class="md-graph" viewBox="0 0 ${W} ${H}">${svg}</svg>
-    <div class="row muted md-legend"><span><i class="h-up"></i>online</span><span><i class="h-down"></i>offline</span>${lanes.some((l) => l.name === 'Power') ? '<span><i class="h-on"></i>power on</span><span><i class="h-off"></i>power off / standby</span>' : ''}${lanes.some((l) => l.small) ? '<span><i class="h-pon"></i>reading on</span><span><i class="h-poff"></i>off</span>' : ''}<span><i class="h-unk"></i>unknown (not checked yet, device offline or controller off)</span></div>`;
+    ${legend != null ? `<div class="row muted md-legend">${legend}</div>` : `<div class="row muted md-legend"><span><i class="h-up"></i>online</span><span><i class="h-down"></i>offline</span>${lanes.some((l) => l.name === 'Power') ? '<span><i class="h-on"></i>power on</span><span><i class="h-off"></i>power off / standby</span>' : ''}${lanes.some((l) => l.small) ? '<span><i class="h-pon"></i>reading on</span><span><i class="h-poff"></i>off</span>' : ''}<span><i class="h-unk"></i>unknown (not checked yet, device offline or controller off)</span></div>`}`;
 }
 
 function renderMonitor() {
@@ -1085,13 +1103,14 @@ function renderMonitor() {
   }
   const pcSec = () => section('PCs', hosts.filter((h) => h.kind === 'pc').map((h) => hostCard(h, 'pc')), 'No monitored PCs (Devices page).');
   const netSec = () => section('Network devices', hosts.filter((h) => h.kind === 'device').map((h) => hostCard(h, 'device')), 'No monitored network devices (Devices page).') +
-    ((st?.io?.tcp?.length || st?.io?.modbus?.length) ? section('TCP & Modbus connections', [
+    (st?.mqtt?.enabled ? section('MQTT broker', [mqttCard(st.mqtt, card)], '') : '');
+  const tcpSec = () => ((st?.io?.tcp?.length || st?.io?.modbus?.length) ? section('TCP & Modbus connections', [
       ...(st.io.tcp || []).map((x) => card(x.state, x.name, `TCP ${x.ip}:${x.port}`, [['Last received', x.lastLine ? esc(x.lastLine) : '—'], ['When', ago(x.lastRx)]])),
       ...(st.io.modbus || []).map((x) => card(x.state, x.name, `Modbus ${x.ip}`, [['Last good poll', ago(x.lastOk)], ['Errors', String(x.errors)],
         ['Variables', esc(p.variables.filter((v) => v.modbus?.device === x.name).map((v) => `${v.name}=${st.vars?.[v.name] ?? '?'}`).join(', ') || '—')]])),
-    ], '') : '') + (st?.mqtt?.enabled ? section('MQTT broker', [mqttCard(st.mqtt, card)], '') : '');
+    ], '') : '<p class="muted">Not connected yet (save first).</p>');
   if (tab !== 'all') {
-    body.innerHTML = tab === 'projectors' ? section('Projectors', pjCards, '') : tab === 'pcs' ? pcSec() : netSec();
+    body.innerHTML = tab === 'projectors' ? section('Projectors', pjCards, '') : tab === 'pcs' ? pcSec() : tab === 'tcp' ? tcpSec() : netSec();
     body.scrollTop = keep;
     return;
   }
@@ -1103,7 +1122,7 @@ function renderMonitor() {
   body.innerHTML = section('Controller', [controller], '') +
     (pmcUsed() ? section('Machine Control', [pmcMonCard(card, true)], '') : '') +
     (p.projectors.length ? section('Projectors', pjCards, '') : '') +
-    pcSec() + drvSecs + netSec();
+    pcSec() + drvSecs + netSec() + (p.tcp.length || p.modbus.length ? tcpSec() : '');
   body.scrollTop = keep;
 }
 views.console = () => `<h2>Console</h2>
@@ -1457,6 +1476,258 @@ views.dmx.after = () => {
 };
 views.dmx.keys = (e) => { if (e.key === 'Escape' && S.dmxSel) { S.dmxSel = null; render(); } };
 
+// Modes page: the live state of each mode group (click to set), when it changed (history), and
+// the groups: states, power-up state, linked variable, and per state a colour / icon and the
+// actions when it starts or ends (stateInfo, run by Triggers.cpp as hidden triggers).
+// States are keys in stateInfo and in data-p paths: no dots in their names.
+const MODE_PALETTE = ['#3fb950', '#d29922', '#58a6ff', '#bc8cff', '#f778ba', '#39c5cf', '#ff7b72', '#8b949e'];
+// Preset state colours (any other through "+"); readable with white text on the buttons.
+const MODE_COLORS = ['#2e7d32', '#3fb950', '#00897b', '#0288d1', '#3a7bd5', '#5e35b1', '#8e24aa', '#d81b60', '#b71c1c', '#e65100', '#f9a825', '#6d4c41', '#616161', '#263238'];
+// The icon picker's choices, by theme; "Other" takes any emoji or short text.
+const MODE_ICONS = [
+  ['Status', '🟢 🟡 🟠 🔴 🔵 🟣 ⚪ ⚫ ✅ ❌ ⚠️ ⛔ 🚨 🔒 🔓 ⏻'],
+  ['Show', '▶️ ⏸️ ⏹️ ⏺️ ⏭️ 🔁 🎭 🎬 🎵 🎤 🔊 🔇 💡 🔦 📽️ 🎥 🖥️ 📺'],
+  ['Time', '⏳ ⏰ 🕐 📅 ☀️ 🌅 🌙 🌃 ❄️ 🌧️'],
+  ['Building', '🏛️ 🏠 🚪 👥 🧍 🎉 ☕ 🚻 🅿️ 🔥 💧 🌡️'],
+  ['Technical', '🔧 🛠️ ⚙️ 🧹 🔌 🔋 📶 🧪 🔍 📋 ⭐ ❤️'],
+].map(([name, list]) => [name, list.split(' ')]);
+function modeIconPop(base, s, cur) {
+  return `<div class="icon-pop">
+    ${MODE_ICONS.map(([name, list]) => `<div class="muted">${name}</div><div class="icon-grid">${list.map((x) =>
+      `<button class="${x === cur ? 'on' : ''}" data-mseticon="${esc(x)}" title="${esc(x)}">${x}</button>`).join('')}</div>`).join('')}
+    <div class="row nowrap" style="margin-top:6px"><span class="muted">Other</span>
+      <input data-p="${esc(`${base}.stateInfo.${s}.icon`)}" value="${esc(cur || '')}" maxlength="4" style="width:70px" title="Any emoji (Windows: Win + .) or a short text" data-r>
+      <button class="btn small ghost" data-mseticon="">No icon</button></div>
+  </div>`;
+}
+// The state's own colour, or one from the palette by its place (history graph).
+const modeColor = (g, s) => g.stateInfo?.[s]?.color || MODE_PALETTE[Math.max(0, g.states.indexOf(s)) % MODE_PALETTE.length];
+views.modes = () => {
+  const p = P();
+  p.modes.forEach((g) => g.states.forEach((s) => (g.stateInfo[s] ??= {})));   // so data-p paths into it work
+  const r = (S.modeHistDay ??= ymd(new Date()));
+  return `<h2>Modes</h2>
+  ${p.modes.length ? `<div class="card"><h3 style="margin-top:0">Now</h3><div id="modes" class="mode-groups">${modesNowHtml()}</div></div>
+  <div class="card md-hist">
+    <div class="row"><h3 style="margin:0;flex:1">History</h3>
+      <button class="btn small" data-mhday="-1" title="Day before">◀</button><input type="date" id="mhDate" value="${r}">
+      <button class="btn small" data-mhday="1" title="Day after">▶</button><button class="btn small" data-mhday="0">Today</button></div>
+    <div id="mhGraph">${S.modeHistHtml?.day === r ? S.modeHistHtml.graph : '<span class="muted">loading…</span>'}</div>
+    <div id="mhChanges" class="mode-changes">${S.modeHistHtml?.day === r ? S.modeHistHtml.changes : ''}</div>
+  </div>` : ''}
+  <h3>Mode groups</h3>
+  ${p.modes.map(modeGroupCard).join('')}
+  <div class="row" style="margin-top:6px"><button class="btn small" data-add="modegroup">+ Mode group</button></div>
+  <p class="muted">Each group has one active state at a time, kept across reboots unless you pick a state <b>at power-up</b> (like the Pharos Management Mode module, but several at once).
+    Set with <code>mode Curtains Open</code> or step with <code>mode Curtains next</code> / <code>previous</code> / <code>toggle</code> / <code>back</code>;
+    react with a <b>Mode change</b> trigger or the actions <b>when it starts / ends</b> below; check with <code>mode Museum is Open</code> or <code>mode Museum is Open for 10m</code>;
+    use the state in any command as <code>{mode.Museum}</code>. A trigger's <b>Only active in</b> setting makes it fire only in some states.
+    Other systems: <code>GET /api/mode?group=Museum</code> reads it, <code>&amp;state=Open</code> sets it (also <code>cmd:mode Museum Open</code> on the UDP port, or OSC <code>/kd/cmd "mode Museum Open"</code>).
+    New or renamed groups and states can be set here after saving.</p>`;
+};
+function modeGroupCard(g, i) {
+  const p = P(), base = `modes.${i}`;
+  const onlyHere = (s) => p.triggers.filter((t) => t.onlyIn?.group === g.name && t.onlyIn.states?.includes(s));
+  const acts = (s, k) => `${(g.stateInfo[s][k] || []).map((a, j) => { const path = `${base}.stateInfo.${s}.${k}.${j}`; return `<div class="row nowrap" style="margin-bottom:4px">
+      <input class="cmd" data-p="${esc(path)}" value="${esc(a)}" spellcheck="false" autocomplete="off">
+      <button class="btn small" data-build="${esc(path)}" title="Build with menus">⚙</button>
+      <button class="btn small" data-test="${esc(path)}" title="Run this line now">Test</button>
+      <button class="btn small ghost" data-del="${esc(path)}">✕</button></div>`; }).join('')}
+    <button class="btn small ghost" data-madd="${i}" data-mstate="${esc(s)}" data-mkind="${k}">+ Action</button>`;
+  const v = p.variables.find((x) => x.name === g.var), probs = modeProblems(g);
+  return `<div class="card mode-card">
+    ${probs.length ? `<div class="bad" style="margin-bottom:8px">${probs.map((x) => `<div>! ${esc(x)}</div>`).join('')}</div>` : ''}
+    <div class="form">
+      <label>Group</label><div class="row nowrap"><input data-p="${base}.name" data-mrename="${i}" value="${esc(g.name)}" data-r>
+        <button class="btn small ghost" data-del="modes.${i}" title="Delete this group">✕</button></div>
+      <label>States</label><input data-mstates="${i}" value="${esc(g.states.join(', '))}" placeholder="Open, Closed" title="Comma separated. Rename one in place and its settings, startup state and trigger links follow.">
+      <label title="Which state the group is in after the controller starts. Saving the project never changes the state.">At power-up</label>
+      <select data-p="${base}.startup" data-r><option value="">the state it was in (kept across reboots)</option>${g.states.map((s) => `<option${g.startup === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
+      <label title="The variable follows the state, and setting the variable changes the state - so a Modbus or KNX point linked to the variable can read and set the mode">Variable</label>
+      <div class="row nowrap"><select data-p="${base}.var" data-r><option value="">none</option>${p.variables.map((x) => `<option${g.var === x.name ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}${g.var && !v ? `<option selected>${esc(g.var)} (missing)</option>` : ''}</select>
+        <span class="muted">${g.var ? (v?.type === 'number' ? 'gets the state’s number (1, 2…); setting it to a number changes the state' : 'gets the state’s name; setting it to a state name (or number) changes the state') : 'follows the state both ways, e.g. for a PLC'}</span></div>
+    </div>
+    <table class="mode-states"><tr><th>State</th><th title="Colour and icon on the Modes page, the touch panel header and in the history">Look</th><th>When it starts</th><th>When it ends</th></tr>
+    ${g.states.map((s, si) => {
+      const info = g.stateInfo[s], here = onlyHere(s), cpath = esc(`${base}.stateInfo.${s}.color`);
+      const custom = info.color && !MODE_COLORS.includes(info.color) ? info.color : '';
+      const picking = S.modeIconPick === `${i}|${s}`;
+      return `<tr><td><b>${info.icon ? esc(info.icon) + ' ' : ''}${esc(s)}</b>${here.length ? `<div class="muted" style="font-size:12px;margin-top:4px">Only active here: ${here.map((t) => `<a href="#" data-goto-trigger="${t.id}">#${t.id} ${esc(t.name || '')}</a>`).join(', ')}</div>` : ''}</td>
+        <td><div class="row swatches mode-look">
+          <span class="icon-pick"><button class="btn small mode-icon-btn${picking ? ' on' : ''}" data-micon="${i}" data-mstate="${esc(s)}" title="Pick an icon">${info.icon ? esc(info.icon) : '<span class="muted">icon</span>'}</button>
+            ${picking ? modeIconPop(base, s, info.icon) : ''}</span>
+          <button class="swatch${info.color ? '' : ' on'}" data-mnocolor="${i}" data-mstate="${esc(s)}" title="No colour">∅</button>
+          ${MODE_COLORS.map((c) => `<label class="swatch${info.color === c ? ' on' : ''}" title="${c}" style="background:${c}"><input type="radio" name="mcol-${i}-${si}" data-p="${cpath}" value="${c}"${info.color === c ? ' checked' : ''} data-r></label>`).join('')}
+          <label class="swatch custom${custom ? ' on' : ''}" title="Other colour" style="${custom ? `background:${esc(custom)}` : ''}">${custom ? '' : '+'}<input type="color" data-p="${cpath}" value="${esc(custom || '#4aa3ff')}" data-r></label></div></td>
+        <td>${acts(s, 'enter')}</td><td>${acts(s, 'leave')}</td></tr>`;
+    }).join('')}</table>
+  </div>`;
+}
+// What won't work in a mode group (shown on its card; also tools/check-project.js).
+function modeProblems(g) {
+  const out = [];
+  if (g.startup && !g.states.includes(g.startup)) out.push(`At power-up: '${g.startup}' is not one of its states`);
+  if (g.var && !P().variables.some((v) => v.name === g.var)) out.push(`Variable '${g.var}' doesn't exist`);
+  if (g.var && P().variables.find((v) => v.name === g.var)?.type === 'bool' && g.states.length !== 2) out.push(`Variable '${g.var}' is on/off: it only fits a group with 2 states`);
+  for (const s of g.states) for (const k of ['enter', 'leave']) (g.stateInfo?.[s]?.[k] || []).forEach((a, i) => {
+    if (!a.trim() || a.trim().startsWith('#')) return;
+    const v = validate(a);
+    if (!v.ok) out.push(`${s}, ${k === 'enter' ? 'when it starts' : 'when it ends'} line ${i + 1}: ${v.error}`);
+  });
+  return out;
+}
+// A group or state renamed: the trigger settings, startup state and state settings that name it follow.
+function renameModeRefs(g, oldState, newName) {
+  const p = P();
+  if (oldState == null) {   // the group
+    p.triggers.forEach((t) => {
+      if (t.onlyIn?.group === g.name) t.onlyIn.group = newName;
+      if (t.type === 'mode' && t.group === g.name) t.group = newName;
+    });
+    return;
+  }
+  if (g.stateInfo[oldState]) { g.stateInfo[newName] = g.stateInfo[oldState]; delete g.stateInfo[oldState]; }
+  if (g.startup === oldState) g.startup = newName;
+  p.triggers.forEach((t) => {
+    if (t.onlyIn?.group === g.name) t.onlyIn.states = (t.onlyIn.states || []).map((s) => (s === oldState ? newName : s));
+    if (t.type === 'mode' && t.mode === oldState && (!t.group || t.group === g.name)) t.mode = newName;
+  });
+}
+views.modes.after = () => {
+  renderModes();
+  $$('[data-mstates]').forEach((el) => el.addEventListener('change', () => {
+    const g = P().modes[+el.dataset.mstates];
+    if (el.value.includes('.')) toast('A state name can’t have a dot in it: removed', true);
+    const states = [...new Set(el.value.split(',').map((s) => s.replace(/\./g, '').trim()).filter(Boolean))];
+    // One name changed in place (same number of states): a rename.
+    const diff = states.length === g.states.length ? states.map((s, k) => k).filter((k) => states[k] !== g.states[k]) : [];
+    if (diff.length === 1) renameModeRefs(g, g.states[diff[0]], states[diff[0]]);
+    g.states = states;
+    for (const k of Object.keys(g.stateInfo)) if (!states.includes(k)) delete g.stateInfo[k];   // a removed state's settings
+    if (g.startup && !states.includes(g.startup)) delete g.startup;
+    markDirty();
+    render();
+  }));
+  // Before the binding writes the new name (it listens on #main, this on the field).
+  $$('[data-mrename]').forEach((el) => el.addEventListener('change', () => {
+    const g = P().modes[+el.dataset.mrename];
+    if (el.value && el.value !== g.name) renameModeRefs(g, null, el.value);
+  }));
+  $$('[data-madd]').forEach((b) => b.addEventListener('click', () => {
+    const info = P().modes[+b.dataset.madd].stateInfo[b.dataset.mstate];
+    (info[b.dataset.mkind] ??= []).push('');
+    markDirty();
+    render();
+    $(`[data-p="${CSS.escape(`modes.${b.dataset.madd}.stateInfo.${b.dataset.mstate}.${b.dataset.mkind}.${info[b.dataset.mkind].length - 1}`)}"]`)?.focus();
+  }));
+  // Icon picker: one open at a time (S.modeIconPick = "group index|state"); a click outside closes it.
+  $$('[data-micon]').forEach((b) => b.addEventListener('click', () => {
+    const k = `${b.dataset.micon}|${b.dataset.mstate}`;
+    S.modeIconPick = S.modeIconPick === k ? null : k;
+    render();
+  }));
+  $$('[data-mseticon]').forEach((b) => b.addEventListener('click', () => {
+    const [gi, s] = S.modeIconPick.split(/\|(.*)/s);
+    const info = P().modes[+gi].stateInfo[s];
+    if (b.dataset.mseticon) info.icon = b.dataset.mseticon; else delete info.icon;
+    S.modeIconPick = null;
+    markDirty();
+    render();
+  }));
+  const pop = $('.icon-pop');
+  if (pop) {
+    const outside = (e) => {
+      if (!pop.isConnected) return document.removeEventListener('pointerdown', outside, true);
+      if (pop.contains(e.target) || e.target.closest('[data-micon]')) return;
+      // Closed in place, not by render(): the click that closes it still reaches what was clicked.
+      document.removeEventListener('pointerdown', outside, true);
+      S.modeIconPick = null;
+      pop.previousElementSibling?.classList.remove('on');
+      pop.remove();
+    };
+    document.addEventListener('pointerdown', outside, true);
+  }
+  $$('[data-mnocolor]').forEach((b) => b.addEventListener('click', () => {
+    delete P().modes[+b.dataset.mnocolor].stateInfo[b.dataset.mstate].color;
+    markDirty();
+    render();
+  }));
+  const day = (d) => { S.modeHistDay = d; $('#mhDate').value = d; pagePoll('modeHist', modeHistLoad, 30000); };
+  $('#mhDate')?.addEventListener('change', (e) => e.target.value && day(e.target.value));
+  $$('[data-mhday]').forEach((b) => b.addEventListener('click', () => {
+    const d = new Date(`${S.modeHistDay}T12:00`);
+    d.setDate(d.getDate() + +b.dataset.mhday);
+    day(+b.dataset.mhday ? ymd(d) : ymd(new Date()));
+  }));
+  if ($('#mhGraph')) pagePoll('modeHist', modeHistLoad, 30000);
+};
+views.modes.keys = (e) => { if (e.key === 'Escape' && S.modeIconPick) { S.modeIconPick = null; render(); } };
+// Called on every status: the buttons are only rebuilt when a state changes (a rebuild under the
+// mouse would swallow a click), the "since" text is updated in place.
+function renderModes() {
+  const el = $('#modes');
+  if (!el) return;
+  const now = S.status?.time > 1600000000 ? S.status.time : Date.now() / 1000;
+  const html = modesNowHtml();
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
+  $$('[data-mfor]', el).forEach((s) => {
+    const secs = S.status?.modeFor?.[P().modes[+s.dataset.mfor]?.name];
+    s.textContent = secs != null ? `since ${clockHm(now - secs)} · ${duration(secs)}` : '';
+    s.title = secs != null ? `Since ${new Date((now - secs) * 1000).toLocaleString()}` : '';
+  });
+}
+// The state buttons; also put in by views.modes itself, so the page has its full height before
+// render() restores the scroll position (filled in later, the editor below jumped down).
+function modesNowHtml() {
+  return P().modes.map((g, i) => {
+    const cur = S.status?.modes?.[g.name];
+    return `<div class="row mode-group"><b>${esc(g.name)}</b>${g.states.map((s) => {
+      const info = g.stateInfo?.[s] || {}, on = cur === s;
+      const style = info.color ? ` style="--mc:${esc(info.color)}"` : '';
+      return `<button class="toggle${on ? ' on' : ''}${info.color ? ' mcol' : ''}"${style} data-cmd="mode ${esc(quote(g.name))} ${esc(quote(s))}">${info.icon ? `<span>${esc(info.icon)}</span>` : ''}${esc(s)}</button>`;
+    }).join('')}
+      ${cur ? `<span class="muted" data-mfor="${i}"></span>` : '<span class="muted">not set</span>'}</div>`;
+  }).join('');
+}
+// History of every group for one day: a lane per group from the device history ("mode:<group>",
+// m:<state> lines, Monitor::record), and the changes with who made them from the log.
+async function modeHistLoad() {
+  const groups = P().modes, from = new Date(`${S.modeHistDay}T00:00`).getTime() / 1000, to = from + 86400;
+  let res;
+  try {
+    res = await Promise.all(groups.map((g) => {
+      const q = `from=${from}&to=${to}`;
+      return Promise.all([api(`/api/history?name=${encodeURIComponent('mode:' + g.name)}&${q}`), api(`/api/devlog?name=${encodeURIComponent(g.name)}&${q}`)]);
+    }));
+  } catch (e) {
+    if ($('#mhGraph')) $('#mhGraph').innerHTML = `<span class="bad">Could not read the history: ${esc(e.message)}</span>`;
+    return;
+  }
+  if (!$('#mhGraph') || from !== new Date(`${S.modeHistDay}T00:00`).getTime() / 1000) return;
+  const now = S.status?.time > 1600000000 ? S.status.time : Date.now() / 1000;
+  const state = (s) => (s.startsWith('m:') ? decodeURIComponent(s.slice(2)) : undefined);
+  const lanes = groups.map((g, k) => ({ name: g.name, segs: histSegments(res[k][0], from, to, now, state), fill: Object.fromEntries(g.states.map((s) => [s, modeColor(g, s)])) }));
+  // "Mode Museum changed: Closed -> Open (by trigger 5)" (State::setMode)
+  const changes = [];
+  groups.forEach((g, k) => res[k][1].forEach((m) => {
+    const x = /^Mode (.+) changed: (.*) -> (.*?)(?: \(by (.*)\))?$/.exec(m.m);
+    if (x && x[1] === g.name) changes.push({ ...m, g, old: x[2], s: x[3], by: x[4] || '' });
+  }));
+  changes.sort((a, b) => a.e - b.e);
+  const legend = groups.map((g) => `<span><b>${esc(g.name)}:</b></span>${g.states.map((s) => `<span><i style="background:${esc(modeColor(g, s))}"></i>${esc(s)}</span>`).join('')}`).join('') +
+    '<span><i class="h-unk"></i>unknown (controller off, or not set)</span>';
+  $('#mhGraph').innerHTML = histGraph(lanes, changes, from, to, now, legend);
+  const who = (by) => {
+    const t = /^trigger (\d+)$/.exec(by), tr = t && P().triggers.find((x) => x.id === +t[1]);
+    return tr ? `trigger <a href="#" data-goto-trigger="${tr.id}">#${tr.id} ${esc(tr.name || '')}</a>` : +t?.[1] >= 20001 ? 'the actions of a state' : esc({ web: 'the web UI', http: 'HTTP', udp: 'UDP', osc: 'OSC' }[by] || by || '?');
+  };
+  $('#mhChanges').innerHTML = changes.length ? changes.slice().reverse().map((c) => `<div class="row nowrap"><span class="mono muted">${new Date(c.e * 1000).toTimeString().slice(0, 8)}</span>
+      <b>${esc(c.g.name)}</b> <span>${esc(c.old)} → <b style="color:${esc(modeColor(c.g, c.s))}">${esc(c.s)}</b></span><span class="muted">by ${who(c.by)}</span></div>`).join('')
+    : '<div class="muted">No changes on this day.</div>';
+  // Shown at once by the next render (an edit on this page), so the page keeps its height.
+  S.modeHistHtml = { day: S.modeHistDay, graph: $('#mhGraph').innerHTML, changes: $('#mhChanges').innerHTML };
+}
+
 views.settings = () => {
   const p = P();
   return `<h2>Settings</h2>
@@ -1473,15 +1744,6 @@ views.settings = () => {
     <button class="btn ghost" id="showNew">New project</button></div>
   <p class="muted">Export saves the project as it is in the editor (unsaved changes included) with its map images as one <code>.kdshow</code> file.
     Open loads such a file into the editor; press Save to put it on the controller. Make or edit a show on a PC with the mock: <code>node tools/mock-server.js 8080 C:\\Shows\\MyShow</code>.</p>
-  <h3>Mode groups</h3>
-  <table style="max-width:820px"><tr><th style="width:200px">Group</th><th>States (comma separated)</th><th></th></tr>
-  ${p.modes.map((g, i) => `<tr>
-    <td><input data-p="modes.${i}.name" value="${esc(g.name)}" data-r></td>
-    <td><input data-mstates="${i}" value="${esc(g.states.join(', '))}" placeholder="Open, Closed"></td>
-    <td><button class="btn small ghost" data-del="modes.${i}">✕</button></td></tr>`).join('')}</table>
-  <div class="row" style="margin-top:6px"><button class="btn small" data-add="modegroup">+ Mode group</button></div>
-  <p class="muted">Each group has one active state at a time, kept across reboots (like the Pharos Management Mode module, but several at once).
-    Set with <code>mode Curtains Open</code>, react with a <b>Mode change</b> trigger, check with <code>mode Museum is Open</code>.</p>
   <h3>Network (applied after reboot)</h3>
   <div class="form">
     <label>DHCP</label><input type="checkbox" data-p="network.dhcp" data-t="bool"${p.network.dhcp ? ' checked' : ''} data-r>
@@ -1505,10 +1767,6 @@ views.settings = () => {
 views.settings.after = () => {
   // Set as a value, not escaped into the HTML: with a big rig the JSON is several 100 KB.
   $('#raw').value = JSON.stringify(P(), null, 2);
-  $$('[data-mstates]').forEach((el) => el.addEventListener('change', () => {
-    P().modes[+el.dataset.mstates].states = [...new Set(el.value.split(',').map((s) => s.trim()).filter(Boolean))];
-    markDirty();
-  }));
   $('#syncClock').addEventListener('click', setClockFromPc);
   $('#updFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) installUpdate(f); });
   pagePoll('updInfo', () => { if (!S.updating) $('#updInfo').innerHTML = updInfoHtml(); }, 2000);
@@ -1541,10 +1799,18 @@ function displaySettingsHtml() {
     <button class="btn small" data-uistep="1" title="Bigger">A+</button>
     <b id="uiScaleVal" style="min-width:48px">${pct} %</b>
   </div>
-  <p class="muted">Auto fits the window (it changes when you resize it); pick a size yourself to keep it fixed. The touch panel has its own layout.</p>`;
+  <p class="muted">Auto fits the window (it changes when you resize it); pick a size yourself to keep it fixed. The touch panel has its own layout.</p>
+  <div class="row live-colors" style="margin-top:12px">
+    <span class="muted" style="min-width:60px">Live</span>
+    ${LIVE_COLORS.map(([k, c]) => `<button data-livecolor="${k}" class="${k === liveColor()[0] ? 'on' : ''}" style="background:${c}" title="${k}"></button>`).join('')}
+    <button class="toggle${uiPref('kd.liveFrame', '1') === '1' ? ' on' : ''}" id="liveFrame" style="width:auto;height:auto;border-radius:4px;padding:3px 10px" title="A coloured frame around the whole window while editing a controller">Frame</button>
+  </div>
+  <p class="muted">The colour of the badge, top line, Save button and frame when you edit a controller itself (on the PC editor the badge is grey). You are now ${isLive() ? '<b>live on the controller</b>' : 'on the <b>PC editor</b>'}.</p>`;
 }
 function attachDisplaySettings() {
   $$('[data-uitheme]').forEach((b) => b.addEventListener('click', () => { setUiPref('kd.theme', b.dataset.uitheme); render(); }));
+  $$('[data-livecolor]').forEach((b) => b.addEventListener('click', () => { setUiPref('kd.liveColor', b.dataset.livecolor); render(); }));
+  $('#liveFrame').addEventListener('click', () => { setUiPref('kd.liveFrame', uiPref('kd.liveFrame', '1') === '1' ? '0' : '1'); render(); });
   $('#uiAuto').addEventListener('click', () => {
     // Off: keep the size it has now, so switching Auto off changes nothing on screen.
     setUiPref('kd.scale', uiScalePref() === 'auto' ? uiZoom() : null);

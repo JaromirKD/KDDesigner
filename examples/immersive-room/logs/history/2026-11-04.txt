@@ -1,0 +1,14 @@
+1793813250 boot - -
+1793813250 m:Idle mode mode:Room
+1793813250 online pc Media server
+1793813250 online pc Audio Mac
+1793813250 online device mediaserver
+1793813250 online device qlab
+1793813250 online projector PJ 1
+1793813250 off projector PJ 1
+1793813250 online projector PJ 2
+1793813250 off projector PJ 2
+1793813250 online projector PJ 3
+1793813250 off projector PJ 3
+1793813250 online kissbox io
+1793813255 p:2.1=1 kissbox io

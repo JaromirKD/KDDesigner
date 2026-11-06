@@ -80,6 +80,24 @@ bool readFile(const char* path, String& out, size_t maxLen) {
   return true;
 }
 
+bool readFile(const char* path, BigRam::Buffer& out, size_t maxLen) {
+  if (!isMounted) return false;
+  FILE* f = fopen(path, "rb");
+  if (!f) return false;
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  bool ok = size >= 0 && (size_t)size <= maxLen && out.reserve(size);
+  if (!ok) LOGE(Usb, "%s too large (%ld bytes)", path, size);
+  else {
+    out.len = fread(out.data, 1, size, f);
+    out.data[out.len] = 0;
+    ok = out.len == (size_t)size;
+  }
+  fclose(f);
+  return ok;
+}
+
 bool writeFile(const char* path, const char* data, size_t len) {
   if (!isMounted) return false;
   FILE* f = fopen(path, "wb");

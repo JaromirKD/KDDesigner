@@ -23,7 +23,7 @@ bool takeLine(Line& l);
 bool state(const String& name, bool& online, bool& known);
 }  // namespace Tcp
 
-// HTTP/1.1 requests (plain http, no https). Responses fire "http" triggers.
+// HTTP/1.0 requests (plain http, no https; 1.0 so replies are never chunked). Responses fire "http" triggers.
 namespace Http {
 struct Response { String method, url, body; int status; };
 bool request(const String& method, const String& url, const String& body, String& msg);

@@ -1,6 +1,7 @@
 #include "Vars.h"
 #include <math.h>
 #include "Globals.h"
+#include "State.h"
 
 void Vars::set(const String& name, const String& value) {
   for (auto& p : kv) if (p.first == name) { p.second = value; return; }
@@ -106,6 +107,8 @@ String expandVars(const String& line, const Vars* vars) {
       out += e.ok ? formatNumber(v) : String("{" + body + "}");
     } else if (const String* v = vars ? vars->get(body) : nullptr) {
       out += *v;
+    } else if (body.startsWith("mode.") && State::findGroup(body.substring(5)) >= 0) {
+      out += State::current(State::findGroup(body.substring(5)));   // {mode.Museum}: the group's state
     } else {
       String g;
       if (Globals::get(body, g)) out += g;  // user variable

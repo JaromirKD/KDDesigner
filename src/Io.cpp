@@ -16,7 +16,7 @@ namespace {
 // and by load()); `q` guards the small queues and the public state the main
 // thread reads, so commands and conditions never wait on a slow device.
 rtos::Mutex dev, q;
-rtos::Thread thread(osPriorityBelowNormal, 8 * 1024, nullptr, "io");
+rtos::Thread thread(osPriorityNormal, 8 * 1024, nullptr, "io");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 
 // Takes the oldest item of a queue guarded by q; false when it is empty.
 template <class T>
@@ -168,7 +168,9 @@ void httpService() {
     IPAddress ip;
     bool ok = ip.fromString(host) ? c.connect(ip, port) : c.connect(host.c_str(), port);
     if (ok) {
-      String req = r.method + " " + path + " HTTP/1.1\r\nHost: " + host + "\r\nUser-Agent: KD-Designer\r\nConnection: close\r\n";
+      // HTTP/1.0 like Drivers.cpp: a 1.1 server may send the body "chunked" (size lines in
+      // between), and {body} in http triggers got those numbers (seen on the first hardware test).
+      String req = r.method + " " + path + " HTTP/1.0\r\nHost: " + host + "\r\nUser-Agent: KD-Designer\r\nConnection: close\r\n";
       if (r.body.length() || r.method != "GET") {
         req += String("Content-Type: ") + (r.body.startsWith("{") || r.body.startsWith("[") ? "application/json" : "text/plain") + "\r\n";
         req += "Content-Length: " + String(r.body.length()) + "\r\n";
@@ -255,7 +257,7 @@ bool mbTransact(MbDev& d, uint8_t fc, uint16_t addr, uint16_t val, uint8_t* pdu,
   uint8_t req[12] = {(uint8_t)(++d.tid >> 8), (uint8_t)d.tid, 0, 0, 0, 6, d.unit, fc,
                      (uint8_t)(addr >> 8), (uint8_t)addr, (uint8_t)(val >> 8), (uint8_t)val};
   while (d.c.available() > 0) d.c.read();  // drop anything stale
-  d.c.write(req, sizeof(req));
+  if (d.c.write(req, sizeof(req)) != sizeof(req)) { err = "send failed"; return false; }
   uint8_t h[7];
   if (!readExact(d.c, h, 7, 1000)) { err = "timeout"; return false; }
   int len = ((h[4] << 8) | h[5]) - 1;  // PDU length (minus unit id)
@@ -308,7 +310,13 @@ void modbusService() {
       if (!have) break;
       uint8_t fc = fcFor(w.table, true);
       uint16_t v = fc == 5 ? (w.value ? 0xFF00 : 0) : w.value;
-      if (!mbTransact(d, fc, w.address, v, pdu, len, err)) { mbDrop(d, "write " + w.table + " " + w.address + ": " + err); break; }
+      if (!mbTransact(d, fc, w.address, v, pdu, len, err)) {
+        q.lock();
+        mbWrites.push_front(w);   // sent again once reconnected, not lost
+        q.unlock();
+        mbDrop(d, "write " + w.table + " " + w.address + ": " + err);
+        break;
+      }
       LOGD(Sys, "Modbus %s: wrote %s %u = %u", d.name.c_str(), w.table.c_str(), w.address, w.value);
     }
     if (!d.connected || now - d.lastPoll < d.pollMs) continue;
@@ -328,15 +336,24 @@ void modbusService() {
   }
 }
 
+// The jobs below share this thread, so a slow one delays the others (TCP lines, HTTP
+// responses, PLC polls). Anything over half a second is logged with its name.
+void timed(const char* what, void (*job)()) {
+  uint32_t t0 = millis();
+  job();
+  uint32_t ms = millis() - t0;
+  if (ms > 500) LOGW(Sys, "I/O thread: %s took %lu ms", what, (unsigned long)ms);
+}
+
 void run() {
   rtos::ThisThread::sleep_for(3s);  // let the network come up
   for (;;) {
-    Clock::service();
+    timed("clock (NTP)", Clock::service);
     dev.lock();
-    tcpService();
-    modbusService();
+    timed("TCP devices", tcpService);
+    timed("Modbus", modbusService);
     dev.unlock();
-    httpService();
+    timed("HTTP request", httpService);
     rtos::ThisThread::sleep_for(10ms);
   }
 }

@@ -1,0 +1,1895 @@
+{
+  "name": "Media museum - 8 BrightSign players",
+  "settings": {
+    "tzOffsetMin": 60,
+    "udpPort": 4000,
+    "sacnPriority": 100,
+    "monitor": {
+      "interval": 60,
+      "timeout": 1000,
+      "failures": 2
+    },
+    "time": {
+      "ntp": "pool.ntp.org",
+      "ntpEnabled": true,
+      "dst": "eu"
+    },
+    "location": {
+      "lat": 52.37,
+      "lon": 4.9
+    },
+    "outputs": {
+      "dmx": true,
+      "artnet": true,
+      "sacn": true,
+      "dmxFps": 40,
+      "artnetFps": 30,
+      "sacnFps": 40,
+      "artnetChangesOnly": true,
+      "sacnChangesOnly": false
+    }
+  },
+  "network": {
+    "dhcp": false,
+    "ip": "192.168.1.50",
+    "mask": "255.255.255.0",
+    "gateway": "192.168.1.1"
+  },
+  "modes": [
+    {
+      "name": "Museum",
+      "states": [
+        "Closed",
+        "Open",
+        "Emergency"
+      ],
+      "stateInfo": {
+        "Closed": {
+          "color": "#616161",
+          "icon": "🌙",
+          "enter": [
+            "release all fade 30",
+            "scene \"Lobby night\" fade 30",
+            "brightsign screens send night"
+          ]
+        },
+        "Open": {
+          "color": "#3fb950",
+          "icon": "🟢",
+          "enter": [
+            "release all fade 5",
+            "scene \"Lobby day\" fade 10",
+            "scene \"Corridor idle\" fade 10",
+            "scene \"Cinema walk-in\" fade 10",
+            "brightsign screens send day"
+          ]
+        },
+        "Emergency": {
+          "color": "#b71c1c",
+          "icon": "⚠",
+          "enter": [
+            "release all fade 0",
+            "scene Emergency fade 0",
+            "brightsign screens send emergency",
+            "panel lbl_museum flash red"
+          ],
+          "leave": [
+            "panel lbl_museum reset"
+          ]
+        }
+      }
+    }
+  ],
+  "universes": [
+    {
+      "id": 1,
+      "name": "DMX 1",
+      "dmxPort": 1,
+      "artnet": 0,
+      "sacn": 1,
+      "useDmx": true,
+      "useArtnet": false,
+      "useSacn": false
+    }
+  ],
+  "fixtures": [
+    {
+      "id": 1,
+      "name": "Cinema house 1",
+      "universe": 1,
+      "address": 1,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 2,
+      "name": "Cinema house 2",
+      "universe": 1,
+      "address": 2,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 3,
+      "name": "Cinema house 3",
+      "universe": 1,
+      "address": 3,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 4,
+      "name": "Cinema house 4",
+      "universe": 1,
+      "address": 4,
+      "channels": [
+        "dim"
+      ],
+      "curve": "square",
+      "icon": "dimmer"
+    },
+    {
+      "id": 5,
+      "name": "Cinema screen glow 1",
+      "universe": 1,
+      "address": 10,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 6,
+      "name": "Cinema screen glow 2",
+      "universe": 1,
+      "address": 13,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 7,
+      "name": "Corridor spot 1",
+      "universe": 1,
+      "address": 20,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 8,
+      "name": "Corridor spot 2",
+      "universe": 1,
+      "address": 21,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 9,
+      "name": "Corridor spot 3",
+      "universe": 1,
+      "address": 22,
+      "channels": [
+        "dim"
+      ],
+      "icon": "profile"
+    },
+    {
+      "id": 10,
+      "name": "Wall wash 1",
+      "universe": 1,
+      "address": 30,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 11,
+      "name": "Wall wash 2",
+      "universe": 1,
+      "address": 35,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 12,
+      "name": "Wall wash 3",
+      "universe": 1,
+      "address": 40,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 13,
+      "name": "Wall wash 4",
+      "universe": 1,
+      "address": 45,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 14,
+      "name": "Wall wash 5",
+      "universe": 1,
+      "address": 50,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 15,
+      "name": "Wall wash 6",
+      "universe": 1,
+      "address": 55,
+      "channels": [
+        "dim",
+        "r",
+        "g",
+        "b",
+        "w"
+      ],
+      "icon": "wash"
+    },
+    {
+      "id": 16,
+      "name": "Lobby downlight 1",
+      "universe": 1,
+      "address": 70,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 17,
+      "name": "Lobby downlight 2",
+      "universe": 1,
+      "address": 71,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 18,
+      "name": "Lobby downlight 3",
+      "universe": 1,
+      "address": 72,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    },
+    {
+      "id": 19,
+      "name": "Lobby downlight 4",
+      "universe": 1,
+      "address": 73,
+      "channels": [
+        "dim"
+      ],
+      "icon": "dimmer"
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "Cinema glow",
+      "fixtures": [
+        5,
+        6
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Video wall wash",
+      "fixtures": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Cinema house",
+      "fixtures": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Corridor",
+      "fixtures": [
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Lobby",
+      "fixtures": [
+        16,
+        17,
+        18,
+        19
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "name": "Lobby day",
+      "levels": [
+        {
+          "fixture": 16,
+          "ch": "dim",
+          "v": 229
+        },
+        {
+          "fixture": 17,
+          "ch": "dim",
+          "v": 229
+        },
+        {
+          "fixture": 18,
+          "ch": "dim",
+          "v": 229
+        },
+        {
+          "fixture": 19,
+          "ch": "dim",
+          "v": 229
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Lobby night",
+      "levels": [
+        {
+          "fixture": 16,
+          "ch": "dim",
+          "v": 26
+        },
+        {
+          "fixture": 17,
+          "ch": "dim",
+          "v": 26
+        },
+        {
+          "fixture": 18,
+          "ch": "dim",
+          "v": 26
+        },
+        {
+          "fixture": 19,
+          "ch": "dim",
+          "v": 26
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Cinema walk-in",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 204
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 204
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Cinema dark",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 13
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 13
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 13
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 13
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Corridor idle",
+      "levels": [
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 51
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 51
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Corridor welcome",
+      "levels": [
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Emergency",
+      "levels": [
+        {
+          "fixture": 1,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 2,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 3,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 4,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 7,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 8,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 9,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 16,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 17,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 18,
+          "ch": "dim",
+          "v": 255
+        },
+        {
+          "fixture": 19,
+          "ch": "dim",
+          "v": 255
+        }
+      ]
+    }
+  ],
+  "timelines": [
+    {
+      "id": 1,
+      "loop": false,
+      "priority": 0,
+      "name": "Cinema film",
+      "length": 600000,
+      "group": "B",
+      "tracks": [
+        {
+          "name": "House",
+          "fixtures": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "groups": []
+        },
+        {
+          "name": "Screen glow",
+          "fixtures": [],
+          "groups": [
+            1
+          ]
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 6000,
+          "scene": 4,
+          "path": "damped"
+        },
+        {
+          "t": 0,
+          "track": 1,
+          "fade": 6000,
+          "effect": 1,
+          "params": {
+            "speed": 0.05,
+            "color": "#3060ff",
+            "low": 0.3
+          },
+          "dim": 40
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "loop": false,
+      "priority": 0,
+      "name": "Wall show",
+      "length": 90000,
+      "group": "C",
+      "tracks": [
+        {
+          "name": "Wall",
+          "fixtures": [],
+          "groups": [
+            2
+          ]
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "fade": 3000,
+          "len": 30000,
+          "out": 2000,
+          "effect": 2,
+          "params": {
+            "speed": 0.3,
+            "width": 0.3,
+            "color": "#40a0ff",
+            "back": "#000820"
+          },
+          "dim": 100
+        },
+        {
+          "t": 30000,
+          "fade": 2000,
+          "len": 30000,
+          "out": 2000,
+          "effect": 3,
+          "params": {
+            "speed": 0.05,
+            "c1": "#ff6020",
+            "c2": "#6020ff"
+          },
+          "dim": 100
+        },
+        {
+          "t": 60000,
+          "fade": 2000,
+          "len": 30000,
+          "out": 5000,
+          "effect": 1,
+          "params": {
+            "speed": 0.2,
+            "color": "#ffffff",
+            "low": 0.2
+          },
+          "dim": 80
+        }
+      ]
+    }
+  ],
+  "devices": [],
+  "deviceGroups": [
+    {
+      "name": "screens",
+      "kind": "brightsign",
+      "devices": [
+        "lobby",
+        "cinema",
+        "corridor",
+        "guide",
+        "signage",
+        "vitrine",
+        "kiosk",
+        "wall"
+      ]
+    }
+  ],
+  "pcs": [],
+  "email": {
+    "server": "192.168.1.5",
+    "port": 25,
+    "user": "",
+    "password": "",
+    "from": "av@museum.example"
+  },
+  "projectors": [],
+  "panel": {
+    "theme": {},
+    "panels": [
+      {
+        "id": 1,
+        "name": "Staff",
+        "title": "Media museum",
+        "start": 1
+      }
+    ],
+    "pages": [
+      {
+        "id": 1,
+        "name": "Players",
+        "columns": 4,
+        "controls": [
+          {
+            "type": "label",
+            "name": "lbl_museum",
+            "text": "Museum: -",
+            "span": 3
+          },
+          {
+            "type": "clock"
+          },
+          {
+            "type": "label",
+            "name": "lbl_lobby",
+            "text": "Lobby: -",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_cinema",
+            "text": "Cinema:",
+            "var": "cinema_video",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_corridor",
+            "text": "Corridor motion:",
+            "var": "corridor_motion",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_guide",
+            "text": "Guide: -",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_visitors",
+            "text": "Visitors:",
+            "var": "visitors",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_vitrine",
+            "text": "Vitrine: -",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_kiosk",
+            "text": "Kiosk plays:",
+            "var": "kiosk_plays",
+            "span": 2
+          },
+          {
+            "type": "label",
+            "name": "lbl_wall",
+            "text": "Wall: -",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Start film",
+            "text": "Start film",
+            "color": "#6a4c93",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Wall show now",
+            "text": "Wall show now",
+            "color": "#3a4a6b",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Guide NL",
+            "text": "Guide NL",
+            "color": "#00838f"
+          },
+          {
+            "type": "button",
+            "name": "Guide EN",
+            "text": "Guide EN",
+            "color": "#00838f"
+          },
+          {
+            "type": "button",
+            "name": "Guide DE",
+            "text": "Guide DE",
+            "color": "#00838f"
+          },
+          {
+            "type": "label",
+            "name": "lbl_films",
+            "text": "Films today:",
+            "var": "films_today",
+            "span": 1
+          },
+          {
+            "type": "button",
+            "name": "Open now",
+            "text": "Open now",
+            "color": "#2e7d32",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Close now",
+            "text": "Close (hold 3 s)",
+            "color": "#b71c1c",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Technician",
+            "text": "Technician…",
+            "color": "#424242",
+            "goto": 2,
+            "span": 4
+          }
+        ],
+        "panel": 1
+      },
+      {
+        "id": 2,
+        "name": "Technician",
+        "columns": 3,
+        "pin": "1234",
+        "controls": [
+          {
+            "type": "button",
+            "name": "Test cinema",
+            "text": "Test pattern cinema",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Test corridor",
+            "text": "Test pattern corridor",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Test signage",
+            "text": "Test pattern signage",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Test vitrine",
+            "text": "Test pattern vitrine",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Test kiosk",
+            "text": "Test pattern kiosk",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Test wall",
+            "text": "Test pattern wall",
+            "color": "#3a4a6b"
+          },
+          {
+            "type": "button",
+            "name": "Reboot all",
+            "text": "Reboot all players (hold 3 s)",
+            "color": "#5a2a2a",
+            "span": 2
+          },
+          {
+            "type": "button",
+            "name": "Emergency test",
+            "text": "Emergency on/off (hold 3 s)",
+            "color": "#b71c1c"
+          },
+          {
+            "type": "button",
+            "name": "Back",
+            "text": "← Back",
+            "color": "#424242",
+            "goto": 1,
+            "span": 3
+          }
+        ],
+        "panel": 1
+      }
+    ]
+  },
+  "triggers": [
+    {
+      "id": 10001,
+      "name": "== MUSEUM",
+      "type": "comment",
+      "color": "red",
+      "actions": [],
+      "conditions": [],
+      "notes": "The Museum mode group switches every player at once through the device group \"screens\" (a UDP command, so it works with and without the KD plugin)."
+    },
+    {
+      "id": 1,
+      "name": "Startup",
+      "type": "startup",
+      "color": "red",
+      "actions": [
+        "if mode Museum is Open then mode Museum Open else mode Museum Closed"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 2,
+      "name": "Open 10:00",
+      "type": "time",
+      "at": "10:00:00",
+      "color": "red",
+      "actions": [
+        "mode Museum Open"
+      ],
+      "conditions": [
+        "calendar Closed inactive"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Close 17:00",
+      "type": "time",
+      "at": "17:00:00",
+      "color": "red",
+      "actions": [
+        "mode Museum Closed"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 4,
+      "name": "Mode -> panel",
+      "type": "mode",
+      "group": "Museum",
+      "color": "red",
+      "actions": [
+        "panel lbl_museum text Museum: {mode}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 5,
+      "name": "Weekly reboot (Monday 07:00)",
+      "type": "time",
+      "at": "07:00:00",
+      "days": [
+        "mon"
+      ],
+      "color": "red",
+      "actions": [
+        "brightsign screens reboot",
+        "log All players rebooted"
+      ],
+      "conditions": [],
+      "notes": "A fresh start once a week. Through the KD plugin where it is on, else through the DWS."
+    },
+    {
+      "id": 6,
+      "name": "Player offline",
+      "type": "device",
+      "device": "",
+      "state": "offline",
+      "color": "red",
+      "actions": [
+        "email tech@museum.example \"{device} offline\" BrightSign {device} stopped answering"
+      ],
+      "conditions": [
+        "mode Museum is Open"
+      ]
+    },
+    {
+      "id": 10002,
+      "name": "== 1 LOBBY - plain UDP",
+      "type": "comment",
+      "color": "orange",
+      "actions": [],
+      "conditions": [],
+      "notes": "No plugin: the presentation has UDP input events \"day\", \"night\" and \"emergency\", and sends \"playing <state>\" to the controller on every state. That arrives as Player says (linked to lobby_says)."
+    },
+    {
+      "id": 7,
+      "name": "Lobby says",
+      "type": "variable",
+      "variable": "lobby_says",
+      "color": "orange",
+      "actions": [
+        "panel lbl_lobby text Lobby: {value}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10003,
+      "name": "== 2 CINEMA - light follows the film",
+      "type": "comment",
+      "color": "purple",
+      "actions": [],
+      "conditions": [],
+      "notes": "The UDP command \"video3\" starts the film. The KD plugin reports the Video zone (z1 -> cinema_video): the light follows what the player really does, also when someone starts the film on the player itself."
+    },
+    {
+      "id": 8,
+      "name": "Start film",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "brightsign cinema send video3",
+        "log Film start asked"
+      ],
+      "conditions": [
+        "var cinema_video != \"Video 3\""
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Film every hour",
+      "type": "interval",
+      "seconds": 3600,
+      "color": "purple",
+      "actions": [
+        "fire trigger \"Start film\""
+      ],
+      "conditions": [
+        "mode Museum is Open"
+      ],
+      "notes": "Plus the button on the panel."
+    },
+    {
+      "id": 10,
+      "name": "Film started",
+      "type": "variable",
+      "variable": "cinema_video",
+      "value": "Video 3",
+      "color": "purple",
+      "actions": [
+        "release scene \"Cinema walk-in\" fade 6",
+        "start timeline \"Cinema film\"",
+        "var films_today ++"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 11,
+      "name": "Film ended",
+      "type": "variable",
+      "variable": "cinema_video",
+      "color": "purple",
+      "actions": [
+        "stop timeline \"Cinema film\" fade 8",
+        "scene \"Cinema walk-in\" fade 8"
+      ],
+      "conditions": [
+        "var cinema_video != \"Video 3\"",
+        "timeline \"Cinema film\" running"
+      ]
+    },
+    {
+      "id": 10004,
+      "name": "== 3 CORRIDOR - motion sensor on the player",
+      "type": "comment",
+      "color": "green",
+      "actions": [],
+      "conditions": [],
+      "notes": "A PIR sensor on the player's GPIO 0 (gpio0 -> corridor_motion). The presentation keeps its own loop; KD plays a welcome clip and lights the corridor."
+    },
+    {
+      "id": 12,
+      "name": "Corridor: someone there",
+      "type": "variable",
+      "variable": "corridor_motion",
+      "value": "on",
+      "color": "green",
+      "actions": [
+        "cancel trigger \"Corridor: empty\"",
+        "scene \"Corridor welcome\" fade 1",
+        "brightsign corridor play Video welcome.mp4"
+      ],
+      "conditions": [],
+      "cooldown": 5,
+      "onlyIn": {
+        "group": "Museum",
+        "states": [
+          "Open"
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "name": "Corridor: nobody",
+      "type": "variable",
+      "variable": "corridor_motion",
+      "value": "off",
+      "color": "green",
+      "actions": [
+        "fire trigger \"Corridor: empty\" after 30"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 14,
+      "name": "Corridor: empty",
+      "type": "manual",
+      "color": "green",
+      "actions": [
+        "release scene \"Corridor welcome\" fade 10"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10005,
+      "name": "== 4 AUDIO GUIDE - user variable",
+      "type": "comment",
+      "color": "cyan",
+      "actions": [],
+      "conditions": [],
+      "notes": "An audio-only player. Its presentation has a User Variable \"language\"; a User Variable event on it switches the audio states. KD sets it, the plugin reports it back (var.language -> guide_language)."
+    },
+    {
+      "id": 15,
+      "name": "CLICK Guide Dutch",
+      "type": "panel",
+      "control": "Guide NL",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "brightsign guide var language NL"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 16,
+      "name": "CLICK Guide English",
+      "type": "panel",
+      "control": "Guide EN",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "brightsign guide var language EN"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 17,
+      "name": "CLICK Guide German",
+      "type": "panel",
+      "control": "Guide DE",
+      "event": "click",
+      "color": "cyan",
+      "actions": [
+        "brightsign guide var language DE"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 18,
+      "name": "Guide language",
+      "type": "variable",
+      "variable": "guide_language",
+      "color": "cyan",
+      "actions": [
+        "panel lbl_guide text Guide: {value}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10006,
+      "name": "== 5 SIGNAGE - player -> KD",
+      "type": "comment",
+      "color": "blue",
+      "actions": [],
+      "conditions": [],
+      "notes": "The info screen counts visitors (a people counter in the presentation, User Variable \"visitors\" -> visitors). The Ticker zone (z2) shows what's on screen."
+    },
+    {
+      "id": 19,
+      "name": "Busy",
+      "type": "variable",
+      "variable": "visitors",
+      "color": "blue",
+      "actions": [
+        "panel lbl_visitors flash orange",
+        "log Busy: {value} visitors"
+      ],
+      "conditions": [
+        "var visitors > 400"
+      ],
+      "cooldown": 600
+    },
+    {
+      "id": 20,
+      "name": "New day: visitors",
+      "type": "time",
+      "at": "00:05:00",
+      "color": "blue",
+      "actions": [
+        "log Visitors yesterday: {visitors}",
+        "brightsign signage var visitors 0"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10007,
+      "name": "== 6 VITRINE - serial sensor",
+      "type": "comment",
+      "color": "yellow",
+      "actions": [],
+      "conditions": [],
+      "notes": "A climate probe on the player's serial port sends \"TEMP 21.4\" lines; the plugin passes them on (serial -> vitrine_climate). Without serial in the presentation: User Variable kdSerial = 9600."
+    },
+    {
+      "id": 21,
+      "name": "Vitrine climate",
+      "type": "variable",
+      "variable": "vitrine_climate",
+      "color": "yellow",
+      "actions": [
+        "panel lbl_vitrine text Vitrine: {value}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 22,
+      "name": "Climate log every hour",
+      "type": "interval",
+      "seconds": 3600,
+      "color": "yellow",
+      "actions": [
+        "log Vitrine climate: {vitrine_climate}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10008,
+      "name": "== 7 KIOSK - statistics",
+      "type": "comment",
+      "color": "pink",
+      "actions": [],
+      "conditions": [],
+      "notes": "A touch kiosk: visitors pick a chapter on the screen, the presentation handles it all. KD only counts what was watched (z1 -> kiosk_video)."
+    },
+    {
+      "id": 23,
+      "name": "Kiosk chapter",
+      "type": "variable",
+      "variable": "kiosk_video",
+      "color": "pink",
+      "actions": [
+        "var kiosk_plays ++",
+        "log Kiosk: {value}"
+      ],
+      "conditions": [
+        "var kiosk_video != \"Video 1\""
+      ],
+      "notes": "Video 1 is the attract loop, not counted."
+    },
+    {
+      "id": 10009,
+      "name": "== 8 VIDEO WALL - timed show with light",
+      "type": "comment",
+      "color": "grey",
+      "actions": [],
+      "conditions": [],
+      "notes": "At 11:00, 13:00 and 15:00 a Plugin Message \"Video_Show\" moves the wall's Video zone to its Show state (a Plugin Message transition in the presentation), and the wall wash runs along."
+    },
+    {
+      "id": 24,
+      "name": "Wall show",
+      "type": "manual",
+      "color": "grey",
+      "actions": [
+        "brightsign wall event Video_Show",
+        "start timeline \"Wall show\""
+      ],
+      "conditions": [
+        "mode Museum is Open"
+      ],
+      "whileRunning": "ignore"
+    },
+    {
+      "id": 25,
+      "name": "Wall show 11:00",
+      "type": "time",
+      "at": "11:00:00",
+      "color": "grey",
+      "actions": [
+        "fire trigger \"Wall show\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 26,
+      "name": "Wall show 13:00",
+      "type": "time",
+      "at": "13:00:00",
+      "color": "grey",
+      "actions": [
+        "fire trigger \"Wall show\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 27,
+      "name": "Wall show 15:00",
+      "type": "time",
+      "at": "15:00:00",
+      "color": "grey",
+      "actions": [
+        "fire trigger \"Wall show\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 28,
+      "name": "Wall says",
+      "type": "variable",
+      "variable": "wall_video",
+      "color": "grey",
+      "actions": [
+        "panel lbl_wall text Wall: {value}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 10010,
+      "name": "== PANEL & SAFETY",
+      "type": "comment",
+      "color": "red",
+      "actions": [],
+      "conditions": [],
+      "notes": "Staff panel: /panel. Technician page behind PIN 1234: a test pattern per player, emergency test, reboot."
+    },
+    {
+      "id": 29,
+      "name": "CLICK Start film",
+      "type": "panel",
+      "control": "Start film",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "fire trigger \"Start film\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 30,
+      "name": "CLICK Wall show",
+      "type": "panel",
+      "control": "Wall show now",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "fire trigger \"Wall show\""
+      ],
+      "conditions": []
+    },
+    {
+      "id": 31,
+      "name": "CLICK Open",
+      "type": "panel",
+      "control": "Open now",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "mode Museum Open"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 32,
+      "name": "HOLD Close",
+      "type": "panel",
+      "control": "Close now",
+      "event": "hold",
+      "hold": 3,
+      "color": "red",
+      "actions": [
+        "mode Museum Closed"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 33,
+      "name": "CLICK Test cinema",
+      "type": "panel",
+      "control": "Test cinema",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "brightsign cinema test Video Testpattern"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 34,
+      "name": "CLICK Test corridor",
+      "type": "panel",
+      "control": "Test corridor",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "brightsign corridor test Video Testpattern"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 35,
+      "name": "CLICK Test signage",
+      "type": "panel",
+      "control": "Test signage",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "brightsign signage test Video Testpattern"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 36,
+      "name": "CLICK Test vitrine",
+      "type": "panel",
+      "control": "Test vitrine",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "brightsign vitrine test Video Testpattern"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 37,
+      "name": "CLICK Test kiosk",
+      "type": "panel",
+      "control": "Test kiosk",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "brightsign kiosk test Video Testpattern"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 38,
+      "name": "CLICK Test wall",
+      "type": "panel",
+      "control": "Test wall",
+      "event": "click",
+      "color": "red",
+      "actions": [
+        "brightsign wall test Video Testpattern"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 39,
+      "name": "HOLD Reboot all",
+      "type": "panel",
+      "control": "Reboot all",
+      "event": "hold",
+      "hold": 3,
+      "color": "red",
+      "actions": [
+        "brightsign screens reboot"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 40,
+      "name": "Fire alarm (UDP FIRE ON)",
+      "type": "udp",
+      "match": "FIRE ON",
+      "color": "red",
+      "actions": [
+        "mode Museum Emergency",
+        "reply OK\\r"
+      ],
+      "conditions": [],
+      "notes": "From the building's fire panel gateway."
+    },
+    {
+      "id": 41,
+      "name": "Fire alarm over (UDP FIRE OFF)",
+      "type": "udp",
+      "match": "FIRE OFF",
+      "color": "red",
+      "actions": [
+        "mode Museum Open",
+        "reply OK\\r"
+      ],
+      "conditions": [
+        "mode Museum is Emergency"
+      ]
+    },
+    {
+      "id": 42,
+      "name": "HOLD Emergency test",
+      "type": "panel",
+      "control": "Emergency test",
+      "event": "hold",
+      "hold": 3,
+      "color": "red",
+      "actions": [
+        "if mode Museum is Emergency then mode Museum Open else mode Museum Emergency"
+      ],
+      "conditions": []
+    }
+  ],
+  "variables": [
+    {
+      "name": "lobby_says",
+      "type": "text",
+      "initial": ""
+    },
+    {
+      "name": "cinema_video",
+      "type": "text",
+      "initial": ""
+    },
+    {
+      "name": "films_today",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    },
+    {
+      "name": "corridor_motion",
+      "type": "bool",
+      "initial": false
+    },
+    {
+      "name": "guide_language",
+      "type": "text",
+      "initial": ""
+    },
+    {
+      "name": "visitors",
+      "type": "number",
+      "initial": 0
+    },
+    {
+      "name": "signage_ticker",
+      "type": "text",
+      "initial": ""
+    },
+    {
+      "name": "vitrine_climate",
+      "type": "text",
+      "initial": ""
+    },
+    {
+      "name": "kiosk_video",
+      "type": "text",
+      "initial": ""
+    },
+    {
+      "name": "kiosk_plays",
+      "type": "number",
+      "initial": 0,
+      "persist": true
+    },
+    {
+      "name": "wall_video",
+      "type": "text",
+      "initial": ""
+    }
+  ],
+  "calendar": [
+    {
+      "name": "Closed",
+      "from": "01-01",
+      "to": "01-01"
+    },
+    {
+      "name": "Closed",
+      "from": "12-25",
+      "to": "12-25"
+    }
+  ],
+  "tcp": [],
+  "modbus": [],
+  "maps": [
+    {
+      "id": 1,
+      "name": "Floor plan",
+      "aspect": 2,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [
+        {
+          "fixture": 16,
+          "x": 0.05,
+          "y": 0.85
+        },
+        {
+          "fixture": 17,
+          "x": 0.1167,
+          "y": 0.85
+        },
+        {
+          "fixture": 18,
+          "x": 0.1833,
+          "y": 0.85
+        },
+        {
+          "fixture": 19,
+          "x": 0.25,
+          "y": 0.85
+        },
+        {
+          "fixture": 1,
+          "x": 0.35,
+          "y": 0.2
+        },
+        {
+          "fixture": 2,
+          "x": 0.4333,
+          "y": 0.2
+        },
+        {
+          "fixture": 3,
+          "x": 0.5167,
+          "y": 0.2
+        },
+        {
+          "fixture": 4,
+          "x": 0.6,
+          "y": 0.2
+        },
+        {
+          "fixture": 5,
+          "x": 0.42,
+          "y": 0.05
+        },
+        {
+          "fixture": 6,
+          "x": 0.53,
+          "y": 0.05
+        },
+        {
+          "fixture": 7,
+          "x": 0.3,
+          "y": 0.6
+        },
+        {
+          "fixture": 8,
+          "x": 0.5,
+          "y": 0.6
+        },
+        {
+          "fixture": 9,
+          "x": 0.7,
+          "y": 0.6
+        },
+        {
+          "fixture": 10,
+          "x": 0.72,
+          "y": 0.15
+        },
+        {
+          "fixture": 11,
+          "x": 0.77,
+          "y": 0.15
+        },
+        {
+          "fixture": 12,
+          "x": 0.82,
+          "y": 0.15
+        },
+        {
+          "fixture": 13,
+          "x": 0.87,
+          "y": 0.15
+        },
+        {
+          "fixture": 14,
+          "x": 0.92,
+          "y": 0.15
+        },
+        {
+          "fixture": 15,
+          "x": 0.97,
+          "y": 0.15
+        }
+      ]
+    }
+  ],
+  "effects": [
+    {
+      "id": 1,
+      "name": "Breathe",
+      "code": "// Slow fade up and down\nparam speed = 0.25 [0.02, 2]   // breaths per second\nparam low = 0.1 [0, 1]         // lowest level (0 = all the way off)\nparam color = #ffb347          // colour\nr, g, b = color\ndim = mix(low, 1, 0.5 - 0.5 * cos(t * speed * tau))"
+    },
+    {
+      "id": 2,
+      "name": "Chase",
+      "code": "// One light running along the fixtures, in list order\nparam speed = 0.5 [0, 4]       // rounds per second: 1 = the light passes every fixture once a second\nparam width = 0.25 [0.02, 1]   // size of the light, part of the rig (0.25 = a quarter)\nparam color = #ffffff          // colour of the light\nparam back = #000000           // colour of the other fixtures\npos = fract(t * speed)\nd = abs(fract(u - pos + 0.5) - 0.5)\nk = smoothstep(max(width / 2, 1 / n), 0, d)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+    },
+    {
+      "id": 3,
+      "name": "XY gradient",
+      "code": "// Two colours blended across the map at an angle, optionally moving\nparam angle = 0 [0, 360]       // direction of the blend in degrees: 0 = left to right, 90 = top to bottom\nparam speed = 0 [-1, 1]        // how fast the colours move (0 = still)\nparam c1 = #ff2d92             // colour at the start\nparam c2 = #0a84ff             // colour at the end\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a) + 0.5\nk = tri((p + t * speed) / 2)\nr = mix(c1.r, c2.r, k)\ng = mix(c1.g, c2.g, k)\nb = mix(c1.b, c2.b, k)"
+    }
+  ],
+  "triggerColorNames": {
+    "red": "Museum / panel",
+    "orange": "1 Lobby",
+    "purple": "2 Cinema",
+    "green": "3 Corridor",
+    "cyan": "4 Audio guide",
+    "blue": "5 Signage",
+    "yellow": "6 Vitrine",
+    "pink": "7 Kiosk",
+    "grey": "8 Video wall"
+  },
+  "fixtureTypes": [],
+  "drivers": [
+    {
+      "id": 1,
+      "type": "brightsign",
+      "name": "lobby",
+      "ip": "192.168.1.131",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": false,
+      "vars": {
+        "msg": "lobby_says"
+      },
+      "commands": [
+        {
+          "name": "Day",
+          "text": "day"
+        },
+        {
+          "name": "Night",
+          "text": "night"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "brightsign",
+      "name": "cinema",
+      "ip": "192.168.1.132",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": true,
+      "pluginPort": 5010,
+      "vars": {
+        "z1": "cinema_video"
+      },
+      "commands": [
+        {
+          "name": "Start film",
+          "text": "video3"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "brightsign",
+      "name": "corridor",
+      "ip": "192.168.1.133",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": true,
+      "pluginPort": 5010,
+      "vars": {
+        "gpio0": "corridor_motion"
+      },
+      "commands": []
+    },
+    {
+      "id": 4,
+      "type": "brightsign",
+      "name": "guide",
+      "ip": "192.168.1.134",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": true,
+      "pluginPort": 5010,
+      "vars": {
+        "var.language": "guide_language"
+      },
+      "commands": []
+    },
+    {
+      "id": 5,
+      "type": "brightsign",
+      "name": "signage",
+      "ip": "192.168.1.135",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": true,
+      "pluginPort": 5010,
+      "vars": {
+        "var.visitors": "visitors",
+        "z2": "signage_ticker"
+      },
+      "commands": []
+    },
+    {
+      "id": 6,
+      "type": "brightsign",
+      "name": "vitrine",
+      "ip": "192.168.1.136",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": true,
+      "pluginPort": 5010,
+      "vars": {
+        "serial": "vitrine_climate"
+      },
+      "commands": []
+    },
+    {
+      "id": 7,
+      "type": "brightsign",
+      "name": "kiosk",
+      "ip": "192.168.1.137",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": true,
+      "pluginPort": 5010,
+      "vars": {
+        "z1": "kiosk_video"
+      },
+      "commands": []
+    },
+    {
+      "id": 8,
+      "type": "brightsign",
+      "name": "wall",
+      "ip": "192.168.1.138",
+      "port": 80,
+      "user": "admin",
+      "password": "",
+      "udpPort": 5000,
+      "plugin": true,
+      "pluginPort": 5010,
+      "vars": {
+        "z1": "wall_video"
+      },
+      "commands": []
+    }
+  ]
+}

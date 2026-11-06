@@ -5,7 +5,6 @@
 views.dashboard = () => `
   <h2>Dashboard</h2>
   <div class="grid">
-    ${P().modes.length ? `<div class="card" style="grid-column:1/-1"><h3 style="margin-top:0">Modes</h3><div id="modes" class="mode-groups"></div></div>` : ''}
     <div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">Running</h3><div id="pbs"></div><div id="sched"></div></div>
     <div class="card"><h3 style="margin-top:0">System</h3><div id="sys"></div></div>
     <div class="card"><h3 style="margin-top:0">Outputs</h3><div id="outs" class="row"></div>
@@ -39,13 +38,6 @@ function renderPlaybacks() {
       <button class="btn small" data-cmd="start ${ref}">Restart</button>
       <button class="btn small" data-cmd="stop ${ref} fade 2">Release</button>` : `<button class="btn small" data-cmd="release ${ref} fade 1">Release</button>`}</div></div>`;
   }).join('') : '<span class="muted">Nothing running</span>';
-  const modes = $('#modes');
-  if (modes) modes.innerHTML = P().modes.map((g) => {
-    const cur = st?.modes?.[g.name];
-    return `<div class="row mode-group"><b>${esc(g.name)}</b>${g.states.map((s) =>
-      `<button class="toggle${cur === s ? ' on' : ''}" data-cmd="mode ${esc(quote(g.name))} ${esc(quote(s))}">${esc(s)}</button>`).join('')}
-      ${cur ? '' : '<span class="muted">not set</span>'}</div>`;
-  }).join('');
   const trigName = (id) => P().triggers.find((t) => t.id === id)?.name || '?';
   // wait = "wait until" (in -1: no timeout), loop = "repeat <n> times every", sleep = the rest of a run.
   const kind = (s) => (s.wait != null ? 'wait' : s.loop != null ? 'loop' : s.sleep ? 'sleep' : s.every ? 'repeat' : 'delayed');

@@ -8,6 +8,7 @@
 #include "Mqtt.h"
 #include "Net.h"
 #include "Show.h"
+#include "State.h"
 #include "Triggers.h"
 #include "Util.h"
 #include "mbedtls/sha1.h"
@@ -32,6 +33,8 @@ int typeOf(const String& s) {
 
 struct Point { String key, name, value, dpt; };
 struct Trig { int num; String name, type; };   // a Pharos trigger (fired with "pharos <dev> trigger <num>")
+struct BsState { uint8_t zone; String name, file; };   // a BrightSign presentation state (kdlink plugin)
+const size_t kMaxBsStates = 80, kMaxActivity = 30;
 struct Drv {
   int id = 0;
   Type type = Netio;
@@ -72,6 +75,8 @@ struct Drv {
   bool plugin = false;
   uint16_t pluginPort = 5010;
   uint32_t pluginSeen = 0;        // epoch of its last packet
+  std::vector<BsState> states;    // every state of every zone (test buttons)
+  std::deque<std::pair<uint32_t, String>> activity;   // what the player received: serial, UDP, GPIO, zone changes
 };
 
 struct Job { int id; String method, path, body, label; };          // HTTP (method "POLL" = status poll)
@@ -82,8 +87,8 @@ std::vector<Drv> list;
 std::deque<Job> jobs;
 std::deque<UJob> ujobs;
 rtos::Mutex mtx;   // guards everything above; never held during network waits
-rtos::Thread httpThread(osPriorityBelowNormal, 10 * 1024, nullptr, "drv-http");
-rtos::Thread udpThread(osPriorityBelowNormal, 4 * 1024, nullptr, "drv-udp");
+rtos::Thread httpThread(osPriorityNormal, 10 * 1024, nullptr, "drv-http");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
+rtos::Thread udpThread(osPriorityNormal, 4 * 1024, nullptr, "drv-udp");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 volatile uint16_t kissPort = 0;            // Kiss-Box listen port (from the first Kiss-Box)
 
 Drv* byId(int id) {
@@ -109,6 +114,8 @@ int onOff(const Drv& d, const Point& p) {
     bin = (k.startsWith("out") && isNumber(k.substring(3))) || (k.startsWith("in") && isNumber(k.substring(2)));
   } else if (d.type == Knx) {
     bin = p.dpt.toInt() == 1;
+  } else if (d.type == Bsign) {
+    bin = k.startsWith("gpio");
   } else if (d.type == Pharos && (k.startsWith("tl") || k.startsWith("sc"))) {
     return !v.length() ? -1 : v == "none" || v == "released" ? 0 : 1;   // running, paused, started... = on
   }
@@ -128,6 +135,7 @@ void setPoint(Drv& d, const String& key, const String& value, const String& name
   if (p->value == value) return;
   int was = onOff(d, *p);
   p->value = value;
+  State::changed();
   int now = onOff(d, *p);
   if (now >= 0 && now != was) Monitor::record(kTypes[d.type], d.name, ("p:" + key + "=" + String(now)).c_str());
   for (auto& l : d.links) if (l.first == key) vars.push_back({l.second, value});
@@ -1017,7 +1025,7 @@ void runUdp() {
 }
 
 // ---- Live updates (push thread): Pharos WebSocket, MQTT broker ----------------
-rtos::Thread pushThread(osPriorityBelowNormal, 6 * 1024, nullptr, "drv-push");
+rtos::Thread pushThread(osPriorityNormal, 6 * 1024, nullptr, "drv-push");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 
 // NETIO MQTT-flex: ${INOUT_STATUS} / ${OUTPUTS_STATUS} JSON, or a plain 0/1 on .../output/<n>/state.
 void mqttPublish(const IPAddress& from, const String& topic, const String& payload) {
@@ -1306,7 +1314,8 @@ bool kissCmd(Drv& d, const std::vector<String>& t, String& msg) {
     if (!slotOf(t[2], slot)) { msg = "slot must be 1-8"; return false; }
     std::vector<uint8_t> p = {0xA4, (uint8_t)(slot - 1)};
     for (int i = 4; i < 12; i++) { bool b; p.push_back(truthy(t[i], b) ? b : (uint8_t)constrain(t[i].toInt(), 0L, 255L)); }
-    return queueUdp(d, p, "slot " + t[2] + " all " + rest(t, 4), msg) && queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + t[2], msg);
+    String readMsg;   // the reply describes the write, not the read-back after it
+    return queueUdp(d, p, "slot " + t[2] + " all " + rest(t, 4), msg) && queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + t[2], readMsg);
   }
   int dot = t.size() == 4 ? t[2].indexOf('.') : -1;
   if (dot > 0) {
@@ -1316,8 +1325,9 @@ bool kissCmd(Drv& d, const std::vector<String>& t, String& msg) {
     uint8_t v = truthy(t[3], b) ? b : (uint8_t)constrain(t[3].toInt(), 0L, 255L);
     if (!truthy(t[3], b) && !isNumber(t[3])) { msg = "value must be on|off or 0-255"; return false; }
     // Write one channel, then read the slot back so the status follows.
+    String readMsg;
     return queueUdp(d, {0xA5, (uint8_t)(slot - 1), (uint8_t)(ch - 1), v}, t[2] + " = " + t[3], msg) &&
-           queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + String(slot), msg);
+           queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + String(slot), readMsg);
   }
   msg = "expected: <slot>.<ch> on|off|<0-255>, <slot> all <8 values>, read <slot> or send <hex bytes>";
   return false;
@@ -1347,9 +1357,9 @@ bool knxCmd(Drv& d, const std::vector<String>& t, String& msg) {
 // To the kdlink plugin: fields separated by tabs, so zone names and values may contain spaces.
 bool pluginSend(Drv& d, const String& what, const String& a, const String& b, String& msg) {
   if (!d.plugin) { msg = "BrightSign " + d.name + ": switch on the KD plugin for this player first (Devices > BrightSign)"; return false; }
-  String text = "kd\t" + what + "\t" + a + (b.length() ? "\t" + b : String(""));
+  String text = "kd\t" + what + (a.length() ? "\t" + a : String("")) + (b.length() ? "\t" + b : String(""));
   Triggers::sendRaw(d.ip, d.pluginPort, (const uint8_t*)text.c_str(), text.length());
-  String label = what + " " + a + (b.length() ? " " + b : String(""));
+  String label = what + (a.length() ? " " + a : String("")) + (b.length() ? " " + b : String(""));
   d.last = label;
   msg = "BrightSign " + d.name + ": " + label;
   return true;
@@ -1361,6 +1371,10 @@ bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
   if (is("event") && t.size() >= 4) return pluginSend(d, "event", rest(t, 3), "", msg);
   if (is("var") && t.size() >= 5) return pluginSend(d, "var", t[3], rest(t, 4), msg);
   if (is("play") && t.size() == 5) return pluginSend(d, "play", t[3], t[4], msg);
+  // test <zone> <state>: the plugin plays that state's media file (the presentation carries on after it).
+  if (is("test") && t.size() >= 5) return pluginSend(d, "test", t[3], rest(t, 4), msg);
+  // With the plugin, reboot doesn't need the DWS (which may be https-only).
+  if (is("reboot") && t.size() == 3 && d.plugin) return pluginSend(d, "reboot", "", "", msg);
   if (is("stop") && t.size() == 4) return pluginSend(d, "stop", t[3], "", msg);
   if (t.size() >= 4 && t[2].equalsIgnoreCase("send")) {
     Triggers::sendUdp(d.ip, d.udpPort, rest(t, 3));
@@ -1370,7 +1384,7 @@ bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
   }
   if (t.size() == 3 && t[2].equalsIgnoreCase("reboot")) return queueHttp(d, "PUT", "/api/v1/control/reboot", "", "reboot", msg);
   if (t.size() >= 3 && t[2].equalsIgnoreCase("api")) return apiCmd(d, t, 3, "/api/v1/", msg);
-  msg = "expected: event <text>, var <name> <value>, play <zone> <file>, stop <zone>, send <text>, reboot or api get|put|post|delete <path> [body]";
+  msg = "expected: test <zone> <state>, play <zone> <file>, stop <zone>, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]";
   return false;
 }
 
@@ -1544,17 +1558,39 @@ void begin() {
   pushThread.start(runPush);
 }
 
-// Readings from the kdlink plugin: zones as z<n> (state) + z<n>.file, user variables as var.<name>.
+void addActivity(Drv& d, const String& text) {
+  if (d.activity.size() >= kMaxActivity) d.activity.pop_front();
+  d.activity.push_back({epochNow(), text.substring(0, 160)});
+}
+
+// Readings from the kdlink plugin: zones as z<n> (state) + z<n>.file, user variables as var.<name>,
+// GPIO inputs as gpio<n>, the last serial line as "serial".
 void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
   String kind = j["kd"] | "";
   d.pluginSeen = epochNow();
   if (kind == "hello") {
-    setInfo(d, "KD plugin", "kdlink v" + String(j["v"] | 1) + " · " + String(j["zones"] | 0) + " zones · " + String(j["vars"] | 0) + " user variables");
+    String has = String(j["gpio"] | false ? " · GPIO" : "") + (j["serial"] | false ? " · serial port" : "");
+    setInfo(d, "KD plugin", "kdlink v" + String(j["v"] | 1) + " · " + String(j["zones"] | 0) + " zones · " + String(j["vars"] | 0) + " user variables" + has);
+    String model = j["model"] | "";
+    if (model.length()) setInfo(d, "Model", model);
     setPoint(d, "zones", String(j["zones"] | 0), "Zones", vars);
+    d.states.clear();   // the state list follows
+  } else if (kind == "state") {
+    if (d.states.size() < kMaxBsStates) d.states.push_back({(uint8_t)(j["z"] | 0), j["name"] | "", j["file"] | ""});
   } else if (kind == "zone") {
     String k = "z" + String(j["i"] | 0), name = "Zone " + String(j["i"] | 0) + " " + (j["name"] | "");
-    setPoint(d, k, j["state"] | "", name, vars);
+    String state = j["state"] | "";
+    const Point* was = findPoint(d, k);
+    if (was && was->value != state) addActivity(d, String(j["name"] | "zone") + ": " + state);
+    setPoint(d, k, state, name, vars);
     setPoint(d, k + ".file", j["file"] | "", name + " file", vars);
+  } else if (kind == "gpio") {
+    long bits = j["bits"] | 0L;
+    for (int i = 0; i < 8; i++) setPoint(d, "gpio" + String(i), (bits >> i) & 1 ? "1" : "0", "GPIO " + String(i), vars);
+  } else if (kind == "log") {
+    String src = j["src"] | "", text = j["text"] | "";
+    addActivity(d, src + ": " + text);
+    if (src == "serial") setPoint(d, "serial", text, "Serial in (last line)", vars);
   } else if (kind == "var") {
     String name = j["name"] | "";
     if (name.length()) setPoint(d, "var." + name, j["value"] | "", name, vars);
@@ -1655,7 +1691,7 @@ void load() {
         d.uptime = old.uptime; d.lastError = old.lastError; d.lastErrorAt = old.lastErrorAt;
         d.pushState = d.push ? old.pushState : 0; d.pushNote = old.pushNote; d.lastRead = old.lastRead;
         d.nonce = old.nonce; d.session = old.session; d.up = old.up; d.channel = old.channel; d.seq = old.seq; d.aliveAt = old.aliveAt;
-        d.pluginSeen = old.pluginSeen;
+        d.pluginSeen = old.pluginSeen; d.states = old.states; d.activity = old.activity;
         for (auto& p : old.points)
           if (ty != Knx) d.points.push_back(p);
           else for (auto& np : d.points) if (np.key == p.key) np.value = p.value;
@@ -1678,16 +1714,35 @@ void load() {
 
 bool isCommand(const String& word) { return typeOf(word) >= 0; }
 
+// A device of type ty by number or name, -1 if none (caller holds mtx).
+static int findDrv(int ty, const String& ref) {
+  int idx = findRef(ref, list.size(), [](int i) { return list[i].id; }, [](int i) -> const String& { return list[i].name; });
+  if (idx >= 0 && list[idx].type != ty) idx = -1;
+  if (idx < 0) {
+    for (size_t i = 0; i < list.size(); i++) if (list[i].type == ty && list[i].name.equalsIgnoreCase(ref)) idx = i;
+  }
+  return idx;
+}
+
+static bool runCmd(int ty, const String& ref, const std::vector<String>& t, String& msg);
+
 bool command(const std::vector<String>& t, String& msg) {
   int ty = typeOf(t[0]);
   if (t.size() < 3) { msg = String("expected: ") + kTypes[ty] + " <device> ..."; return false; }
+  // A group of this type: the same command for each of its devices (t[1] is only used to find the device).
   mtx.lock();
-  int idx = findRef(t[1], list.size(), [](int i) { return list[i].id; }, [](int i) -> const String& { return list[i].name; });
-  if (idx >= 0 && list[idx].type != ty) idx = -1;
-  if (idx < 0) {
-    for (size_t i = 0; i < list.size(); i++) if (list[i].type == ty && list[i].name.equalsIgnoreCase(t[1])) idx = i;
-  }
-  if (idx < 0) { mtx.unlock(); msg = "unknown " + String(kTypeNames[ty]) + " device '" + t[1] + "'"; return false; }
+  bool single = findDrv(ty, t[1]) >= 0;
+  mtx.unlock();
+  std::vector<String> group;
+  if (!single && State::groupMembers(kTypes[ty], t[1], group))
+    return State::forMembers(t[1], group, [&](const String& n, String& m) { return runCmd(ty, n, t, m); }, msg);
+  return runCmd(ty, t[1], t, msg);
+}
+
+static bool runCmd(int ty, const String& ref, const std::vector<String>& t, String& msg) {
+  mtx.lock();
+  int idx = findDrv(ty, ref);
+  if (idx < 0) { mtx.unlock(); msg = "unknown " + String(kTypeNames[ty]) + " device '" + ref + "'"; return false; }
   Drv& d = list[idx];
   bool ok = false;
   switch (ty) {
@@ -1743,6 +1798,14 @@ void statusJson(JsonArray arr) {
     if (!d.scenes.empty()) {
       JsonArray sc = o["scenes"].to<JsonArray>();
       for (auto& s : d.scenes) sc.add(s.first);
+    }
+    if (!d.states.empty()) {
+      JsonArray st = o["states"].to<JsonArray>();
+      for (auto& s : d.states) { JsonObject x = st.add<JsonObject>(); x["z"] = s.zone; x["n"] = s.name; if (s.file.length()) x["f"] = s.file; }
+    }
+    if (!d.activity.empty()) {
+      JsonArray ac = o["activity"].to<JsonArray>();
+      for (auto& a : d.activity) { JsonArray x = ac.add<JsonArray>(); x.add(a.first); x.add(a.second); }
     }
     if (!d.triggers.empty()) {
       JsonArray tr = o["triggers"].to<JsonArray>();

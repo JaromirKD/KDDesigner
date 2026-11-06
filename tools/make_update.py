@@ -9,9 +9,15 @@
 #   "KDUPDATE 1\n" + one line of JSON + "\n" + the files' bytes, back to back.
 #   JSON: {"version", "target": "portenta" | "machine_control" | "any", "built",
 #          "files": [{"name": "firmware.bin" | "www/<path>", "size", "crc"}]}   (crc = CRC-32)
-import json, os, re, sys, time, zlib
+#
+# Text files of the web UI go in gzipped (www/app-core.js.gz): the controller reads its USB
+# stick at ~300 KB/s, so a quarter of the bytes opens the UI much faster. www/etags.txt lists
+# "<url path> <stored size> <crc hex>" per file: the controller's ETag, so a reload only checks
+# (304). A stick filled by hand from data/www has neither and is served as before (src/Web.cpp).
+import gzip, json, os, re, sys, time, zlib
 
 MAGIC = b"KDUPDATE 1\n"
+GZIP_EXT = (".html", ".js", ".css", ".json", ".svg")
 
 
 def www_files(root):
@@ -24,12 +30,27 @@ def www_files(root):
     return sorted(out)
 
 
-def make(root, version, target, firmware=None):
-    files = ([("firmware.bin", firmware)] if firmware else []) + www_files(root)
-    blobs = []
-    for name, path in files:
+def www_blobs(root):
+    blobs, etags = [], []
+    for name, path in www_files(root):
         with open(path, "rb") as f:
-            blobs.append((name, f.read()))
+            data = f.read()
+        url = name[3:]   # www/x -> /x
+        if name.endswith(GZIP_EXT):
+            data = gzip.compress(data, 9, mtime=0)
+            name += ".gz"
+        blobs.append((name, data))
+        etags.append("%s %d %08x" % (url, len(data), zlib.crc32(data) & 0xFFFFFFFF))
+    blobs.append(("www/etags.txt", ("\n".join(etags) + "\n").encode()))
+    return blobs
+
+
+def make(root, version, target, firmware=None):
+    blobs = []
+    if firmware:
+        with open(firmware, "rb") as f:
+            blobs.append(("firmware.bin", f.read()))
+    blobs += www_blobs(root)
     header = {
         "version": version,
         "target": target,

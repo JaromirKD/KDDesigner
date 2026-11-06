@@ -1,0 +1,19 @@
+2026-11-04 17:27:30 [INFO ] SYS    KD Designer mock booting
+2026-11-04 17:27:30 [INFO ] USB    USB stick mounted at /usb
+2026-11-04 17:27:30 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-04 17:27:30 [INFO ] SYS    Mode Room starts in Idle
+2026-11-04 17:27:30 [INFO ] SHOW   Project 'Immersive room - show cycle' loaded: 2 universes, 38 fixtures, 4 scenes, 2 timelines
+2026-11-04 17:27:30 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 17:27:30 [INFO ] SYS    pc 'Media server' (192.168.1.20) is online (8 ms)
+2026-11-04 17:27:30 [INFO ] SYS    pc 'Audio Mac' (192.168.1.21) is online (9 ms)
+2026-11-04 17:27:30 [INFO ] SYS    device 'mediaserver' (192.168.1.20) is online (12 ms)
+2026-11-04 17:27:30 [INFO ] SYS    device 'qlab' (192.168.1.21) is online (12 ms)
+2026-11-04 17:27:30 [WARN ] PJLINK PJ 1: filter warning
+2026-11-04 17:27:30 [INFO ] PJLINK PJ 1 (192.168.1.101) online
+2026-11-04 17:27:30 [INFO ] PJLINK PJ 2 (192.168.1.102) online
+2026-11-04 17:27:30 [INFO ] PJLINK PJ 3 (192.168.1.103) online
+2026-11-04 17:27:30 [INFO ] SYS    Kiss-Box io (192.168.1.121) online
+2026-11-04 17:27:31 [INFO ] SYS    Clock set from browser
+2026-11-04 17:27:35 [INFO ] TRIG   Trigger 4 'Start inloop' fired (delayed from trigger 1)
+2026-11-04 17:27:35 [INFO ] SHOW   Started timeline 2 'Inloop'
+2026-11-04 17:27:35 [INFO ] SYS    Kiss-Box io: 2.1 = on -> sent (simulated)

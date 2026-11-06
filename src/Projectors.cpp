@@ -44,7 +44,7 @@ std::vector<Projector> list;
 std::deque<Job> jobs;
 std::deque<Projectors::Alarm> alarms;
 rtos::Mutex mtx;               // guards list + jobs + alarms
-rtos::Thread thread(osPriorityBelowNormal, 8 * 1024, nullptr, "pjlink");
+rtos::Thread thread(osPriorityNormal, 8 * 1024, nullptr, "pjlink");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 
 const char* powerName(int p) {
   static const char* const kNames[] = {"off", "on", "cooling", "warming"};

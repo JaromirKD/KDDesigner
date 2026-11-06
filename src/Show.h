@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <mbed.h>
 #include <vector>
+#include "BigRam.h"
 #include "Config.h"
 #include "Net.h"
 
@@ -12,7 +13,7 @@ extern rtos::Mutex g_engine;
 
 // u = universe index, ch = 0..511. 16-bit levels use ch (coarse) and ch+1 (fine).
 struct Level { uint8_t u; uint16_t ch; uint16_t v; bool wide; };
-struct Scene { int id; String name; std::vector<Level> levels; };
+struct Scene { int id; String name; BigRam::Vec<Level> levels; };
 // Crossfade path, like Pharos: how a cue moves from the old to the new value.
 enum class Path : uint8_t { Linear, Accelerated, Braked, Damped, Overshoot };
 // A cue plays a scene (index into scenes), its own levels (a track preset, or a scene
@@ -26,7 +27,7 @@ struct Cue { uint32_t t; uint32_t fade; int scene; int own; int fx; uint8_t trac
 struct Timeline {
   int id; String name; uint32_t length; bool loop; int priority;
   String group;                      // starting a timeline releases others in the same group
-  std::vector<Cue> cues;
+  BigRam::Vec<Cue> cues;
 };
 struct UniverseCfg {
   int id; String name; int dmxPort; int artnet; int sacn; IPAddress artnetDest;

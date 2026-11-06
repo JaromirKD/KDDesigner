@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KD Designer</title>
+<style>
+  /* Colours from data/www/style.css (default dark theme; light follows Windows) */
+  :root {
+    --bg: #111318; --panel: #1a1d24; --panel2: #222631; --border: #2c313d; --border2: #3a4150; --hover: #2a2f3b;
+    --text: #d8dbe2; --muted: #8a90a0; --accent: #ffb020; --blue: #4aa3ff; --ok: #3ecf8e; --warn: #ffb020; --err: #ff5c5c;
+    --deep: #0c0e12; --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #eef0f4; --panel: #ffffff; --panel2: #e5e8ee; --border: #c9ced8; --border2: #b3bac7; --hover: #dde1e8;
+      --text: #1d2330; --muted: #5d6678; --accent: #e08600; --blue: #1f6fd1; --ok: #138a55; --warn: #c27200; --err: #d63333; --deep: #dfe3ea;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 18px; margin: 0 12px 0 0; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  header .grow { flex: 1; }
+  main { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 16px; padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
+  main > div { min-width: 0; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px; } header { flex-wrap: wrap; padding: 10px 16px; } }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  h2 .grow { flex: 1; }
+  h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); font-weight: 600; }
+  button, .btn { background: var(--panel2); color: var(--text); border: 1px solid var(--border2); border-radius: 5px; padding: 5px 11px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; white-space: nowrap; }
+  button:hover, .btn:hover { background: var(--hover); }
+  button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.small, .btn.small { padding: 2px 8px; font-size: 12px; }
+  button.danger { color: var(--err); }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select { background: var(--deep); color: var(--text); border: 1px solid var(--border2); border-radius: 5px; padding: 5px 8px; font: inherit; }
+  input:focus, select:focus, button:focus-visible { outline: 2px solid var(--blue); outline-offset: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .mono { font-family: var(--mono); font-size: 12px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button { border-radius: 14px; padding: 2px 10px; font-size: 12px; }
+  .tabs button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .shows { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .show { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; cursor: pointer; background: var(--panel); }
+  .show:hover { background: var(--hover); }
+  .show.sel { border-color: var(--blue); background: var(--panel2); }
+  .show .top { display: flex; align-items: baseline; gap: 8px; }
+  .show .name { font-weight: 600; font-size: 15px; }
+  .show .grow { flex: 1; }
+  .show .path { font-family: var(--mono); font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .show .acts { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; cursor: default; }
+  .badge { font-size: 11px; border-radius: 10px; padding: 1px 7px; border: 1px solid var(--border2); color: var(--muted); white-space: nowrap; }
+  .badge.run { background: var(--ok); border-color: var(--ok); color: #062; font-weight: 600; }
+  .badge.err { border-color: var(--err); color: var(--err); }
+  .badge.warn { border-color: var(--warn); color: var(--warn); }
+  .star { color: var(--accent); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .dot.err { background: var(--err); }
+  .dot.warn { background: var(--warn); }
+  .card { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .card .head { display: flex; align-items: center; gap: 8px; }
+  .card .head b { font-size: 14px; }
+  .card .grow { flex: 1; }
+  .card .acts { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .card .acts select { flex: 1 1 0; min-width: 0; max-width: 100%; }
+  td.mono { word-break: break-all; }
+  pre.out { background: var(--deep); border: 1px solid var(--border); border-radius: 5px; padding: 8px; margin: 8px 0 0; max-height: 260px; overflow: auto; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; cursor: text; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td, th { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .empty { color: var(--muted); padding: 10px 2px; }
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 9; max-width: 460px; }
+  .toast { background: var(--panel2); border: 1px solid var(--border2); border-left: 4px solid var(--ok); padding: 8px 12px; border-radius: 6px; box-shadow: 0 4px 16px #0006; }
+  .toast.bad { border-left-color: var(--err); }
+  .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--muted); border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border2); border-radius: 3px; padding: 0 4px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>KD <span>Designer</span></h1>
+  <button class="primary" id="bNew" title="Ctrl+N">+ New show</button>
+  <button id="bBrowse" title="A show's project.json anywhere, or a .kdshow file (Ctrl+O)">Open…</button>
+  <button id="bFolder" title="Open the shows folder in Explorer">Shows folder</button>
+  <span class="grow"></span>
+  <span class="muted small" id="host"></span>
+</header>
+<main>
+  <div>
+    <section>
+      <h2>Shows <span class="grow"></span><input id="search" placeholder="Search  ( / )" size="22"></h2>
+      <div class="tabs" id="tabs"></div>
+      <div class="shows" id="shows"></div>
+    </section>
+  </div>
+  <div>
+    <section id="netSec">
+      <h2>Controllers on the network <span class="grow"></span><span id="netSpin"></span><button class="small" id="bScan">Search again</button></h2>
+      <div id="net"></div>
+      <div class="row" style="margin-top:8px">
+        <input id="addIp" placeholder="Address, e.g. 192.168.1.50" size="24">
+        <button class="small" id="bAdd">Add</button>
+      </div>
+    </section>
+    <section>
+      <h2>USB <span class="grow"></span><span id="usbSpin"></span></h2>
+      <div id="usb"></div>
+    </section>
+    <section>
+      <h2>Other Art-Net devices <span class="grow"></span><span class="muted small" id="otherCount"></span></h2>
+      <div id="others"></div>
+    </section>
+    <section>
+      <h2>This PC</h2>
+      <div id="pc"></div>
+    </section>
+  </div>
+</main>
+<div id="toasts"></div>
+<script>
+'use strict';
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const S = { state: null, usb: null, net: null, sel: '', tab: 'all', search: '', busy: new Set(), out: {}, rename: '' };
+const k = (p) => String(p || '').toLowerCase();
+
+function toast(msg, bad) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (bad ? ' bad' : '');
+  t.textContent = msg;
+  $('#toasts').append(t);
+  setTimeout(() => t.remove(), bad ? 9000 : 4500);
+}
+async function get(p) { const r = await fetch(p); return r.json(); }
+// Every action goes through here: a spinner on its button, the reply as a toast.
+async function act(name, args = {}, busyKey) {
+  if (busyKey) { S.busy.add(busyKey); draw(); }
+  try {
+    const r = await fetch('/api/do/' + name, { method: 'POST', headers: { 'X-KD': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(args) });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.reply || 'Failed');
+    if (j.reply) toast(j.reply);
+    return j;
+  } catch (e) {
+    toast(e.message === 'Failed to fetch' ? 'The launcher is not running (its window was closed?)' : e.message, true);
+    return null;
+  } finally {
+    if (busyKey) S.busy.delete(busyKey);
+    await refresh(true);
+  }
+}
+const mockUrl = (port) => `http://localhost:${port}/`;
+// Opens a show in a new tab. The tab is opened at once (before the answer), or the
+// browser would block it as a pop-up.
+async function openShow(show, opener) {
+  if (show.running) return void window.open(mockUrl(show.running), '_blank');
+  const w = window.open('about:blank', '_blank');
+  const j = await act(opener || 'open', { path: show.path }, 'open:' + k(show.path));
+  if (j?.port && w) w.location = mockUrl(j.port);
+  else if (w) w.close();
+  return j;
+}
+
+// ---- drawing ----------------------------------------------------------------
+const ago = (t) => {
+  if (!t) return '';
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  if (s < 86400 * 7) return `${Math.floor(s / 86400)} days ago`;
+  return new Date(t).toLocaleDateString();
+};
+const size = (b) => (b > 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b > 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.round(b / 1e3) + ' KB');
+const dur = (ms) => { const m = Math.floor(ms / 60000); return m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.floor(m / 1440)} days`; };
+const spin = (key) => (S.busy.has(key) ? '<span class="spin"></span> ' : '');
+
+const TABS = { all: 'All', recent: 'Recent', pinned: 'Pinned', open: 'Open now', examples: 'Examples' };
+function visibleShows() {
+  const st = S.state;
+  if (!st) return [];
+  let list = st.shows.slice();
+  const q = S.search.trim().toLowerCase();
+  if (q) list = list.filter((s) => (s.name + ' ' + (s.project || '') + ' ' + s.path).toLowerCase().includes(q));
+  if (S.tab === 'recent') list = list.filter((s) => s.recentAt).sort((a, b) => b.recentAt - a.recentAt);
+  else if (S.tab === 'pinned') list = list.filter((s) => s.pinned);
+  else if (S.tab === 'open') list = list.filter((s) => s.running);
+  else if (S.tab === 'examples') list = list.filter((s) => s.example);
+  else {
+    // Open ones first, then pinned, then the most recently used or saved; examples at the end.
+    const rank = (s) => (s.running ? 0 : s.pinned ? 1 : s.example ? 3 : 2);
+    list.sort((a, b) => rank(a) - rank(b) || Math.max(b.recentAt || 0, b.saved || 0) - Math.max(a.recentAt || 0, a.saved || 0));
+  }
+  return list;
+}
+function showRow(s) {
+  const key = k(s.path), sel = key === S.sel;
+  const counts = s.missing ? '<span class="badge err">folder not found</span>'
+    : s.error ? `<span class="badge err">${esc(s.error)}</span>`
+    : `${s.fixtures} fixtures · ${s.universes} universes · ${s.timelines} timelines · ${s.triggers} triggers`;
+  const stopped = S.state.stopped[key];
+  const out = S.out[key];
+  let acts = '';
+  if (sel) {
+    const b = (name, label, title, cls = '') => `<button class="small ${cls}" data-a="${name}" title="${esc(title)}">${spin(name + ':' + key)}${label}</button>`;
+    acts = `<div class="acts">
+      ${s.missing ? '' : s.running
+        ? `<button class="small primary" data-a="open">Go to it</button>${b('stop', 'Close', 'Stops this show\'s mock (save in its tab first)')}`
+        : `<button class="small primary" data-a="open">${spin('open:' + key)}Open</button>`}
+      ${s.missing ? '' : b('check', 'Check', 'Compiles every effect and lists the triggers that would get a red !')}
+      ${s.missing ? '' : b('backup', 'Backup', 'Saves a .kdshow (project + map images) in the Backups folder')}
+      ${s.missing ? '' : b('duplicate', s.example ? 'Copy to my shows' : 'Duplicate', 'A copy in the shows folder')}
+      ${s.missing || s.example ? '' : b('rename', 'Rename', 'Renames the show folder')}
+      ${s.missing ? '' : b('reveal', 'Show in Explorer', s.path)}
+      ${b('pin', s.pinned ? 'Unpin' : 'Pin', 'Pinned shows stay at the top')}
+      ${!s.inShows && !s.example ? b('forget', 'Remove from list', 'Only from this list; the folder stays') : ''}
+      ${s.missing || s.example ? '' : b('delete', 'Delete', 'Moves the show folder to the Recycle Bin', 'danger')}
+    </div>
+    ${stopped ? `<pre class="out">The show stopped by itself:\n${esc(stopped.join('\n'))}</pre>` : ''}
+    ${out ? `<pre class="out">${esc(out)}</pre>` : ''}`;
+  }
+  return `<div class="show${sel ? ' sel' : ''}" data-show="${esc(s.path)}" tabindex="0">
+    <div class="top">
+      ${s.pinned ? '<span class="star" title="Pinned">★</span>' : ''}
+      <span class="name">${esc(s.example || s.name)}</span>
+      ${s.project && s.project !== s.name && !s.example ? `<span class="muted">${esc(s.project)}</span>` : ''}
+      ${s.running ? `<span class="badge run" title="Open on port ${s.running}">open · ${s.running}</span>` : ''}
+      ${s.example ? '<span class="badge">example</span>' : ''}
+      <span class="grow"></span>
+      <span class="muted small" title="${s.saved ? 'Saved ' + new Date(s.saved).toLocaleString() : ''}">${s.saved ? 'saved ' + ago(s.saved) : ''}</span>
+    </div>
+    <div class="small muted">${counts}${s.note ? ' · ' + esc(s.note) : ''}</div>
+    <div class="path">${esc(s.path)}</div>
+    ${acts}
+  </div>`;
+}
+function drawShows() {
+  const st = S.state;
+  const n = (t) => (t === 'all' ? st.shows.length : st.shows.filter((s) => (t === 'recent' ? s.recentAt : t === 'pinned' ? s.pinned : t === 'open' ? s.running : s.example)).length);
+  $('#tabs').innerHTML = Object.entries(TABS).map(([t, label]) => `<button class="${S.tab === t ? 'on' : ''}" data-tab="${t}">${label} <span class="muted">${n(t)}</span></button>`).join('');
+  const list = visibleShows();
+  $('#shows').innerHTML = list.length ? list.map(showRow).join('')
+    : `<div class="empty">${S.search ? 'No show matches.' : S.tab === 'all' ? 'No shows yet: press <b>+ New show</b>.' : 'Nothing here.'}</div>`;
+}
+const showOptions = () => (S.state?.shows || []).filter((s) => !s.missing && !s.error)
+  .map((s) => `<option value="${esc(s.path)}">${esc(s.example || s.name)}${s.project && s.project !== s.name && !s.example ? ' (' + esc(s.project) + ')' : ''}</option>`).join('');
+function drawNet() {
+  const n = S.net;
+  $('#netSpin').innerHTML = S.busy.has('scan') ? '<span class="spin"></span>' : '';
+  if (!n) { $('#net').innerHTML = '<div class="empty"><span class="spin"></span> Looking for controllers…</div>'; return; }
+  const ups = (t) => (S.state?.updates || []).filter((u) => u.target === t || u.target === 'any');
+  const cards = n.controllers.map((c) => {
+    const key = c.ip, url = `http://${c.ip}/`;
+    const state = c.online ? (c.restarting ? ['warn', 'restarting'] : c.safeMode ? ['warn', 'safe mode'] : ['ok', 'online'])
+      : ['err', c.lastSeen ? `offline · last seen ${ago(c.lastSeen)}` : 'not answering'];
+    const u = ups(c.target);
+    return `<div class="card" data-ctl="${esc(c.ip)}">
+      <div class="head"><span class="dot ${state[0]}"></span><b>${esc(c.project || 'KD controller')}</b>
+        <span class="mono muted">${esc(c.ip)}</span><span class="grow"></span>
+        <button class="small" data-c="forget" title="Remove from this list">✕</button></div>
+      <div class="small muted">${esc(state[1])}${c.online ? ` · firmware ${esc(c.version)} · ${esc(c.target)} · up ${dur(c.uptime)}${c.usb === false ? ' · <span style="color:var(--err)">no USB stick</span>' : ''}` : ''}${c.found ? '' : c.online ? ' · added by address' : ''}</div>
+      ${c.online ? `<div class="acts">
+        <a class="btn small" href="${esc(url)}" target="_blank">Open web UI</a>
+        <a class="btn small" href="${esc(url)}panel" target="_blank">Touch panel</a>
+        <button class="small" data-c="get" title="Copies the controller's show (with map images) into a new show folder on this PC">${spin('get:' + key)}Copy show to PC</button>
+      </div>
+      <div class="acts">
+        <select data-c-show title="A show from this PC">${showOptions()}</select>
+        <button class="small" data-c="send" title="Replaces the controller's show. Its current show is saved in Backups first; it keeps its own network settings.">${spin('send:' + key)}Send show</button>
+      </div>
+      <div class="acts">
+        ${u.length ? `<select data-c-upd>${u.map((x) => `<option value="${esc(x.name)}">${esc(x.name)} (${ago(x.at)})</option>`).join('')}</select>
+          <button class="small" data-c="update" title="Installs firmware and web UI; the controller restarts">${spin('update:' + key)}Install update</button>`
+        : `<span class="muted small">No update file for ${esc(c.target || 'this controller')} in the updates folder</span>`}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  $('#net').innerHTML = (cards || `<div class="empty">No controller found. It must be on the same network as this PC (${n.ips.map((i) => esc(i.ip)).join(', ') || 'no network'}); or add it by address.</div>`)
+    + (n.artError ? `<div class="small" style="color:var(--warn)">${esc(n.artError)}</div>` : '');
+  $('#otherCount').textContent = n.others.length ? n.others.length + ' found' : '';
+  $('#others').innerHTML = n.others.length
+    ? `<table><tr><th>Address</th><th>Name</th><th>Description</th></tr>${n.others.map((o) => `<tr><td class="mono"><a href="http://${esc(o.ip)}/" target="_blank" style="color:var(--blue)">${esc(o.ip)}</a></td><td>${esc(o.short)}</td><td class="muted">${esc(o.long)}</td></tr>`).join('')}</table>`
+    : '<div class="empty small">Other Art-Net nodes on the network (gateways, consoles, media servers) show up here.</div>';
+}
+function drawUsb() {
+  const u = S.usb;
+  $('#usbSpin').innerHTML = u ? '' : '<span class="spin"></span>';
+  if (!u) { $('#usb').innerHTML = '<div class="empty">Looking…</div>'; return; }
+  const boards = u.boards.length ? u.boards.map((b) => `<div class="card"><div class="head"><span class="dot ${b.ok ? 'ok' : 'warn'}"></span><b>${esc(b.name)}</b>
+      <span class="mono muted">${esc(b.ports.join(', '))}</span><span class="grow"></span><span class="muted small">USB ${esc(b.id)}</span></div>
+      <div class="small muted">${/bootloader/.test(b.name) ? 'Waiting for new firmware (bootloader). Press reset once to start it normally.' : b.ok ? 'Connected' + (b.ports.length ? ` on ${esc(b.ports[0])} (serial log: 115200 baud)` : '') : 'Windows reports a driver problem'}</div></div>`).join('')
+    : '<div class="empty small">No Arduino on USB.</div>';
+  const drives = u.drives.map((d) => {
+    const key = d.drive;
+    return `<div class="card" data-drive="${esc(d.drive)}">
+      <div class="head"><span class="dot ${d.kd ? 'ok' : ''}"></span><b>${esc(d.drive)} ${esc(d.label)}</b><span class="grow"></span>
+        <span class="muted small">${size(d.free)} free of ${size(d.size)}</span></div>
+      <div class="small muted">${d.kd ? `KD stick${d.show ? ` · show <b>${esc(d.show.project || '?')}</b> saved ${ago(d.show.saved)}` : ' · no show'}${d.www ? '' : ' · no web UI'}` : 'Not a KD stick yet (no www or show folder)'}</div>
+      <div class="acts">
+        ${d.show ? `<button class="small" data-s="get" title="Copies the stick's show into a new show folder on this PC">${spin('sget:' + key)}Copy show to PC</button>` : ''}
+        <select data-s-show>${showOptions()}</select>
+        <button class="small" data-s="put" title="Puts a PC show in the stick's show folder. Its old show is saved in Backups first; its network settings are kept.">${spin('sput:' + key)}Put show on stick</button>
+        <button class="small" data-s="www" title="Copies this PC's web UI (data/www) to the stick's www folder">${spin('swww:' + key)}${d.www ? 'Update web UI' : 'Copy web UI'}</button>
+      </div></div>`;
+  }).join('');
+  $('#usb').innerHTML = `<h3 style="margin-top:0">Boards</h3>${boards}<h3>USB sticks</h3>${drives || '<div class="empty small">No USB stick.</div>'}`
+    + (u.error ? `<div class="small" style="color:var(--warn)">${esc(u.error)}</div>` : '');
+}
+function drawPc() {
+  const st = S.state, n = S.net;
+  if (!st) return;
+  $('#host').textContent = `${st.host} · Node ${st.node}`;
+  $('#pc').innerHTML = `<table>
+    <tr><td class="muted">Network</td><td class="mono">${n ? n.ips.map((i) => `${esc(i.ip)} <span class="muted">/ ${esc(i.mask)} (${esc(i.name)})</span>`).join('<br>') || 'not connected' : '…'}</td></tr>
+    <tr><td class="muted">Shows</td><td class="mono"><a href="#" data-reveal="${esc(st.showsDir)}" style="color:var(--blue)">${esc(st.showsDir)}</a></td></tr>
+    <tr><td class="muted">Backups</td><td class="mono"><a href="#" data-reveal="${esc(st.backups)}" style="color:var(--blue)">${esc(st.backups)}</a></td></tr>
+    <tr><td class="muted">Updates</td><td>${st.updates.length ? st.updates.map((u) => `${esc(u.name)} <span class="muted">${ago(u.at)}</span>`).join('<br>') : '<span class="muted">none built yet</span>'}</td></tr>
+  </table>
+  <p class="small muted" style="margin:8px 0 0">Keys: <kbd>Ctrl+N</kbd> new · <kbd>Ctrl+O</kbd> open · <kbd>/</kbd> search · <kbd>↑</kbd><kbd>↓</kbd> pick · <kbd>Enter</kbd> open show. Closing the launcher's black window stops every show it opened.</p>`;
+}
+function draw() {
+  if (!S.state) return;
+  // Redrawing would drop a half-chosen <select>: keep their values. A show picker that was
+  // not touched yet follows the selected show.
+  const sels = () => document.querySelectorAll('[data-ctl] select, [data-drive] select');
+  const id = (el) => (el.closest('[data-ctl]')?.dataset.ctl || el.closest('[data-drive]').dataset.drive) + (el.hasAttribute('data-c-upd') ? 'u' : 's');
+  const keep = {};
+  for (const el of sels()) if (el.dataset.touched) keep[id(el)] = el.value;
+  drawShows(); drawNet(); drawUsb(); drawPc();
+  for (const el of sels()) {
+    const v = keep[id(el)];
+    if (v && [...el.options].some((o) => o.value === v)) { el.value = v; el.dataset.touched = 1; }
+    else if (!el.hasAttribute('data-c-upd') && S.sel) { const o = [...el.options].find((x) => k(x.value) === S.sel); if (o) el.value = o.value; }
+  }
+}
+document.addEventListener('change', (e) => { if (e.target.matches('select')) e.target.dataset.touched = 1; });
+
+// ---- data ---------------------------------------------------------------------
+// Polls only redraw when something changed, and not while a dropdown is open.
+let lastState = '', lastUsb = '';
+const picking = () => document.activeElement?.tagName === 'SELECT';
+async function refresh(force) {
+  let txt;
+  try { txt = await (await fetch('/api/state')).text(); } catch { return; }
+  S.state = JSON.parse(txt);
+  // "saved 5 min ago" ages too: redraw at least once a minute.
+  const stamp = txt + Math.floor(Date.now() / 60000);
+  if ((force === true || stamp !== lastState) && !picking()) { lastState = stamp; draw(); }
+}
+async function pollUsb() {
+  try {
+    const txt = await (await fetch('/api/usb')).text();
+    S.usb = JSON.parse(txt);
+    if (txt !== lastUsb && !picking()) { lastUsb = txt; draw(); }
+  } catch { /* launcher gone */ }
+}
+async function scan() {
+  if (S.busy.has('scan')) return;
+  S.busy.add('scan'); drawNet();
+  try { S.net = await get('/api/net'); } catch { /* launcher gone */ }
+  S.busy.delete('scan'); draw();
+}
+const showByPath = (p) => S.state.shows.find((s) => k(s.path) === k(p));
+
+// ---- events -------------------------------------------------------------------
+$('#tabs').addEventListener('click', (e) => { const t = e.target.closest('[data-tab]'); if (t) { S.tab = t.dataset.tab; draw(); } });
+$('#search').addEventListener('input', (e) => { S.search = e.target.value; drawShows(); });
+$('#bNew').onclick = newShow;
+$('#bBrowse').onclick = browse;
+$('#bFolder').onclick = () => act('reveal', {});
+$('#bScan').onclick = scan;
+$('#bAdd').onclick = async () => {
+  const ip = $('#addIp').value;
+  const j = await act('ctlAdd', { ip }, 'scan');
+  if (j) { $('#addIp').value = ''; S.net = j; draw(); }
+};
+$('#addIp').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#bAdd').click(); });
+
+async function newShow() {
+  const name = prompt('Name of the new show:');
+  if (!name || !name.trim()) return;
+  const w = window.open('about:blank', '_blank');
+  const j = await act('new', { name: name.trim() });
+  if (j?.port && w) { w.location = mockUrl(j.port); S.sel = k(j.path); draw(); } else if (w) w.close();
+}
+async function browse() {
+  // The Windows dialog opens on top; the tab is only opened once a show was picked.
+  const j = await act('browse', {}, 'browse');
+  if (j?.port) { S.sel = k(j.path); draw(); window.open(mockUrl(j.port), '_blank') || toast(`Opened on ${mockUrl(j.port)} - allow pop-ups for this page to open it in a tab`); }
+}
+
+$('#shows').addEventListener('click', async (e) => {
+  const row = e.target.closest('[data-show]');
+  if (!row) return;
+  const s = showByPath(row.dataset.show);
+  if (!s) return;
+  const a = e.target.closest('[data-a]')?.dataset.a;
+  if (!a) { if (S.sel !== k(s.path)) { S.sel = k(s.path); draw(); } return; }
+  const key = k(s.path), busy = a + ':' + key;
+  if (a === 'open') return openShow(s);
+  if (a === 'stop') { if (confirm(`Close "${s.example || s.name}"?\n\nUnsaved changes in its browser tab are lost - save there first.`)) await act('stop', { path: s.path }); return; }
+  if (a === 'check') {
+    const j = await act('check', { path: s.path }, busy);
+    if (j) S.out[key] = (j.problems ? '' : '✓ ') + (j.text || 'No problems found');
+    return draw();
+  }
+  if (a === 'backup') return act('backup', { path: s.path }, busy);
+  if (a === 'duplicate') {
+    const name = prompt('Name of the copy:', s.example ? s.example : s.name + ' copy');
+    if (!name) return;
+    const j = await act('duplicate', { path: s.path, name }, busy);
+    if (j) { S.sel = k(j.path); toast('Copied to ' + j.path); draw(); }
+    return;
+  }
+  if (a === 'rename') {
+    const name = prompt('New name of the show folder:', s.name);
+    if (!name || name === s.name) return;
+    const j = await act('rename', { path: s.path, name }, busy);
+    if (j) { S.sel = k(j.path); draw(); }
+    return;
+  }
+  if (a === 'reveal') return act('reveal', { path: s.path });
+  if (a === 'pin') return act('pin', { path: s.path, pinned: !s.pinned });
+  if (a === 'forget') return act('forget', { path: s.path });
+  if (a === 'delete') {
+    if (!confirm(`Delete "${s.name}"?\n\n${s.path}\n\nThe folder goes to the Recycle Bin.`)) return;
+    const j = await act('delete', { path: s.path }, busy);
+    if (j) S.sel = '';
+  }
+});
+$('#shows').addEventListener('dblclick', (e) => {
+  const row = e.target.closest('[data-show]');
+  if (row && !e.target.closest('button')) { const s = showByPath(row.dataset.show); if (s && !s.missing) openShow(s); }
+});
+$('#net').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-c]');
+  if (!b) return;
+  const card = b.closest('[data-ctl]'), ip = card.dataset.ctl, a = b.dataset.c;
+  if (a === 'forget') { await act('ctlForget', { ip }); S.net.controllers = S.net.controllers.filter((c) => c.ip !== ip); return draw(); }
+  if (a === 'get') {
+    const j = await act('ctlGet', { ip }, 'get:' + ip);
+    if (j) { S.sel = k(j.path); draw(); }
+    return;
+  }
+  if (a === 'send') {
+    const s = showByPath($('[data-c-show]', card).value);
+    const c = S.net.controllers.find((x) => x.ip === ip);
+    if (!s || !confirm(`Send "${s.example || s.name}" to ${ip}?\n\nIt replaces "${c?.project || 'the current show'}" on the controller (saved in Backups first) and loads at once. The controller keeps its own network settings.`)) return;
+    const j = await act('ctlSend', { ip, path: s.path }, 'send:' + ip);
+    if (j?.backup) toast('Old show saved: ' + j.backup);
+    return scan();
+  }
+  if (a === 'update') {
+    const name = $('[data-c-upd]', card).value;
+    if (!confirm(`Install ${name} on ${ip}?\n\nThe controller restarts (the show stops for about half a minute).`)) return;
+    await act('ctlUpdate', { ip, name }, 'update:' + ip);
+    setTimeout(scan, 15000);
+  }
+});
+$('#usb').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-s]');
+  if (!b) return;
+  const card = b.closest('[data-drive]'), drive = card.dataset.drive, a = b.dataset.s;
+  if (a === 'get') { const j = await act('stickGet', { drive }, 'sget:' + drive); if (j) { S.sel = k(j.path); toast('Copied to ' + j.path); } }
+  if (a === 'put') {
+    const s = showByPath($('[data-s-show]', card).value);
+    if (!s || !confirm(`Put "${s.example || s.name}" on ${drive}?\n\nIt replaces the stick's show (saved in Backups first).`)) return;
+    const j = await act('stickPut', { drive, path: s.path }, 'sput:' + drive);
+    if (j?.backup) toast('Old show saved: ' + j.backup);
+  }
+  if (a === 'www' && confirm(`Copy this PC's web UI to ${drive}\\www?\n\nThe stick's current www folder is replaced.`)) await act('stickWww', { drive }, 'swww:' + drive);
+  pollUsb();
+});
+document.addEventListener('click', (e) => {
+  const r = e.target.closest('[data-reveal]');
+  if (r) { e.preventDefault(); act('reveal', { path: r.dataset.reveal }); }
+});
+document.addEventListener('keydown', (e) => {
+  const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName);
+  if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); return newShow(); }
+  if (e.ctrlKey && e.key.toLowerCase() === 'o') { e.preventDefault(); return browse(); }
+  if (typing) { if (e.key === 'Escape') document.activeElement.blur(); if (!(e.key === 'ArrowDown' && document.activeElement.id === 'search')) return; }
+  if (e.key === '/') { e.preventDefault(); return $('#search').focus(); }
+  const list = visibleShows();
+  if (!list.length) return;
+  const i = list.findIndex((s) => k(s.path) === S.sel);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const n = list[Math.max(0, Math.min(list.length - 1, i < 0 ? 0 : i + (e.key === 'ArrowDown' ? 1 : -1)))];
+    S.sel = k(n.path);
+    if (document.activeElement.id === 'search') document.activeElement.blur();
+    draw();
+    [...document.querySelectorAll('[data-show]')].find((x) => k(x.dataset.show) === S.sel)?.scrollIntoView({ block: 'nearest' });
+  }
+  if (e.key === 'Enter' && i >= 0 && !e.target.closest('button, a') && !list[i].missing) openShow(list[i]);
+});
+
+// Shows every 3 s, USB every 5 s, a network search every 20 s - only while this tab is visible.
+const every = (fn, ms) => setInterval(() => { if (!document.hidden) fn(); }, ms);
+refresh().then(() => { get('/api/net?cached=1').then((n) => { S.net = n; draw(); }).catch(() => {}); scan(); });
+pollUsb();
+every(refresh, 3000);
+every(pollUsb, 5000);
+every(scan, 20000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); pollUsb(); } });
+</script>
+</body>
+</html>

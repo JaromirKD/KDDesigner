@@ -1,0 +1,4533 @@
+{
+ "name": "KD Feature demo",
+ "settings": {
+  "tzOffsetMin": 60,
+  "udpPort": 4000,
+  "sacnPriority": 100,
+  "outputs": {
+   "dmx": true,
+   "artnet": true,
+   "sacn": true,
+   "dmxFps": 40,
+   "artnetFps": 30,
+   "sacnFps": 40,
+   "artnetChangesOnly": true,
+   "sacnChangesOnly": false
+  },
+  "monitor": {
+   "interval": 60,
+   "timeout": 1000,
+   "failures": 2
+  },
+  "time": {
+   "ntp": "pool.ntp.org",
+   "ntpEnabled": true,
+   "dst": "eu"
+  },
+  "location": {
+   "lat": 52.16,
+   "lon": 4.49
+  }
+ },
+ "network": {
+  "dhcp": true,
+  "ip": "192.168.1.50",
+  "mask": "255.255.255.0",
+  "gateway": "192.168.1.1"
+ },
+ "modes": [
+  {
+   "name": "System",
+   "states": [
+    "Idle",
+    "Show",
+    "Maintenance",
+    "Emergency"
+   ],
+   "startup": "Idle",
+   "stateInfo": {
+    "Idle": {
+     "color": "#3a7bd5",
+     "icon": "⏸"
+    },
+    "Show": {
+     "color": "#2e7d32",
+     "icon": "▶"
+    },
+    "Maintenance": {
+     "color": "#f9a825",
+     "icon": "🔧",
+     "enter": [
+      "grandmaster 100",
+      "set 1.4 255",
+      "log Maintenance: work light on"
+     ],
+     "leave": [
+      "clear override 1.4"
+     ]
+    },
+    "Emergency": {
+     "color": "#b71c1c",
+     "icon": "⚠",
+     "enter": [
+      "release all fade 0",
+      "set 1.3 255",
+      "set 1.4 255",
+      "panel lbl_status text EMERGENCY ({mode.Museum})",
+      "panel lbl_status flash red"
+     ],
+     "leave": [
+      "clear overrides",
+      "panel lbl_status reset"
+     ]
+    }
+   }
+  },
+  {
+   "name": "Museum",
+   "states": [
+    "Closed",
+    "Starting up",
+    "Open"
+   ],
+   "var": "museum_state",
+   "stateInfo": {
+    "Closed": {
+     "color": "#616161",
+     "icon": "🌙"
+    },
+    "Starting up": {
+     "color": "#d29922",
+     "icon": "⏳",
+     "enter": [
+      "knx gw write \"Hall light\" on",
+      "netio rack output 1 on",
+      "sleep 120",
+      "mode Museum Open"
+     ]
+    },
+    "Open": {
+     "color": "#3fb950",
+     "icon": "🟢"
+    }
+   }
+  }
+ ],
+ "universes": [
+  {
+   "id": 1,
+   "name": "Stage",
+   "dmxPort": 1,
+   "artnet": 0,
+   "sacn": 1,
+   "useDmx": true,
+   "useArtnet": false,
+   "useSacn": true
+  },
+  {
+   "id": 2,
+   "name": "Pixels",
+   "dmxPort": 2,
+   "artnet": 1,
+   "artnetDest": "192.168.1.60",
+   "sacn": 2,
+   "useDmx": false,
+   "useArtnet": true,
+   "useSacn": false
+  },
+  {
+   "id": 3,
+   "name": "Motors",
+   "dmxPort": 2,
+   "artnet": 2,
+   "sacn": 3,
+   "useDmx": true,
+   "useArtnet": true,
+   "useSacn": false
+  }
+ ],
+ "fixtures": [
+  {
+   "id": 1,
+   "name": "FOH left",
+   "universe": 1,
+   "address": 1,
+   "channels": [
+    "dim"
+   ],
+   "curve": "square",
+   "icon": "profile"
+  },
+  {
+   "id": 2,
+   "name": "FOH right",
+   "universe": 1,
+   "address": 2,
+   "channels": [
+    "dim"
+   ],
+   "curve": "square",
+   "icon": "profile"
+  },
+  {
+   "id": 3,
+   "name": "House light",
+   "universe": 1,
+   "address": 3,
+   "channels": [
+    "dim"
+   ],
+   "curve": "preheat10",
+   "icon": "dimmer"
+  },
+  {
+   "id": 4,
+   "name": "Work light",
+   "universe": 1,
+   "address": 4,
+   "channels": [
+    "dim"
+   ],
+   "curve": "nondim",
+   "icon": "relay"
+  },
+  {
+   "id": 5,
+   "name": "Wall wash 1",
+   "universe": 1,
+   "address": 10,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ],
+   "icon": "wash"
+  },
+  {
+   "id": 6,
+   "name": "Wall wash 2",
+   "universe": 1,
+   "address": 15,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ],
+   "icon": "wash"
+  },
+  {
+   "id": 7,
+   "name": "Wall wash 3",
+   "universe": 1,
+   "address": 20,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ],
+   "icon": "wash"
+  },
+  {
+   "id": 8,
+   "name": "Wall wash 4",
+   "universe": 1,
+   "address": 25,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "w"
+   ],
+   "icon": "wash"
+  },
+  {
+   "id": 9,
+   "name": "Mover left",
+   "universe": 1,
+   "address": 40,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "pan:16",
+    "tilt:16",
+    "shutter",
+    "zoom",
+    "gobo"
+   ],
+   "icon": "spot"
+  },
+  {
+   "id": 10,
+   "name": "Mover right",
+   "universe": 1,
+   "address": 56,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b",
+    "pan:16",
+    "tilt:16",
+    "shutter",
+    "zoom",
+    "gobo"
+   ],
+   "icon": "spot"
+  },
+  {
+   "id": 11,
+   "name": "Fog machine",
+   "universe": 1,
+   "address": 80,
+   "channels": [
+    "fog",
+    "fan"
+   ],
+   "icon": "fog"
+  },
+  {
+   "id": 12,
+   "name": "Strobe",
+   "universe": 1,
+   "address": 85,
+   "channels": [
+    "dim",
+    "strobe"
+   ],
+   "icon": "strobe"
+  },
+  {
+   "id": 13,
+   "name": "Circle par 1",
+   "universe": 1,
+   "address": 100,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "par"
+  },
+  {
+   "id": 14,
+   "name": "Circle par 2",
+   "universe": 1,
+   "address": 104,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "par"
+  },
+  {
+   "id": 15,
+   "name": "Circle par 3",
+   "universe": 1,
+   "address": 108,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "par"
+  },
+  {
+   "id": 16,
+   "name": "Circle par 4",
+   "universe": 1,
+   "address": 112,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "par"
+  },
+  {
+   "id": 17,
+   "name": "Circle par 5",
+   "universe": 1,
+   "address": 116,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "par"
+  },
+  {
+   "id": 18,
+   "name": "Circle par 6",
+   "universe": 1,
+   "address": 120,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "par"
+  },
+  {
+   "id": 19,
+   "name": "Circle par 7",
+   "universe": 1,
+   "address": 124,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "par"
+  },
+  {
+   "id": 20,
+   "name": "Circle par 8",
+   "universe": 1,
+   "address": 128,
+   "channels": [
+    "dim",
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "par"
+  },
+  {
+   "id": 21,
+   "name": "Vitrine cell 1",
+   "universe": 1,
+   "address": 140,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel",
+   "type": "Museum / Vitrine LED strip",
+   "mode": "4 cells"
+  },
+  {
+   "id": 22,
+   "name": "Vitrine cell 2",
+   "universe": 1,
+   "address": 143,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel",
+   "type": "Museum / Vitrine LED strip",
+   "mode": "4 cells"
+  },
+  {
+   "id": 23,
+   "name": "Vitrine cell 3",
+   "universe": 1,
+   "address": 146,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel",
+   "type": "Museum / Vitrine LED strip",
+   "mode": "4 cells"
+  },
+  {
+   "id": 24,
+   "name": "Vitrine cell 4",
+   "universe": 1,
+   "address": 149,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel",
+   "type": "Museum / Vitrine LED strip",
+   "mode": "4 cells"
+  },
+  {
+   "id": 25,
+   "name": "Pixel 1",
+   "universe": 2,
+   "address": 1,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 26,
+   "name": "Pixel 2",
+   "universe": 2,
+   "address": 4,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 27,
+   "name": "Pixel 3",
+   "universe": 2,
+   "address": 7,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 28,
+   "name": "Pixel 4",
+   "universe": 2,
+   "address": 10,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 29,
+   "name": "Pixel 5",
+   "universe": 2,
+   "address": 13,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 30,
+   "name": "Pixel 6",
+   "universe": 2,
+   "address": 16,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 31,
+   "name": "Pixel 7",
+   "universe": 2,
+   "address": 19,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 32,
+   "name": "Pixel 8",
+   "universe": 2,
+   "address": 22,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 33,
+   "name": "Pixel 9",
+   "universe": 2,
+   "address": 25,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 34,
+   "name": "Pixel 10",
+   "universe": 2,
+   "address": 28,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 35,
+   "name": "Pixel 11",
+   "universe": 2,
+   "address": 31,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 36,
+   "name": "Pixel 12",
+   "universe": 2,
+   "address": 34,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 37,
+   "name": "Pixel 13",
+   "universe": 2,
+   "address": 37,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 38,
+   "name": "Pixel 14",
+   "universe": 2,
+   "address": 40,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 39,
+   "name": "Pixel 15",
+   "universe": 2,
+   "address": 43,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 40,
+   "name": "Pixel 16",
+   "universe": 2,
+   "address": 46,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 41,
+   "name": "Pixel 17",
+   "universe": 2,
+   "address": 49,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 42,
+   "name": "Pixel 18",
+   "universe": 2,
+   "address": 52,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 43,
+   "name": "Pixel 19",
+   "universe": 2,
+   "address": 55,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 44,
+   "name": "Pixel 20",
+   "universe": 2,
+   "address": 58,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 45,
+   "name": "Pixel 21",
+   "universe": 2,
+   "address": 61,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 46,
+   "name": "Pixel 22",
+   "universe": 2,
+   "address": 64,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 47,
+   "name": "Pixel 23",
+   "universe": 2,
+   "address": 67,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 48,
+   "name": "Pixel 24",
+   "universe": 2,
+   "address": 70,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 49,
+   "name": "Pixel 25",
+   "universe": 2,
+   "address": 73,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 50,
+   "name": "Pixel 26",
+   "universe": 2,
+   "address": 76,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 51,
+   "name": "Pixel 27",
+   "universe": 2,
+   "address": 79,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 52,
+   "name": "Pixel 28",
+   "universe": 2,
+   "address": 82,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 53,
+   "name": "Pixel 29",
+   "universe": 2,
+   "address": 85,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 54,
+   "name": "Pixel 30",
+   "universe": 2,
+   "address": 88,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 55,
+   "name": "Pixel 31",
+   "universe": 2,
+   "address": 91,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 56,
+   "name": "Pixel 32",
+   "universe": 2,
+   "address": 94,
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "icon": "pixel"
+  },
+  {
+   "id": 57,
+   "name": "Winch",
+   "universe": 3,
+   "address": 1,
+   "channels": [
+    "pos:16",
+    "speed"
+   ],
+   "icon": "motor"
+  },
+  {
+   "id": 58,
+   "name": "Projector shutter",
+   "universe": 3,
+   "address": 10,
+   "channels": [
+    "shutter"
+   ],
+   "icon": "screen"
+  }
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "name": "FOH",
+   "fixtures": [
+    1,
+    2
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Walls",
+   "fixtures": [
+    5,
+    6,
+    7,
+    8
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Movers",
+   "fixtures": [
+    9,
+    10
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Circle",
+   "fixtures": [
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Pixel grid",
+   "fixtures": [
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56
+   ]
+  },
+  {
+   "id": 6,
+   "name": "Vitrine",
+   "fixtures": [
+    21,
+    22,
+    23,
+    24
+   ]
+  },
+  {
+   "id": 7,
+   "name": "All colour",
+   "fixtures": [
+    5,
+    6,
+    7,
+    8,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56
+   ]
+  }
+ ],
+ "scenes": [
+  {
+   "id": 1,
+   "name": "Work light",
+   "levels": [
+    {
+     "fixture": 4,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "dim",
+     "v": 255
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Pre-show warm",
+   "levels": [
+    {
+     "fixture": 3,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 1,
+     "ch": "dim",
+     "v": 90
+    },
+    {
+     "fixture": 2,
+     "ch": "dim",
+     "v": 90
+    },
+    {
+     "fixture": 5,
+     "ch": "dim",
+     "v": 200
+    },
+    {
+     "fixture": 6,
+     "ch": "dim",
+     "v": 200
+    },
+    {
+     "fixture": 7,
+     "ch": "dim",
+     "v": 200
+    },
+    {
+     "fixture": 8,
+     "ch": "dim",
+     "v": 200
+    },
+    {
+     "fixture": 5,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 7,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "g",
+     "v": 140
+    },
+    {
+     "fixture": 6,
+     "ch": "g",
+     "v": 140
+    },
+    {
+     "fixture": 7,
+     "ch": "g",
+     "v": 140
+    },
+    {
+     "fixture": 8,
+     "ch": "g",
+     "v": 140
+    },
+    {
+     "fixture": 5,
+     "ch": "b",
+     "v": 40
+    },
+    {
+     "fixture": 6,
+     "ch": "b",
+     "v": 40
+    },
+    {
+     "fixture": 7,
+     "ch": "b",
+     "v": 40
+    },
+    {
+     "fixture": 8,
+     "ch": "b",
+     "v": 40
+    },
+    {
+     "fixture": 5,
+     "ch": "w",
+     "v": 60
+    },
+    {
+     "fixture": 6,
+     "ch": "w",
+     "v": 60
+    },
+    {
+     "fixture": 7,
+     "ch": "w",
+     "v": 60
+    },
+    {
+     "fixture": 8,
+     "ch": "w",
+     "v": 60
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Show blue",
+   "levels": [
+    {
+     "fixture": 1,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 2,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 7,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "g",
+     "v": 40
+    },
+    {
+     "fixture": 6,
+     "ch": "g",
+     "v": 40
+    },
+    {
+     "fixture": 7,
+     "ch": "g",
+     "v": 40
+    },
+    {
+     "fixture": 8,
+     "ch": "g",
+     "v": 40
+    },
+    {
+     "fixture": 5,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 7,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 13,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 14,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 15,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 16,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 17,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 18,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 19,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 20,
+     "ch": "dim",
+     "v": 180
+    },
+    {
+     "fixture": 13,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 14,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 15,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 16,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 17,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 18,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 19,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 20,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 13,
+     "ch": "g",
+     "v": 80
+    },
+    {
+     "fixture": 14,
+     "ch": "g",
+     "v": 80
+    },
+    {
+     "fixture": 15,
+     "ch": "g",
+     "v": 80
+    },
+    {
+     "fixture": 16,
+     "ch": "g",
+     "v": 80
+    },
+    {
+     "fixture": 17,
+     "ch": "g",
+     "v": 80
+    },
+    {
+     "fixture": 18,
+     "ch": "g",
+     "v": 80
+    },
+    {
+     "fixture": 19,
+     "ch": "g",
+     "v": 80
+    },
+    {
+     "fixture": 20,
+     "ch": "g",
+     "v": 80
+    },
+    {
+     "fixture": 13,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 14,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 15,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 16,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 17,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 18,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 19,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 20,
+     "ch": "b",
+     "v": 255
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Movers centre",
+   "levels": [
+    {
+     "fixture": 9,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 10,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 9,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 10,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 9,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 10,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 9,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 10,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 9,
+     "ch": "pan",
+     "v": 32768
+    },
+    {
+     "fixture": 10,
+     "ch": "pan",
+     "v": 32768
+    },
+    {
+     "fixture": 9,
+     "ch": "tilt",
+     "v": 32768
+    },
+    {
+     "fixture": 10,
+     "ch": "tilt",
+     "v": 32768
+    },
+    {
+     "fixture": 9,
+     "ch": "shutter",
+     "v": 255
+    },
+    {
+     "fixture": 10,
+     "ch": "shutter",
+     "v": 255
+    },
+    {
+     "fixture": 9,
+     "ch": "zoom",
+     "v": 128
+    },
+    {
+     "fixture": 10,
+     "ch": "zoom",
+     "v": 128
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Pixels red",
+   "levels": [
+    {
+     "fixture": 25,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 26,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 27,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 28,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 29,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 30,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 31,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 32,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 33,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 34,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 35,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 36,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 37,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 38,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 39,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 40,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 41,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 42,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 43,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 44,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 45,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 46,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 47,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 48,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 49,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 50,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 51,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 52,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 53,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 54,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 55,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 56,
+     "ch": "r",
+     "v": 255
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "name": "Emergency",
+   "levels": [
+    {
+     "fixture": 4,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 1,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 2,
+     "ch": "dim",
+     "v": 255
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "name": "Winch up + raw channel",
+   "levels": [
+    {
+     "fixture": 57,
+     "ch": "pos",
+     "v": 52000
+    },
+    {
+     "fixture": 57,
+     "ch": "speed",
+     "v": 128
+    },
+    {
+     "universe": 3,
+     "ch": 20,
+     "v": 255
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Finale",
+   "levels": [
+    {
+     "fixture": 5,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 7,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 7,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "b",
+     "v": 160
+    },
+    {
+     "fixture": 6,
+     "ch": "b",
+     "v": 160
+    },
+    {
+     "fixture": 7,
+     "ch": "b",
+     "v": 160
+    },
+    {
+     "fixture": 8,
+     "ch": "b",
+     "v": 160
+    },
+    {
+     "fixture": 13,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 14,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 15,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 16,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 17,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 18,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 19,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 20,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 13,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 14,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 15,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 16,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 17,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 18,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 19,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 20,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 13,
+     "ch": "g",
+     "v": 200
+    },
+    {
+     "fixture": 14,
+     "ch": "g",
+     "v": 200
+    },
+    {
+     "fixture": 15,
+     "ch": "g",
+     "v": 200
+    },
+    {
+     "fixture": 16,
+     "ch": "g",
+     "v": 200
+    },
+    {
+     "fixture": 17,
+     "ch": "g",
+     "v": 200
+    },
+    {
+     "fixture": 18,
+     "ch": "g",
+     "v": 200
+    },
+    {
+     "fixture": 19,
+     "ch": "g",
+     "v": 200
+    },
+    {
+     "fixture": 20,
+     "ch": "g",
+     "v": 200
+    },
+    {
+     "fixture": 13,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 14,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 15,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 16,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 17,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 18,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 19,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 20,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 1,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 2,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 12,
+     "ch": "dim",
+     "v": 255
+    },
+    {
+     "fixture": 12,
+     "ch": "strobe",
+     "v": 200
+    }
+   ]
+  }
+ ],
+ "timelines": [
+  {
+   "id": 1,
+   "name": "Inloop",
+   "length": 30000,
+   "loop": true,
+   "priority": 0,
+   "group": "A",
+   "tracks": [
+    {
+     "name": "Base",
+     "fixtures": [],
+     "groups": []
+    },
+    {
+     "name": "Walls",
+     "fixtures": [],
+     "groups": [
+      2
+     ]
+    },
+    {
+     "name": "Pixels",
+     "fixtures": [],
+     "groups": [
+      5
+     ]
+    },
+    {
+     "name": "Circle",
+     "fixtures": [],
+     "groups": [
+      4
+     ]
+    },
+    {
+     "name": "Vitrine",
+     "fixtures": [],
+     "groups": [
+      6
+     ]
+    }
+   ],
+   "cues": [
+    {
+     "t": 0,
+     "fade": 3000,
+     "scene": 2,
+     "path": "damped"
+    },
+    {
+     "t": 0,
+     "track": 1,
+     "fade": 2000,
+     "effect": 9,
+     "params": {
+      "speed": 0.1,
+      "color": "#ff9040"
+     },
+     "dim": 100
+    },
+    {
+     "t": 0,
+     "track": 2,
+     "fade": 2000,
+     "len": 15000,
+     "out": 2000,
+     "effect": 21,
+     "params": {},
+     "dim": 80
+    },
+    {
+     "t": 15000,
+     "track": 2,
+     "fade": 2000,
+     "len": 15000,
+     "out": 2000,
+     "effect": 17,
+     "params": {},
+     "dim": 80
+    },
+    {
+     "t": 0,
+     "track": 3,
+     "fade": 1000,
+     "effect": 2,
+     "params": {
+      "speed": 0.5
+     },
+     "dim": 100
+    },
+    {
+     "t": 0,
+     "track": 4,
+     "fade": 2000,
+     "effect": 23,
+     "params": {},
+     "dim": 100
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Main show",
+   "length": 60000,
+   "loop": false,
+   "priority": 0,
+   "group": "A",
+   "tracks": [
+    {
+     "name": "Scenes",
+     "fixtures": [],
+     "groups": []
+    },
+    {
+     "name": "Walls",
+     "fixtures": [],
+     "groups": [
+      2
+     ]
+    },
+    {
+     "name": "Movers",
+     "fixtures": [],
+     "groups": [
+      3
+     ]
+    },
+    {
+     "name": "Pixels",
+     "fixtures": [],
+     "groups": [
+      5
+     ]
+    },
+    {
+     "name": "Strobe",
+     "fixtures": [
+      12
+     ],
+     "groups": []
+    }
+   ],
+   "cues": [
+    {
+     "t": 0,
+     "fade": 4000,
+     "scene": 3,
+     "path": "damped"
+    },
+    {
+     "t": 40000,
+     "fade": 3000,
+     "scene": 8,
+     "path": "overshoot"
+    },
+    {
+     "t": 0,
+     "track": 1,
+     "fade": 2000,
+     "len": 10000,
+     "out": 2000,
+     "dim": 100,
+     "color": "#ff3b30",
+     "path": "linear"
+    },
+    {
+     "t": 10000,
+     "track": 1,
+     "fade": 3000,
+     "len": 10000,
+     "out": 3000,
+     "dim": 100,
+     "color": "#30d158",
+     "path": "accelerated"
+    },
+    {
+     "t": 20000,
+     "track": 1,
+     "fade": 3000,
+     "len": 15000,
+     "out": 3000,
+     "dim": 80,
+     "color": "#0a84ff",
+     "path": "braked"
+    },
+    {
+     "t": 35000,
+     "track": 1,
+     "fade": 1000,
+     "effect": 8,
+     "params": {},
+     "dim": 100
+    },
+    {
+     "t": 5000,
+     "track": 2,
+     "fade": 3000,
+     "len": 25000,
+     "out": 3000,
+     "scene": 4,
+     "path": "damped"
+    },
+    {
+     "t": 0,
+     "track": 3,
+     "fade": 2000,
+     "len": 20000,
+     "out": 2000,
+     "effect": 18,
+     "params": {
+      "speed": 0.8,
+      "color": "#00c7be"
+     },
+     "dim": 100
+    },
+    {
+     "t": 20000,
+     "track": 3,
+     "fade": 2000,
+     "len": 20000,
+     "out": 2000,
+     "effect": 20,
+     "params": {},
+     "dim": 100
+    },
+    {
+     "t": 40000,
+     "track": 3,
+     "fade": 500,
+     "effect": 1,
+     "params": {},
+     "dim": 100
+    },
+    {
+     "t": 50000,
+     "track": 4,
+     "fade": 0,
+     "len": 3000,
+     "out": 500,
+     "effect": 11,
+     "params": {},
+     "dim": 100
+    },
+    {
+     "t": 2000,
+     "trigger": "Show: start video"
+    },
+    {
+     "t": 30000,
+     "trigger": "Show: halfway"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Emergency",
+   "length": 0,
+   "loop": false,
+   "priority": 10,
+   "cues": [
+    {
+     "t": 0,
+     "fade": 0,
+     "scene": 6
+    }
+   ],
+   "tracks": [
+    {
+     "name": "Scenes",
+     "fixtures": [],
+     "groups": []
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Exterior evening",
+   "length": 20000,
+   "loop": true,
+   "priority": 0,
+   "group": "B",
+   "tracks": [
+    {
+     "name": "Circle",
+     "fixtures": [],
+     "groups": [
+      4
+     ]
+    }
+   ],
+   "cues": [
+    {
+     "t": 0,
+     "fade": 5000,
+     "effect": 22,
+     "params": {},
+     "dim": 70
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Winch move",
+   "length": 12000,
+   "loop": false,
+   "priority": 5,
+   "tracks": [
+    {
+     "name": "Winch",
+     "fixtures": [
+      57
+     ],
+     "groups": []
+    }
+   ],
+   "cues": [
+    {
+     "t": 0,
+     "fade": 8000,
+     "scene": 7,
+     "path": "damped"
+    }
+   ]
+  }
+ ],
+ "devices": [
+  {
+   "name": "mediaserver",
+   "ip": "192.168.1.52",
+   "port": 7000,
+   "notes": "OSC media server"
+  },
+  {
+   "name": "qlab",
+   "ip": "192.168.1.51",
+   "port": 53000,
+   "notes": "QLab OSC"
+  },
+  {
+   "name": "motors",
+   "ip": "192.168.1.70",
+   "port": 5000,
+   "notes": "Winch / motor controller (UDP)"
+  },
+  {
+   "name": "screen1",
+   "ip": "192.168.1.61",
+   "port": 5000,
+   "notes": "Video player left"
+  },
+  {
+   "name": "screen2",
+   "ip": "192.168.1.62",
+   "port": 5000,
+   "notes": "Video player right"
+  },
+  {
+   "name": "Wi-Fi bridge",
+   "ip": "192.168.1.77",
+   "port": 7000,
+   "notes": "Flaky on purpose (mock: answers ~60 %)"
+  }
+ ],
+ "deviceGroups": [
+  {
+   "name": "screens",
+   "devices": [
+    "screen1",
+    "screen2"
+   ]
+  },
+  {
+   "name": "hall",
+   "kind": "projector",
+   "devices": [
+    "PJ left",
+    "PJ right"
+   ]
+  }
+ ],
+ "pcs": [
+  {
+   "id": 1,
+   "name": "Media PC",
+   "ip": "192.168.1.41",
+   "mac": "00:1B:21:3A:4F:10",
+   "port": 7,
+   "startup": "startup",
+   "shutdown": "shutdown",
+   "reboot": "reboot"
+  },
+  {
+   "id": 2,
+   "name": "Kiosk PC",
+   "ip": "192.168.1.199",
+   "mac": "00:1B:21:3A:4F:11",
+   "port": 7,
+   "startup": "startup",
+   "shutdown": "shutdown",
+   "reboot": "reboot"
+  }
+ ],
+ "email": {
+  "server": "192.168.1.5",
+  "port": 25,
+  "user": "",
+  "password": "",
+  "from": "show@example.com"
+ },
+ "projectors": [
+  {
+   "id": 1,
+   "name": "PJ left",
+   "ip": "192.168.1.101",
+   "port": 4352,
+   "password": ""
+  },
+  {
+   "id": 2,
+   "name": "PJ right",
+   "ip": "192.168.1.102",
+   "port": 4352,
+   "password": "panasonic"
+  },
+  {
+   "id": 3,
+   "name": "PJ foyer",
+   "ip": "192.168.1.199",
+   "port": 4352,
+   "password": ""
+  }
+ ],
+ "panel": {
+  "theme": {},
+  "panels": [
+   {
+    "id": 1,
+    "name": "Operator",
+    "title": "KD Feature demo",
+    "start": 1
+   },
+   {
+    "id": 2,
+    "name": "Front desk",
+    "title": "Front desk",
+    "start": 4
+   }
+  ],
+  "pages": [
+   {
+    "id": 1,
+    "name": "Show",
+    "columns": 4,
+    "controls": [
+     {
+      "type": "label",
+      "name": "lbl_status",
+      "text": "Status: -",
+      "span": 3,
+      "col": 1,
+      "row": 1
+     },
+     {
+      "type": "clock",
+      "col": 4,
+      "row": 1
+     },
+     {
+      "type": "button",
+      "name": "Start show",
+      "text": "START SHOW",
+      "color": "#2e7d32",
+      "span": 2,
+      "col": 1,
+      "row": 2
+     },
+     {
+      "type": "button",
+      "name": "Inloop",
+      "text": "Inloop",
+      "color": "#3a4a6b",
+      "col": 3,
+      "row": 2
+     },
+     {
+      "type": "button",
+      "name": "Stop",
+      "text": "STOP",
+      "color": "#b71c1c",
+      "confirm": "Stop everything?",
+      "col": 4,
+      "row": 2
+     },
+     {
+      "type": "group",
+      "name": "grp_room",
+      "text": "Room",
+      "span": 3,
+      "rows": 1,
+      "col": 1,
+      "row": 3
+     },
+     {
+      "type": "slider",
+      "name": "House level",
+      "text": "House light",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": " %",
+      "var": "house_level",
+      "span": 2,
+      "col": 1,
+      "row": 3
+     },
+     {
+      "type": "toggle",
+      "name": "Fog",
+      "text": "Fog",
+      "var": "fog_on",
+      "col": 3,
+      "row": 3
+     },
+     {
+      "type": "button",
+      "name": "Technician",
+      "text": "Technician…",
+      "color": "#424242",
+      "goto": 2,
+      "col": 4,
+      "row": 3
+     },
+     {
+      "type": "color",
+      "name": "Wall colour",
+      "text": "Wall colour",
+      "links": {
+       "r": "wall_r",
+       "g": "wall_g",
+       "b": "wall_b"
+      },
+      "var": "wall_colour",
+      "span": 2,
+      "col": 1,
+      "row": 4,
+      "rows": 3
+     },
+     {
+      "type": "xy",
+      "name": "Mover position",
+      "text": "Pan / tilt",
+      "min": 0,
+      "max": 100,
+      "ymin": 0,
+      "ymax": 100,
+      "links": {
+       "x": "pan",
+       "y": "tilt"
+      },
+      "span": 2,
+      "col": 3,
+      "row": 4,
+      "rows": 3
+     },
+     {
+      "type": "slider",
+      "name": "Show progress",
+      "text": "Show progress",
+      "readonly": true,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": " %",
+      "span": 4,
+      "col": 1,
+      "row": 7
+     },
+     {
+      "type": "slider",
+      "name": "Show time",
+      "text": "Main show",
+      "follow": 2,
+      "min": 0,
+      "max": 100,
+      "span": 4,
+      "col": 1,
+      "row": 8
+     },
+     {
+      "type": "label",
+      "name": "lbl_visitors",
+      "text": "Visitors:",
+      "var": "visitors",
+      "span": 2,
+      "col": 1,
+      "row": 9
+     },
+     {
+      "type": "label",
+      "name": "lbl_time",
+      "text": "Time left",
+      "follow": 2,
+      "timeShow": "left",
+      "span": 2,
+      "col": 3,
+      "row": 9
+     }
+    ],
+    "panel": 1
+   },
+   {
+    "id": 2,
+    "name": "Technician",
+    "columns": 4,
+    "pin": "1234",
+    "controls": [
+     {
+      "type": "label",
+      "name": "lbl_mode",
+      "text": "Mode: -",
+      "span": 4
+     },
+     {
+      "type": "button",
+      "name": "Projectors on",
+      "text": "Projectors on",
+      "color": "#3a4a6b"
+     },
+     {
+      "type": "button",
+      "name": "Projectors off",
+      "text": "Projectors off",
+      "color": "#3a4a6b"
+     },
+     {
+      "type": "button",
+      "name": "Teststand",
+      "text": "Test scenes",
+      "color": "#f9a825"
+     },
+     {
+      "type": "dial",
+      "name": "Grand master",
+      "text": "Grand master",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": " %",
+      "value": 100,
+      "rows": 2
+     },
+     {
+      "type": "button",
+      "name": "All off",
+      "text": "All off (hold 3 s)",
+      "color": "#b71c1c"
+     },
+     {
+      "type": "button",
+      "name": "Blackout",
+      "text": "Blackout (double-click)",
+      "color": "#000000"
+     },
+     {
+      "type": "slider",
+      "name": "Fader",
+      "text": "Vertical slider",
+      "vertical": true,
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "rows": 3
+     },
+     {
+      "type": "spacer"
+     },
+     {
+      "type": "button",
+      "name": "A",
+      "text": "A",
+      "color": "#424242"
+     },
+     {
+      "type": "button",
+      "name": "B",
+      "text": "B",
+      "color": "#424242"
+     },
+     {
+      "type": "button",
+      "name": "C",
+      "text": "C",
+      "color": "#424242"
+     },
+     {
+      "type": "button",
+      "name": "Groups page",
+      "text": "Groups…",
+      "color": "#424242",
+      "goto": 3
+     },
+     {
+      "type": "button",
+      "name": "Back",
+      "text": "← Back",
+      "color": "#424242",
+      "goto": 1,
+      "span": 4
+     }
+    ],
+    "panel": 1
+   },
+   {
+    "id": 3,
+    "name": "Groups",
+    "columns": 4,
+    "controls": [
+     {
+      "type": "group",
+      "name": "grp_stage",
+      "text": "Stage",
+      "col": 1,
+      "row": 1,
+      "span": 4,
+      "rows": 2
+     },
+     {
+      "type": "group",
+      "name": "grp_haze",
+      "text": "Haze",
+      "col": 1,
+      "row": 1,
+      "span": 2,
+      "rows": 2,
+      "color": "#6a5acd"
+     },
+     {
+      "type": "toggle",
+      "name": "Haze",
+      "text": "Haze",
+      "col": 1,
+      "row": 1,
+      "span": 2
+     },
+     {
+      "type": "slider",
+      "name": "Haze level",
+      "text": "Haze level",
+      "min": 0,
+      "max": 100,
+      "unit": " %",
+      "col": 1,
+      "row": 2,
+      "span": 2
+     },
+     {
+      "type": "button",
+      "name": "Curtain open",
+      "text": "Curtain open",
+      "color": "#3a4a6b",
+      "col": 3,
+      "row": 1
+     },
+     {
+      "type": "button",
+      "name": "Curtain close",
+      "text": "Curtain close",
+      "color": "#3a4a6b",
+      "col": 4,
+      "row": 1
+     },
+     {
+      "type": "button",
+      "name": "Groups back",
+      "text": "← Back",
+      "color": "#424242",
+      "goto": 2,
+      "col": 1,
+      "row": 3,
+      "span": 4
+     }
+    ],
+    "panel": 1
+   },
+   {
+    "id": 4,
+    "name": "Desk",
+    "panel": 2,
+    "columns": 2,
+    "controls": [
+     {
+      "type": "label",
+      "name": "lbl_status",
+      "text": "Status: -",
+      "span": 2
+     },
+     {
+      "type": "button",
+      "name": "Start show",
+      "text": "START SHOW",
+      "color": "#2e7d32"
+     },
+     {
+      "type": "button",
+      "name": "Stop",
+      "text": "STOP",
+      "color": "#b71c1c",
+      "confirm": "Stop everything?"
+     }
+    ]
+   }
+  ]
+ },
+ "triggers": [
+  {
+   "id": 10001,
+   "name": "== START & SAFETY",
+   "type": "comment",
+   "color": "red",
+   "actions": [],
+   "conditions": [],
+   "notes": "What happens at power-on and in an emergency. Put the building's normal state in Startup: it also runs after a watchdog restart."
+  },
+  {
+   "id": 1,
+   "name": "Startup",
+   "type": "startup",
+   "color": "red",
+   "actions": [
+    "mode System Idle",
+    "panel \"Start show\" reset",
+    "panel \"Show progress\" reset",
+    "panel \"Show progress\" value 0",
+    "fire trigger \"Start inloop\" after 5"
+   ],
+   "conditions": [],
+   "notes": "Runs at every start (power on, restart, after saving). Starts the inloop after 5 s."
+  },
+  {
+   "id": 2,
+   "name": "Emergency stop (in0)",
+   "type": "input",
+   "io": "in0",
+   "edge": "falling",
+   "color": "red",
+   "actions": [
+    "mode System Emergency"
+   ],
+   "conditions": [],
+   "notes": "Machine Control input 0: the emergency-stop loop opens (24 V drops)."
+  },
+  {
+   "id": 3,
+   "name": "Mode -> Emergency",
+   "type": "mode",
+   "group": "System",
+   "mode": "Emergency",
+   "color": "red",
+   "actions": [
+    "start timeline \"Emergency\"",
+    "send osc qlab /cue/*/stop",
+    "panel lbl_status text EMERGENCY STOP",
+    "panel lbl_status color #ff5c5c",
+    "io Beacon on",
+    "email tech@example.com \"Emergency stop\" The emergency stop was pressed"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 4,
+   "name": "Mode changed -> label",
+   "type": "mode",
+   "color": "red",
+   "actions": [
+    "panel lbl_mode text {group}: {mode}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 5,
+   "name": "Emergency released",
+   "type": "input",
+   "io": "in0",
+   "edge": "rising",
+   "color": "red",
+   "actions": [
+    "stop timeline \"Emergency\" fade 3",
+    "io Beacon off",
+    "mode System Idle",
+    "fire trigger \"Start inloop\""
+   ],
+   "conditions": [
+    "mode System is Emergency"
+   ]
+  },
+  {
+   "id": 10002,
+   "name": "== CLOCK & CALENDAR",
+   "type": "comment",
+   "color": "green",
+   "actions": [],
+   "conditions": [],
+   "notes": "Opening hours. The Schedule page shows the next 7 days of these."
+  },
+  {
+   "id": 6,
+   "name": "Morning start",
+   "type": "time",
+   "at": "09:30:00",
+   "days": [
+    "mon",
+    "tue",
+    "wed",
+    "thu",
+    "fri"
+   ],
+   "color": "green",
+   "actions": [
+    "mode Museum \"Starting up\"",
+    "pc all wake",
+    "projector all on",
+    "# wait for the projector before switching its input",
+    "wait until device \"PJ left\" is online timeout 120",
+    "projector all input 31",
+    "fire trigger \"Start inloop\""
+   ],
+   "conditions": [
+    "calendar Closed inactive"
+   ],
+   "whileRunning": "ignore",
+   "notes": "Weekdays 09:30, not on closed days (Schedule > Calendar)."
+  },
+  {
+   "id": 7,
+   "name": "Weekend start",
+   "type": "time",
+   "at": "10:30:00",
+   "days": [
+    "sat",
+    "sun"
+   ],
+   "color": "green",
+   "actions": [
+    "fire trigger \"Morning start\""
+   ],
+   "conditions": [
+    "calendar Closed inactive",
+    "date between 03-01 10-31"
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Closing",
+   "type": "time",
+   "at": "17:30:00",
+   "color": "green",
+   "actions": [
+    "release all fade 10",
+    "projector all off",
+    "mode Museum Closed",
+    "sleep 30",
+    "pc all shutdown"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10003,
+   "name": "Exterior lights",
+   "type": "comment",
+   "color": "green",
+   "actions": [],
+   "conditions": [],
+   "notes": "A sub section: smaller heading, indented with its triggers.",
+   "level": 2
+  },
+  {
+   "id": 9,
+   "name": "Sunset: exterior on",
+   "type": "time",
+   "at": "sunset",
+   "offset": -15,
+   "color": "green",
+   "actions": [
+    "start timeline \"Exterior evening\""
+   ],
+   "conditions": [
+    "calendar Closed inactive"
+   ]
+  },
+  {
+   "id": 10,
+   "name": "Sunrise: exterior off",
+   "type": "time",
+   "at": "sunrise",
+   "offset": 30,
+   "color": "green",
+   "actions": [
+    "stop timeline \"Exterior evening\" fade 10"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 11,
+   "name": "Summer season (log)",
+   "type": "time",
+   "at": "09:00:00",
+   "color": "green",
+   "actions": [
+    "log Summer season: open longer today"
+   ],
+   "conditions": [
+    "calendar Summer active",
+    "day is sat,sun"
+   ]
+  },
+  {
+   "id": 12,
+   "name": "Poll media server",
+   "type": "interval",
+   "seconds": 60,
+   "color": "green",
+   "actions": [
+    "http get http://192.168.1.95/api/status"
+   ],
+   "conditions": [
+    "time between sunrise sunset"
+   ]
+  },
+  {
+   "id": 10004,
+   "name": "== SHOW TASK LISTS",
+   "type": "comment",
+   "color": "purple",
+   "actions": [],
+   "conditions": [],
+   "notes": "Manual triggers = task lists that other triggers (buttons, UDP, clock) fire by name."
+  },
+  {
+   "id": 13,
+   "name": "Start inloop",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "mode System Idle",
+    "start timeline \"Inloop\"",
+    "panel lbl_status text Inloop",
+    "panel lbl_status color #d8dbe2",
+    "panel \"Start show\" reset"
+   ],
+   "conditions": [
+    "mode System not Emergency"
+   ]
+  },
+  {
+   "id": 14,
+   "name": "Start main show",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "mode System Show",
+    "start timeline \"Main show\"",
+    "send osc mediaserver /play",
+    "send udp screens \"PLAY\\r\"",
+    "panel \"Start show\" flash on",
+    "panel \"Start show\" text RUNNING",
+    "panel \"Show progress\" value 100",
+    "panel lbl_status text Show is running",
+    "panel lbl_status color #3ecf8e"
+   ],
+   "conditions": [
+    "mode System not Emergency",
+    "timeline \"Main show\" stopped"
+   ],
+   "whileRunning": "ignore"
+  },
+  {
+   "id": 15,
+   "name": "Show: start video",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "send tcp watchout run",
+    "brightsign lobby send play1",
+    "brightsign lobby event video_show",
+    "brightsign lobby var mode show",
+    "log Video started from timeline {timeline}"
+   ],
+   "conditions": [],
+   "notes": "Fired by a ◆ trigger cue at 2 s on timeline \"Main show\". The brightsign event/var lines go through the KD plugin (kdlink) in the presentation."
+  },
+  {
+   "id": 16,
+   "name": "Lobby: back to loop",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "brightsign lobby play Video loop.mp4",
+    "brightsign lobby stop Audio"
+   ],
+   "conditions": [],
+   "notes": "Plays a file directly in a BrightSign zone (KD plugin)."
+  },
+  {
+   "id": 17,
+   "name": "Show: halfway",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "netio rack output 2 pulse 5",
+    "pharos lpc timeline 1 start fade 3",
+    "digidot c4 scene 1 fade 2"
+   ],
+   "conditions": [],
+   "notes": "Trigger cue at 30 s: shows the show-device commands."
+  },
+  {
+   "id": 18,
+   "name": "Main show finished",
+   "type": "timeline_end",
+   "timeline": 2,
+   "color": "purple",
+   "actions": [
+    "var show_count += 1",
+    "log Show {show_count} finished",
+    "fire trigger \"Start inloop\""
+   ],
+   "conditions": []
+  },
+  {
+   "id": 19,
+   "name": "Stop all",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "mode System Idle",
+    "release all fade 3",
+    "send osc qlab /cue/*/stop",
+    "send udp screens \"STOP\\r\"",
+    "panel \"Start show\" reset",
+    "panel lbl_status text Stopped",
+    "panel lbl_status color #ff9f43"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 20,
+   "name": "Flash walls once",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "set 1.10-29 255",
+    "sleep 0.2",
+    "clear override 1.10-29"
+   ],
+   "conditions": [],
+   "notes": "Used by \"Flash walls 6x\": {count} is the round."
+  },
+  {
+   "id": 21,
+   "name": "Flash walls 6x",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "repeat \"Flash walls once\" 6 times every 0.5",
+    "log Walls flashed 6 times"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 22,
+   "name": "Relay chase",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "repeat 4 times every 0.5 kissbox io 1.{i} on",
+    "sleep 1",
+    "kissbox io 1 all 0 0 0 0 0 0 0 0"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 23,
+   "name": "Step through scenes",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "log Step {count}",
+    "scene {=1+count%3} fade 1"
+   ],
+   "conditions": [],
+   "notes": "Fired with repeat by the Teststand button: {count} = 1, 2, 3…"
+  },
+  {
+   "id": 24,
+   "name": "Winch up",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "start timeline \"Winch move\""
+   ],
+   "conditions": [
+    "io in2 is on"
+   ],
+   "notes": "Only when the safety contact (in2) is closed."
+  },
+  {
+   "id": 10005,
+   "name": "== TOUCH PANEL",
+   "type": "comment",
+   "color": "cyan",
+   "actions": [],
+   "conditions": [],
+   "notes": "Every kind of panel event: click, hold, double click, change (slider, dial, colour, XY, toggle)."
+  },
+  {
+   "id": 25,
+   "name": "CLICK Start show",
+   "type": "panel",
+   "control": "Start show",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "fire trigger \"Start main show\""
+   ],
+   "conditions": [
+    "mode System is Idle"
+   ],
+   "cooldown": 30,
+   "notes": "Visitor button: 30 s cooldown so pressing it again does nothing."
+  },
+  {
+   "id": 26,
+   "name": "CLICK Inloop",
+   "type": "panel",
+   "control": "Inloop",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "fire trigger \"Start inloop\""
+   ],
+   "conditions": []
+  },
+  {
+   "id": 27,
+   "name": "CLICK Stop",
+   "type": "panel",
+   "control": "Stop",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "fire trigger \"Stop all\""
+   ],
+   "conditions": []
+  },
+  {
+   "id": 28,
+   "name": "HOLD All off (3 s)",
+   "type": "panel",
+   "control": "All off",
+   "event": "hold",
+   "hold": 3,
+   "color": "cyan",
+   "actions": [
+    "release all fade 0",
+    "io all off",
+    "netio rack output all off",
+    "log All off by long press"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 29,
+   "name": "DOUBLE Blackout",
+   "type": "panel",
+   "control": "Blackout",
+   "event": "double",
+   "within": 0.5,
+   "color": "cyan",
+   "actions": [
+    "if var blackout = on then blackout off else blackout on",
+    "var blackout toggle"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 30,
+   "name": "House level slider",
+   "type": "panel",
+   "control": "House level",
+   "event": "change",
+   "color": "cyan",
+   "actions": [
+    "set 1.3 {=round(value*2.55)}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 31,
+   "name": "Grand master dial",
+   "type": "panel",
+   "control": "Grand master",
+   "event": "change",
+   "color": "cyan",
+   "actions": [
+    "grandmaster {value}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 32,
+   "name": "Wall colour wheel",
+   "type": "panel",
+   "control": "Wall colour",
+   "event": "change",
+   "color": "cyan",
+   "actions": [
+    "set 1.11 {r}",
+    "set 1.12 {g}",
+    "set 1.13 {b}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 33,
+   "name": "Mover XY pad",
+   "type": "panel",
+   "control": "Mover position",
+   "event": "change",
+   "color": "cyan",
+   "actions": [
+    "set 1.45 {=round(x*2.55)}",
+    "set 1.47 {=round(y*2.55)}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 34,
+   "name": "Fog toggle",
+   "type": "panel",
+   "control": "Fog",
+   "event": "change",
+   "color": "cyan",
+   "actions": [
+    "if var fog_on = on then io Fog on else io Fog off"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 35,
+   "name": "CLICK Projectors on",
+   "type": "panel",
+   "control": "Projectors on",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "projector all on"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 36,
+   "name": "CLICK Projectors off",
+   "type": "panel",
+   "control": "Projectors off",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "projector all off"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 37,
+   "name": "Hall projectors mute",
+   "type": "manual",
+   "color": "cyan",
+   "actions": [
+    "projector hall mute on"
+   ],
+   "conditions": [],
+   "notes": "Projector group \"hall\" (Devices > Projectors): one command for both hall projectors."
+  },
+  {
+   "id": 38,
+   "name": "CLICK Teststand",
+   "type": "panel",
+   "control": "Teststand",
+   "event": "click",
+   "color": "cyan",
+   "actions": [
+    "mode System Maintenance",
+    "repeat trigger \"Step through scenes\" every 2 times 6"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 39,
+   "name": "Code A",
+   "type": "panel",
+   "control": "A",
+   "event": "click",
+   "color": "cyan",
+   "actions": [],
+   "conditions": [],
+   "notes": "Step 1 of the secret service code (no actions needed)."
+  },
+  {
+   "id": 40,
+   "name": "Code B",
+   "type": "panel",
+   "control": "B",
+   "event": "click",
+   "color": "cyan",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 41,
+   "name": "Code C",
+   "type": "panel",
+   "control": "C",
+   "event": "click",
+   "color": "cyan",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 42,
+   "name": "Service code A-C-B",
+   "type": "sequence",
+   "steps": [
+    "Code A",
+    "Code C",
+    "Code B"
+   ],
+   "within": 5,
+   "color": "cyan",
+   "actions": [
+    "mode System Maintenance",
+    "start timeline \"Inloop\"",
+    "panel lbl_mode text Service mode",
+    "panel \"Show progress\" unlock"
+   ],
+   "conditions": [],
+   "notes": "Press A, C, B within 5 s on the Technician page."
+  },
+  {
+   "id": 10006,
+   "name": "== EXTERNAL CONTROL",
+   "type": "comment",
+   "color": "orange",
+   "actions": [],
+   "conditions": [],
+   "notes": "UDP, OSC, TCP, HTTP, Art-Net/sACN in, DMX change."
+  },
+  {
+   "id": 43,
+   "name": "UDP SHOW <name>",
+   "type": "udp",
+   "match": "SHOW*",
+   "color": "orange",
+   "actions": [
+    "log UDP asked for show {1} from {sender_ip}",
+    "if var visitors >= 0 then fire trigger \"Start main show\""
+   ],
+   "conditions": []
+  },
+  {
+   "id": 44,
+   "name": "UDP PING",
+   "type": "udp",
+   "match": "PING",
+   "color": "orange",
+   "actions": [
+    "reply PONG {visitors} {mode.System}\\r"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 45,
+   "name": "UDP from QLab only (port 7001)",
+   "type": "udp",
+   "match": "GO",
+   "port": 7001,
+   "fromIp": "192.168.1.51",
+   "color": "orange",
+   "actions": [
+    "fire trigger \"Start main show\""
+   ],
+   "conditions": []
+  },
+  {
+   "id": 46,
+   "name": "OSC /kd/cue/*",
+   "type": "osc",
+   "address": "/kd/cue/*",
+   "port": 8000,
+   "color": "orange",
+   "actions": [
+    "log QLab says {address} {1}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 47,
+   "name": "Visitor counted (UDP)",
+   "type": "udp",
+   "match": "VISITOR",
+   "color": "orange",
+   "actions": [
+    "var visitors + 1",
+    "if var visitors >= 50 then panel lbl_status text FULL ({visitors})"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 48,
+   "name": "Watchout answers",
+   "type": "tcp",
+   "device": "watchout",
+   "match": "ACK*",
+   "color": "orange",
+   "actions": [
+    "log Watchout says {1}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 49,
+   "name": "Media server status",
+   "type": "http",
+   "url": "http://192.168.1.95",
+   "color": "orange",
+   "actions": [
+    "if var media_status != {status} then var media_status = {status}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 50,
+   "name": "Desk ch1 >= 50 %: start show",
+   "type": "dmx_in",
+   "protocol": "artnet",
+   "universe": 0,
+   "channels": "1",
+   "when": "above",
+   "level": 128,
+   "color": "orange",
+   "actions": [
+    "fire trigger \"Start main show\""
+   ],
+   "conditions": [],
+   "notes": "Mock console: dmxin artnet 0 1 255"
+  },
+  {
+   "id": 51,
+   "name": "Desk ch2 = grand master",
+   "type": "dmx_in",
+   "protocol": "sacn",
+   "universe": 1,
+   "channels": "2",
+   "when": "change",
+   "color": "orange",
+   "actions": [
+    "grandmaster {=round(value/2.55)}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 52,
+   "name": "Winch -> motor controller",
+   "type": "dmx_change",
+   "universe": 3,
+   "channels": "1-2",
+   "tables": {
+    "motor": [
+     "P",
+     "S"
+    ],
+    "range": [
+     65535,
+     100
+    ]
+   },
+   "color": "orange",
+   "actions": [
+    "send udp motors W{motor}{=ceil(value*range/255)}\\r"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10007,
+   "name": "== DEVICES & MONITORING",
+   "type": "comment",
+   "color": "blue",
+   "actions": [],
+   "conditions": [],
+   "notes": "Device online/offline, projector alarms, PLC, KNX and Machine Control readings."
+  },
+  {
+   "id": 53,
+   "name": "Device offline -> email",
+   "type": "device",
+   "device": "",
+   "state": "offline",
+   "color": "blue",
+   "actions": [
+    "log {kind} {device} is {state}",
+    "email tech@example.com \"{device} offline\" {kind} {device} stopped answering"
+   ],
+   "conditions": [
+    "mode System not Maintenance"
+   ]
+  },
+  {
+   "id": 54,
+   "name": "PJ left back online",
+   "type": "device",
+   "device": "PJ left",
+   "state": "online",
+   "color": "blue",
+   "actions": [
+    "log PJ left is back"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 55,
+   "name": "Projector error",
+   "type": "projector",
+   "projector": "",
+   "alarm": "any",
+   "level": "warning",
+   "color": "blue",
+   "actions": [
+    "email tech@example.com \"{projector}: {alarm} {state}\" Lamp at {lamp} h"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 56,
+   "name": "Lamp hours 4000",
+   "type": "projector",
+   "projector": "PJ left",
+   "alarm": "lamp_hours",
+   "hours": 4000,
+   "color": "blue",
+   "actions": [
+    "email tech@example.com \"{projector} lamp\" Lamp passed {hours} h (now {lamp} h)"
+   ],
+   "conditions": [],
+   "notes": "Mock console: projector \"PJ left\" send LAMP=4100"
+  },
+  {
+   "id": 57,
+   "name": "Door opened (PLC)",
+   "type": "variable",
+   "variable": "door",
+   "value": "on",
+   "color": "blue",
+   "actions": [
+    "if mode Museum is Open then log Door opened during opening hours else email tech@example.com \"Door\" Door opened outside opening hours"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 58,
+   "name": "KNX hall light changed",
+   "type": "variable",
+   "variable": "hall_light",
+   "color": "blue",
+   "actions": [
+    "log Hall light is now {value} (was {old})"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 59,
+   "name": "Daylight above 5 V (ai0)",
+   "type": "input",
+   "io": "ai0",
+   "edge": "rising",
+   "level": 5,
+   "color": "blue",
+   "actions": [
+    "stop timeline \"Exterior evening\" fade 10"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 60,
+   "name": "Visitor sensor (in1)",
+   "type": "input",
+   "io": "in1",
+   "edge": "rising",
+   "color": "blue",
+   "actions": [
+    "var visitors ++"
+   ],
+   "conditions": [],
+   "cooldown": 1,
+   "onlyIn": {
+    "group": "Museum",
+    "states": [
+     "Open"
+    ]
+   },
+   "notes": "Only counts while the museum is open (Only active in)."
+  },
+  {
+   "id": 61,
+   "name": "Reset button held (in3)",
+   "type": "input",
+   "io": "in3",
+   "edge": "hold",
+   "hold": 5,
+   "color": "blue",
+   "actions": [
+    "var visitors = 0",
+    "log Visitor counter reset"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 62,
+   "name": "Museum open",
+   "type": "manual",
+   "color": "blue",
+   "actions": [
+    "mode Museum Open"
+   ],
+   "conditions": [
+    "mode Museum is \"Starting up\""
+   ],
+   "notes": "\"Starting up\" goes to Open by itself after 120 s (its actions on the Modes page); this skips the wait."
+  },
+  {
+   "id": 63,
+   "name": "Museum: next state",
+   "type": "manual",
+   "color": "blue",
+   "actions": [
+    "mode Museum next",
+    "log Museum is now {mode.Museum}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 64,
+   "name": "Emergency over",
+   "type": "manual",
+   "color": "blue",
+   "actions": [
+    "mode System back"
+   ],
+   "conditions": [
+    "mode System is Emergency"
+   ],
+   "notes": "Back to the state System was in before the emergency."
+  },
+  {
+   "id": 65,
+   "name": "Long maintenance reminder",
+   "type": "interval",
+   "seconds": 600,
+   "color": "blue",
+   "actions": [
+    "email tech@example.com \"Maintenance\" System has been in maintenance for over 2 hours"
+   ],
+   "conditions": [
+    "mode System is Maintenance for 2h"
+   ]
+  },
+  {
+   "id": 66,
+   "name": "Museum closed",
+   "type": "mode",
+   "group": "Museum",
+   "mode": "Closed",
+   "color": "blue",
+   "actions": [
+    "knx gw write \"Hall light\" off",
+    "netio rack output 1 off"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10008,
+   "name": "== EXAMPLES",
+   "type": "comment",
+   "color": "grey",
+   "actions": [],
+   "conditions": [],
+   "notes": "Disabled triggers and comment lines."
+  },
+  {
+   "id": 67,
+   "name": "Disabled example",
+   "type": "manual",
+   "color": "grey",
+   "actions": [
+    "# a line starting with # is a comment and is skipped",
+    "log This trigger is switched off"
+   ],
+   "conditions": [],
+   "enabled": false
+  },
+  {
+   "id": 68,
+   "name": "Every 10 s heartbeat (disabled)",
+   "type": "interval",
+   "seconds": 10,
+   "color": "grey",
+   "actions": [
+    "send udp mediaserver alive"
+   ],
+   "conditions": [],
+   "enabled": false
+  }
+ ],
+ "variables": [
+  {
+   "name": "visitors",
+   "type": "number",
+   "initial": 0,
+   "persist": true
+  },
+  {
+   "name": "show_count",
+   "type": "number",
+   "initial": 0,
+   "persist": true
+  },
+  {
+   "name": "door",
+   "type": "bool",
+   "initial": false,
+   "modbus": {
+    "device": "plc",
+    "table": "discrete",
+    "address": 0
+   }
+  },
+  {
+   "name": "work_lights",
+   "type": "bool",
+   "initial": false,
+   "modbus": {
+    "device": "plc",
+    "table": "coil",
+    "address": 3
+   }
+  },
+  {
+   "name": "media_status",
+   "type": "text",
+   "initial": "unknown"
+  },
+  {
+   "name": "museum_state",
+   "type": "number",
+   "initial": 1,
+   "modbus": {
+    "device": "plc",
+    "table": "holding",
+    "address": 20
+   }
+  },
+  {
+   "name": "blackout",
+   "type": "bool",
+   "initial": false
+  },
+  {
+   "name": "fog_on",
+   "type": "bool",
+   "initial": false
+  },
+  {
+   "name": "house_level",
+   "type": "number",
+   "initial": 0
+  },
+  {
+   "name": "wall_colour",
+   "type": "text",
+   "initial": "#000000"
+  },
+  {
+   "name": "wall_r",
+   "type": "number",
+   "initial": 0
+  },
+  {
+   "name": "wall_g",
+   "type": "number",
+   "initial": 0
+  },
+  {
+   "name": "wall_b",
+   "type": "number",
+   "initial": 0
+  },
+  {
+   "name": "pan",
+   "type": "number",
+   "initial": 50
+  },
+  {
+   "name": "tilt",
+   "type": "number",
+   "initial": 50
+  },
+  {
+   "name": "hall_light",
+   "type": "bool",
+   "initial": false
+  },
+  {
+   "name": "daylight",
+   "type": "number",
+   "initial": 0
+  },
+  {
+   "name": "pharos_tl1",
+   "type": "text",
+   "initial": ""
+  }
+ ],
+ "calendar": [
+  {
+   "name": "Closed",
+   "from": "12-25",
+   "to": "12-26"
+  },
+  {
+   "name": "Closed",
+   "from": "01-01",
+   "to": "01-01"
+  },
+  {
+   "name": "Summer",
+   "from": "07-01",
+   "to": "08-31"
+  }
+ ],
+ "tcp": [
+  {
+   "name": "watchout",
+   "ip": "192.168.1.90",
+   "port": 3039,
+   "eol": "\\r\\n"
+  }
+ ],
+ "modbus": [
+  {
+   "name": "plc",
+   "ip": "192.168.1.80",
+   "port": 502,
+   "unit": 1,
+   "pollMs": 500
+  }
+ ],
+ "maps": [
+  {
+   "id": 1,
+   "name": "Stage plan",
+   "aspect": 1.5,
+   "background": "",
+   "snap": true,
+   "labels": true,
+   "items": [
+    {
+     "fixture": 1,
+     "x": 0.3,
+     "y": 0.85
+    },
+    {
+     "fixture": 2,
+     "x": 0.7,
+     "y": 0.85
+    },
+    {
+     "fixture": 3,
+     "x": 0.5,
+     "y": 0.95
+    },
+    {
+     "fixture": 4,
+     "x": 0.5,
+     "y": 0.06
+    },
+    {
+     "fixture": 5,
+     "x": 0.06,
+     "y": 0.25
+    },
+    {
+     "fixture": 6,
+     "x": 0.06,
+     "y": 0.6
+    },
+    {
+     "fixture": 7,
+     "x": 0.94,
+     "y": 0.25
+    },
+    {
+     "fixture": 8,
+     "x": 0.94,
+     "y": 0.6
+    },
+    {
+     "fixture": 9,
+     "x": 0.35,
+     "y": 0.35
+    },
+    {
+     "fixture": 10,
+     "x": 0.65,
+     "y": 0.35
+    },
+    {
+     "fixture": 11,
+     "x": 0.2,
+     "y": 0.12
+    },
+    {
+     "fixture": 12,
+     "x": 0.8,
+     "y": 0.12
+    },
+    {
+     "fixture": 21,
+     "x": 0.4,
+     "y": 0.6
+    },
+    {
+     "fixture": 22,
+     "x": 0.467,
+     "y": 0.6
+    },
+    {
+     "fixture": 23,
+     "x": 0.534,
+     "y": 0.6
+    },
+    {
+     "fixture": 24,
+     "x": 0.601,
+     "y": 0.6
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Pixel grid 8 x 4",
+   "aspect": 2,
+   "background": "",
+   "snap": true,
+   "labels": true,
+   "items": [
+    {
+     "fixture": 25,
+     "x": 0.1,
+     "y": 0.15
+    },
+    {
+     "fixture": 26,
+     "x": 0.214,
+     "y": 0.15
+    },
+    {
+     "fixture": 27,
+     "x": 0.328,
+     "y": 0.15
+    },
+    {
+     "fixture": 28,
+     "x": 0.442,
+     "y": 0.15
+    },
+    {
+     "fixture": 29,
+     "x": 0.556,
+     "y": 0.15
+    },
+    {
+     "fixture": 30,
+     "x": 0.67,
+     "y": 0.15
+    },
+    {
+     "fixture": 31,
+     "x": 0.784,
+     "y": 0.15
+    },
+    {
+     "fixture": 32,
+     "x": 0.898,
+     "y": 0.15
+    },
+    {
+     "fixture": 33,
+     "x": 0.898,
+     "y": 0.383
+    },
+    {
+     "fixture": 34,
+     "x": 0.784,
+     "y": 0.383
+    },
+    {
+     "fixture": 35,
+     "x": 0.67,
+     "y": 0.383
+    },
+    {
+     "fixture": 36,
+     "x": 0.556,
+     "y": 0.383
+    },
+    {
+     "fixture": 37,
+     "x": 0.442,
+     "y": 0.383
+    },
+    {
+     "fixture": 38,
+     "x": 0.328,
+     "y": 0.383
+    },
+    {
+     "fixture": 39,
+     "x": 0.214,
+     "y": 0.383
+    },
+    {
+     "fixture": 40,
+     "x": 0.1,
+     "y": 0.383
+    },
+    {
+     "fixture": 41,
+     "x": 0.1,
+     "y": 0.616
+    },
+    {
+     "fixture": 42,
+     "x": 0.214,
+     "y": 0.616
+    },
+    {
+     "fixture": 43,
+     "x": 0.328,
+     "y": 0.616
+    },
+    {
+     "fixture": 44,
+     "x": 0.442,
+     "y": 0.616
+    },
+    {
+     "fixture": 45,
+     "x": 0.556,
+     "y": 0.616
+    },
+    {
+     "fixture": 46,
+     "x": 0.67,
+     "y": 0.616
+    },
+    {
+     "fixture": 47,
+     "x": 0.784,
+     "y": 0.616
+    },
+    {
+     "fixture": 48,
+     "x": 0.898,
+     "y": 0.616
+    },
+    {
+     "fixture": 49,
+     "x": 0.898,
+     "y": 0.849
+    },
+    {
+     "fixture": 50,
+     "x": 0.784,
+     "y": 0.849
+    },
+    {
+     "fixture": 51,
+     "x": 0.67,
+     "y": 0.849
+    },
+    {
+     "fixture": 52,
+     "x": 0.556,
+     "y": 0.849
+    },
+    {
+     "fixture": 53,
+     "x": 0.442,
+     "y": 0.849
+    },
+    {
+     "fixture": 54,
+     "x": 0.328,
+     "y": 0.849
+    },
+    {
+     "fixture": 55,
+     "x": 0.214,
+     "y": 0.849
+    },
+    {
+     "fixture": 56,
+     "x": 0.1,
+     "y": 0.849
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Circle",
+   "aspect": 1,
+   "background": "",
+   "snap": true,
+   "labels": true,
+   "items": [
+    {
+     "fixture": 13,
+     "x": 0.5,
+     "y": 0.12
+    },
+    {
+     "fixture": 14,
+     "x": 0.7687,
+     "y": 0.2313
+    },
+    {
+     "fixture": 15,
+     "x": 0.88,
+     "y": 0.5
+    },
+    {
+     "fixture": 16,
+     "x": 0.7687,
+     "y": 0.7687
+    },
+    {
+     "fixture": 17,
+     "x": 0.5,
+     "y": 0.88
+    },
+    {
+     "fixture": 18,
+     "x": 0.2313,
+     "y": 0.7687
+    },
+    {
+     "fixture": 19,
+     "x": 0.12,
+     "y": 0.5
+    },
+    {
+     "fixture": 20,
+     "x": 0.2313,
+     "y": 0.2313
+    }
+   ]
+  }
+ ],
+ "effects": [
+  {
+   "id": 1,
+   "name": "Rainbow",
+   "code": "// Colour wheel rolling over the fixtures\nparam speed = 0.2 [0, 2]       // turns of the colour wheel per second\nparam spread = 1 [0, 4]        // rainbows across the rig (the map's width): 0 = all the same colour\nparam sat = 1 [0, 1]           // saturation: 0 = white, 1 = full colour\nr, g, b = hsv(t * speed + x * spread, sat, 1)"
+  },
+  {
+   "id": 2,
+   "name": "Chase",
+   "code": "// One light running along the fixtures, in list order\nparam speed = 0.5 [0, 4]       // rounds per second: 1 = the light passes every fixture once a second\nparam width = 0.25 [0.02, 1]   // size of the light, part of the rig (0.25 = a quarter)\nparam color = #ffffff          // colour of the light\nparam back = #000000           // colour of the other fixtures\npos = fract(t * speed)\nd = abs(fract(u - pos + 0.5) - 0.5)\nk = smoothstep(max(width / 2, 1 / n), 0, d)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+  },
+  {
+   "id": 3,
+   "name": "Bounce (scanner)",
+   "code": "// A light going back and forth along the fixtures\nparam speed = 0.3 [0, 4]       // trips there and back per second\nparam width = 0.2 [0.02, 1]    // size of the light, part of the rig\nparam color = #ff0000          // colour of the light\np0 = n > 1 ? i / (n - 1) : 0.5\nd = abs(p0 - tri(t * speed))\nr, g, b = color\ndim = smoothstep(max(width / 2, 1 / n), 0, d)"
+  },
+  {
+   "id": 4,
+   "name": "Theatre chase",
+   "code": "// Every few fixtures on, stepping along (marquee lights)\nparam rate = 4 [0.5, 20]       // steps per second\nparam every = 3 [2, 8]         // one fixture on in every ... fixtures\nparam color = #ffcc66          // colour of the fixtures that are on\nparam back = #000000           // colour of the others\non = mod(i - floor(t * rate), max(floor(every), 2)) < 1\nr = on ? color.r : back.r\ng = on ? color.g : back.g\nb = on ? color.b : back.b"
+  },
+  {
+   "id": 5,
+   "name": "Two-colour fade",
+   "code": "// Fade back and forth between two colours, offset per fixture\nparam speed = 0.15 [0, 2]      // fades there and back per second\nparam offset = 0.5 [0, 1]      // shift along the rig: 0 = all together, 1 = a whole cycle spread out\nparam a = #ff2d92              // first colour\nparam b2 = #0a84ff             // second colour\nk = tri(t * speed + u * offset)\nr = mix(a.r, b2.r, k)\ng = mix(a.g, b2.g, k)\nb = mix(a.b, b2.b, k)"
+  },
+  {
+   "id": 6,
+   "name": "Colour steps",
+   "code": "// Steps through three colours\nparam rate = 0.5 [0.05, 4]     // colour changes per second\nparam fade = 0.3 [0, 1]        // 0 = hard cut, 1 = fade all the way to the next colour\nparam offset = 0 [0, 1]        // shift along the rig: 0 = all fixtures the same colour\nparam c1 = #ff0000             // first colour\nparam c2 = #00ff00             // second colour\nparam c3 = #0000ff             // third colour\nph = mod(t * rate + u * offset * 3, 3)\nst = floor(ph)\nk = smoothstep(1 - fade, 1, fract(ph))\nr = mix(st < 1 ? c1.r : st < 2 ? c2.r : c3.r, st < 1 ? c2.r : st < 2 ? c3.r : c1.r, k)\ng = mix(st < 1 ? c1.g : st < 2 ? c2.g : c3.g, st < 1 ? c2.g : st < 2 ? c3.g : c1.g, k)\nb = mix(st < 1 ? c1.b : st < 2 ? c2.b : c3.b, st < 1 ? c2.b : st < 2 ? c3.b : c1.b, k)"
+  },
+  {
+   "id": 7,
+   "name": "Wipe",
+   "code": "// Fills the rig with a colour from left to right, then empties it the same way\nparam speed = 0.25 [0.02, 2]   // complete fill + empty cycles per second\nparam soft = 0.1 [0, 0.5]      // soft edge, part of the rig (0 = hard edge)\nparam color = #0a84ff          // fill colour\nparam back = #000000           // colour before the fill\ne = fract(t * speed * 2) * (1 + soft) - soft\nfill = 1 - smoothstep(e, e + soft, x)\nk = fract(t * speed) < 0.5 ? fill : 1 - fill\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+  },
+  {
+   "id": 8,
+   "name": "Police",
+   "code": "// Red / blue alternating halves\nparam rate = 2 [0.5, 8]        // changes per second\nside = u < 0.5\nphase = sq(t * rate)\non = side ? phase : 1 - phase\nr = on\nb = 1 - on\ndim = pulse(t * rate * 4, 0.5) * 0.5 + 0.5"
+  },
+  {
+   "id": 9,
+   "name": "Breathe",
+   "code": "// Slow fade up and down\nparam speed = 0.25 [0.02, 2]   // breaths per second\nparam low = 0.1 [0, 1]         // lowest level (0 = all the way off)\nparam color = #ffb347          // colour\nr, g, b = color\ndim = mix(low, 1, 0.5 - 0.5 * cos(t * speed * tau))"
+  },
+  {
+   "id": 10,
+   "name": "Heartbeat",
+   "code": "// Double pulse, like a heartbeat\nparam bpm = 60 [20, 180]       // beats per minute\nparam low = 0.05 [0, 0.5]      // level between the beats\nparam color = #ff2040          // colour\nph = fract(t * bpm / 60)\nbeat = max(1 - abs(ph - 0.08) * 14, 0) + 0.7 * max(1 - abs(ph - 0.3) * 12, 0)\nr, g, b = color\ndim = mix(low, 1, min(beat, 1))"
+  },
+  {
+   "id": 11,
+   "name": "Strobe",
+   "code": "// Flashes; rate in flashes per second\nparam rate = 8 [0.5, 25]       // flashes per second\nparam duty = 0.15 [0.02, 0.9]  // part of each flash that is on (0.5 = half on, half off)\nparam color = #ffffff          // colour of the flash\nr, g, b = color\ndim = pulse(t * rate, duty)"
+  },
+  {
+   "id": 12,
+   "name": "Lightning",
+   "code": "// Random lightning flashes over the whole rig\nparam rate = 0.5 [0.05, 4]     // flashes per second, on average\nparam base = 0 [0, 0.3]        // level between the flashes\nparam color = #dfe8ff          // colour of the flash\ns = floor(t * 20)\nhit = rand(s * 0.0137) < rate / 20\nr, g, b = color\ndim = hit ? 0.4 + 0.6 * rand(s * 0.0291 + 0.5) : base"
+  },
+  {
+   "id": 13,
+   "name": "Fire",
+   "code": "// Flickering flame, every fixture its own\nparam speed = 3 [0.5, 10]      // how fast the flames flicker\nf = noise(t * speed + i * 17.3) * 0.7 + noise(t * speed * 2.7 + i * 5.1) * 0.3\nr = 1\ng = 0.25 + f * 0.35\nb = 0\ndim = 0.35 + f * 0.65"
+  },
+  {
+   "id": 14,
+   "name": "Candle",
+   "code": "// Warm, gentle flicker\nparam color = #ff9329          // colour of the flame\nf = noise(t * 2.1 + i * 3.7) * 0.6 + noise(t * 7.3 + i) * 0.4\nr, g, b = color\ndim = 0.6 + f * 0.4"
+  },
+  {
+   "id": 15,
+   "name": "Sparkle",
+   "code": "// Random short flashes on a coloured base\nparam rate = 6 [1, 30]         // chances to flash per second\nparam chance = 0.08 [0, 0.5]   // part of the fixtures that flash each time\nparam base = #1a2a6c           // background colour\nparam flash = #ffffff          // colour of the flash\nstep_t = floor(t * rate)\non = rand(step_t * 0.37 + i * 0.011) < chance\nr = on ? flash.r : base.r\ng = on ? flash.g : base.g\nb = on ? flash.b : base.b"
+  },
+  {
+   "id": 16,
+   "name": "Twinkle",
+   "code": "// Every fixture slowly fades in and out on its own (starry sky)\nparam speed = 0.3 [0.05, 2]    // how fast the stars fade in and out\nparam amount = 0.45 [0, 1]     // how many stars are lit at a time\nparam color = #ffffff          // colour of the stars\nparam base = #000814           // background colour\nk = smoothstep(1 - amount, 1, noise(t * speed + i * 7.31))\nr = mix(base.r, color.r, k)\ng = mix(base.g, color.g, k)\nb = mix(base.b, color.b, k)"
+  },
+  {
+   "id": 17,
+   "name": "Wave across the map",
+   "code": "// Brightness wave moving left to right over the map\nparam speed = 0.3 [0, 2]       // waves passing per second\nparam size = 1.5 [0.2, 6]      // waves across the map's width\nparam color = #00c7be          // colour\nr, g, b = color\ndim = 0.5 + 0.5 * sin((x * size - t * speed) * tau)"
+  },
+  {
+   "id": 18,
+   "name": "XY ripple",
+   "code": "// Rings rippling out from a point on the map, like a stone in water\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.5 [0, 3]       // rings per second\nparam size = 3 [0.5, 10]       // rings from the centre to the edge\nparam color = #00c7be          // colour of the rings\nparam back = #000000           // colour between the rings\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nk = pow(0.5 + 0.5 * sin((d * size - t * speed) * tau), 3)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+  },
+  {
+   "id": 19,
+   "name": "XY sweep",
+   "code": "// A bar of light sweeping over the map, in any direction\nparam angle = 0 [0, 360]       // direction in degrees: 0 = to the right, 90 = down, 180 = to the left\nparam speed = 0.3 [0, 2]       // sweeps per second\nparam width = 0.2 [0.02, 1]    // thickness of the bar, part of the map\nparam color = #ffffff          // colour of the bar\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a)\npos = fract(t * speed) * (1.42 + width) - 0.71 - width / 2\nr, g, b = color\ndim = smoothstep(width / 2, 0, abs(p - pos))"
+  },
+  {
+   "id": 20,
+   "name": "XY radar",
+   "code": "// A beam turning around a point, with a fading tail\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.25 [-2, 2]     // turns per second (minus = the other way round)\nparam tail = 0.3 [0.02, 1]     // length of the tail, part of a turn\nparam color = #30d158          // colour of the beam\na = atan(y - cy, x - cx) / tau\nk = speed >= 0 ? fract(t * speed - a) : fract(a - t * speed)\nr, g, b = color\ndim = smoothstep(tail, 0, k)"
+  },
+  {
+   "id": 21,
+   "name": "XY plasma",
+   "code": "// Soft colour clouds drifting over the map\nparam speed = 0.3 [0, 2]       // how fast the clouds move\nparam scale = 3 [0.5, 10]      // bigger = more, smaller clouds\nparam sat = 1 [0, 1]           // saturation: 0 = white, 1 = full colour\nv = sin(x * scale * 3 + t * speed * 3) + sin((y * scale + t * speed * 2) * 2) + sin((x + y) * scale * 2 - t * speed * 4)\nr, g, b = hsv(v / 6 + t * speed * 0.2, sat, 1)"
+  },
+  {
+   "id": 22,
+   "name": "XY gradient",
+   "code": "// Two colours blended across the map at an angle, optionally moving\nparam angle = 0 [0, 360]       // direction of the blend in degrees: 0 = left to right, 90 = top to bottom\nparam speed = 0 [-1, 1]        // how fast the colours move (0 = still)\nparam c1 = #ff2d92             // colour at the start\nparam c2 = #0a84ff             // colour at the end\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a) + 0.5\nk = tri((p + t * speed) / 2)\nr = mix(c1.r, c2.r, k)\ng = mix(c1.g, c2.g, k)\nb = mix(c1.b, c2.b, k)"
+  },
+  {
+   "id": 23,
+   "name": "Vitrine shimmer (own)",
+   "code": "// Our own effect: a slow warm shimmer for the showcase\nparam speed = 0.3 [0, 2]       // shimmer waves per second\nparam color = #ffb070          // base colour\nparam depth = 0.4 [0, 1]       // how deep the shimmer dips\nk = 1 - depth * (0.5 + 0.5 * sin((u * 2 + t * speed) * tau))\nr, g, b = color\ndim = k * (0.8 + 0.2 * noise(t * 3 + i))"
+  }
+ ],
+ "triggerColorNames": {
+  "red": "Start & safety",
+  "green": "Clock",
+  "purple": "Show tasks",
+  "cyan": "Touch panel",
+  "orange": "External"
+ },
+ "fixtureTypes": [
+  "fixture Museum / Vitrine LED strip\nicon pixel\ncurve linear\nnote Our own 4-cell showcase strip (example of a project fixture type)\nmode 4 cells: 4 x (r, g, b)\nmode Simple: dim, r, g, b"
+ ],
+ "drivers": [
+  {
+   "id": 1,
+   "type": "kissbox",
+   "name": "io",
+   "ip": "192.168.1.121",
+   "port": 9813,
+   "listenPort": 9813,
+   "frame": "IO3",
+   "cards": [
+    "DO4PR",
+    "DI8DC",
+    "AO8DA"
+   ],
+   "names": {
+    "1.1": "Fog power",
+    "1.2": "Hazer",
+    "1.3": "Doors",
+    "1.4": "Spare",
+    "2.1": "Door contact",
+    "3.1": "Fan speed"
+   },
+   "vars": {
+    "2.1": "door"
+   }
+  },
+  {
+   "id": 2,
+   "type": "knx",
+   "name": "gw",
+   "ip": "192.168.1.123",
+   "port": 3671,
+   "addresses": [
+    {
+     "ga": "1/1/1",
+     "dpt": "1",
+     "name": "Hall light",
+     "var": "hall_light"
+    },
+    {
+     "ga": "1/2/1",
+     "dpt": "5.001",
+     "name": "Hall dimmer"
+    },
+    {
+     "ga": "2/1/1",
+     "dpt": "3",
+     "name": "Blinds"
+    },
+    {
+     "ga": "3/1/1",
+     "dpt": "9",
+     "name": "Hall temperature"
+    },
+    {
+     "ga": "4/1/1",
+     "dpt": "232",
+     "name": "RGB strip"
+    }
+   ],
+   "vars": {}
+  },
+  {
+   "id": 3,
+   "type": "brightsign",
+   "name": "lobby",
+   "ip": "192.168.1.125",
+   "port": 80,
+   "user": "admin",
+   "password": "",
+   "udpPort": 5000,
+   "plugin": true,
+   "pluginPort": 5010,
+   "vars": {},
+   "commands": [
+    {
+     "name": "Play intro",
+     "text": "play1"
+    },
+    {
+     "name": "Loop",
+     "text": "loop"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "digidot",
+   "name": "c4",
+   "ip": "192.168.1.126",
+   "port": 80,
+   "user": "admin",
+   "password": "admin",
+   "vars": {}
+  },
+  {
+   "id": 5,
+   "type": "netio",
+   "name": "rack",
+   "ip": "192.168.1.127",
+   "port": 80,
+   "user": "netio",
+   "password": "netio",
+   "model": "4PZ",
+   "outputs": 4,
+   "live": true,
+   "vars": {}
+  },
+  {
+   "id": 6,
+   "type": "pharos",
+   "name": "lpc",
+   "ip": "192.168.1.128",
+   "port": 80,
+   "live": true,
+   "vars": {
+    "tl1": "pharos_tl1"
+   }
+  }
+ ],
+ "machineControl": {
+  "in0": {
+   "name": "Emergency stop"
+  },
+  "in1": {
+   "name": "Visitor sensor"
+  },
+  "in2": {
+   "name": "Winch safety"
+  },
+  "in3": {
+   "name": "Reset button"
+  },
+  "out0": {
+   "name": "Door release"
+  },
+  "out1": {
+   "name": "Beacon"
+  },
+  "io4": {
+   "name": "Fog",
+   "mode": "out",
+   "var": "fog_on"
+  },
+  "ai0": {
+   "name": "Daylight sensor",
+   "var": "daylight"
+  },
+  "ai1": {
+   "name": "Room temperature",
+   "mode": "NTC"
+  },
+  "ao0": {
+   "name": "Fan 0-10V"
+  }
+ }
+}

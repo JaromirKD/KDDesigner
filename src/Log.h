@@ -18,6 +18,21 @@ struct LogEntry {
 // view), mirrored to Serial and appended to a rotating file on the USB stick.
 namespace Log {
 void begin();
+// Lines kept from before a reset (watchdog, crash, restart; not a power cut), and how many
+// of them hadn't reached the stick yet (they are written with the next flush).
+uint32_t keptFromBefore(uint32_t& notOnStick);
+// Why the board started, from the kept log (the bootloader clears the chip's reset flags):
+// "power on" (the log was lost), "restart" (markPlannedRestart was called), "new firmware"
+// (another build than before: flashed or updated), "USB upload" (the same build flashed
+// again) or "unexpected" (watchdog, crash or the reset button). build = an id of this
+// firmware. Call once, after begin().
+const char* startReason(uint32_t build);
+void markPlannedRestart();   // just before the firmware resets the board itself
+// Breadcrumbs that survive a reset: slot 0 = main loop, 1 = web thread, 2 = project (re)load. `where` must be a
+// string literal. After an "unexpected" start, lastCrumb() says where each one last was.
+enum { kCrumbMain = 0, kCrumbWeb = 1, kCrumbLoad = 2 };
+void crumb(int slot, const char* where);
+const char* lastCrumb(int slot);
 void write(Lvl lvl, Cat cat, const char* fmt, ...) __attribute__((format(printf, 3, 4)));
 
 uint32_t lastSeq();

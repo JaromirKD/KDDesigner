@@ -8,6 +8,13 @@
 function addItem(kind) {
   const p = P();
   if (kind.startsWith('ptrig-')) return addPanelTrigger(p.panel.pages[S.sel.page || 0].controls[+kind.slice(6)]);
+  if (kind.startsWith('devgroup-')) {
+    const gk = kind.slice(9);
+    let n = 1;
+    while (p.deviceGroups.some((g) => groupKind(g) === gk && g.name === 'group' + n)) n++;
+    p.deviceGroups.push({ name: 'group' + n, ...(gk === 'network' ? {} : { kind: gk }), devices: [] });
+    return markDirty(), render();
+  }
   const fx = (name, channels, type, mode) => {
     const u = p.universes[0]?.id || 1;
     const end = p.fixtures.filter((f) => f.universe === u).reduce((m, f) => Math.max(m, f.address + footprint(f)), 1);
@@ -51,14 +58,8 @@ function addItem(kind) {
     case 'fixture-rgbw': fx('RGBW', ['dim', 'r', 'g', 'b', 'w'], 'Generic / RGBW', '5 ch'); break;
     case 'fixture-dim': fx('Dimmer', ['dim'], 'Generic / Dimmer', '1 ch'); break;
     case 'fixture-16': fx('Winch', ['pos:16', 'speed', 'enable'], 'Generic / Motor / winch', '3 ch'); break;
-    case 'devgroup': {
-      let n = 1;
-      while (p.deviceGroups.some((g) => g.name === 'group' + n)) n++;
-      p.deviceGroups.push({ name: 'group' + n, devices: [] });
-      break;
-    }
     case 'map': p.maps.push({ id: nextId(p.maps), name: 'Map ' + nextId(p.maps), aspect: 1.6, background: '', snap: true, labels: true, items: [] }); S.sel.map = p.maps.length - 1; S.mapSel = new Set(); break;
-    case 'modegroup': p.modes.push({ name: 'Group ' + (p.modes.length + 1), states: ['On', 'Off'] }); break;
+    case 'modegroup': p.modes.push({ name: 'Group ' + (p.modes.length + 1), states: ['On', 'Off'], stateInfo: {} }); break;
     case 'device': p.devices.push({ name: 'device' + (p.devices.length + 1), ip: '192.168.1.20', port: 7000 }); break;
     case 'variable': {
       let n = 1;
@@ -95,9 +96,17 @@ function addItem(kind) {
       break;
     }
     case 'separator': {
-      p.triggers.push({ id: nextId(p.triggers), name: '== SECTION', type: 'comment', actions: [] });
+      // In a colour tab: that colour. The tab's first main section goes on top of its triggers
+      // (insertColorHead); once it has one, a new separator is a sub section after the last item.
+      const spot = trigAddSpot(), s = { id: nextId(p.triggers), name: '== SECTION', type: 'comment', actions: [] };
+      if (spot.color == null) p.triggers.push(s);
+      else {
+        if (spot.color) s.color = spot.color;
+        if (trigColorHead(spot.color)) { s.level = 2; s.name = 'Sub section'; p.triggers.splice(spot.at, 0, s); }
+        else insertColorHead(spot.color, s);
+      }
       renumberTriggers(p);
-      selectTriggers([p.triggers.length - 1]);
+      selectTriggers([p.triggers.indexOf(s)]);
       break;
     }
     case 'condition': p.triggers[S.sel.trigger].conditions.push(''); break;
@@ -133,10 +142,13 @@ function addItem(kind) {
     }
     case 'trigger': {
       const t = { id: nextId(p.triggers), name: '', type: 'manual', enabled: true, conditions: [], actions: [''] };
-      p.triggers.push(t);  // always at the end
+      // At the end, or in a colour tab: that colour, after the tab's last item.
+      const spot = trigAddSpot();
+      if (spot.color) t.color = spot.color;
+      p.triggers.splice(spot.at, 0, t);
       renumberTriggers(p);
       t.name = uniqueTrigName('Trigger ' + t.id);
-      selectTriggers([p.triggers.length - 1]);
+      selectTriggers([p.triggers.indexOf(t)]);
       break;
     }
     case 'action': p.triggers[S.sel.trigger].actions.push(''); break;
@@ -284,7 +296,7 @@ window.addEventListener('resize', () => acs.forEach((a) => a.hide()));
     // Older projects: put the trigger numbers in list order once (references follow).
     if (renumberTriggers()) { S.dirty = true; setTimeout(() => toast('Triggers renumbered in list order - press Save to keep it'), 500); }
   }
-  catch (e) { S.project = emptyProject(); toast('No project on the controller (' + e.message + ') - starting a new one', true); }
+  catch (e) { S.project = normalize(emptyProject()); toast('No project on the controller (' + e.message + ') - starting a new one', true); }
   undoReset(!S.dirty);
   const page = location.hash.slice(1);
   if (views[page]) S.view = page;

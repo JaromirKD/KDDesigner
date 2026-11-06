@@ -1,0 +1,88 @@
+1793797769 boot - -
+1793797769 m:Idle mode mode:System
+1793797769 online pc Media PC
+1793797769 offline pc Kiosk PC
+1793797769 online device mediaserver
+1793797769 online device qlab
+1793797769 online device motors
+1793797769 online device screen1
+1793797769 online device screen2
+1793797769 offline device Wi-Fi bridge
+1793797769 online projector PJ left
+1793797769 off projector PJ left
+1793797769 online projector PJ right
+1793797769 off projector PJ right
+1793797769 offline projector PJ foyer
+1793797769 online kissbox io
+1793797769 online knx gw
+1793797769 online brightsign lobby
+1793797769 online digidot c4
+1793797769 online netio rack
+1793797769 online pharos lpc
+1793797782 m:Maintenance mode mode:System
+1793797783 m:Show mode mode:System
+1793797830 online device Wi-Fi bridge
+1793797831 p:2.1=1 kissbox io
+1793797891 p:2.1=0 kissbox io
+1793797951 p:2.1=1 kissbox io
+1793798012 p:2.1=0 kissbox io
+1793798072 p:2.1=1 kissbox io
+1793798132 p:2.1=0 kissbox io
+1793798193 p:2.1=1 kissbox io
+1793798253 p:2.1=0 kissbox io
+1793798261 m:Idle mode mode:System
+1793798312 offline device Wi-Fi bridge
+1793798313 p:2.1=1 kissbox io
+1793798372 online device Wi-Fi bridge
+1793798374 p:2.1=0 kissbox io
+1793798434 p:2.1=1 kissbox io
+1793798494 p:2.1=0 kissbox io
+1793798554 p:2.1=1 kissbox io
+1793798626 boot - -
+1793798626 m:Idle mode mode:System
+1793798626 online pc Media PC
+1793798626 offline pc Kiosk PC
+1793798626 online device mediaserver
+1793798626 online device qlab
+1793798626 online device motors
+1793798626 online device screen1
+1793798626 online device screen2
+1793798626 online device Wi-Fi bridge
+1793798626 online projector PJ left
+1793798626 off projector PJ left
+1793798626 online projector PJ right
+1793798626 off projector PJ right
+1793798626 offline projector PJ foyer
+1793798626 p:2.1=1 kissbox io
+1793798626 online kissbox io
+1793798626 online knx gw
+1793798626 online brightsign lobby
+1793798626 online digidot c4
+1793798626 online netio rack
+1793798626 online pharos lpc
+1793798687 p:2.1=0 kissbox io
+1793798748 p:2.1=1 kissbox io
+1793798808 p:2.1=0 kissbox io
+1793798868 p:2.1=1 kissbox io
+1793798912 boot - -
+1793798912 m:Idle mode mode:System
+1793798913 online pc Media PC
+1793798913 offline pc Kiosk PC
+1793798913 online device mediaserver
+1793798913 online device qlab
+1793798913 online device motors
+1793798913 online device screen1
+1793798913 online device screen2
+1793798913 online device Wi-Fi bridge
+1793798913 online projector PJ left
+1793798913 off projector PJ left
+1793798913 online projector PJ right
+1793798913 off projector PJ right
+1793798913 offline projector PJ foyer
+1793798913 p:2.1=1 kissbox io
+1793798913 online kissbox io
+1793798913 online knx gw
+1793798913 online brightsign lobby
+1793798913 online digidot c4
+1793798913 online netio rack
+1793798913 online pharos lpc

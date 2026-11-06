@@ -6,6 +6,7 @@
 #include "Io.h"
 #include "Log.h"
 #include "Show.h"
+#include "State.h"
 #include "Storage.h"
 
 namespace {
@@ -154,6 +155,7 @@ bool set(const String& name, const String& value, String& msg, bool fromDevice) 
   }
   String n = v->name;
   mtx.unlock();
+  if (changed) State::changed();
   if (changed) LOGD(Sys, "var %s = %s%s", n.c_str(), val.c_str(), fromDevice ? " (from PLC)" : "");
   if (link) {
     String err;

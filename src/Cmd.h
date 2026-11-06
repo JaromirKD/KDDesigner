@@ -14,6 +14,7 @@
 //   set <universe>.<ch>[-<ch>] <0-255>     clear override <universe>.<ch>[-<ch>]     clear overrides
 //   grandmaster <pct>              blackout on|off
 //   mode <group> <state>           (old form "mode <state>" if the state is unique)
+//   mode <group> next|previous|toggle|back   ({mode.<group>} = a group's state in any command)
 //   label <name> <text>            label <name> color <color>
 //   panel <control> text <text>    panel <control> color <color>    panel <control> flash on|off|<colour>
 //   panel <control> value <v>      panel <control> enable|disable|reset

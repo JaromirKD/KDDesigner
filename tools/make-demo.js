@@ -64,7 +64,7 @@ const scenes = [
   { id: 4, name: 'Movers centre', levels: [...colour(movers, 255, 255, 255), ...L(movers, 'pan', 32768), ...L(movers, 'tilt', 32768), ...L(movers, 'shutter', 255), ...L(movers, 'zoom', 128)] },
   { id: 5, name: 'Pixels red', levels: [...L(pixels, 'r', 255)] },
   { id: 6, name: 'Emergency', levels: [...L([WORK, HOUSE, FOH_L, FOH_R], 'dim', 255)] },
-  { id: 7, name: 'Winch up + raw channel', levels: [{ fixture: WINCH, ch: 'pos', v: 52000 }, { fixture: WINCH, ch: 'speed', v: 128 }, { universe: 3, ch: 20, v: 255 }] },
+  { id: 7, name: 'Winch up + raw channel', levels: [{ fixture: WINCH, ch: 'pos', v: 52000 }, { fixture: WINCH, ch: 'speed', v: 128 }, { u: 3, ch: 20, v: 255 }] },
   { id: 8, name: 'Finale', levels: [...colour(walls, 255, 0, 160), ...colour(pars, 255, 200, 0), ...L([FOH_L, FOH_R], 'dim', 255), ...L([STROBE], 'dim', 255), ...L([STROBE], 'strobe', 200)] },
 ];
 
@@ -127,6 +127,8 @@ const section = (name, color, notes) => triggers.push({ id: ++sep, name, type: '
 let curColor = '';
 const trig = (name, type, fields, actions, conditions = [], extra = {}) => triggers.push({ id: 0, name, type, ...fields, color: curColor, actions, conditions, ...extra });
 const sec = (name, color, notes) => { curColor = color; section(name, color, notes); };
+// Sub section: a smaller, indented heading under the main section above (same colour).
+const subSec = (name, notes) => { section(name, curColor, notes); triggers[triggers.length - 1].level = 2; };
 
 sec('== START & SAFETY', 'red', 'What happens at power-on and in an emergency. Put the building\'s normal state in Startup: it also runs after a watchdog restart.');
 trig('Startup', 'startup', {}, ['mode System Idle', 'panel "Start show" reset', 'panel "Show progress" reset', 'panel "Show progress" value 0', 'fire trigger "Start inloop" after 5'], [], { notes: 'Runs at every start (power on, restart, after saving). Starts the inloop after 5 s.' });
@@ -142,6 +144,7 @@ trig('Morning start', 'time', { at: '09:30:00', days: ['mon', 'tue', 'wed', 'thu
   ['calendar Closed inactive'], { whileRunning: 'ignore', notes: 'Weekdays 09:30, not on closed days (Schedule > Calendar).' });
 trig('Weekend start', 'time', { at: '10:30:00', days: ['sat', 'sun'] }, ['fire trigger "Morning start"'], ['calendar Closed inactive', 'date between 03-01 10-31']);
 trig('Closing', 'time', { at: '17:30:00' }, ['release all fade 10', 'projector all off', 'mode Museum Closed', 'sleep 30', 'pc all shutdown']);
+subSec('Exterior lights', 'A sub section: smaller heading, indented with its triggers.');
 trig('Sunset: exterior on', 'time', { at: 'sunset', offset: -15 }, ['start timeline "Exterior evening"'], ['calendar Closed inactive']);
 trig('Sunrise: exterior off', 'time', { at: 'sunrise', offset: 30 }, ['stop timeline "Exterior evening" fade 10']);
 trig('Summer season (log)', 'time', { at: '09:00:00' }, ['log Summer season: open longer today'], ['calendar Summer active', 'day is sat,sun']);
@@ -155,6 +158,7 @@ trig('Start main show', 'manual', {},
 trig('Show: start video', 'manual', {}, ['send tcp watchout run', 'brightsign lobby send play1', 'brightsign lobby event video_show', 'brightsign lobby var mode show', 'log Video started from timeline {timeline}'], [],
   { notes: 'Fired by a ◆ trigger cue at 2 s on timeline "Main show". The brightsign event/var lines go through the KD plugin (kdlink) in the presentation.' });
 trig('Lobby: back to loop', 'manual', {}, ['brightsign lobby play Video loop.mp4', 'brightsign lobby stop Audio'], [], { notes: 'Plays a file directly in a BrightSign zone (KD plugin).' });
+trig('Lobby: show test pattern', 'manual', {}, ['brightsign lobby test Video Testpattern'], [], { notes: 'Plays the file of the presentation\'s "Testpattern" state in the Video zone (KD plugin); the presentation carries on when it ends.' });
 trig('Show: halfway', 'manual', {}, ['netio rack output 2 pulse 5', 'pharos lpc timeline 1 start fade 3', 'digidot c4 scene 1 fade 2'], [], { notes: 'Trigger cue at 30 s: shows the show-device commands.' });
 trig('Main show finished', 'timeline_end', { timeline: 2 }, ['var show_count += 1', 'log Show {show_count} finished', 'fire trigger "Start inloop"']);
 trig('Stop all', 'manual', {}, ['mode System Idle', 'release all fade 3', 'send osc qlab /cue/*/stop', 'send udp screens "STOP\\r"', 'panel "Start show" reset', 'panel lbl_status text Stopped', 'panel lbl_status color #ff9f43']);
@@ -177,6 +181,7 @@ trig('Mover XY pad', 'panel', { control: 'Mover position', event: 'change' }, ['
 trig('Fog toggle', 'panel', { control: 'Fog', event: 'change' }, ['if var fog_on = on then io Fog on else io Fog off']);
 trig('CLICK Projectors on', 'panel', { control: 'Projectors on', event: 'click' }, ['projector all on']);
 trig('CLICK Projectors off', 'panel', { control: 'Projectors off', event: 'click' }, ['projector all off']);
+trig('Hall projectors mute', 'manual', {}, ['projector hall mute on'], [], { notes: 'Projector group "hall" (Devices > Projectors): one command for both hall projectors.' });
 trig('CLICK Teststand', 'panel', { control: 'Teststand', event: 'click' }, ['mode System Maintenance', 'repeat trigger "Step through scenes" every 2 times 6']);
 trig('Code A', 'panel', { control: 'A', event: 'click' }, [], [], { notes: 'Step 1 of the secret service code (no actions needed).' });
 trig('Code B', 'panel', { control: 'B', event: 'click' }, []);
@@ -185,7 +190,7 @@ trig('Service code A-C-B', 'sequence', { steps: ['Code A', 'Code C', 'Code B'], 
 
 sec('== EXTERNAL CONTROL', 'orange', 'UDP, OSC, TCP, HTTP, Art-Net/sACN in, DMX change.');
 trig('UDP SHOW <name>', 'udp', { match: 'SHOW*' }, ['log UDP asked for show {1} from {sender_ip}', 'if var visitors >= 0 then fire trigger "Start main show"']);
-trig('UDP PING', 'udp', { match: 'PING' }, ['reply PONG {visitors}\\r']);
+trig('UDP PING', 'udp', { match: 'PING' }, ['reply PONG {visitors} {mode.System}\\r']);
 trig('UDP from QLab only (port 7001)', 'udp', { match: 'GO', port: 7001, fromIp: '192.168.1.51' }, ['fire trigger "Start main show"']);
 trig('OSC /kd/cue/*', 'osc', { address: '/kd/cue/*', port: 8000 }, ['log QLab says {address} {1}']);
 trig('Visitor counted (UDP)', 'udp', { match: 'VISITOR' }, ['var visitors + 1', 'if var visitors >= 50 then panel lbl_status text FULL ({visitors})']);
@@ -203,10 +208,12 @@ trig('Lamp hours 4000', 'projector', { projector: 'PJ left', alarm: 'lamp_hours'
 trig('Door opened (PLC)', 'variable', { variable: 'door', value: 'on' }, ['if mode Museum is Open then log Door opened during opening hours else email tech@example.com "Door" Door opened outside opening hours']);
 trig('KNX hall light changed', 'variable', { variable: 'hall_light' }, ['log Hall light is now {value} (was {old})']);
 trig('Daylight above 5 V (ai0)', 'input', { io: 'ai0', edge: 'rising', level: 5 }, ['stop timeline "Exterior evening" fade 10']);
-trig('Visitor sensor (in1)', 'input', { io: 'in1', edge: 'rising' }, ['var visitors ++'], [], { cooldown: 1 });
+trig('Visitor sensor (in1)', 'input', { io: 'in1', edge: 'rising' }, ['var visitors ++'], [], { cooldown: 1, onlyIn: { group: 'Museum', states: ['Open'] }, notes: 'Only counts while the museum is open (Only active in).' });
 trig('Reset button held (in3)', 'input', { io: 'in3', edge: 'hold', hold: 5 }, ['var visitors = 0', 'log Visitor counter reset']);
-trig('Museum starting up', 'mode', { group: 'Museum', mode: 'Starting up' }, ['knx gw write "Hall light" on', 'netio rack output 1 on', 'fire trigger "Museum open" after 120']);
-trig('Museum open', 'manual', {}, ['mode Museum Open'], ['mode Museum is "Starting up"']);
+trig('Museum open', 'manual', {}, ['mode Museum Open'], ['mode Museum is "Starting up"'], { notes: '"Starting up" goes to Open by itself after 120 s (its actions on the Modes page); this skips the wait.' });
+trig('Museum: next state', 'manual', {}, ['mode Museum next', 'log Museum is now {mode.Museum}']);
+trig('Emergency over', 'manual', {}, ['mode System back'], ['mode System is Emergency'], { notes: 'Back to the state System was in before the emergency.' });
+trig('Long maintenance reminder', 'interval', { seconds: 600 }, ['email tech@example.com "Maintenance" System has been in maintenance for over 2 hours'], ['mode System is Maintenance for 2h']);
 trig('Museum closed', 'mode', { group: 'Museum', mode: 'Closed' }, ['knx gw write "Hall light" off', 'netio rack output 1 off']);
 
 sec('== EXAMPLES', 'grey', 'Disabled triggers and comment lines.');
@@ -285,9 +292,20 @@ const project = {
   settings: { tzOffsetMin: 60, udpPort: 4000, sacnPriority: 100,
     monitor: { interval: 60, timeout: 1000, failures: 2 }, time: { ntp: 'pool.ntp.org', ntpEnabled: true, dst: 'eu' }, location: { lat: 52.16, lon: 4.49 }, outputs:{ dmx: true, artnet: true, sacn: true, dmxFps: 40, artnetFps: 30, sacnFps: 40, artnetChangesOnly: true, sacnChangesOnly: false } },
   network: { dhcp: true, ip: '192.168.1.50', mask: '255.255.255.0', gateway: '192.168.1.1' },
+  // Per state: colour / icon (Modes page, panel header) and actions when it starts / ends.
+  // System starts in Idle at power-up; Museum keeps its state and follows variable museum_state.
   modes: [
-    { name: 'System', states: ['Idle', 'Show', 'Maintenance', 'Emergency'] },
-    { name: 'Museum', states: ['Closed', 'Starting up', 'Open'] },
+    { name: 'System', states: ['Idle', 'Show', 'Maintenance', 'Emergency'], startup: 'Idle', stateInfo: {
+      Idle: { color: '#3a7bd5', icon: '⏸' },
+      Show: { color: '#2e7d32', icon: '▶' },
+      Maintenance: { color: '#f9a825', icon: '🔧', enter: ['grandmaster 100', 'set 1.4 255', 'log Maintenance: work light on'], leave: ['clear override 1.4'] },
+      Emergency: { color: '#b71c1c', icon: '⚠', enter: ['release all fade 0', 'set 1.3 255', 'set 1.4 255', 'panel lbl_status text EMERGENCY ({mode.Museum})', 'panel lbl_status flash red'], leave: ['clear overrides', 'panel lbl_status reset'] },
+    } },
+    { name: 'Museum', states: ['Closed', 'Starting up', 'Open'], var: 'museum_state', stateInfo: {
+      Closed: { color: '#616161', icon: '🌙' },
+      'Starting up': { color: '#d29922', icon: '⏳', enter: ['knx gw write "Hall light" on', 'netio rack output 1 on', 'sleep 120', 'mode Museum Open'] },
+      Open: { color: '#3fb950', icon: '🟢' },
+    } },
   ],
   universes: [
     { id: 1, name: 'Stage', dmxPort: 1, artnet: 0, sacn: 1, useDmx: true, useArtnet: false, useSacn: true },
@@ -303,7 +321,9 @@ const project = {
     { name: 'screen2', ip: '192.168.1.62', port: 5000, notes: 'Video player right' },
     { name: 'Wi-Fi bridge', ip: '192.168.1.77', port: 7000, notes: 'Flaky on purpose (mock: answers ~60 %)' },
   ],
-  deviceGroups: [{ name: 'screens', devices: ['screen1', 'screen2'] }],
+  // Groups per kind: network (no kind) for send udp/osc, the others where a PC / projector name goes.
+  deviceGroups: [{ name: 'screens', devices: ['screen1', 'screen2'] },
+    { name: 'hall', kind: 'projector', devices: ['PJ left', 'PJ right'] }],
   pcs: [
     { id: 1, name: 'Media PC', ip: '192.168.1.41', mac: '00:1B:21:3A:4F:10', port: 7, startup: 'startup', shutdown: 'shutdown', reboot: 'reboot' },
     { id: 2, name: 'Kiosk PC', ip: '192.168.1.199', mac: '00:1B:21:3A:4F:11', port: 7, startup: 'startup', shutdown: 'shutdown', reboot: 'reboot' },
@@ -321,6 +341,8 @@ const project = {
     { name: 'door', type: 'bool', initial: false, modbus: { device: 'plc', table: 'discrete', address: 0 } },
     { name: 'work_lights', type: 'bool', initial: false, modbus: { device: 'plc', table: 'coil', address: 3 } },
     { name: 'media_status', type: 'text', initial: 'unknown' },
+    // Linked to the mode group Museum (both ways): a PLC holding register could set it too.
+    { name: 'museum_state', type: 'number', initial: 1, modbus: { device: 'plc', table: 'holding', address: 20 } },
     { name: 'blackout', type: 'bool', initial: false },
     { name: 'fog_on', type: 'bool', initial: false },
     { name: 'house_level', type: 'number', initial: 0 },
@@ -342,6 +364,8 @@ const project = {
   tcp: [{ name: 'watchout', ip: '192.168.1.90', port: 3039, eol: '\\r\\n' }],
   modbus: [{ name: 'plc', ip: '192.168.1.80', port: 502, unit: 1, pollMs: 500 }],
   maps, effects,
+  // Tab names of the trigger colours (Triggers page, UI only); blue and grey keep their colour name.
+  triggerColorNames: { red: 'Start & safety', green: 'Clock', purple: 'Show tasks', cyan: 'Touch panel', orange: 'External' },
   fixtureTypes: [
 `fixture Museum / Vitrine LED strip
 icon pixel

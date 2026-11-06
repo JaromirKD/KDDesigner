@@ -86,7 +86,15 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 #define KD_HTTP_PORT 80
 #define KD_MAX_SSE 4              // simultaneous live-log browser tabs
 
-// ---- Network fallback (when the project has no network block / no USB) ------
-#define KD_FALLBACK_IP 192, 168, 1, 50
+// ---- Network fallback (DHCP on but no answer) ------------------------------------
+// The office / bench network (172.16.1.x), so a PC there still reaches the controller when
+// the router is off. Can be set per build: PLATFORMIO_BUILD_FLAGS="-DKD_FALLBACK_IP=10,0,0,50 ..."
+#ifndef KD_FALLBACK_IP
+#define KD_FALLBACK_IP 172, 16, 1, 111
+#endif
+#ifndef KD_FALLBACK_MASK
 #define KD_FALLBACK_MASK 255, 255, 255, 0
-#define KD_FALLBACK_GW 192, 168, 1, 1
+#endif
+#ifndef KD_FALLBACK_GW
+#define KD_FALLBACK_GW 172, 16, 1, 1
+#endif

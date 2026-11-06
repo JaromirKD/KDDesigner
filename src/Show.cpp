@@ -1,25 +1,28 @@
 // The light engine: playbacks, crossfades, effects and the DMX / Art-Net / sACN output.
 // Reading project.json is in ShowParse.cpp; both share the tables in ShowInternal.h.
 #include <algorithm>
+#include "BigRam.h"
+#include "D2Ram.h"
 #include "Dmx.h"
 #include "Fx.h"
 #include "Log.h"
 #include "ShowInternal.h"
+#include "State.h"
 #include "Util.h"
 
 rtos::Mutex g_engine;
 
 namespace ShowImpl {
 Settings cfg;
-JsonDocument doc;
-std::vector<UniverseCfg> universes;
-std::vector<Fixture> fixtures;
-std::vector<Scene> scenes;
-std::vector<Timeline> timelines;
-std::vector<Scene> cueScenes;
-std::vector<Fx::Program> fxProgs;
-std::vector<FxCue> fxCues;
-std::vector<double> fxScratch;
+JsonDocument doc(BigRam::json());   // the loaded project, in SDRAM (BigRam.h)
+BigRam::Vec<UniverseCfg> universes;
+BigRam::Vec<Fixture> fixtures;
+BigRam::Vec<Scene> scenes;
+BigRam::Vec<Timeline> timelines;
+BigRam::Vec<Scene> cueScenes;
+BigRam::Vec<Fx::Program> fxProgs;
+BigRam::Vec<FxCue> fxCues;
+BigRam::Vec<double> fxScratch;
 uint32_t projectVersion = 0;
 uint8_t gmExempt[U][64];
 uint8_t wide[U][64];
@@ -56,7 +59,8 @@ struct Playback {
   uint8_t from[U][512], to[U][512], cur[U][512], mask[U][64];
 };
 
-Playback pbs[KD_MAX_PLAYBACKS];
+// ~140 KB: in D2 SRAM, not the heap's RAM (D2Ram.h).
+Playback (&pbs)[KD_MAX_PLAYBACKS] = D2Ram::array<Playback, KD_MAX_PLAYBACKS>();
 uint8_t out[U][512];
 // Per network protocol: what was last sent and when (each has its own rate).
 struct Pace { uint8_t sent[U][512]; uint32_t at[U]; };
@@ -276,7 +280,7 @@ void updateMaster(Playback& p, uint32_t now) {
   float k = p.mLen ? (float)(now - p.mStart) / p.mLen : 1.0f;
   if (k >= 1) { k = 1; p.mLen = 0; }
   p.master = p.mFrom + (p.mTo - p.mFrom) * k;
-  if (p.releasing && k >= 1) p.active = false;
+  if (p.releasing && k >= 1) { p.active = false; State::changed(); }   // faded out: gone from the dashboard now
 }
 
 void fadeMasterTo(Playback& p, float target, uint32_t fadeMs, uint32_t now) {
@@ -328,6 +332,7 @@ void updateTimeline(Playback& p, uint32_t now) {
     } else {
       p.ended = true;
       endedQueue.push_back(t.id);
+      State::changed();
       LOGI(Show, "Timeline %d '%s' reached end (holding)", t.id, t.name.c_str());
     }
   }

@@ -43,7 +43,45 @@
         "Show",
         "Maintenance",
         "Emergency"
-      ]
+      ],
+      "startup": "Idle",
+      "stateInfo": {
+        "Idle": {
+          "color": "#3a7bd5",
+          "icon": "⏸"
+        },
+        "Show": {
+          "color": "#2e7d32",
+          "icon": "▶"
+        },
+        "Maintenance": {
+          "color": "#f9a825",
+          "icon": "🔧",
+          "enter": [
+            "grandmaster 100",
+            "set 1.4 255",
+            "log Maintenance: work light on"
+          ],
+          "leave": [
+            "clear override 1.4"
+          ]
+        },
+        "Emergency": {
+          "color": "#b71c1c",
+          "icon": "⚠",
+          "enter": [
+            "release all fade 0",
+            "set 1.3 255",
+            "set 1.4 255",
+            "panel lbl_status text EMERGENCY ({mode.Museum})",
+            "panel lbl_status flash red"
+          ],
+          "leave": [
+            "clear overrides",
+            "panel lbl_status reset"
+          ]
+        }
+      }
     },
     {
       "name": "Museum",
@@ -51,7 +89,28 @@
         "Closed",
         "Starting up",
         "Open"
-      ]
+      ],
+      "var": "museum_state",
+      "stateInfo": {
+        "Closed": {
+          "color": "#616161",
+          "icon": "🌙"
+        },
+        "Starting up": {
+          "color": "#d29922",
+          "icon": "⏳",
+          "enter": [
+            "knx gw write \"Hall light\" on",
+            "netio rack output 1 on",
+            "sleep 120",
+            "mode Museum Open"
+          ]
+        },
+        "Open": {
+          "color": "#3fb950",
+          "icon": "🟢"
+        }
+      }
     }
   ],
   "universes": [
@@ -1639,7 +1698,7 @@
           "v": 128
         },
         {
-          "universe": 3,
+          "u": 3,
           "ch": 20,
           "v": 255
         }
@@ -2283,6 +2342,14 @@
         "screen1",
         "screen2"
       ]
+    },
+    {
+      "name": "hall",
+      "kind": "projector",
+      "devices": [
+        "PJ left",
+        "PJ right"
+      ]
     }
   ],
   "pcs": [
@@ -2871,6 +2938,16 @@
       "conditions": []
     },
     {
+      "id": 10003,
+      "name": "Exterior lights",
+      "type": "comment",
+      "color": "green",
+      "actions": [],
+      "conditions": [],
+      "notes": "A sub section: smaller heading, indented with its triggers.",
+      "level": 2
+    },
+    {
       "id": 9,
       "name": "Sunset: exterior on",
       "type": "time",
@@ -2924,7 +3001,7 @@
       ]
     },
     {
-      "id": 10003,
+      "id": 10004,
       "name": "== SHOW TASK LISTS",
       "type": "comment",
       "color": "purple",
@@ -2999,6 +3076,17 @@
     },
     {
       "id": 17,
+      "name": "Lobby: show test pattern",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "brightsign lobby test Video Testpattern"
+      ],
+      "conditions": [],
+      "notes": "Plays the file of the presentation's \"Testpattern\" state in the Video zone (KD plugin); the presentation carries on when it ends."
+    },
+    {
+      "id": 18,
       "name": "Show: halfway",
       "type": "manual",
       "color": "purple",
@@ -3011,7 +3099,7 @@
       "notes": "Trigger cue at 30 s: shows the show-device commands."
     },
     {
-      "id": 18,
+      "id": 19,
       "name": "Main show finished",
       "type": "timeline_end",
       "timeline": 2,
@@ -3024,7 +3112,7 @@
       "conditions": []
     },
     {
-      "id": 19,
+      "id": 20,
       "name": "Stop all",
       "type": "manual",
       "color": "purple",
@@ -3040,7 +3128,7 @@
       "conditions": []
     },
     {
-      "id": 20,
+      "id": 21,
       "name": "Flash walls once",
       "type": "manual",
       "color": "purple",
@@ -3053,7 +3141,7 @@
       "notes": "Used by \"Flash walls 6x\": {count} is the round."
     },
     {
-      "id": 21,
+      "id": 22,
       "name": "Flash walls 6x",
       "type": "manual",
       "color": "purple",
@@ -3064,7 +3152,7 @@
       "conditions": []
     },
     {
-      "id": 22,
+      "id": 23,
       "name": "Relay chase",
       "type": "manual",
       "color": "purple",
@@ -3076,7 +3164,7 @@
       "conditions": []
     },
     {
-      "id": 23,
+      "id": 24,
       "name": "Step through scenes",
       "type": "manual",
       "color": "purple",
@@ -3088,7 +3176,7 @@
       "notes": "Fired with repeat by the Teststand button: {count} = 1, 2, 3…"
     },
     {
-      "id": 24,
+      "id": 25,
       "name": "Winch up",
       "type": "manual",
       "color": "purple",
@@ -3101,7 +3189,7 @@
       "notes": "Only when the safety contact (in2) is closed."
     },
     {
-      "id": 10004,
+      "id": 10005,
       "name": "== TOUCH PANEL",
       "type": "comment",
       "color": "cyan",
@@ -3110,7 +3198,7 @@
       "notes": "Every kind of panel event: click, hold, double click, change (slider, dial, colour, XY, toggle)."
     },
     {
-      "id": 25,
+      "id": 26,
       "name": "CLICK Start show",
       "type": "panel",
       "control": "Start show",
@@ -3126,7 +3214,7 @@
       "notes": "Visitor button: 30 s cooldown so pressing it again does nothing."
     },
     {
-      "id": 26,
+      "id": 27,
       "name": "CLICK Inloop",
       "type": "panel",
       "control": "Inloop",
@@ -3138,7 +3226,7 @@
       "conditions": []
     },
     {
-      "id": 27,
+      "id": 28,
       "name": "CLICK Stop",
       "type": "panel",
       "control": "Stop",
@@ -3150,7 +3238,7 @@
       "conditions": []
     },
     {
-      "id": 28,
+      "id": 29,
       "name": "HOLD All off (3 s)",
       "type": "panel",
       "control": "All off",
@@ -3166,7 +3254,7 @@
       "conditions": []
     },
     {
-      "id": 29,
+      "id": 30,
       "name": "DOUBLE Blackout",
       "type": "panel",
       "control": "Blackout",
@@ -3180,7 +3268,7 @@
       "conditions": []
     },
     {
-      "id": 30,
+      "id": 31,
       "name": "House level slider",
       "type": "panel",
       "control": "House level",
@@ -3192,7 +3280,7 @@
       "conditions": []
     },
     {
-      "id": 31,
+      "id": 32,
       "name": "Grand master dial",
       "type": "panel",
       "control": "Grand master",
@@ -3204,7 +3292,7 @@
       "conditions": []
     },
     {
-      "id": 32,
+      "id": 33,
       "name": "Wall colour wheel",
       "type": "panel",
       "control": "Wall colour",
@@ -3218,7 +3306,7 @@
       "conditions": []
     },
     {
-      "id": 33,
+      "id": 34,
       "name": "Mover XY pad",
       "type": "panel",
       "control": "Mover position",
@@ -3231,7 +3319,7 @@
       "conditions": []
     },
     {
-      "id": 34,
+      "id": 35,
       "name": "Fog toggle",
       "type": "panel",
       "control": "Fog",
@@ -3243,7 +3331,7 @@
       "conditions": []
     },
     {
-      "id": 35,
+      "id": 36,
       "name": "CLICK Projectors on",
       "type": "panel",
       "control": "Projectors on",
@@ -3255,7 +3343,7 @@
       "conditions": []
     },
     {
-      "id": 36,
+      "id": 37,
       "name": "CLICK Projectors off",
       "type": "panel",
       "control": "Projectors off",
@@ -3267,7 +3355,18 @@
       "conditions": []
     },
     {
-      "id": 37,
+      "id": 38,
+      "name": "Hall projectors mute",
+      "type": "manual",
+      "color": "cyan",
+      "actions": [
+        "projector hall mute on"
+      ],
+      "conditions": [],
+      "notes": "Projector group \"hall\" (Devices > Projectors): one command for both hall projectors."
+    },
+    {
+      "id": 39,
       "name": "CLICK Teststand",
       "type": "panel",
       "control": "Teststand",
@@ -3280,7 +3379,7 @@
       "conditions": []
     },
     {
-      "id": 38,
+      "id": 40,
       "name": "Code A",
       "type": "panel",
       "control": "A",
@@ -3291,7 +3390,7 @@
       "notes": "Step 1 of the secret service code (no actions needed)."
     },
     {
-      "id": 39,
+      "id": 41,
       "name": "Code B",
       "type": "panel",
       "control": "B",
@@ -3301,7 +3400,7 @@
       "conditions": []
     },
     {
-      "id": 40,
+      "id": 42,
       "name": "Code C",
       "type": "panel",
       "control": "C",
@@ -3311,7 +3410,7 @@
       "conditions": []
     },
     {
-      "id": 41,
+      "id": 43,
       "name": "Service code A-C-B",
       "type": "sequence",
       "steps": [
@@ -3331,7 +3430,7 @@
       "notes": "Press A, C, B within 5 s on the Technician page."
     },
     {
-      "id": 10005,
+      "id": 10006,
       "name": "== EXTERNAL CONTROL",
       "type": "comment",
       "color": "orange",
@@ -3340,7 +3439,7 @@
       "notes": "UDP, OSC, TCP, HTTP, Art-Net/sACN in, DMX change."
     },
     {
-      "id": 42,
+      "id": 44,
       "name": "UDP SHOW <name>",
       "type": "udp",
       "match": "SHOW*",
@@ -3352,18 +3451,18 @@
       "conditions": []
     },
     {
-      "id": 43,
+      "id": 45,
       "name": "UDP PING",
       "type": "udp",
       "match": "PING",
       "color": "orange",
       "actions": [
-        "reply PONG {visitors}\\r"
+        "reply PONG {visitors} {mode.System}\\r"
       ],
       "conditions": []
     },
     {
-      "id": 44,
+      "id": 46,
       "name": "UDP from QLab only (port 7001)",
       "type": "udp",
       "match": "GO",
@@ -3376,7 +3475,7 @@
       "conditions": []
     },
     {
-      "id": 45,
+      "id": 47,
       "name": "OSC /kd/cue/*",
       "type": "osc",
       "address": "/kd/cue/*",
@@ -3388,7 +3487,7 @@
       "conditions": []
     },
     {
-      "id": 46,
+      "id": 48,
       "name": "Visitor counted (UDP)",
       "type": "udp",
       "match": "VISITOR",
@@ -3400,7 +3499,7 @@
       "conditions": []
     },
     {
-      "id": 47,
+      "id": 49,
       "name": "Watchout answers",
       "type": "tcp",
       "device": "watchout",
@@ -3412,7 +3511,7 @@
       "conditions": []
     },
     {
-      "id": 48,
+      "id": 50,
       "name": "Media server status",
       "type": "http",
       "url": "http://192.168.1.95",
@@ -3423,7 +3522,7 @@
       "conditions": []
     },
     {
-      "id": 49,
+      "id": 51,
       "name": "Desk ch1 >= 50 %: start show",
       "type": "dmx_in",
       "protocol": "artnet",
@@ -3439,7 +3538,7 @@
       "notes": "Mock console: dmxin artnet 0 1 255"
     },
     {
-      "id": 50,
+      "id": 52,
       "name": "Desk ch2 = grand master",
       "type": "dmx_in",
       "protocol": "sacn",
@@ -3453,7 +3552,7 @@
       "conditions": []
     },
     {
-      "id": 51,
+      "id": 53,
       "name": "Winch -> motor controller",
       "type": "dmx_change",
       "universe": 3,
@@ -3475,7 +3574,7 @@
       "conditions": []
     },
     {
-      "id": 10006,
+      "id": 10007,
       "name": "== DEVICES & MONITORING",
       "type": "comment",
       "color": "blue",
@@ -3484,7 +3583,7 @@
       "notes": "Device online/offline, projector alarms, PLC, KNX and Machine Control readings."
     },
     {
-      "id": 52,
+      "id": 54,
       "name": "Device offline -> email",
       "type": "device",
       "device": "",
@@ -3499,7 +3598,7 @@
       ]
     },
     {
-      "id": 53,
+      "id": 55,
       "name": "PJ left back online",
       "type": "device",
       "device": "PJ left",
@@ -3511,7 +3610,7 @@
       "conditions": []
     },
     {
-      "id": 54,
+      "id": 56,
       "name": "Projector error",
       "type": "projector",
       "projector": "",
@@ -3524,7 +3623,7 @@
       "conditions": []
     },
     {
-      "id": 55,
+      "id": 57,
       "name": "Lamp hours 4000",
       "type": "projector",
       "projector": "PJ left",
@@ -3538,7 +3637,7 @@
       "notes": "Mock console: projector \"PJ left\" send LAMP=4100"
     },
     {
-      "id": 56,
+      "id": 58,
       "name": "Door opened (PLC)",
       "type": "variable",
       "variable": "door",
@@ -3550,7 +3649,7 @@
       "conditions": []
     },
     {
-      "id": 57,
+      "id": 59,
       "name": "KNX hall light changed",
       "type": "variable",
       "variable": "hall_light",
@@ -3561,7 +3660,7 @@
       "conditions": []
     },
     {
-      "id": 58,
+      "id": 60,
       "name": "Daylight above 5 V (ai0)",
       "type": "input",
       "io": "ai0",
@@ -3574,7 +3673,7 @@
       "conditions": []
     },
     {
-      "id": 59,
+      "id": 61,
       "name": "Visitor sensor (in1)",
       "type": "input",
       "io": "in1",
@@ -3584,10 +3683,17 @@
         "var visitors ++"
       ],
       "conditions": [],
-      "cooldown": 1
+      "cooldown": 1,
+      "onlyIn": {
+        "group": "Museum",
+        "states": [
+          "Open"
+        ]
+      },
+      "notes": "Only counts while the museum is open (Only active in)."
     },
     {
-      "id": 60,
+      "id": 62,
       "name": "Reset button held (in3)",
       "type": "input",
       "io": "in3",
@@ -3601,21 +3707,7 @@
       "conditions": []
     },
     {
-      "id": 61,
-      "name": "Museum starting up",
-      "type": "mode",
-      "group": "Museum",
-      "mode": "Starting up",
-      "color": "blue",
-      "actions": [
-        "knx gw write \"Hall light\" on",
-        "netio rack output 1 on",
-        "fire trigger \"Museum open\" after 120"
-      ],
-      "conditions": []
-    },
-    {
-      "id": 62,
+      "id": 63,
       "name": "Museum open",
       "type": "manual",
       "color": "blue",
@@ -3624,10 +3716,48 @@
       ],
       "conditions": [
         "mode Museum is \"Starting up\""
+      ],
+      "notes": "\"Starting up\" goes to Open by itself after 120 s (its actions on the Modes page); this skips the wait."
+    },
+    {
+      "id": 64,
+      "name": "Museum: next state",
+      "type": "manual",
+      "color": "blue",
+      "actions": [
+        "mode Museum next",
+        "log Museum is now {mode.Museum}"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 65,
+      "name": "Emergency over",
+      "type": "manual",
+      "color": "blue",
+      "actions": [
+        "mode System back"
+      ],
+      "conditions": [
+        "mode System is Emergency"
+      ],
+      "notes": "Back to the state System was in before the emergency."
+    },
+    {
+      "id": 66,
+      "name": "Long maintenance reminder",
+      "type": "interval",
+      "seconds": 600,
+      "color": "blue",
+      "actions": [
+        "email tech@example.com \"Maintenance\" System has been in maintenance for over 2 hours"
+      ],
+      "conditions": [
+        "mode System is Maintenance for 2h"
       ]
     },
     {
-      "id": 63,
+      "id": 67,
       "name": "Museum closed",
       "type": "mode",
       "group": "Museum",
@@ -3640,7 +3770,7 @@
       "conditions": []
     },
     {
-      "id": 10007,
+      "id": 10008,
       "name": "== EXAMPLES",
       "type": "comment",
       "color": "grey",
@@ -3649,7 +3779,7 @@
       "notes": "Disabled triggers and comment lines."
     },
     {
-      "id": 64,
+      "id": 68,
       "name": "Disabled example",
       "type": "manual",
       "color": "grey",
@@ -3661,7 +3791,7 @@
       "enabled": false
     },
     {
-      "id": 65,
+      "id": 69,
       "name": "Every 10 s heartbeat (disabled)",
       "type": "interval",
       "seconds": 10,
@@ -3710,6 +3840,16 @@
       "name": "media_status",
       "type": "text",
       "initial": "unknown"
+    },
+    {
+      "name": "museum_state",
+      "type": "number",
+      "initial": 1,
+      "modbus": {
+        "device": "plc",
+        "table": "holding",
+        "address": 20
+      }
     },
     {
       "name": "blackout",
@@ -4235,6 +4375,13 @@
       "code": "// Our own effect: a slow warm shimmer for the showcase\nparam speed = 0.3 [0, 2]       // shimmer waves per second\nparam color = #ffb070          // base colour\nparam depth = 0.4 [0, 1]       // how deep the shimmer dips\nk = 1 - depth * (0.5 + 0.5 * sin((u * 2 + t * speed) * tau))\nr, g, b = color\ndim = k * (0.8 + 0.2 * noise(t * 3 + i))"
     }
   ],
+  "triggerColorNames": {
+    "red": "Start & safety",
+    "green": "Clock",
+    "purple": "Show tasks",
+    "cyan": "Touch panel",
+    "orange": "External"
+  },
   "fixtureTypes": [
     "fixture Museum / Vitrine LED strip\nicon pixel\ncurve linear\nnote Our own 4-cell showcase strip (example of a project fixture type)\nmode 4 cells: 4 x (r, g, b)\nmode Simple: dim, r, g, b"
   ],

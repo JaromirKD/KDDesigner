@@ -1,0 +1,14 @@
+2026-11-04 17:28:22 [INFO ] SYS    KD Designer mock booting
+2026-11-04 17:28:22 [INFO ] USB    USB stick mounted at /usb
+2026-11-04 17:28:22 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-04 17:28:22 [INFO ] SHOW   Project 'Auditorium - lecture hall' loaded: 1 universes, 10 fixtures, 5 scenes, 0 timelines
+2026-11-04 17:28:22 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-04 17:28:23 [INFO ] SYS    pc 'Lectern PC' (192.168.1.41) is online (6 ms)
+2026-11-04 17:28:23 [WARN ] PJLINK Laser PJ: filter warning
+2026-11-04 17:28:23 [INFO ] TRIG   Trigger 21 'Projector warning' fired (projector alarm)
+2026-11-04 17:28:23 [INFO ] SYS    Email 'Auditorium projector: filter' sent to tech@museum.example (simulated)
+2026-11-04 17:28:23 [INFO ] PJLINK Laser PJ (192.168.1.101) online
+2026-11-04 17:28:23 [INFO ] SYS    NETIO stage (192.168.1.127) online
+2026-11-04 17:28:23 [INFO ] SYS    KNX building (192.168.1.123) online
+2026-11-04 17:28:23 [INFO ] SYS    Clock set from browser
+2026-11-04 17:29:46 [WARN ] NET    Ethernet link flapped (simulated)
