@@ -96,4 +96,6 @@ void statusJson(JsonObject o);
 void historyJson(String& out);
 // Safe mode (after repeated crash restarts): triggers only run when fired by hand.
 void setSafeMode(bool on);
+// True while trigger actions run (a reload must wait: it replaces the trigger table).
+bool inRun();
 }  // namespace Triggers

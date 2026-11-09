@@ -96,16 +96,22 @@ function capture(seconds) {
 }
 
 // ---- UDP / OSC senders ---------------------------------------------------------------------
-// Sends at `rate` per second in 5 ms batches (Windows timers aren't finer).
+// Sends at `rate` per second, evenly spaced (checks the clock on every event-loop turn: Windows
+// timers only tick every ~15 ms, and the batches that made arrived as bursts of up to ~50
+// packets back to back, more than the controller's Ethernet chip buffers: ~7).
 async function pace(rate, seconds, sendOne) {
   const total = Math.round(rate * seconds);
   const t0 = nowMs();
   let sent = 0;
-  while (sent < total) {
-    const due = Math.min(total, Math.floor((nowMs() - t0) / 1000 * rate) + 1);
-    while (sent < due) sendOne(sent++);
-    await sleep(5);
-  }
+  await new Promise((done) => {
+    const turn = () => {
+      const due = Math.min(total, Math.floor((nowMs() - t0) / 1000 * rate) + 1);
+      while (sent < due) sendOne(sent++);
+      if (sent >= total) done();
+      else setImmediate(turn);
+    };
+    turn();
+  });
   return { sent, secs: (nowMs() - t0) / 1000 };
 }
 function oscPacket(addr, arg) {
@@ -224,7 +230,7 @@ async function withStats(name, fn) {
     case 'all': {
       const s = secs(A1, 10);
       await withStats('all', async () => {
-        const [art, ui, ec, oc, ht] = await Promise.all([capture(s + 2), udpin(200, s), echo(50, s), osc(100, s), httpLoad(2, s)]);
+        const [art, ui, ec, oc, ht] = await Promise.all([capture(s + 2), udpin(200, s), echo(50, s), osc(80, s), httpLoad(2, s)]);
         return { art, udpin: ui, echo: ec, osc: oc, http: ht };
       });
       break;

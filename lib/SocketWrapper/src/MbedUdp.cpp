@@ -204,6 +204,22 @@ uint16_t arduino::MbedUDP::remotePort() {
   return _remoteHost.get_port();
 }
 
+int arduino::MbedUDP::sendTo(IPAddress ip, uint16_t port, const uint8_t *data, size_t len) {
+  nsapi_size_or_error_t ret = _socket.sendto(SocketHelpers::socketAddressFromIpAddress(ip, port), data, len);
+  return ret < 0 ? 0 : ret;
+}
+
+int arduino::MbedUDP::receive(uint8_t *buf, size_t len, IPAddress &from, uint16_t &port) {
+  SocketAddress a;
+  nsapi_size_or_error_t ret = _socket.recvfrom(&a, buf, len);
+  if (ret == NSAPI_ERROR_WOULD_BLOCK) return 0;
+  if (ret < 0) return ret;
+  nsapi_addr_t address = a.get_addr();
+  from = IPAddress(address.bytes[0], address.bytes[1], address.bytes[2], address.bytes[3]);
+  port = a.get_port();
+  return ret ? ret : -1;   // an empty datagram: not "nothing there", but nothing to use either
+}
+
 void arduino::MbedUDP::flush() {
   // TODO: a real check to ensure transmission has been completed
 }

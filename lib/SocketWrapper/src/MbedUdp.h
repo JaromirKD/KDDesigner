@@ -104,6 +104,17 @@ public:
   // // Return the port of the host who sent the current incoming packet
   virtual uint16_t remotePort();
 
+  // KD Designer additions (see lib/README.md):
+  // One datagram straight from data: no byte-by-byte copy through txBuffer, and the socket
+  // stays non-blocking (endPacket() switches it to blocking and back, which a receive running
+  // in another thread would then wait in). Returns the bytes sent, 0 on an error.
+  int sendTo(IPAddress ip, uint16_t port, const uint8_t* data, size_t len);
+  // The next datagram into buf, without waiting: its length, 0 if none, < 0 on an error.
+  // Leaves parsePacket()'s buffer alone, so a receive thread can use it while others send.
+  int receive(uint8_t* buf, size_t len, IPAddress& from, uint16_t& port);
+  // cb runs (in the network stack's thread: keep it tiny) whenever the socket has news.
+  void onEvent(mbed::Callback<void()> cb) { _socket.sigio(cb); }
+
   friend class MbedSocketClass;
 };
 

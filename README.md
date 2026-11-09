@@ -489,7 +489,8 @@ repeat trigger <name|#> every <s> [times <n>]            stop repeat <name|#>
 sleep <s>                              (trigger actions only: the lines below it run <s> later)
 wait until <condition> [timeout <s>]   (trigger actions only: the lines below run once it is true)
 repeat <trigger> <n> times [every <s>] (trigger actions only: fires that trigger n times; {count} = the round)
-repeat <n> times [every <s>] <command> (trigger actions only: {i} = 1..n; the lines below run after the last)
+repeat <n> times [every <s>] <command> (trigger actions only: {i} = 1..n; the lines below run after the last;
+                                       without every: as fast as possible, a few ms at a time between engine frames)
 log <text>                             email <to> "<subject>" <body>
 send udp <ip> <port> <text>            send udp <device|devicegroup> [<port>] <text>
 send osc <ip> <port> </address> [args] send osc <device|devicegroup> [<port>] </address> [args]
@@ -519,7 +520,7 @@ pharos <dev> override fixture|group <n> intensity <0-100> | color #rrggbb [fade 
 pharos <dev> output <protocol> on|off  pharos <dev> beacon on|off   pharos <dev> api get|post|put|delete <path> [json]
 io <point> on|off|toggle               io <point> pulse <s>     io <ao0-3> <volts> [fade <s>]     io all off
 ntp sync
-reload
+reload                                 (from a trigger's actions: once that trigger's run is over)
 ```
 
 `send udp` and `reply` text support the escapes `\r \n \t \\ \xNN`, e.g. `send udp 192.168.1.10 7001 GO\r`.
@@ -558,34 +559,37 @@ The controller guards against that:
 - **At most 100 waiting actions** (`sleep`s, `wait until`s, `repeat … every` loops, queued fires, `fire trigger … after` and `repeat trigger`s together, `KD_MAX_SCHEDULED`). A loop that keeps adding them would otherwise use up the memory and crash the controller. When the list is full, the new one is dropped with a warning.
 - **UDP/OSC from the controller's own IP is ignored** (it is logged once). A broadcast `send udp` comes back in, and would fire your own triggers. To start your own trigger, use `fire trigger`.
 - `fire trigger` chains stop after 8 levels deep, and at most 32 variable changes are handled per engine frame.
+- **The log gets at most 10 `fired` lines per trigger per second** (`KD_TRIGGER_LOG_PER_S`). The 11th says `fires more than 10 times a second: the rest of this second is not logged`; the trigger still runs every time (the fire history on the Triggers page has them all). Writing hundreds of log lines a second to the stick slowed the whole controller.
 
 ## Capacity (measured)
 
-Measured on 9 Nov 2026 on a Portenta Machine Control with a deliberately extreme show: 8 universes full of RGB pixels (1360 fixtures), every one running an effect, a second timeline crossfading full-rig scenes over it, and 108 triggers. Re-run the measurements with `tools/stress/` (see the comment at the top of `stress.js`). A normal show uses a fraction of this.
+Measured on 9 Nov 2026 on a Portenta Machine Control with a deliberately extreme show: 8 universes full of RGB pixels (1360 fixtures), every one running an effect, a second timeline crossfading full-rig scenes over it, and 108 triggers. Re-run the measurements with `tools/stress/` (see the comment at the top of `stress.js`). A normal show uses a fraction of this. The second column is the same test the same morning, before the speed-ups of that day.
 
-| What | Result |
-|---|---|
-| Art-Net out | 8 universes at 40 fps (38.9 measured, no gaps over 50 ms); at 60 fps 61-62 fps, but frames less even (gaps up to 35 ms) |
-| Art-Net + sACN together | 16 universes (8 + 8), ~1000 packets/s |
-| Engine tick | 13 ms for this show (budget 25 ms at 40 fps); a 120-fixture show ~1 ms |
-| UDP / OSC messages in | lights stay at 40 fps even when flooded with 3000 messages/s; ~350-400 trigger fires/s with this show (more with a lighter one); extra messages are dropped |
-| One trigger | max 100 fires per second, then paused 10 s (loop protection, above): a fast OSC fader on one trigger hits this |
-| UDP round trip (`reply`) | 3-7 ms typical, up to ~15 ms (a message that arrives during an engine tick waits for it) |
-| Sending | 500 UDP or OSC messages in ~0.2 s, 100 TCP lines in ~0.1 s; at most 16 HTTP requests waiting (more are refused: "HTTP queue full") |
-| `repeat … every 0.01` | runs, but the timing wobbles: gaps up to ~50 ms |
-| Web API | ~65 requests/s from one client, ~90/s from 4; with 8 at once most connections are refused |
-| Everything at once | 16 universes out + 450 messages/s in + 2 web clients: lights at ~36 fps, 7-10% of the messages lost, no restart |
-| Memory | a trigger costs ~400 bytes: ~400-500 triggers fit next to a big show |
-| Saving a project | ~36 KB/s onto the stick (a 400 KB show takes ~11 s; the lights keep running) |
+| What | Now | Before |
+|---|---|---|
+| Engine frame | 7 ms for this show (budget 25 ms at 40 fps): effects 4.4, fades 0.6, mixing 0.7, sending 1.0 ms; the Ledtest show 0.5 ms | 13 ms; Ledtest 1.1 ms |
+| Art-Net out | 8 universes at 40 fps, no gaps over 50 ms; at 60 fps ~63 fps | the same, at 13 ms a frame |
+| Art-Net + sACN together | 16 universes (8 + 8) at ~63 fps, ~1000 packets/s, frame 8 ms | 16 universes, ~1000 packets/s |
+| UDP / OSC messages in | 900 messages/s with none lost (evenly spaced); ~0.1 ms of controller time each | ~350-400 fires/s, the rest lost |
+| Messages arriving all at once | the Ethernet chip holds ~7: more back to back (within a fraction of a millisecond) are lost. Senders that spread their messages are fine | the same |
+| One trigger | max 100 fires per second, then paused 10 s (loop protection, above): a fast OSC fader on one trigger hits this | the same |
+| UDP round trip (`reply`) | ~2 ms typical, p99 ~17 ms | 3-7 ms, up to ~15 ms |
+| Sending | 500 UDP or OSC messages in ~0.17 s **while the lights keep running at 40 fps** (a burst runs a few ms at a time between frames); 100 TCP lines in ~0.03 s; at most 16 HTTP requests waiting (more are refused: "HTTP queue full") | lights stopped for the 0.2 s of a burst |
+| `repeat … every 0.01` | 1000 messages in 10.0 s, gaps 10 ms typical, up to ~30 ms | gaps up to ~50 ms |
+| Web API | ~90 requests/s from one client, ~140/s from 4 | ~65/s, ~90/s |
+| Everything at once | 16 universes out + 330 messages/s in (UDP, OSC, echo) + 2 web clients: lights at ~38 fps, **no messages lost**, no restart | lights at ~36 fps, 7-10% lost |
+| Memory | free with Ledtest 211 KB (was 176 KB); with this show 206 KB (was 167 KB): triggers no longer use the small memory (~400 bytes each before) | |
+| Saving a project | ~36 KB/s onto the stick (a 400 KB show takes ~11 s; the lights keep running) | the same |
 
-A burst (`repeat 500 times send udp …`) runs in one go: the lights pause for those ~0.2 s.
+`/api/status` shows where the time goes: `stats.tickParts` (effects, fades, mixing, sending in µs per frame), `trigUs` and `busyUs` (µs per second in trigger handling / in the main loop, 1 000 000 = all of it) and `udpDropped` (messages the receive queue had no room for).
 
+**The second processor core (M4) is not used.** It runs at half the speed and has no hardware maths for the 64-bit numbers the effects use (they match the browser preview exactly), so effects would run slower there, not faster. It would also need its own firmware, flashed separately, and every exchange with the main core goes through shared memory. The frame now uses about a quarter of the main core at 40 fps, with room to spare.
 ## Logging
 
 - A 512-entry RAM ring is streamed live to every open browser via Server-Sent Events. The UI has filters per level and category, search with highlight, pause, export, and a warning badge.
 - Every entry is also written to Serial and appended to `/usb/logs/system.log`. At 8 MB it moves on to `system.1.log`, the older ones to `system.2.log` … `system.4.log`, and the oldest is deleted: 5 files, 40 MB, about 450 000 lines (a line is ~90 bytes). That's months on a normal day of triggers and device checks, a few weeks on a very busy one; a category on DEBUG fills it much faster. Size and number are `KD_LOG_MAX_BYTES` / `KD_LOG_FILES` in `src/Config.h`. In the mock, `KD_LOG_MAX=2000` makes the files tiny to test this.
 - Per-category firmware verbosity can be changed at runtime (Log page or `loglevel artnet debug`).
-- The status stream reports engine fps, DMX fps, Art-Net/sACN packets/s, UDP rx, worst tick and loop time, and running playbacks. The engine warns when a tick exceeds half its budget.
+- The status stream reports engine fps, DMX fps, Art-Net/sACN packets/s, UDP rx, worst tick and loop time, the time per part of a frame, and running playbacks. The engine warns when a tick exceeds half its budget.
 
 ## HTTP API
 

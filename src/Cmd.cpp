@@ -18,6 +18,7 @@
 #include "Util.h"
 
 namespace {
+bool reloadPending = false;   // a "reload" from a trigger's actions, done by reloadDue()
 
 const char* cmdSource = "";   // who runs the command now (exec's source), for "mode" in the log
 
@@ -366,6 +367,9 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
   // kissbox | knx | brightsign | digidot | netio | pharos <device> ...
   if (!t.empty() && Drivers::isCommand(t[0])) return Drivers::command(t, r);
   if (is(0, "reload") && t.size() == 1) {
+    // From a trigger's actions: after its run (the reload replaces the trigger table and the
+    // action text that run is reading). Cmd::reloadDue() in the main loop does it.
+    if (Triggers::inRun()) { reloadPending = true; r = "Project reloads after this trigger"; return true; }
     if (!Show::loadFile(KD_PROJECT_PATH, r)) return false;
     Project::loadModules();
     r = "Project reloaded";
@@ -378,21 +382,36 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
 
 namespace Cmd {
 
+bool reloadDue() {
+  if (!reloadPending || Triggers::inRun()) return false;
+  reloadPending = false;
+  String r;
+  if (Show::loadFile(KD_PROJECT_PATH, r)) Project::loadModules();
+  else LOGE(Cmd, "reload: %s", r.c_str());
+  return true;
+}
+
 std::vector<String> tokenize(const String& line) {
   std::vector<String> t;
+  // Runs for every command and condition: one allocation per word. Adding a character at a
+  // time re-allocated the word for each one, and a growing vector copies every String.
+  t.reserve(8);
+  const char* s = line.c_str();
   size_t i = 0, n = line.length();
   while (i < n) {
-    while (i < n && isspace(line[i])) i++;
+    while (i < n && isspace((unsigned char)s[i])) i++;
     if (i >= n) break;
-    String tok;
-    if (line[i] == '"') {
-      i++;
-      while (i < n && line[i] != '"') tok += line[i++];
-      i++;
+    size_t a, b;
+    if (s[i] == '"') {
+      a = ++i;
+      while (i < n && s[i] != '"') i++;
+      b = i++;
     } else {
-      while (i < n && !isspace(line[i])) tok += line[i++];
+      a = i;
+      while (i < n && !isspace((unsigned char)s[i])) i++;
+      b = i;
     }
-    t.push_back(tok);
+    t.push_back(line.substring(a, b));
   }
   return t;
 }

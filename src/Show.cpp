@@ -10,6 +10,10 @@
 #include "State.h"
 #include "Util.h"
 
+// The per-frame loops are built for speed, not size (the firmware is -Os): they run 40-60 times a
+// second over every channel and fixture. Only those, not the whole file: flash is ~85 % full.
+#define KD_FAST __attribute__((optimize("O2")))
+
 rtos::Mutex g_engine;
 
 namespace ShowImpl {
@@ -74,8 +78,9 @@ struct CueEvent { int timeline; String trigger; };
 std::vector<CueEvent> cueQueue;
 
 const char* const kOutputNames[] = {"DMX", "Art-Net", "sACN"};   // by Output
+uint32_t partUs[Show::kParts];   // time per part of the frame, summed until takeTiming()
 
-uint8_t applyCurve(uint8_t c, uint8_t v) {
+KD_FAST uint8_t applyCurve(uint8_t c, uint8_t v) {
   switch (c) {
     case CurveSquare: return (uint16_t)v * v / 255;
     case CurveNonDim: return v >= 128 ? 255 : 0;
@@ -85,7 +90,7 @@ uint8_t applyCurve(uint8_t c, uint8_t v) {
   }
 }
 
-float ease(Path p, float k) {
+KD_FAST float ease(Path p, float k) {
   switch (p) {
     case Path::Accelerated: return k * k;
     case Path::Braked: return 1 - (1 - k) * (1 - k);
@@ -149,7 +154,7 @@ void startTrackFade(Playback& p, uint8_t track, uint32_t now, uint32_t fadeMs, P
 }
 
 // A 16-bit value goes into the coarse channel and the fine one after it.
-void putTarget(Playback& p, int u, int ch, bool wide, int v) {
+KD_FAST void putTarget(Playback& p, int u, int ch, bool wide, int v) {
   if (wide) { p.to[u][ch] = v >> 8; p.to[u][ch + 1] = v & 0xff; }
   else p.to[u][ch] = v;
 }
@@ -167,31 +172,40 @@ void fireScene(Playback& p, const Scene& s, uint32_t fadeMs, Path path, uint32_t
 }
 
 // v01 is 0..1 (clamped by the caller): + 0.5 and truncate = lround, without the library call.
-void setTarget(Playback& p, int u, int ch, bool wide, double v01) {
+// live >= 0: an effect at full on track `live` (not fading): straight into the live value
+// too, as updateFade would copy it there (it leaves such tracks alone), for the channels that
+// track still owns (another track's cue may have taken some over).
+KD_FAST void setTarget(Playback& p, int u, int ch, bool wide, double v01, int live) {
   putTarget(p, u, ch, wide, (int)(v01 * (wide ? 65535 : 255) + 0.5));
+  if (live >= 0 && p.chTrack[u][ch] == live) {
+    p.cur[u][ch] = p.to[u][ch];
+    if (wide) p.cur[u][ch + 1] = p.to[u][ch + 1];
+  }
 }
 
 // One frame of the effect on a track: run the program per fixture into p.to.
 // Same mapping as toFixture() in fx.js.
-void runEffect(Playback& p, int track, uint32_t now) {
+KD_FAST void runEffect(Playback& p, int track, uint32_t now) {
   const FxCue& fc = fxCues[p.tf[track].fx];
   const Fx::Program& prog = fxProgs[fc.prog];
-  // Slots on the stack (the cue's start values copied once): from SDRAM for every fixture
-  // they cost more than the effect itself. Big programs use the shared scratch.
+  // Slots on the stack (big programs use the shared scratch). The cue's values once, then the
+  // frame part (what is the same for every fixture); per fixture only the inputs that differ
+  // and the outputs' defaults are set again: the effect sets its own names before reading them.
   const int kStack = 64;
-  double local[kStack], base[kStack];
-  const bool onStack = prog.slots <= kStack;
-  double* s = onStack ? local : fxScratch.data();
-  const double* init = fc.slots.data();
-  if (onStack) { memcpy(base, init, sizeof(double) * prog.slots); init = base; }
+  double local[kStack];
+  double* s = prog.slots <= kStack ? local : fxScratch.data();
+  memcpy(s, fc.slots.data(), sizeof(double) * prog.slots);
   const int n = fc.targets.size();
-  const double t = (now - p.tf[track].fxStart) / 1000.0;
+  const int live = p.tf[track].fading ? -1 : track;
+  s[Fx::T] = (now - p.tf[track].fxStart) / 1000.0;
+  s[Fx::N] = n;
+  Fx::runFrame(prog, s);
+  double outs[Fx::DIM - Fx::R + 1];
+  memcpy(outs, fc.slots.data() + Fx::R, sizeof(outs));
   for (int i = 0; i < n; i++) {
     const FxTarget& x = fc.targets[i];
-    memcpy(s, init, sizeof(double) * prog.slots);
-    s[Fx::T] = t;
+    memcpy(s + Fx::R, outs, sizeof(outs));
     s[Fx::I] = i;
-    s[Fx::N] = n;
     s[Fx::U] = (double)i / n;
     s[Fx::X] = x.x;
     s[Fx::Y] = x.y;
@@ -200,18 +214,18 @@ void runEffect(Playback& p, int track, uint32_t now) {
     double dim = cl(s[Fx::DIM]) * fc.level;
     double r = cl(s[Fx::R]), g = cl(s[Fx::G]), b = cl(s[Fx::B]), w = s[Fx::W] >= 0 ? cl(s[Fx::W]) : -1;
     if (x.r < 0 || x.g < 0 || x.b < 0) {
-      if (x.d >= 0) setTarget(p, x.u, x.d, x.dWide, dim * std::max(r, std::max(g, b)));
+      if (x.d >= 0) setTarget(p, x.u, x.d, x.dWide, dim * std::max(r, std::max(g, b)), live);
       continue;
     }
-    if (x.d >= 0) setTarget(p, x.u, x.d, x.dWide, dim);
+    if (x.d >= 0) setTarget(p, x.u, x.d, x.dWide, dim, live);
     else { r *= dim; g *= dim; b *= dim; if (w >= 0) w *= dim; }
     if (x.w >= 0) {
       if (w < 0) { w = std::min(r, std::min(g, b)); r -= w; g -= w; b -= w; }
-      setTarget(p, x.u, x.w, false, w);
+      setTarget(p, x.u, x.w, false, w, live);
     }
-    setTarget(p, x.u, x.r, false, r);
-    setTarget(p, x.u, x.g, false, g);
-    setTarget(p, x.u, x.b, false, b);
+    setTarget(p, x.u, x.r, false, r, live);
+    setTarget(p, x.u, x.g, false, g, live);
+    setTarget(p, x.u, x.b, false, b, live);
   }
 }
 
@@ -228,37 +242,45 @@ void startEffect(Playback& p, const Cue& c, uint32_t at, uint32_t now) {
   runEffect(p, c.track, now);
 }
 
-void updateFade(Playback& p, uint32_t now) {
+// The universes in use: the per-channel loops below skip the rest (KD_MAX_UNIVERSES).
+inline int usedUniverses() { return std::min((int)universes.size(), U); }
+
+KD_FAST void updateFade(Playback& p, uint32_t now) {
   float e[KD_MAX_TRACKS];
   bool any = false;
   for (int t = 0; t < KD_MAX_TRACKS; t++) {
     auto& f = p.tf[t];
-    e[t] = -1;   // not fading: leave its channels alone
-    if (!f.fading) {
-      if (f.fx >= 0) { e[t] = 1; any = true; }   // effect running: follow it every frame
-      continue;
-    }
+    e[t] = -1;   // not fading: leave its channels alone (an effect at full writes them itself)
+    if (!f.fading) continue;
     float k = f.len ? (float)(now - f.start) / f.len : 1.0f;
     if (k >= 1) { k = 1; f.fading = false; }
     e[t] = ease(f.path, k);
     any = true;
   }
   if (!any) return;
-  for (int u = 0; u < U; u++)
+  const int nu = usedUniverses();
+  for (int u = 0; u < nu; u++) {
+    const uint8_t* m = p.mask[u];
     for (int i = 0; i < 512; i++) {
-      if (!testBit(p.mask[u], i)) continue;
-      float ek = e[p.chTrack[u][i]];
+      if (!(i & 7) && !m[i >> 3]) { i += 7; continue; }   // 8 channels not in this playback
+      if (!testBit(m, i)) continue;
+      const float ek = e[p.chTrack[u][i]];
       if (ek < 0) continue;
-      if (testBit(wide[u], i) && i < 511) {
+      const bool w = testBit(wide[u], i) && i < 511;
+      if (ek == 1) {   // the end of a fade, or an effect: the target itself (what the sum gives)
+        p.cur[u][i] = p.to[u][i];
+        if (w) { p.cur[u][i + 1] = p.to[u][i + 1]; i++; }
+      } else if (w) {
         int a = (p.from[u][i] << 8) | p.from[u][i + 1], b = (p.to[u][i] << 8) | p.to[u][i + 1];
-        int v = clampInt(a + lroundf((b - a) * ek), 0, 65535);
+        int v = clampInt(a + roundInt((b - a) * ek), 0, 65535);
         p.cur[u][i] = v >> 8;
         p.cur[u][i + 1] = v & 0xff;
         i++;
       } else {
-        p.cur[u][i] = clampInt(p.from[u][i] + lroundf((p.to[u][i] - p.from[u][i]) * ek), 0, 255);
+        p.cur[u][i] = clampInt(p.from[u][i] + roundInt((p.to[u][i] - p.from[u][i]) * ek), 0, 255);
       }
     }
+  }
 }
 
 // The track lets go of its channels: they show what is underneath again (lower
@@ -397,16 +419,22 @@ void ShowImpl::stopAllPlaybacks() {
 
 namespace Show {
 
-void tick(uint32_t now) {
+KD_FAST void tick(uint32_t now) {
+  uint32_t t0 = micros(), fxUs = 0;
   for (auto& p : pbs) {
     if (!p.active) continue;
     if (!p.isScene) updateTimeline(p, now);
+    uint32_t f0 = micros();
     if (!p.paused)
       for (int t = 0; t < KD_MAX_TRACKS; t++) if (p.tf[t].fx >= 0) runEffect(p, t, now);
+    fxUs += micros() - f0;
     updateFade(p, now);
     updateRelease(p, now);
     updateMaster(p, now);
   }
+  uint32_t t1 = micros();
+  partUs[kPartFx] += fxUs;
+  partUs[kPartFade] += t1 - t0 - fxUs;
 
   // Compose: lowest priority first, then by start order (latest takes precedence).
   Playback* order[KD_MAX_PLAYBACKS];
@@ -417,32 +445,51 @@ void tick(uint32_t now) {
   });
 
   memset(out, 0, sizeof(out));
+  const int nu = usedUniverses();
   for (int k = 0; k < n; k++) {
     Playback& p = *order[k];
-    for (int u = 0; u < U; u++)
+    float mt[KD_MAX_TRACKS];   // per track: the playback master x the track's own (fading out after its cue ended)
+    for (int t = 0; t < KD_MAX_TRACKS; t++) mt[t] = p.master * p.tf[t].op;
+    for (int u = 0; u < nu; u++) {
+      const uint8_t* mk = p.mask[u];
       for (int i = 0; i < 512; i++) {
-        if (!testBit(p.mask[u], i)) continue;
-        const float m = p.master * p.tf[p.chTrack[u][i]].op;   // a track fading out after its cue ended
-        if (testBit(wide[u], i) && i < 511) {
+        if (!(i & 7) && !mk[i >> 3]) { i += 7; continue; }
+        if (!testBit(mk, i)) continue;
+        const float m = mt[p.chTrack[u][i]];
+        const bool w = testBit(wide[u], i) && i < 511;
+        if (m == 1) {   // at full: the playback's value (what the sum gives)
+          out[u][i] = p.cur[u][i];
+          if (w) { out[u][i + 1] = p.cur[u][i + 1]; i++; }
+        } else if (w) {
           int under = (out[u][i] << 8) | out[u][i + 1], v = (p.cur[u][i] << 8) | p.cur[u][i + 1];
-          int r = under + lroundf((v - under) * m);
+          int r = under + roundInt((v - under) * m);
           out[u][i] = r >> 8;
           out[u][i + 1] = r & 0xff;
           i++;
         } else {
-          out[u][i] = out[u][i] + lroundf((p.cur[u][i] - out[u][i]) * m);
+          out[u][i] = out[u][i] + roundInt((p.cur[u][i] - out[u][i]) * m);
         }
       }
+    }
   }
-  for (int u = 0; u < U; u++)
+  // Overrides, grand master, blackout and dimmer curves. At full grand master a linear
+  // channel stays as it is (x 1.0 changes nothing), so only the rest needs the maths.
+  const bool full = !blackout && gm >= 1;
+  for (int u = 0; u < nu; u++)
     for (int i = 0; i < 512; i++) {
       if (testBit(ovrMask[u], i)) out[u][i] = ovr[u][i];
-      if (testBit(gmExempt[u], i)) continue;
+      if (testBit(gmExempt[u], i) || (full && curveOf[u][i] == CurveLinear)) continue;
       out[u][i] = blackout ? 0 : applyCurve(curveOf[u][i], (uint8_t)(out[u][i] * gm));
     }
+  partUs[kPartMix] += micros() - t1;
+}
+
+void takeTiming(uint32_t o[kParts]) {
+  for (int k = 0; k < kParts; k++) { o[k] = partUs[k]; partUs[k] = 0; }
 }
 
 void sendOutputs(uint32_t now) {
+  uint32_t t0 = micros();
   // DMX first and all ports together: commit() starts the frame on every port at once.
   for (size_t u = 0; u < universes.size(); u++) {
     const UniverseCfg& c = universes[u];
@@ -456,6 +503,7 @@ void sendOutputs(uint32_t now) {
     if (cfg.outSacn && c.useSacn && c.sacn > 0 && due(sacnPace, u, now, cfg.sacnFps, cfg.sacnChangesOnly))
       Net::sendSacn(c.sacn, out[u], cfg.sacnPriority);
   }
+  partUs[kPartOut] += micros() - t0;
 }
 
 uint32_t engineHz() {

@@ -82,6 +82,11 @@ uint32_t engineHz();                               // engine rate: max(40, netwo
 void setGrandMaster(float level);
 void setBlackout(bool on);
 
+// Where a frame's time goes (us summed since the last call, then reset): effects, fades,
+// mixing the playbacks, sending DMX / Art-Net / sACN. For /api/status "tickParts".
+enum Part { kPartFx, kPartFade, kPartMix, kPartOut, kParts };
+void takeTiming(uint32_t out[kParts]);
+
 bool takeEndedTimeline(int& timelineId);           // timeline-end events for triggers
 bool takeTimelineCue(int& timelineId, String& trigger);  // trigger cues that were reached
 void statusJson(JsonObject obj);

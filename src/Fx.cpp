@@ -1,5 +1,6 @@
 #include "Fx.h"
 #include <math.h>
+#include <algorithm>
 #include <ctype.h>
 
 namespace Fx {
@@ -293,21 +294,134 @@ class Compiler {
   }
 };
 
-inline double fract(double x) { return x - floor(x); }
+// What runs per fixture per frame is built for speed, not size (the firmware is -Os); the compiler part isn't.
+#define KD_FAST __attribute__((optimize("O2")))
+
+inline __attribute__((always_inline)) double fract(double x) { return x - floor(x); }
 // Same integer hash as fx.js, so the controller and the browser preview agree.
-double rnd(double x) {
-  uint32_t h = (uint32_t)(int64_t)floor(x * 4096.0);
+KD_FAST double rnd(double x) {
+  // The low 32 bits of the whole number (JS: | 0). Within int32 range one instruction does
+  // it; the 64-bit conversion is a library call (~4x slower), only needed beyond that.
+  double v = floor(x * 4096.0);
+  uint32_t h = (v >= -2147483648.0 && v < 2147483648.0) ? (uint32_t)(int32_t)v : (uint32_t)(int64_t)v;
   h = (h ^ (h >> 16)) * 0x45d9f3bu;
   h = (h ^ (h >> 16)) * 0x45d9f3bu;
   h ^= h >> 16;
   return (h >> 8) / 16777216.0;
 }
-double noise(double x) {
+KD_FAST double noise(double x) {
   double i = floor(x), f = x - i, k = f * f * (3 - 2 * f);
   double a = rnd(i / 4096.0), b = rnd((i + 1) / 4096.0);
   return a + (b - a) * k;
 }
-inline double clampd(double x, double a, double b) { return x < a ? a : x > b ? b : x; }
+inline __attribute__((always_inline)) double clampd(double x, double a, double b) { return x < a ? a : x > b ? b : x; }
+
+// ---- What runs on the controller (the bytecode itself is fx.js's) -------------------------
+// An effect runs for every fixture every frame (1360 fixtures x 40 fps in the stress test), so
+// compile() rearranges the bytecode, without changing a single result:
+// 1. Work that is the same for every fixture moves to a part that runs once per frame:
+//    statements like "a = angle / 360 * tau" (a name set once, only from t, n, parameters or
+//    such names), and pieces like "t * speed" or "cos(a)" inside a per-fixture expression
+//    (worked out into a temporary slot the fixture part then reads).
+// 2. A number or a name right before an operator becomes part of that instruction.
+// Same operations on the same values in the same order: bit-for-bit the same output.
+struct Val { int start, end; bool uni; };   // a value on the stack: made by ops [start, end)
+struct Cut { int start, end, n, tmp; };   // ops [start, end) go to the frame part; n values -> tmp (n 0: a whole statement)
+
+bool isBinary(uint8_t op) { return (op >= ADD && op <= MOD) || (op >= LT && op <= OR); }
+const int kEnd = 60;   // dispatch number of the end marker; others are op * 3 + mode
+
+void emitIns(BigRam::Vec<Ins>& out, uint8_t op, double a) {
+  if (isBinary(op) && !out.empty() && out.back().mode == 0 && (out.back().op == CONST * 3 || out.back().op == LOAD * 3)) {
+    Ins& prev = out.back();   // its value is the right-hand operand: fold it in
+    prev.mode = prev.op == CONST * 3 ? 1 : 2;
+    prev.op = op * 3 + prev.mode;
+    return;
+  }
+  Ins x = {(uint8_t)(op * 3), 0, 0, 0, (uint16_t)(op == LOAD || op == STORE ? (int)a : 0), a};
+  if (op == CALL) { x.fn = (uint8_t)(int)a; x.na = kFuncs[x.fn].args; }
+  out.push_back(x);
+}
+
+void prepare(Program& p) {
+  const int nOps = p.ops.size();
+  std::vector<uint8_t> uni(p.slots, 0), stores(p.slots, 0);
+  uni[T] = uni[N] = uni[PI_] = uni[TAU] = 1;
+  for (auto& q : p.params)
+    for (int k = 0; k < (q.color ? 3 : 1); k++) uni[q.slot + k] = 1;
+  for (int k = 0; k < nOps; k++)
+    if (p.ops[k] == STORE && stores[(int)p.args[k]] < 2) stores[(int)p.args[k]]++;
+  std::vector<Val> st;
+  std::vector<Cut> cuts;
+  int slots = p.slots;
+  // A value that is the same for every fixture, used by something that is not: worked out
+  // per frame (unless it is a lone number or name: nothing to save).
+  auto hoist = [&](const Val& v, int n) {
+    if (!v.uni || v.end - v.start < 2) return;
+    cuts.push_back({v.start, v.end, n, slots});
+    slots += n;
+  };
+  auto pop = [&]() { Val v = st.back(); st.pop_back(); return v; };
+  for (int k = 0; k < nOps; k++) {
+    const uint8_t op = p.ops[k];
+    const int a = (int)p.args[k];
+    if (op == CONST) st.push_back({k, k + 1, true});
+    else if (op == LOAD) st.push_back({k, k + 1, uni[a] != 0});
+    else if (op == NEG || op == NOT) st.back().end = k + 1;   // same kind of value
+    else if (op == STORE) {
+      Val v = pop();
+      // A name set once, from frame values only: the whole statement runs per frame.
+      if (v.uni && a >= FIRST_FREE && stores[a] == 1) { cuts.push_back({v.start, k + 1, 0, -1}); uni[a] = 1; }
+      else hoist(v, 1);
+    } else if (op == SEL) {
+      Val z = pop(), y = pop(), x = pop();
+      bool all = x.uni && y.uni && z.uni;
+      if (!all) { hoist(x, 1); hoist(y, 1); hoist(z, 1); }
+      st.push_back({x.start, k + 1, all});
+    } else if (op == CALL) {
+      const int na = kFuncs[a].args, nr = kFuncs[a].rets;
+      Val v[3];
+      for (int j = na - 1; j >= 0; j--) v[j] = pop();
+      bool all = true;
+      for (int j = 0; j < na; j++) all = all && v[j].uni;
+      if (nr == 1) {
+        if (!all) for (int j = 0; j < na; j++) hoist(v[j], 1);
+        st.push_back({v[0].start, k + 1, all});
+      } else {
+        // hsv(): three values. Taken per frame only in the plain "r, g, b = hsv(...)" form;
+        // otherwise its arguments can still be. The three are never treated as frame values.
+        bool plain = k + 3 < nOps && p.ops[k + 1] == STORE && p.ops[k + 2] == STORE && p.ops[k + 3] == STORE;
+        if (all && plain) hoist({v[0].start, k + 1, true}, nr);
+        else if (!all) for (int j = 0; j < na; j++) hoist(v[j], 1);
+        for (int j = 0; j < nr; j++) st.push_back({k, k + 1, false});
+      }
+    } else {   // binary
+      Val y = pop(), x = pop();
+      if (x.uni != y.uni) { hoist(x, 1); hoist(y, 1); }
+      st.push_back({x.start, k + 1, x.uni && y.uni});
+    }
+  }
+  std::sort(cuts.begin(), cuts.end(), [](const Cut& x, const Cut& y) { return x.start < y.start; });
+  p.frame.clear();
+  p.body.clear();
+  size_t c = 0;
+  for (int k = 0; k < nOps;) {
+    if (c < cuts.size() && cuts[c].start == k) {
+      const Cut& x = cuts[c++];
+      for (int j = x.start; j < x.end; j++) emitIns(p.frame, p.ops[j], p.args[j]);
+      for (int j = x.n - 1; j >= 0; j--) emitIns(p.frame, STORE, x.tmp + j);
+      for (int j = 0; j < x.n; j++) emitIns(p.body, LOAD, x.tmp + j);
+      k = x.end;
+      continue;
+    }
+    emitIns(p.body, p.ops[k], p.args[k]);
+    k++;
+  }
+  Ins end = {kEnd, 0, 0, 0, 0, 0};
+  p.frame.push_back(end);
+  p.body.push_back(end);
+  p.slots = slots;
+}
 
 }  // namespace
 
@@ -318,6 +432,7 @@ bool compile(const char* src, Program& out, String& err) {
   if (!tokenize(src, toks, f)) { err = "line " + String(f.line) + ": " + f.msg; return false; }
   Compiler c(toks, out);
   if (!c.program(f)) { err = (f.line ? "line " + String(f.line) + ": " : String()) + f.msg; return false; }
+  prepare(out);
   return true;
 }
 
@@ -344,92 +459,107 @@ void init(const Program& prog, double* s) {
     for (int k = 0; k < (q.color ? 3 : 1); k++) s[q.slot + k] = q.def[k];
 }
 
-void run(const Program& prog, double* s) {
-  double st[72];
-  int sp = 0;
-  const size_t n = prog.ops.size();
-  for (size_t k = 0; k < n; k++) {
-    const double a = prog.args[k];
-    switch (prog.ops[k]) {
-      case CONST: st[sp++] = a; break;
-      case LOAD: st[sp++] = s[(int)a]; break;
-      case STORE: s[(int)a] = st[--sp]; break;
-      case NEG: st[sp - 1] = -st[sp - 1]; break;
-      case NOT: st[sp - 1] = st[sp - 1] ? 0 : 1; break;
-      case SEL: { double z = st[--sp], y = st[--sp], x = st[--sp]; st[sp++] = x ? y : z; break; }
-      case CALL: {
-        int f = (int)a;
-        int na = kFuncs[f].args;
-        double* v = &st[sp - na];
-        double r = 0;
-        switch (f) {
-          case 0: r = sin(v[0]); break;
-          case 1: r = cos(v[0]); break;
-          case 2: r = tan(v[0]); break;
-          case 3: r = fabs(v[0]); break;
-          case 4: r = floor(v[0]); break;
-          case 5: r = ceil(v[0]); break;
-          case 6: r = fract(v[0]); break;
-          case 7: r = v[0] > 0 ? sqrt(v[0]) : 0; break;
-          case 8: r = exp(v[0]); break;
-          case 9: r = v[0] > 0 ? log(v[0]) : 0; break;
-          case 10: r = v[0] > 0 ? 1 : v[0] < 0 ? -1 : 0; break;
-          case 11: r = (v[0] < 0 && v[1] != floor(v[1])) ? 0 : pow(v[0], v[1]); break;
-          case 12: r = v[0] < v[1] ? v[0] : v[1]; break;
-          case 13: r = v[0] > v[1] ? v[0] : v[1]; break;
-          case 14: r = v[1] ? v[0] - v[1] * floor(v[0] / v[1]) : 0; break;
-          case 15: r = atan2(v[0], v[1]); break;
-          case 16: r = v[1] < v[0] ? 0 : 1; break;
-          case 17: r = clampd(v[0], v[1], v[2]); break;
-          case 18: r = v[0] + (v[1] - v[0]) * v[2]; break;
-          case 19: {
-            double k2 = v[0] == v[1] ? (v[2] < v[0] ? 0 : 1) : clampd((v[2] - v[0]) / (v[1] - v[0]), 0, 1);
-            r = k2 * k2 * (3 - 2 * k2);
-            break;
-          }
-          case 20: r = rnd(v[0]); break;
-          case 21: r = noise(v[0]); break;
-          case 22: r = 1 - fabs(fract(v[0]) * 2 - 1); break;
-          case 23: r = fract(v[0]); break;
-          case 24: r = fract(v[0]) < 0.5 ? 1 : 0; break;
-          case 25: r = fract(v[0]) < v[1] ? 1 : 0; break;
-          case 26: {   // hsv -> r, g, b (replaces the 3 arguments)
-            double h = fract(v[0]) * 6, sat = clampd(v[1], 0, 1), val = v[2];
-            int i = (int)floor(h) % 6;
-            double f2 = h - floor(h), p = val * (1 - sat), q = val * (1 - sat * f2), t = val * (1 - sat * (1 - f2));
-            const double rgb[6][3] = {{val, t, p}, {q, val, p}, {p, val, t}, {p, q, val}, {t, p, val}, {val, p, q}};
-            v[0] = rgb[i][0];
-            v[1] = rgb[i][1];
-            v[2] = rgb[i][2];
-            continue;
-          }
-        }
-        if (!isfinite(r)) r = 0;
-        sp -= na;
-        st[sp++] = r;
+namespace {
+// Runs one instruction list (fx.js run(), with the top of the stack kept in `top`). Each
+// instruction jumps straight to the next one's code (GCC's labels as values): no switch.
+KD_FAST void exec(const Ins* ip, double* s) {
+  double st[72], top = 0;
+  int sp = 0;   // st[0] takes the empty stack's dummy top
+#define K3(name) &&name##0, &&name##1, &&name##2
+#define K1(name) &&name, &&bad, &&bad
+  static const void* const L[kEnd + 1] = {
+      K1(CONST_), K1(LOAD_), K1(STORE_), K3(ADD_), K3(SUB_), K3(MUL_), K3(DIV_), K3(MOD_), K1(NEG_), K1(NOT_),
+      K3(LT_), K3(GT_), K3(LE_), K3(GE_), K3(EQ_), K3(NE_), K3(AND_), K3(OR_), K1(SEL_), K1(CALL_), &&END_};
+#undef K3
+#undef K1
+#define NEXT goto* L[(++ip)->op]
+// y = the right-hand operand: below the top (mode 0), the folded number (1) or slot (2).
+#define BIN(name, expr)                                                   \
+  name##0 : { double y = top, x = st[--sp]; top = (expr); NEXT; }       \
+  name##1 : { double y = ip->a, x = top; top = (expr); NEXT; }          \
+  name##2 : { double y = s[ip->slot], x = top; top = (expr); NEXT; }
+  goto* L[ip->op];
+CONST_: st[sp++] = top; top = ip->a; NEXT;
+LOAD_: st[sp++] = top; top = s[ip->slot]; NEXT;
+STORE_: s[ip->slot] = top; top = st[--sp]; NEXT;
+NEG_: top = -top; NEXT;
+NOT_: top = top ? 0 : 1; NEXT;
+SEL_: { double z = top, y = st[--sp], x = st[--sp]; top = x ? y : z; NEXT; }
+  BIN(ADD_, x + y)
+  BIN(SUB_, x - y)
+  BIN(MUL_, x * y)
+  BIN(DIV_, y ? x / y : 0)
+  BIN(MOD_, y ? x - y * floor(x / y) : 0)
+  BIN(LT_, x < y)
+  BIN(GT_, x > y)
+  BIN(LE_, x <= y)
+  BIN(GE_, x >= y)
+  BIN(EQ_, x == y)
+  BIN(NE_, x != y)
+  BIN(AND_, x && y)
+  BIN(OR_, x || y)
+#undef BIN
+CALL_: {
+    st[sp++] = top;
+    double* v = &st[sp - ip->na];
+    double r = 0;
+    switch (ip->fn) {
+      case 0: r = sin(v[0]); break;
+      case 1: r = cos(v[0]); break;
+      case 2: r = tan(v[0]); break;
+      case 3: r = fabs(v[0]); break;
+      case 4: r = floor(v[0]); break;
+      case 5: r = ceil(v[0]); break;
+      case 6: r = fract(v[0]); break;
+      case 7: r = v[0] > 0 ? sqrt(v[0]) : 0; break;
+      case 8: r = exp(v[0]); break;
+      case 9: r = v[0] > 0 ? log(v[0]) : 0; break;
+      case 10: r = v[0] > 0 ? 1 : v[0] < 0 ? -1 : 0; break;
+      case 11: r = (v[0] < 0 && v[1] != floor(v[1])) ? 0 : pow(v[0], v[1]); break;
+      case 12: r = v[0] < v[1] ? v[0] : v[1]; break;
+      case 13: r = v[0] > v[1] ? v[0] : v[1]; break;
+      case 14: r = v[1] ? v[0] - v[1] * floor(v[0] / v[1]) : 0; break;
+      case 15: r = atan2(v[0], v[1]); break;
+      case 16: r = v[1] < v[0] ? 0 : 1; break;
+      case 17: r = clampd(v[0], v[1], v[2]); break;
+      case 18: r = v[0] + (v[1] - v[0]) * v[2]; break;
+      case 19: {
+        double k2 = v[0] == v[1] ? (v[2] < v[0] ? 0 : 1) : clampd((v[2] - v[0]) / (v[1] - v[0]), 0, 1);
+        r = k2 * k2 * (3 - 2 * k2);
         break;
       }
-      default: {
-        double y = st[--sp], x = st[sp - 1], r;
-        switch (prog.ops[k]) {
-          case ADD: r = x + y; break;
-          case SUB: r = x - y; break;
-          case MUL: r = x * y; break;
-          case DIV: r = y ? x / y : 0; break;
-          case MOD: r = y ? x - y * floor(x / y) : 0; break;
-          case LT: r = x < y; break;
-          case GT: r = x > y; break;
-          case LE: r = x <= y; break;
-          case GE: r = x >= y; break;
-          case EQ: r = x == y; break;
-          case NE: r = x != y; break;
-          case AND: r = x && y; break;
-          default: r = x || y; break;
-        }
-        st[sp - 1] = r;
+      case 20: r = rnd(v[0]); break;
+      case 21: r = noise(v[0]); break;
+      case 22: r = 1 - fabs(fract(v[0]) * 2 - 1); break;
+      case 23: r = fract(v[0]); break;
+      case 24: r = fract(v[0]) < 0.5 ? 1 : 0; break;
+      case 25: r = fract(v[0]) < v[1] ? 1 : 0; break;
+      case 26: {   // hsv -> r, g, b in place of the 3 arguments
+        double h = fract(v[0]) * 6, sat = clampd(v[1], 0, 1), val = v[2];
+        int i = (int)floor(h) % 6;
+        double f2 = h - floor(h), p = val * (1 - sat), q = val * (1 - sat * f2), t = val * (1 - sat * (1 - f2));
+        const double rgb[6][3] = {{val, t, p}, {q, val, p}, {p, val, t}, {p, q, val}, {t, p, val}, {val, p, q}};
+        v[0] = rgb[i][0];
+        v[1] = rgb[i][1];
+        v[2] = rgb[i][2];
+        top = st[--sp];
+        NEXT;
       }
     }
+    if (!isfinite(r)) r = 0;
+    sp -= ip->na;
+    top = r;
+    NEXT;
   }
+#undef NEXT
+bad:
+END_:
+  return;
 }
+}  // namespace
+
+void runFrame(const Program& prog, double* s) { exec(prog.frame.data(), s); }
+void run(const Program& prog, double* s) { exec(prog.body.data(), s); }
 
 }  // namespace Fx
+

@@ -294,6 +294,14 @@ void buildStatus(JsonDocument& d) {
   s["udpRx"] = g_stats.udpRxPs;
   s["tickUs"] = g_stats.tickUsMax;
   s["loopUs"] = g_stats.loopUsMax;
+  JsonObject parts = s["tickParts"].to<JsonObject>();   // average us per frame
+  parts["fx"] = g_stats.tickPartUs[Show::kPartFx];
+  parts["fade"] = g_stats.tickPartUs[Show::kPartFade];
+  parts["mix"] = g_stats.tickPartUs[Show::kPartMix];
+  parts["out"] = g_stats.tickPartUs[Show::kPartOut];
+  s["udpDropped"] = g_stats.udpDropped;
+  s["trigUs"] = g_stats.trigUs;   // per second
+  s["busyUs"] = g_stats.busyUs;
   s["http"] = g_stats.httpRequests;
   JsonObject heap = s["heap"].to<JsonObject>();
   heap["sdramFree"] = BigRam::freeBytes();

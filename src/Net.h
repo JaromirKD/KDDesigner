@@ -18,15 +18,19 @@ bool up();
 IPAddress localIP();
 void macAddress(uint8_t mac[6]);
 
-void poll();  // answers ArtPoll, counts incoming packets, keeps DMX-input frames; caller holds g_engine
+// Answers ArtPoll and joins the sACN group for DMX input; main loop. Receiving (counting,
+// DMX-input frames) runs in the network receive thread (NetRx.h).
+void poll();
 
 // DMX input for "DMX input" triggers: the universes to keep (sacn: sACN universe 1-63999,
 // else an Art-Net 15-bit port address). Max KD_MAX_DMX_IN; caller holds g_engine.
 // sACN arrives by multicast for the first sACN universe only (one group per socket);
 // others need the console to send unicast to the controller.
 void setDmxInputs(const bool* sacn, const uint16_t* universes, int n);
-// Input i's last frame (nullptr until one arrived); frames counts the packets received.
-const uint8_t* dmxIn(int i, uint32_t& frames);
+// Input i: frames received so far (0 = none yet), and a copy of the last one (512 bytes;
+// returns its frame count). The receive thread writes them: read through the copy.
+uint32_t dmxInFrames(int i);
+uint32_t dmxInCopy(int i, uint8_t* out512);
 
 // Art-Net: portAddress is the 15-bit Net/SubNet/Universe address.
 void sendArtDmx(uint16_t portAddress, const uint8_t* data512, IPAddress dest);

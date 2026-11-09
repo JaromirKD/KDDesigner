@@ -47,10 +47,24 @@ extern uint8_t curveOf[U][512];        // dimmer curve per channel
 
 void stopAllPlaybacks();               // before a new project is swapped in
 
-inline bool testBit(const uint8_t* m, int i) { return m[i >> 3] & (1 << (i & 7)); }
-inline void setBit(uint8_t* m, int i) { m[i >> 3] |= (1 << (i & 7)); }
-inline void clearBit(uint8_t* m, int i) { m[i >> 3] &= ~(1 << (i & 7)); }
-inline int clampInt(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+// Run for every channel every frame. always_inline: the firmware is built for size (-Os),
+// which made even these function calls (half the time of the fade and mix loops).
+#define KD_HOT inline __attribute__((always_inline))
+KD_HOT bool testBit(const uint8_t* m, int i) { return m[i >> 3] & (1 << (i & 7)); }
+KD_HOT void setBit(uint8_t* m, int i) { m[i >> 3] |= (1 << (i & 7)); }
+KD_HOT void clearBit(uint8_t* m, int i) { m[i >> 3] &= ~(1 << (i & 7)); }
+KD_HOT int clampInt(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+// lroundf without the library call (~40 cycles, run for every channel every frame): VCVTA
+// rounds to nearest with halves away from zero, exactly as lroundf.
+KD_HOT int roundInt(float x) {
+#if defined(__ARM_FP)
+  int r;
+  asm("vcvta.s32.f32 %0, %1" : "=t"(r) : "t"(x));
+  return r;
+#else
+  return lroundf(x);
+#endif
+}
 
 inline int indexOfUniverse(const BigRam::Vec<UniverseCfg>& list, int id) {
   for (size_t i = 0; i < list.size(); i++) if (list[i].id == id) return i;

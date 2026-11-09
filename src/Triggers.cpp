@@ -2,6 +2,7 @@
 #include <EthernetUdp.h>
 #include <time.h>
 #include <vector>
+#include "BigRam.h"
 #include "Board.h"
 #include "Cmd.h"
 #include "Clock.h"
@@ -10,6 +11,7 @@
 #include "Log.h"
 #include "Monitor.h"
 #include "Net.h"
+#include "NetRx.h"
 #include "Osc.h"
 #include "Projectors.h"
 #include "Show.h"
@@ -23,13 +25,15 @@ enum WhileRunning : uint8_t { kAgain, kIgnore, kRestart, kQueue };
 
 struct Table { String name; std::vector<String> values; };
 
+// The trigger table lives in SDRAM (BigRam), and the action lines are the project JSON's own
+// text (also SDRAM, kept until the next load): in the heap they took ~400 bytes per trigger.
 struct Trigger {
   int id = 0;
   String name;
   bool enabled = true;
   Type type = Type::Unknown;
-  std::vector<String> actions;
-  std::vector<String> conditions;
+  BigRam::Vec<const char*> actions;   // points into Show::projectDoc()
+  BigRam::Vec<String> conditions;
   int hh = 0, mm = 0, ss = 0;
   int sun = 0, sunOffset = 0;   // time trigger at sunrise (1) / sunset (2) + offset minutes
   uint8_t days = 0x7f;          // bit per weekday, 0 = Sunday
@@ -47,8 +51,8 @@ struct Trigger {
   uint32_t changedAt = 0;
   int timeline = 0;
   int universe = -1;            // dmx_change: universe index
-  std::vector<uint16_t> channels;  // dmx_change: 0-based channels, in index order
-  std::vector<uint8_t> lastValues;
+  BigRam::Vec<uint16_t> channels;  // dmx_change: 0-based channels, in index order
+  BigRam::Vec<uint8_t> lastValues;
   std::vector<Table> tables;
   int alarm = -1;               // projector: part 0-5, Projectors::kLampHours, -1 = any error part
   int alarmLevel = 1;           // projector: 1 warning (or worse), 2 error, 0 back to ok
@@ -62,7 +66,7 @@ struct Trigger {
   // sequence: withinMs = from the first step to the last.
   bool hold = false, dbl = false;
   uint32_t holdMs = 2000, withinMs = 500, pressAt = 0, lastPress = 0;
-  std::vector<int> steps;       // sequence: the trigger ids that must fire in this order
+  BigRam::Vec<int> steps;       // sequence: the trigger ids that must fire in this order
   size_t seqPos = 0;
   uint32_t seqStart = 0;
   int dmxIn = -1;               // dmx_in: input slot in Net, channels/lastValues as dmx_change
@@ -104,7 +108,7 @@ struct Scheduled {
 struct Fired { uint32_t ms; uint16_t id, src; };
 const uint16_t kSrcHand = 0xffff, kSrcRepeat = 0xfffe, kSrcDelayed = 0xfffd, kSrcQueued = 0xfffc;
 
-std::vector<Trigger> triggers;
+BigRam::Vec<Trigger> triggers;
 UdpListener listeners[KD_MAX_UDP_PORTS];  // [0] is the global command/trigger port
 std::vector<Scheduled> scheduled;
 uint32_t udpCount = 0;
@@ -257,23 +261,29 @@ String afterWords(const String& line, int n) {
 // "repeat <n> times every <s>" loop stop here and schedule the rest (with the same
 // variables); "cancel trigger" drops it like a delayed fire.
 void runActions(Trigger& t, size_t from, const Vars* vars) {
-  String src = "trigger " + String(t.id);
+  char src[20];   // no String: runs for every fire
+  snprintf(src, sizeof(src), "trigger %d", t.id);
   int was = running;
   running = t.id;
   depth++;
   bool later = false;           // the rest of the lines waits: the run isn't over
   for (size_t i = from; i < t.actions.size(); i++) {
+    // Only a sleep / wait / repeat line (or one a variable may turn into one) is looked at
+    // here; the rest goes straight to Cmd::exec, which expands the variables itself.
+    const char* raw = t.actions[i];
+    while (*raw == ' ') raw++;
+    if (*raw == '{' || !strncasecmp(raw, "sleep", 5) || !strncasecmp(raw, "wait", 4) || !strncasecmp(raw, "repeat", 6)) {
     String line = expandVars(t.actions[i], vars);
     line.trim();
     if (startsWord(line, "sleep")) {
       String s = line.substring(5);
       s.trim();
-      if (!isSeconds(s)) { LOGW(Cmd, "[%s] '%s' failed: expected: sleep <seconds>", src.c_str(), line.c_str()); continue; }
+      if (!isSeconds(s)) { LOGW(Cmd, "[%s] '%s' failed: expected: sleep <seconds>", src, line.c_str()); continue; }
       if (i + 1 < t.actions.size()) {
         Scheduled job{t.id, millis() + (uint32_t)(s.toFloat() * 1000), 0, 0, 1, vars ? *vars : Vars()};
         job.line = i + 1;
         later = schedule(job);
-        if (later) LOGD(Cmd, "[%s] sleep %s s", src.c_str(), s.c_str());
+        if (later) LOGD(Cmd, "[%s] sleep %s s", src, s.c_str());
       }
       break;
     }
@@ -281,7 +291,7 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
       // wait until <condition> [timeout <s>]: checked every KD_WAIT_CHECK_MS in poll.
       String cond = line.substring(4), err;
       cond.trim();
-      if (!startsWord(cond, "until")) { LOGW(Cmd, "[%s] '%s' failed: expected: wait until <condition> [timeout <seconds>]", src.c_str(), line.c_str()); continue; }
+      if (!startsWord(cond, "until")) { LOGW(Cmd, "[%s] '%s' failed: expected: wait until <condition> [timeout <seconds>]", src, line.c_str()); continue; }
       cond = cond.substring(5);
       cond.trim();
       uint32_t timeout = 0;
@@ -294,14 +304,14 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
         if (isSeconds(s)) { timeout = (uint32_t)(s.toFloat() * 1000); cond = cond.substring(0, k); cond.trim(); }
       }
       if (Triggers::checkCondition(cond, err)) continue;   // already true: carry on
-      if (err.length()) { LOGW(Cmd, "[%s] wait until '%s': %s", src.c_str(), cond.c_str(), err.c_str()); break; }
+      if (err.length()) { LOGW(Cmd, "[%s] wait until '%s': %s", src, cond.c_str(), err.c_str()); break; }
       if (i + 1 < t.actions.size()) {
         Scheduled job{t.id, timeout ? (millis() + timeout) | 1 : 0, 0, 0, 1, vars ? *vars : Vars()};
         job.line = i + 1;
         job.kind = kWait;
         job.text = cond;
         later = schedule(job);
-        if (later) LOGD(Cmd, "[%s] waiting until %s", src.c_str(), cond.c_str());
+        if (later) LOGD(Cmd, "[%s] waiting until %s", src, cond.c_str());
       }
       break;
     }
@@ -319,11 +329,15 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
         String cmd = cmdLoop ? afterWords(t.actions[i], every ? 5 : 3) : "fire trigger \"" + w[1] + "\"";
         Vars v = vars ? *vars : Vars();
         int k = 1;
-        for (; k <= n && (k == 1 || !ms); k++) {
+        // Without "every" the rounds run back to back, but KD_BURST_BUDGET_US at a time: the
+        // rest carries on in the next main-loop rounds, between engine frames (500 sends in one
+        // go stopped the lights for 0.2 s). Like a loop with "every", the lines below wait for it.
+        const uint32_t t0 = micros();
+        for (; k <= n && (k == 1 || (!ms && micros() - t0 < KD_BURST_BUDGET_US)); k++) {
           v.set("i", String(k));
           v.set("count", String(k));   // as "repeat trigger" gives the trigger it fires
           String reply;
-          Cmd::exec(cmd, reply, src.c_str(), &v);
+          Cmd::exec(cmd, reply, src, &v);
         }
         if (k > n) continue;   // all done: next line
         Scheduled job{t.id, millis() + ms, ms, n - k + 1, k, v};
@@ -334,8 +348,9 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
         break;
       }
     }
+    }
     String reply;
-    Cmd::exec(t.actions[i], reply, src.c_str(), vars);
+    Cmd::exec(t.actions[i], reply, src, vars);
   }
   depth--;
   running = was;
@@ -403,7 +418,12 @@ void runTrigger(Trigger& t, const char* reason, const Vars* vars) {
   char from[24] = "";
   if (running && running != t.id) snprintf(from, sizeof(from), " from trigger %d", running);
   if (t.type == Type::DmxChange || (t.type == Type::DmxIn && t.when == 0)) LOGD(Trig, "Trigger %d '%s' fired (%s%s)", t.id, t.name.c_str(), reason, from);
-  else LOGI(Trig, "Trigger %d '%s' fired (%s%s)", t.id, t.name.c_str(), reason, from);
+  // At most KD_TRIGGER_LOG_PER_S "fired" lines per trigger per second (rateCount counts this
+  // second's fires): a fader sending 100 messages a second filled the log, and writing that
+  // much to the stick slowed the whole controller (engine frames up to 25 ms).
+  else if (t.rateCount <= KD_TRIGGER_LOG_PER_S) LOGI(Trig, "Trigger %d '%s' fired (%s%s)", t.id, t.name.c_str(), reason, from);
+  else if (t.rateCount == KD_TRIGGER_LOG_PER_S + 1)
+    LOGI(Trig, "Trigger %d '%s' fired (%s%s) - fires more than %d times a second: the rest of this second is not logged", t.id, t.name.c_str(), reason, from, KD_TRIGGER_LOG_PER_S);
   remember(t, reason);
   runActions(t, 0, vars);
   stepFired(t, now);
@@ -424,10 +444,10 @@ void inputEdge(Trigger& t, bool on, uint32_t now, const Vars* vars) {
 
 // A new frame on a DMX input: fire for each watched channel that changed (or crossed the level).
 void dmxInCheck(Trigger& t) {
-  uint32_t frames;
-  const uint8_t* d = Net::dmxIn(t.dmxIn, frames);
-  if (!d || frames == t.inFrames) return;
-  t.inFrames = frames;
+  uint32_t frames = Net::dmxInFrames(t.dmxIn);
+  if (!frames || frames == t.inFrames) return;
+  static uint8_t d[512];   // main loop only
+  t.inFrames = Net::dmxInCopy(t.dmxIn, d);
   if (t.lastValues.size() != t.channels.size()) {   // first frame: only note where it starts
     t.lastValues.clear();
     for (auto c : t.channels) t.lastValues.push_back(d[c]);
@@ -462,9 +482,7 @@ bool udpMatches(const String& pattern, const String& msg, Vars& vars) {
 }
 
 void sendPacket(UdpListener& l, const IPAddress& ip, uint16_t port, const uint8_t* data, size_t len) {
-  l.udp.beginPacket(ip, port);
-  l.udp.write(data, len);
-  l.udp.endPacket();
+  l.udp.sendTo(ip, port, data, len);
 }
 
 // Who sent it, so "reply" can answer on the same socket.
@@ -487,20 +505,20 @@ void handleOsc(UdpListener& l, int listener, IPAddress from, uint16_t fromPort, 
   }
 }
 
-// Start of this loop's UDP work: a flood of packets is handled KD_UDP_BUDGET_US at a time
-// (the rest waits in the socket, the newest are dropped when it is full). Handling them all
+// The receive thread (NetRx) queues what arrives on the trigger ports; the main loop works
+// through it KD_UDP_BUDGET_US at a time (the rest waits in the queue). Handling a flood all
 // at once held the engine lock for seconds: the lights froze.
 uint32_t udpPollStart = 0;
-void handleUdp(UdpListener& l, int listener, bool isCommandPort) {
-  int len;
-  while (micros() - udpPollStart < KD_UDP_BUDGET_US && (len = l.udp.parsePacket()) > 0) {
-    int n = l.udp.read(pkt, sizeof(pkt) - 1);
-    l.udp.flush();
-    if (n <= 0) continue;
-    pkt[n] = 0;
+void handleUdp() {
+  int slot, n;
+  IPAddress from;
+  uint16_t fromPort;
+  while (micros() - udpPollStart < KD_UDP_BUDGET_US && (n = sizeof(pkt), NetRx::take(slot, from, fromPort, pkt, n))) {
+    int listener = slot - NetRx::kFirstTrigger;
+    if (listener < 0 || listener >= KD_MAX_UDP_PORTS || !listeners[listener].open || n <= 0) continue;
+    UdpListener& l = listeners[listener];
+    const bool isCommandPort = l.port == Show::settings().udpPort;
     udpCount++;
-    IPAddress from = l.udp.remoteIP();
-    uint16_t fromPort = l.udp.remotePort();
     // Our own packets (a broadcast "udp send" comes back in) would fire our own
     // triggers - the most common feedback loop. Use "fire trigger" for that.
     if (from == Net::localIP()) {
@@ -555,10 +573,12 @@ void handleUdp(UdpListener& l, int listener, bool isCommandPort) {
 
 void openListener(uint16_t port) {
   for (auto& l : listeners) if (l.open && l.port == port) return;
-  for (auto& l : listeners) {
+  for (int i = 0; i < KD_MAX_UDP_PORTS; i++) {
+    UdpListener& l = listeners[i];
     if (l.open) continue;
     l.port = port;
     l.open = l.udp.begin(port);
+    if (l.open) NetRx::watch(NetRx::kFirstTrigger + i, &l.udp);
     if (l.open) LOGI(Trig, "Listening for UDP/OSC on port %u", port);
     else LOGE(Trig, "Cannot open UDP port %u", port);
     return;
@@ -567,8 +587,8 @@ void openListener(uint16_t port) {
 }
 
 // "1-17" or "1,3,5-8" -> 0-based channel list
-std::vector<uint16_t> parseChannels(const String& spec) {
-  std::vector<uint16_t> out;
+BigRam::Vec<uint16_t> parseChannels(const String& spec) {
+  BigRam::Vec<uint16_t> out;
   int start = 0;
   while (start < (int)spec.length()) {
     int comma = spec.indexOf(',', start);
@@ -603,7 +623,7 @@ void load() {
     t.whileRunning = !strcmp(wr, "ignore") ? kIgnore : !strcmp(wr, "restart") ? kRestart : !strcmp(wr, "queue") ? kQueue : kAgain;
     t.holdMs = (uint32_t)((float)(o["hold"] | 2.0f) * 1000);
     t.withinMs = (uint32_t)((float)(o["within"] | (t.type == Type::Sequence ? 5.0f : 0.5f)) * 1000);
-    for (JsonVariantConst a : o["actions"].as<JsonArrayConst>()) t.actions.push_back(a.as<const char*>());
+    for (JsonVariantConst a : o["actions"].as<JsonArrayConst>()) t.actions.push_back(a | "");
     // "onlyIn": {"group": "Museum", "states": ["Open", "Starting up"]}
     t.onlyGroup = o["onlyIn"]["group"] | "";
     for (JsonVariantConst s : o["onlyIn"]["states"].as<JsonArrayConst>()) t.onlyStates.push_back(s.as<const char*>());
@@ -712,7 +732,7 @@ void load() {
       default: break;
     }
     t.last = millis();
-    triggers.push_back(t);
+    triggers.push_back(std::move(t));
   }
   Net::setDmxInputs(inSacn, inUni, nIn);
   // Sequence steps refer to other triggers by name or number: resolved once all are loaded.
@@ -746,9 +766,9 @@ void load() {
         t.name = m.group + " " + m.state + (leave ? " (leave)" : " (enter)");
         t.type = Type::Manual;
         t.internal = true;
-        for (JsonVariantConst a : acts) t.actions.push_back(a.as<const char*>());
+        for (JsonVariantConst a : acts) t.actions.push_back(a | "");
         (leave ? m.leave : m.enter) = t.id;
-        triggers.push_back(t);
+        triggers.push_back(std::move(t));
       }
       if (m.enter || m.leave) modeActs.push_back(m);
     }
@@ -757,10 +777,12 @@ void load() {
 }
 
 void begin() {
-  for (auto& l : listeners) {
-    if (l.open) l.udp.stop();
-    l.open = false;
+  for (int i = 0; i < KD_MAX_UDP_PORTS; i++) {
+    NetRx::unwatch(NetRx::kFirstTrigger + i);
+    if (listeners[i].open) listeners[i].udp.stop();
+    listeners[i].open = false;
   }
+  NetRx::clear();   // queued for the old ports
   openListener(Show::settings().udpPort);
   for (auto& t : triggers)
     if (t.type == Type::Udp || t.type == Type::Osc) openListener(t.udpPort);
@@ -772,8 +794,7 @@ void startup() {
 
 void poll(uint32_t now) {
   udpPollStart = micros();
-  for (size_t i = 0; i < KD_MAX_UDP_PORTS; i++)
-    if (listeners[i].open) handleUdp(listeners[i], i, listeners[i].port == Show::settings().udpPort);
+  handleUdp();
 
   struct tm tmv;
   time_t utc = time(nullptr);
@@ -835,6 +856,7 @@ void poll(uint32_t now) {
   }
 
   // Delayed and repeating fires, waits and loops. Work on a copy: actions may schedule more.
+  const uint32_t burstStart = micros();
   bool checkWaits = now - lastWaitCheck >= KD_WAIT_CHECK_MS;
   if (checkWaits) lastWaitCheck = now;
   for (size_t i = 0; i < scheduled.size();) {
@@ -855,6 +877,31 @@ void poll(uint32_t now) {
       continue;
     }
     if ((int32_t)(now - s.due) < 0) { i++; continue; }
+    if (s.kind == kLoop && !s.every) {
+      // A burst (repeat without "every"): rounds until this main-loop round's budget is used,
+      // the rest in the next round (taken out and put back at the end: skipped until then).
+      if (micros() - burstStart >= KD_BURST_BUDGET_US) { i++; continue; }
+      Scheduled job = s;
+      scheduled.erase(scheduled.begin() + i);
+      Trigger* t = byId(job.id);
+      if (!t) continue;
+      String src = "trigger " + String(t->id);
+      running = t->id;
+      depth++;
+      while (job.remaining > 0 && micros() - burstStart < KD_BURST_BUDGET_US) {
+        job.vars.set("i", String(job.count));
+        job.vars.set("count", String(job.count));
+        String reply;
+        Cmd::exec(job.text, reply, src.c_str(), &job.vars);
+        job.count++;
+        job.remaining--;
+      }
+      depth--;
+      running = 0;
+      if (job.remaining > 0) schedule(job);
+      else runActions(*t, job.line + 1, &job.vars);   // the last one: carry on below
+      continue;
+    }
     Scheduled job = s;
     if (job.kind == kLoop) {
       if (job.remaining > 1) { s.due += s.every; s.count++; s.remaining--; i++; }
@@ -1309,6 +1356,8 @@ void historyJson(String& out) {
   }
   out += "]}";
 }
+
+bool inRun() { return depth > 0; }
 
 void setSafeMode(bool on) {
   if (safe && !on) LOGI(Trig, "Safe mode off - triggers run again");

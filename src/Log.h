@@ -61,7 +61,10 @@ void startWriter();   // from then on the stick is written by its own thread, no
 void search(const String& a, const String& b, uint32_t from, uint32_t to, size_t max, String& out);
 }  // namespace Log
 
-#define LOGD(c, ...) Log::write(Lvl::Debug, Cat::c, __VA_ARGS__)
-#define LOGI(c, ...) Log::write(Lvl::Info, Cat::c, __VA_ARGS__)
-#define LOGW(c, ...) Log::write(Lvl::Warn, Cat::c, __VA_ARGS__)
-#define LOGE(c, ...) Log::write(Lvl::Error, Cat::c, __VA_ARGS__)
+// The level is checked before the arguments are worked out: a filtered debug line with
+// ip.toString() or a String sum still cost those allocations on every UDP message.
+#define KD_LOG(l, c, ...) do { if (Lvl::l >= Log::level(Cat::c)) Log::write(Lvl::l, Cat::c, __VA_ARGS__); } while (0)
+#define LOGD(c, ...) KD_LOG(Debug, c, __VA_ARGS__)
+#define LOGI(c, ...) KD_LOG(Info, c, __VA_ARGS__)
+#define LOGW(c, ...) KD_LOG(Warn, c, __VA_ARGS__)
+#define LOGE(c, ...) KD_LOG(Error, c, __VA_ARGS__)

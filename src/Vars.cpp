@@ -5,7 +5,9 @@
 
 void Vars::set(const String& name, const String& value) {
   for (auto& p : kv) if (p.first == name) { p.second = value; return; }
-  kv.push_back({name, value});
+  // Room for a UDP/OSC trigger's usual set at once: growing copies every String pair.
+  if (kv.empty()) kv.reserve(8);
+  kv.emplace_back(name, value);
 }
 
 const String* Vars::get(const String& name) const {

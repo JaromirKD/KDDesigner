@@ -49,7 +49,7 @@ rebuilt for that version too (the headers come from the package, the library fro
 
 Mbed's malloc wrappers (`mbed_alloc_wrappers.o`: a statistics mutex and memory tracing on every
 call, realloc as malloc + copy + free) made each allocation cost ~3000 CPU cycles. `src/Heap.cpp`
-has lean versions. `libmbed.a` is linked whole (`--whole-archive`), so Mbed's versions are made
+has lean versions, which also serve blocks up to 256 bytes from a pool (`src/HeapPool.h`). `libmbed.a` is linked whole (`--whole-archive`), so Mbed's versions are made
 **weak** in this copy of the library, and ours win. After rebuilding or replacing `libmbed.a`, run
 once (PowerShell, in the project folder):
 

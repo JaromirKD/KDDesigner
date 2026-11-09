@@ -7,15 +7,18 @@
 #include <drivers/Watchdog.h>
 #include "BigRam.h"
 #include "Board.h"
+#include "Cmd.h"
 #include "Config.h"
 #include "Dmx.h"
 #include "Drivers.h"
 #include "Log.h"
 #include "Mail.h"
 #include "Globals.h"
+#include "Heap.h"
 #include "Io.h"
 #include "Monitor.h"
 #include "Net.h"
+#include "NetRx.h"
 #include "Project.h"
 #include "Projectors.h"
 #include "Show.h"
@@ -38,6 +41,7 @@ uint32_t ticks = 0, lastDmxFrames = 0;
 Net::Counters lastNet = {};
 uint32_t lastUdp = 0;
 uint32_t tickUsMax = 0, loopUsMax = 0;
+uint32_t trigUs = 0, busyUs = 0;   // time in Triggers::poll / in the loop (not sleeping), summed per second
 uint32_t lastLowMemWarn = 0;
 
 // Identifies this build (Log::startReason tells a restart after flashing from a hang): a
@@ -77,9 +81,9 @@ int countCrash(bool crashed) {
 void updateHeap(uint32_t now) {
   struct mallinfo mi = mallinfo();
   uint32_t size = mbed_heap_size;
-  uint32_t free = (size > (uint32_t)mi.arena ? size - mi.arena : 0) + mi.fordblks;
+  uint32_t free = (size > (uint32_t)mi.arena ? size - mi.arena : 0) + mi.fordblks + Heap::poolFree();
   g_stats.heapSize = size;
-  g_stats.heapUsed = mi.uordblks;
+  g_stats.heapUsed = mi.uordblks - Heap::poolFree();
   g_stats.heapFree = free;
   if (!g_stats.heapMinFree || free < g_stats.heapMinFree) g_stats.heapMinFree = free;
   if (free < 32 * 1024 && (!lastLowMemWarn || now - lastLowMemWarn > 60000)) {
@@ -93,6 +97,9 @@ void updateStats(uint32_t now) {
   lastStats = now;
   updateHeap(now);
   g_stats.engineFps = ticks;
+  uint32_t parts[Show::kParts];
+  Show::takeTiming(parts);
+  for (int k = 0; k < Show::kParts; k++) g_stats.tickPartUs[k] = ticks ? parts[k] / ticks : 0;
   ticks = 0;
   uint32_t frames = Dmx::framesSent();
   g_stats.dmxFps = frames - lastDmxFrames;
@@ -106,7 +113,11 @@ void updateStats(uint32_t now) {
   lastNet.sacnRx = Net::counters.sacnRx;
   lastNet.sacnTx = Net::counters.sacnTx;
   g_stats.udpRxPs = Triggers::udpReceived() - lastUdp;
+  g_stats.udpDropped = NetRx::dropped();
   lastUdp = Triggers::udpReceived();
+  g_stats.trigUs = trigUs;
+  g_stats.busyUs = busyUs;
+  trigUs = busyUs = 0;
   g_stats.tickUsMax = tickUsMax;
   g_stats.loopUsMax = loopUsMax;
   tickUsMax = loopUsMax = 0;
@@ -155,6 +166,7 @@ void setup() {
   }
 
   Net::begin(Show::settings().net);
+  NetRx::begin();           // the network receive thread (UDP triggers, DMX input, ArtPoll)
   Board::begin();           // before Dmx: on the Machine Control it switches on the RS485 port
   Dmx::begin();
   Project::loadModules();   // after Net::begin: opens the UDP ports
@@ -194,9 +206,11 @@ void loop() {
   // millis(), and the engine must not see a start time in its future.
   now = millis();
   CRUMB("Net::poll");
-  Net::poll();   // under the lock: DMX-input frames are read by Triggers, set up by a project (re)load
+  Net::poll();   // ArtPoll answers, sACN group for DMX input (set up by a project (re)load)
   CRUMB("Triggers::poll");
+  uint32_t tp = micros();
   Triggers::poll(now);
+  trigUs += micros() - tp;
   if ((int32_t)(now - nextTick) >= 0) {
     nextTick += 1000 / Show::engineHz();
     if ((int32_t)(now - nextTick) > 200) nextTick = now;  // don't try to catch up after a stall
@@ -230,6 +244,7 @@ void loop() {
     Http::Response resp;
     while (Http::takeResponse(resp)) Triggers::onHttpResponse(resp.method, resp.url, resp.status, resp.body);
   }
+  Cmd::reloadDue();
   g_engine.unlock();
 
   CRUMB("Log::flush");
@@ -241,5 +256,6 @@ void loop() {
   CRUMB("stats / sleep");
   updateStats(now);
   loopUsMax = max(loopUsMax, micros() - t0);
+  busyUs += micros() - t0;
   rtos::ThisThread::sleep_for(1ms);
 }

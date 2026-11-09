@@ -4,6 +4,7 @@
 #include "stm32xx_emac.h"
 #include "Config.h"
 #include "Log.h"
+#include "NetRx.h"
 
 namespace {
 const uint16_t kArtPort = 6454;
@@ -107,9 +108,7 @@ void sendDiscover(uint32_t now) {
   memcpy(p + 28, mac, 6);
   const uint8_t opts[] = {99, 130, 83, 99, 53, 1, 1, 55, 2, 1, 3, 255};   // cookie, DISCOVER, ask mask/router
   memcpy(p + 236, opts, sizeof(opts));
-  probe.beginPacket(IPAddress(255, 255, 255, 255), 67);
-  probe.write(p, sizeof(p));
-  probe.endPacket();
+  probe.sendTo(IPAddress(255, 255, 255, 255), 67, p, sizeof(p));
 }
 // An OFFER for our DISCOVER: returns the server's address.
 bool offerSeen(IPAddress& server) {
@@ -162,13 +161,16 @@ struct DmxIn {
   uint32_t frames = 0;
   uint8_t data[512];
 };
+// Written by the receive thread (NetRx), read and set up by the main loop: under inLock.
 DmxIn dmxIns[KD_MAX_DMX_IN];
-int dmxInCount = 0;
+volatile int dmxInCount = 0;
+rtos::Mutex inLock;
 uint16_t sacnGroup = 0, sacnJoined = 0;   // wanted / joined multicast universe (0 = none)
-uint8_t rx[18 + 512];                     // Art-Net OpDmx is the biggest packet we read
+volatile bool pollAsked = false;          // an ArtPoll came in: the main loop answers
 
 // Stores a received frame for every DMX input that listens to this universe.
 void storeIn(bool sacn, uint16_t universe, const uint8_t* data, int len) {
+  inLock.lock();
   for (int i = 0; i < dmxInCount; i++) {
     DmxIn& d = dmxIns[i];
     if (d.sacn != sacn || d.universe != universe) continue;
@@ -177,6 +179,28 @@ void storeIn(bool sacn, uint16_t universe, const uint8_t* data, int len) {
     if (n < 512) memset(d.data + n, 0, 512 - n);
     d.frames++;
   }
+  inLock.unlock();
+}
+
+// In the receive thread (NetRx): what comes in on the Art-Net and sACN ports.
+void artIn(const uint8_t* rx, int n, const IPAddress& from, uint16_t) {
+  Net::counters.artRx++;
+  if (n < 10 || memcmp(rx, "Art-Net", 8) != 0) return;
+  uint16_t op = rx[8] | (rx[9] << 8);
+  if (op == 0x5000 && n >= 18 && dmxInCount && from != lastIp) {   // OpDmx
+    int dl = (rx[16] << 8) | rx[17];
+    storeIn(false, rx[14] | ((rx[15] & 0x7f) << 8), rx + 18, min(dl, n - 18));
+  } else if (op == 0x2000) {   // OpPoll
+    pollAsked = true;
+  }
+}
+void sacnIn(const uint8_t* p, int n, const IPAddress& from, uint16_t) {
+  Net::counters.sacnRx++;
+  // E1.31 data packet with a DMX start code, from another device.
+  if (!dmxInCount || n < 126 || memcmp(p + 4, "ASC-E1.17", 9) != 0 || p[21] != 0x04 || p[43] != 0x02 || p[125] != 0) return;
+  if (from == lastIp) return;
+  int count = ((p[123] << 8) | p[124]) - 1;
+  storeIn(true, (p[113] << 8) | p[114], p + 126, min(count, n - 126));
 }
 
 // Mbed's STM32 Ethernet driver ignores multicast joins (add_multicast_group does nothing),
@@ -203,6 +227,7 @@ void macAcceptGroup(uint16_t universe) {
 // when the multicast group for DMX input changes.
 void joinSacn() {
   if (sacnGroup == sacnJoined) return;
+  NetRx::unwatch(NetRx::kSacn);
   sacnUdp.stop();
   bool ok = sacnGroup ? sacnUdp.beginMulticast(IPAddress(239, 255, sacnGroup >> 8, sacnGroup & 0xff), kSacnPort) : sacnUdp.begin(kSacnPort);
   if (sacnGroup && !ok) { LOGW(Sacn, "Cannot join sACN universe %u (multicast) - only unicast sACN is received", sacnGroup); sacnUdp.begin(kSacnPort); }
@@ -213,6 +238,7 @@ void joinSacn() {
          (unsigned long)before, (unsigned long)ETH->MACPFR, (unsigned long)ETH->MACHT1R, (unsigned long)ETH->MACHT0R);
   }
   sacnJoined = sacnGroup;
+  NetRx::watch(NetRx::kSacn, &sacnUdp, sacnIn);
 }
 uint8_t artSeq[256];           // sequence counter per (low byte of) port address
 uint8_t sacnSeq[KD_MAX_UNIVERSES * 16];
@@ -242,9 +268,7 @@ void sendPollReply(IPAddress to) {
   for (int i = 0; i < 4; i++) pkt[207 + i] = ip[i];
   pkt[211] = 1;
   pkt[212] = 0x08;                                   // Status2: supports 15-bit port address
-  artUdp.beginPacket(to, kArtPort);
-  artUdp.write(pkt, 239);
-  artUdp.endPacket();
+  artUdp.sendTo(to, kArtPort, pkt, 239);
   Net::counters.pollReplies++;
 }
 }  // namespace
@@ -287,6 +311,8 @@ void begin(const NetConfig& cfg) {
 
   artUdp.begin(kArtPort);
   sacnUdp.begin(kSacnPort);
+  NetRx::watch(NetRx::kArtNet, &artUdp, artIn);
+  NetRx::watch(NetRx::kSacn, &sacnUdp, sacnIn);
   cacheOn();
   isUp = true;
   IPAddress ip = Ethernet.localIP();
@@ -356,55 +382,43 @@ void macAddress(uint8_t out[6]) { memcpy(out, mac, 6); }
 
 void poll() {
   if (!isUp) return;
-  int len;
-  IPAddress self = Ethernet.localIP();
-  while ((len = artUdp.parsePacket()) > 0) {
-    // Only DMX inputs need the whole packet; otherwise the header is enough.
-    int n = artUdp.read(rx, dmxInCount ? sizeof(rx) : 12);
-    artUdp.flush();
-    counters.artRx++;
-    if (n < 10 || memcmp(rx, "Art-Net", 8) != 0) continue;
-    uint16_t op = rx[8] | (rx[9] << 8);
-    if (op == 0x5000 && n >= 18 && dmxInCount && artUdp.remoteIP() != self) {   // OpDmx
-      int dl = (rx[16] << 8) | rx[17];
-      storeIn(false, rx[14] | ((rx[15] & 0x7f) << 8), rx + 18, min(dl, n - 18));
-    } else if (op == 0x2000) {  // OpPoll
-      LOGD(ArtNet, "ArtPoll from %s", artUdp.remoteIP().toString().c_str());
-      IPAddress ip = Ethernet.localIP();
-      IPAddress mask = Ethernet.subnetMask();
-      IPAddress bcast(ip[0] | ~mask[0], ip[1] | ~mask[1], ip[2] | ~mask[2], ip[3] | ~mask[3]);
-      sendPollReply(bcast);
-    }
+  // Receiving runs in NetRx's thread; the answers to an ArtPoll and a new sACN group are here.
+  if (pollAsked) {
+    pollAsked = false;
+    LOGD(ArtNet, "ArtPoll");
+    IPAddress ip = Ethernet.localIP();
+    IPAddress mask = Ethernet.subnetMask();
+    IPAddress bcast(ip[0] | ~mask[0], ip[1] | ~mask[1], ip[2] | ~mask[2], ip[3] | ~mask[3]);
+    sendPollReply(bcast);
   }
   joinSacn();
-  while ((len = sacnUdp.parsePacket()) > 0) {
-    int n = sacnUdp.read(pkt, sizeof(pkt));
-    sacnUdp.flush();
-    counters.sacnRx++;
-    // E1.31 data packet with a DMX start code, from another device.
-    if (!dmxInCount || n < 126 || memcmp(pkt + 4, "ASC-E1.17", 9) != 0 || pkt[21] != 0x04 || pkt[43] != 0x02 || pkt[125] != 0) continue;
-    if (sacnUdp.remoteIP() == self) continue;
-    int count = ((pkt[123] << 8) | pkt[124]) - 1;
-    storeIn(true, (pkt[113] << 8) | pkt[114], pkt + 126, min(count, n - 126));
-  }
 }
-
 void setDmxInputs(const bool* sacn, const uint16_t* universes, int n) {
-  dmxInCount = 0;
+  inLock.lock();
+  int count = 0;
   sacnGroup = 0;
-  for (int i = 0; i < n && dmxInCount < KD_MAX_DMX_IN; i++) {
-    DmxIn& d = dmxIns[dmxInCount++];
+  for (int i = 0; i < n && count < KD_MAX_DMX_IN; i++) {
+    DmxIn& d = dmxIns[count++];
     d.sacn = sacn[i];
     d.universe = universes[i];
     d.frames = 0;
     if (d.sacn && !sacnGroup && d.universe >= 1 && d.universe <= 63999) sacnGroup = d.universe;
   }
+  dmxInCount = count;
+  inLock.unlock();
 }
 
-const uint8_t* dmxIn(int i, uint32_t& frames) {
-  if (i < 0 || i >= dmxInCount) { frames = 0; return nullptr; }
-  frames = dmxIns[i].frames;
-  return frames ? dmxIns[i].data : nullptr;
+uint32_t dmxInFrames(int i) {
+  if (i < 0 || i >= dmxInCount) return 0;
+  return dmxIns[i].frames;
+}
+
+uint32_t dmxInCopy(int i, uint8_t* out) {
+  inLock.lock();   // the receive thread may be writing the next frame
+  uint32_t f = i >= 0 && i < dmxInCount ? dmxIns[i].frames : 0;
+  if (f) memcpy(out, dmxIns[i].data, 512);
+  inLock.unlock();
+  return f;
 }
 
 void sendArtDmx(uint16_t portAddress, const uint8_t* data512, IPAddress dest) {
@@ -420,9 +434,7 @@ void sendArtDmx(uint16_t portAddress, const uint8_t* data512, IPAddress dest) {
   pkt[15] = (portAddress >> 8) & 0x7f;               // Net
   put16be(pkt + 16, 512);
   memcpy(pkt + 18, data512, 512);
-  artUdp.beginPacket(dest, kArtPort);
-  artUdp.write(pkt, 18 + 512);
-  artUdp.endPacket();
+  artUdp.sendTo(dest, kArtPort, pkt, 18 + 512);
   counters.artTx++;
 }
 
@@ -447,9 +459,7 @@ void sendSacn(uint16_t universe, const uint8_t* data512, uint8_t priority) {
   put16be(pkt + 123, 513);                           // property value count
   pkt[125] = 0;                                      // start code
   memcpy(pkt + 126, data512, 512);
-  sacnUdp.beginPacket(IPAddress(239, 255, universe >> 8, universe & 0xff), kSacnPort);
-  sacnUdp.write(pkt, 638);
-  sacnUdp.endPacket();
+  sacnUdp.sendTo(IPAddress(239, 255, universe >> 8, universe & 0xff), kSacnPort, pkt, 638);
   counters.sacnTx++;
 }
 

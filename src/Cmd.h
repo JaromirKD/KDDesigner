@@ -45,4 +45,7 @@
 namespace Cmd {
 bool exec(const String& line, String& reply, const char* source, const Vars* vars = nullptr);
 std::vector<String> tokenize(const String& line);
+// A "reload" asked by a trigger's actions waits for the run to end: call from the main loop
+// (holding g_engine). True if it reloaded.
+bool reloadDue();
 }
