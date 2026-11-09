@@ -13,3 +13,11 @@ PlatformIO uses a library in this folder instead of the core's library with the 
   (`src/NetRx.cpp`): `sendTo()` (one datagram straight from a buffer, socket stays non-blocking),
   `receive()` (into the caller's buffer) and `onEvent()` (the socket's sigio). See the comments there. Everything else is unchanged; when moving to a new core
   version, copy its SocketWrapper here again and re-apply the fix (or drop it if Arduino fixed it).
+- `Arduino_USBHostMbed5/` - the USB stick driver, version 0.3.1 from the PlatformIO registry
+  (`facchinm/Arduino_USBHostMbed5`, taken out of `lib_deps`; `.github`/`examples` left out).
+  One change in `src/USBHostMSD/USBHostMSD.cpp` (9 Nov 2026): `program()` / `read()` send up to
+  `KD_MSD_BLOCKS` (64) blocks per SCSI command instead of one 512-byte block each. Every command
+  is a command packet, a status reply and the stick's own delay, so writing ran at ~100 KB/s;
+  now ~200 KB/s (a 456 KB project: 4.7 s -> 2.3 s, read back identical). The driver doesn't
+  use DMA (`dma_enable = 0`) and splits the data into USB packets itself. To update the
+  library, copy the new version here and re-apply the two loops (search "KD Designer").

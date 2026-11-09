@@ -75,6 +75,12 @@ struct Trigger {
   String onlyGroup;             // "onlyIn": only fires (not by hand) while this group is in one of onlyStates
   std::vector<String> onlyStates;
   bool internal = false;        // a mode state's enter / leave actions (not in the project's list)
+  // udp / osc "latest": a fader sends far more values than anyone can see. Runs at most once
+  // per KD_LATEST_MS with the newest value; the one that arrives meanwhile waits in heldVars
+  // (always run in the end, so the fader's last position is never lost).
+  bool latest = false, held = false;
+  uint32_t latestAt = 0;
+  Vars heldVars;
 };
 
 // A mode state's "enter" / "leave" actions run as hidden Manual triggers (so sleep, wait and
@@ -492,6 +498,32 @@ void senderVars(Vars& vars, IPAddress from, uint16_t fromPort, int listener) {
   vars.set("socket", String(listener));
 }
 
+int heldCount = 0;              // triggers with a held "latest" value
+void fireNetwork(Trigger& t, const char* reason, const Vars& vars) {
+  if (!t.latest) { runTrigger(t, reason, &vars); return; }
+  uint32_t now = millis();
+  if (!t.held && now - t.latestAt >= KD_LATEST_MS) {
+    t.latestAt = now;
+    runTrigger(t, reason, &vars);
+    return;
+  }
+  if (!t.held) heldCount++;
+  t.held = true;
+  t.heldVars = vars;   // a newer value replaces the one that waited
+}
+// The held values whose time has come (main loop, after handleUdp).
+void runHeld(uint32_t now) {
+  if (!heldCount) return;
+  for (auto& t : triggers) {
+    if (!t.held || now - t.latestAt < KD_LATEST_MS) continue;
+    t.held = false;
+    heldCount--;
+    t.latestAt = now;
+    Vars v = t.heldVars;   // runTrigger may hold a new one meanwhile (a reply that comes back)
+    runTrigger(t, t.type == Type::Osc ? "osc" : "udp", &v);
+  }
+}
+
 void handleOsc(UdpListener& l, int listener, IPAddress from, uint16_t fromPort, const String& address, const std::vector<String>& args) {
   LOGD(Trig, "OSC :%u from %s: %s (%d args)", l.port, from.toString().c_str(), address.c_str(), (int)args.size());
   Vars vars;
@@ -501,7 +533,7 @@ void handleOsc(UdpListener& l, int listener, IPAddress from, uint16_t fromPort, 
   for (auto& t : triggers) {
     if (!t.enabled || t.type != Type::Osc || t.udpPort != l.port) continue;
     if (t.hasFromIp && t.fromIp != from) continue;
-    if (Osc::match(t.match.c_str(), address.c_str())) runTrigger(t, "osc", &vars);
+    if (Osc::match(t.match.c_str(), address.c_str())) fireNetwork(t, "osc", vars);
   }
 }
 
@@ -565,7 +597,7 @@ void handleUdp() {
     for (auto& t : triggers) {
       if (!t.enabled || t.type != Type::Udp || t.udpPort != l.port) continue;
       if (t.hasFromIp && t.fromIp != from) continue;
-      if (udpMatches(t.match, msg, vars)) { runTrigger(t, "udp", &vars); matched = true; }
+      if (udpMatches(t.match, msg, vars)) { fireNetwork(t, "udp", vars); matched = true; }
     }
     if (!matched) LOGD(Trig, "UDP '%s' matched no trigger", msg.c_str());
   }
@@ -608,6 +640,7 @@ namespace Triggers {
 void load() {
   triggers.clear();
   scheduled.clear();
+  heldCount = 0;
   ownSeen = false;
   bool inSacn[KD_MAX_DMX_IN];
   uint16_t inUni[KD_MAX_DMX_IN];
@@ -656,6 +689,7 @@ void load() {
         t.udpPort = o["port"] | Show::settings().udpPort;
         const char* from = o["fromIp"] | "";
         t.hasFromIp = *from && t.fromIp.fromString(from);
+        t.latest = o["latest"] | false;
         break;
       }
       case Type::Input: {
@@ -795,6 +829,7 @@ void startup() {
 void poll(uint32_t now) {
   udpPollStart = micros();
   handleUdp();
+  runHeld(now);
 
   struct tm tmv;
   time_t utc = time(nullptr);

@@ -70,7 +70,8 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 #define KD_MAX_SCHEDULED 100      // waiting "sleep"s, "wait until"s, loops, delayed fires and repeats together
 #define KD_TRIGGER_HISTORY 512    // last fires kept for the history strip on the Triggers page (8 bytes each)
 #define KD_MAX_DMX_IN 4           // Art-Net / sACN universes received for "DMX input" triggers (512 bytes each)
-#define KD_WAIT_CHECK_MS 100      // how often "wait until <condition>" is checked
+#define KD_LATEST_MS 25           // udp/osc trigger with "latest value only" (faders): runs at most this often
+#define KD_WAIT_CHECK_MS 100     // how often "wait until <condition>" is checked
 #define KD_UDP_BUDGET_US 6000     // UDP/OSC trigger messages handled per main-loop round (time), the rest waits
 #define KD_BURST_BUDGET_US 3000   // "repeat <n> times" without every: rounds per main-loop round (time), the rest next round
 

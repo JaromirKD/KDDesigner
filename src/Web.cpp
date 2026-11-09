@@ -331,7 +331,9 @@ void handleProjectPut(EthernetClient& c, size_t len) {
   if (!Storage::mounted()) { sendResult(c, false, "No storage device"); return; }
   BigRam::Buffer body;
   Log::crumb(Log::kCrumbWeb, "save: receiving");
+  uint32_t t0 = millis();
   if (!readBody(c, len, body)) { sendResult(c, false, body.data ? "Upload incomplete" : "Project too big for the memory"); return; }
+  uint32_t t1 = millis();
   String err;
   Log::crumb(Log::kCrumbWeb, "save: waiting for g_engine");
   g_engine.lock();
@@ -345,6 +347,7 @@ void handleProjectPut(EthernetClient& c, size_t len) {
     Triggers::startup();
   }
   g_engine.unlock();
+  uint32_t t2 = millis();
   Log::crumb(Log::kCrumbWeb, "save: writing the stick");
   if (!ok) { LOGW(Web, "Rejected project upload: %s", err.c_str()); sendResult(c, false, err); return; }
 
@@ -356,7 +359,10 @@ void handleProjectPut(EthernetClient& c, size_t len) {
   remove(KD_PROJECT_BAK);
   rename(KD_PROJECT_PATH, KD_PROJECT_BAK);
   rename(KD_PROJECT_TMP, KD_PROJECT_PATH);
-  LOGI(Web, "Project saved to the storage device (%u bytes)", (unsigned)body.len);
+  uint32_t t3 = millis();
+  // Where a slow save spends its time: receiving it, loading it into the engine, the stick.
+  LOGI(Web, "Project saved (%u bytes: received %lu ms, loaded %lu ms, stick %lu ms)", (unsigned)body.len,
+       (unsigned long)(t1 - t0), (unsigned long)(t2 - t1), (unsigned long)(t3 - t2));
   sendResult(c, true, "Saved and loaded");
 }
 

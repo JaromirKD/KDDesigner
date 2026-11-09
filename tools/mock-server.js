@@ -1974,7 +1974,7 @@ http.createServer(async (req, res) => {
     fs.writeFileSync(PROJECT, b);
     if (safeMode) { safeMode = false; log(1, 'TRIG', 'Safe mode off - triggers run again'); }
     loadProject();
-    log(1, 'WEB', `Project saved to the storage device (${b.length} bytes)`);
+    log(1, 'WEB', `Project saved (${b.length} bytes)`);
     return json(res, 200, { ok: true, reply: 'Saved and loaded' });
   }
   if (p === '/api/cmd') {

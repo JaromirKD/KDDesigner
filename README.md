@@ -292,6 +292,7 @@ The live output of one universe (after grand master), 4 times a second.
   - `startup`, `time` (**Time of day / sunrise / sunset**: a clock time HH:MM:SS, or sunrise or sunset with an offset in minutes, `-15` = 15 min before; + weekdays; the list shows sunrise/sunset ones as `sunrise`/`sunset`), `interval`, `input` (a Portenta GPIO pin, or a Machine Control input; debounced) and `timeline_end`.
   - `udp`: matches a message exactly or by `prefix*` (the rest goes into `{1}`). It can listen on its own `port` and only accept one sender (`fromIp`).
   - `osc`: matches an OSC address with `*`/`?` wildcards; the arguments go into `{1}…{n}`. UDP and OSC share up to 6 listen ports.
+  - **Latest value only** (`latest`, udp and osc): for faders and sliders. The trigger runs at most 40 times a second, always with the newest value; values in between are skipped, and the fader's last position always arrives. A fast fader then never hits the 100-fires-a-second loop protection. Leave it off for buttons: two presses close together would count as one.
   - `projector` (**Projector alarm**): a projector's PJLink error status or lamp hours, checked at every monitoring poll. Pick a projector (or any) and the alarm:
     - an error part (`fan`, `lamp`, `temperature`, `cover`, `filter`, `other`, or **any**), firing when it **gets worse** (to warning or error), **becomes an error**, or **is ok again**;
     - **lamp hours reach a limit** (e.g. 4000): fires once when the lamp hours pass it.
@@ -572,14 +573,14 @@ Measured on 9 Nov 2026 on a Portenta Machine Control with a deliberately extreme
 | Art-Net + sACN together | 16 universes (8 + 8) at ~63 fps, ~1000 packets/s, frame 8 ms | 16 universes, ~1000 packets/s |
 | UDP / OSC messages in | 900 messages/s with none lost (evenly spaced); ~0.1 ms of controller time each | ~350-400 fires/s, the rest lost |
 | Messages arriving all at once | the Ethernet chip holds ~7: more back to back (within a fraction of a millisecond) are lost. Senders that spread their messages are fine | the same |
-| One trigger | max 100 fires per second, then paused 10 s (loop protection, above): a fast OSC fader on one trigger hits this | the same |
+| One trigger | max 100 fires per second, then paused 10 s (loop protection, above): a fast OSC fader on one trigger hits this, unless the trigger has **Latest value only** (max 40 runs a second) | the same |
 | UDP round trip (`reply`) | ~2 ms typical, p99 ~17 ms | 3-7 ms, up to ~15 ms |
 | Sending | 500 UDP or OSC messages in ~0.17 s **while the lights keep running at 40 fps** (a burst runs a few ms at a time between frames); 100 TCP lines in ~0.03 s; at most 16 HTTP requests waiting (more are refused: "HTTP queue full") | lights stopped for the 0.2 s of a burst |
 | `repeat … every 0.01` | 1000 messages in 10.0 s, gaps 10 ms typical, up to ~30 ms | gaps up to ~50 ms |
 | Web API | ~90 requests/s from one client, ~140/s from 4 | ~65/s, ~90/s |
 | Everything at once | 16 universes out + 330 messages/s in (UDP, OSC, echo) + 2 web clients: lights at ~38 fps, **no messages lost**, no restart | lights at ~36 fps, 7-10% lost |
 | Memory | free with Ledtest 211 KB (was 176 KB); with this show 206 KB (was 167 KB): triggers no longer use the small memory (~400 bytes each before) | |
-| Saving a project | ~36 KB/s onto the stick (a 400 KB show takes ~11 s; the lights keep running) | the same |
+| Saving a project | a 456 KB show in 8.2 s: receiving 1.8 s, loading 4.1 s, writing the stick 2.3 s (~200 KB/s); a 38 KB show in 0.5 s. The lights keep running. The log line "Project saved (… received / loaded / stick … ms)" shows where the time goes | 12.7 s, the stick part ~6.8 s (one 512-byte block per USB command) |
 
 `/api/status` shows where the time goes: `stats.tickParts` (effects, fades, mixing, sending in µs per frame), `trigUs` and `busyUs` (µs per second in trigger handling / in the main loop, 1 000 000 = all of it) and `udpDropped` (messages the receive queue had no room for).
 

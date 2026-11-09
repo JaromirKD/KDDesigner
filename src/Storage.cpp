@@ -110,15 +110,24 @@ bool writeFile(const char* path, const char* data, size_t len) {
   if (!isMounted) return false;
   FILE* f = fopen(path, "wb");
   if (!f) return false;
-  // In blocks through internal RAM: data may be in cached SDRAM (see readFile).
-  char buf[512];
+  // In blocks through internal RAM: data may be in cached SDRAM (see readFile). Big blocks:
+  // every write is a USB command to the stick with its own round trip, so 512-byte pieces
+  // (one sector each) made a save crawl at ~36 KB/s. 16 sectors at a time go as one command.
+  // Unbuffered, so stdio doesn't cut them up again into its own 1 KB pieces.
+  setvbuf(f, nullptr, _IONBF, 0);
+  static const size_t kBig = 8192;
+  char small[512];
+  char* buf = (char*)malloc(kBig);
+  size_t size = buf ? kBig : sizeof(small);
+  if (!buf) buf = small;
   size_t n = 0;
   while (n < len) {
-    size_t k = min(sizeof(buf), len - n);
+    size_t k = min(size, len - n);
     memcpy(buf, data + n, k);
     if (fwrite(buf, 1, k, f) != k) break;
     n += k;
   }
+  if (buf != small) free(buf);
   fclose(f);
   return n == len;
 }

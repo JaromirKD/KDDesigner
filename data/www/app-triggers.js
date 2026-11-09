@@ -121,12 +121,14 @@ views.triggers = () => {
         params = `<label>Message</label><input data-p="${base}.match" value="${esc(t.match || '')}" placeholder="GO   or   SHOW*  (prefix)">
           <label>Listen port</label><input type="number" min="1" max="65535" data-p="${base}.port" data-t="num" value="${t.port ?? ''}" placeholder="${p.settings.udpPort} (default)">
           <label>From IP</label><input data-p="${base}.fromIp" value="${esc(t.fromIp || '')}" placeholder="any sender" pattern="^(\\d{1,3}\\.){3}\\d{1,3}$">
+          ${latestField(t, base)}
           <label></label><span class="muted">Max 6 different ports in total. On the default port, messages starting with <code>cmd:</code> are executed directly.</span>`;
         break;
       case 'osc':
         params = `<label>OSC address</label><input data-p="${base}.address" value="${esc(t.address || '')}" placeholder="/show/start   or   /cue/*  (* and ? wildcards)">
           <label>Listen port</label><input type="number" min="1" max="65535" data-p="${base}.port" data-t="num" value="${t.port ?? ''}" placeholder="${p.settings.udpPort} (default)">
-          <label>From IP</label><input data-p="${base}.fromIp" value="${esc(t.fromIp || '')}" placeholder="any sender">`;
+          <label>From IP</label><input data-p="${base}.fromIp" value="${esc(t.fromIp || '')}" placeholder="any sender">
+          ${latestField(t, base)}`;
         break;
       case 'mode':
       {
@@ -509,6 +511,13 @@ views.triggers.after = () => {
   wireOnlyIn();
 };
 
+// UDP / OSC "latest" (Triggers.cpp fireNetwork): a fader's flood of values runs at most 40 times
+// a second with the newest one, and the last value always arrives.
+function latestField(t, base) {
+  return `<label title="For faders and sliders: runs at most 40 times a second, always with the newest value; the values in between are skipped. The fader's last position always arrives. Leave it off for buttons: two presses close together would count as one.">Latest value only</label>
+    <div class="row nowrap"><input type="checkbox" data-p="${base}.latest" data-t="bool"${t.latest ? ' checked' : ''} data-r>
+      <span class="muted">${t.latest ? 'fader: at most 40 runs a second, with the newest value' : 'off: every message runs (buttons, cues)'}</span></div>`;
+}
 // "Hold for" / "within" fields of an input or panel trigger with edge/event hold or double.
 function holdDoubleFields(t, base, ev) {
   if (ev === 'hold') return `<label>Hold for</label><div class="row nowrap"><input type="number" min="0.1" step="0.5" data-p="${base}.hold" data-t="num" value="${t.hold ?? 2}" style="width:90px"><span class="muted">s</span></div>`;

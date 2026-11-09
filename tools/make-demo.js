@@ -193,6 +193,7 @@ trig('UDP SHOW <name>', 'udp', { match: 'SHOW*' }, ['log UDP asked for show {1} 
 trig('UDP PING', 'udp', { match: 'PING' }, ['reply PONG {visitors} {mode.System}\\r']);
 trig('UDP from QLab only (port 7001)', 'udp', { match: 'GO', port: 7001, fromIp: '192.168.1.51' }, ['fire trigger "Start main show"']);
 trig('OSC /kd/cue/*', 'osc', { address: '/kd/cue/*', port: 8000 }, ['log QLab says {address} {1}']);
+trig('OSC fader -> grand master', 'osc', { address: '/kd/master', port: 8000, latest: true }, ['grandmaster {1}'], [], { notes: 'A TouchOSC fader sending 0-100. "Latest value only": at most 40 runs a second, with the newest value.' });
 trig('Visitor counted (UDP)', 'udp', { match: 'VISITOR' }, ['var visitors + 1', 'if var visitors >= 50 then panel lbl_status text FULL ({visitors})']);
 trig('Watchout answers', 'tcp', { device: 'watchout', match: 'ACK*' }, ['log Watchout says {1}']);
 trig('Media server status', 'http', { url: 'http://192.168.1.95' }, ['if var media_status != {status} then var media_status = {status}']);
