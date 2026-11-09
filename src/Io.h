@@ -4,8 +4,8 @@
 #include "Globals.h"
 
 // Generic network I/O, like Medialon's generic TCP/IP and Modbus devices,
-// plus an HTTP client. Everything runs in one "io" thread
-// (also NTP), so a slow device never blocks the show engine.
+// plus an HTTP client. Everything runs in one "io" thread, so a slow device never blocks the
+// show engine (NTP has its own thread, Clock.cpp).
 
 namespace Io {
 void begin();       // starts the io thread

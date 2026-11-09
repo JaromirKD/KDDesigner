@@ -348,7 +348,6 @@ void timed(const char* what, void (*job)()) {
 void run() {
   rtos::ThisThread::sleep_for(3s);  // let the network come up
   for (;;) {
-    timed("clock (NTP)", Clock::service);
     dev.lock();
     timed("TCP devices", tcpService);
     timed("Modbus", modbusService);

@@ -1,9 +1,10 @@
 # Next steps
 
-State on 6 Nov 2026: all features in the README are built and tested in the mock. **First run on
+State on 9 Nov 2026: all features in the README are built and tested in the mock. **First run on
 a Portenta Machine Control** on 6 Nov: boot, stick, network, web UI, saving, Art-Net/sACN output,
 effects, UDP triggers and the network update work (see HARDWARE-TEST-PLAN.md for what was found
-and fixed). Firmware 0.1.1: RAM ~25 %, flash ~74 % (Machine Control ~26 % / ~79 %).
+and fixed). **9 Nov**: stress test and two rounds of speed-ups (README "Capacity (measured)"),
+installed as **0.2.0** by network update. Machine Control build: RAM ~28 %, flash ~86 %.
 `backup-before-tidy.zip` in the project folder is the state before the first tidy-up.
 
 ## 1. Git - done 2 Nov 2026
@@ -157,7 +158,7 @@ Still open:
 - ~~NTP blocked the I/O thread every minute~~ - fixed: with no DNS answer (router off) a try took
   ~17 s on the I/O thread, which also polls PLCs and TCP devices (PLC gaps of 17 s). Now the
   name is resolved first (Arduino's `beginPacket(host)` "succeeded" without an address) and
-  failed tries back off 1, 2, 4 … 30 min. Better still: NTP in its own thread.
+  failed tries back off 1, 2, 4 … 30 min. NTP now has its own thread (9 Nov 2026).
 - ~~sACN input did not fire~~ - fixed 6 Nov 2026. Unicast always worked: a "changes" `dmx_in`
   trigger logs "fired" at debug level, which the trigger test looks for (`trigtest.js` should
   check the grand master instead). Multicast never arrived: Mbed's STM32 EMAC driver has
@@ -171,12 +172,17 @@ Still open:
   it ahead) and re-fired all its cues 40 times a second, for ever (status `pos` ~3.7e9). Now
   `updateTimeline` uses a signed difference and the loop reads `now` after taking the lock.
   Worth checking the other `now - x.start` fades / effects for the same pattern.
-- **Engine load with a big show**: the feature demo's Inloop takes ~6-12 ms of the 25 ms tick
-  (measured again after the fix above, which may have caused the earlier 23 ms spikes), and then
-  the DMX port drops to ~22 fps. Profile `Show::tick` / `sendOutputs` / effects.
-- **NTP in its own thread**: a failed DNS lookup still blocks the I/O thread (PLC, TCP devices)
-  ~15 s once per back-off step. Small: "Web UI on http://0.0.0.0/" is logged when started without
-  a cable (the address follows later).
+- ~~Engine load with a big show~~ - profiled and sped up 9 Nov 2026 (13 -> 7 ms for 1360 pixels
+  with effects; `stats.tickParts` in the status shows the parts). Still to check: the feature
+  demo's Inloop with a DMX fixture on the port (it dropped to ~22 fps before).
+- ~~NTP in its own thread~~ - done 9 Nov 2026 (the no-DNS case itself not reproduced on the board).
+  Small: "Web UI on http://0.0.0.0/" is logged when started without a cable (the address follows later).
+- **Long run** with the stress show (hours, traffic on all inputs): the 9 Nov changes (receive
+  thread, small-block heap, triggers in SDRAM) were only tested for minutes. Watch free heap, restarts,
+  Art-Net gaps.
+- Thread stacks with little room (`osThreadGetStackSpace`, 9 Nov): `lwip_tcpip` ~370-410 bytes free
+  (its size is set in the rebuilt `libmbed.a`), `USBevt` (Arduino's USB serial) 120 of 256. Fine in
+  all tests so far; look there first if the board ever crashes under network load.
 - **Heap**: ~196 KB is used with an empty show (thread stacks ~80 KB, network, USB); the feature
   demo leaves ~100 KB free. Trim thread stacks after measuring them (Mbed stack stats are enabled).
 - Small: a timeline master set while it is releasing ends the release early in the mock but not
@@ -197,5 +203,5 @@ Still open:
 ## 6. Later
 - **First test on the Portenta** (step by step in [HARDWARE-TEST-PLAN.md](HARDWARE-TEST-PLAN.md); started 6 Nov 2026, see 5c): USB stick mount, Ethernet, DMX timing on the RS485 pins (check `Config.h` against the carrier board), Art-Net/sACN, the web UI from the stick (copy the whole new `www` folder), and effects (`Fx.cpp` has only been checked by reading).
   **Watchdog** (added 1 Nov 2026): after a normal boot "Last start" should say `power on`; a project save with a big rig must not trip it (15 s); a network update must still install (the bootloader runs after a system reset, which stops the watchdog). Test a hang once, e.g. a temporary `while (1) {}` in a command, and check the board comes back with `watchdog`.
-- **Network update on hardware** (`src/Update.cpp`, written from Arduino's Portenta OTA library without having run): bootloader version shown on Settings; QSPI partition 2 created/mounted on first boot; a `.kdupdate` with a raised `KD_VERSION` installs and the log says "installed" after the restart. Check whether the bootloader deletes `UPDATE.BIN` itself (then the "installed / NOT installed" check can't run and needs another way). Also watch the engine during the upload: the HTTP thread writes ~1.4 MB to QSPI and the stick.
+- ~~Network update on hardware~~ - works: 0.1.0 -> 0.1.1 on 6 Nov, 0.1.1 -> 0.2.0 on 9 Nov 2026 (HARDWARE-TEST-PLAN). Original notes: (`src/Update.cpp`, written from Arduino's Portenta OTA library without having run): bootloader version shown on Settings; QSPI partition 2 created/mounted on first boot; a `.kdupdate` with a raised `KD_VERSION` installs and the log says "installed" after the restart. Check whether the bootloader deletes `UPDATE.BIN` itself (then the "installed / NOT installed" check can't run and needs another way). Also watch the engine during the upload: the HTTP thread writes ~1.4 MB to QSPI and the stick.
 - Ideas mentioned along the way: more effect templates using `y`, e.g. ripple and radar (see the conversation of 31 Oct).

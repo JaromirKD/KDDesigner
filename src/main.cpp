@@ -7,6 +7,7 @@
 #include <drivers/Watchdog.h>
 #include "BigRam.h"
 #include "Board.h"
+#include "Clock.h"
 #include "Cmd.h"
 #include "Config.h"
 #include "Dmx.h"
@@ -172,6 +173,7 @@ void setup() {
   Project::loadModules();   // after Net::begin: opens the UDP ports
   // Worker threads start once everything is loaded.
   Io::begin();
+  Clock::begin();           // NTP in its own thread: a slow DNS answer must not hold up the I/O thread
   Monitor::begin();
   Mail::begin();
   Projectors::begin();

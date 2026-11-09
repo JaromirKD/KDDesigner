@@ -375,7 +375,7 @@ The live output of one universe (after grand master), 4 times a second.
 ## Schedule
 
 - **Schedule** page (like the Medialon scheduler):
-  - Clock with **NTP** sync (`settings.time.ntp`, at boot and every 6 h, `ntp sync`), time zone and automatic **summer time** (EU/US).
+  - Clock with **NTP** sync (`settings.time.ntp`, at boot and every 6 h, `ntp sync`), time zone and automatic **summer time** (EU/US). Without internet or DNS a try can take ~15 s; it runs on its own, so PLCs, TCP devices and HTTP requests carry on meanwhile. Failed tries wait 1, 2, 4 … 30 minutes before the next.
   - **Sunrise/sunset** from `settings.location` (lat/lon): time triggers at `sunset` with an offset (`-15` = 15 min before), and conditions like `time between sunset 23:00`.
   - **Calendar periods** (`calendar`: name + from/to, `MM-DD` = every year, `YYYY-MM-DD` = once) for holidays and seasons: `calendar Closed inactive`, `date between 07-01 08-31`.
   - A **next 7 days** overview of all timed triggers, showing which are skipped by calendar/date conditions.

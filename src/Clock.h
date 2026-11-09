@@ -11,7 +11,7 @@
 //    MM-DD repeats every year, YYYY-MM-DD is a one-off.
 namespace Clock {
 void load();                               // caller holds g_engine
-void service();                            // io thread: NTP
+void begin();                              // starts the NTP thread (after Net::begin)
 void syncNow();
 
 bool localTime(struct tm& out);            // false while the clock is not set

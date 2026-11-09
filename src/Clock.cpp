@@ -109,24 +109,29 @@ int sunUtcMinutes(int y, int m, int d, bool rise) {
   return (int)lround(720 - 4 * (lon + (rise ? ha : -ha)) - eq);
 }
 
-// Failed tries in a row: the next one waits 1, 2, 4, ... 30 minutes. A try blocks the I/O
-// thread (which also polls PLCs and TCP devices) up to ~17 s when no DNS server answers,
-// e.g. with the router off, so it must not run every minute.
+// Failed tries in a row: the next one waits 1, 2, 4, ... 30 minutes. A try can take ~17 s when
+// no DNS server answers (router off). It runs in its own thread ("ntp"): on the I/O thread it
+// held up the PLC polls and TCP devices for that long.
 uint8_t ntpFails = 0;
+rtos::EventFlags wake;          // syncNow(): try now instead of at the next check
+void setError(const String& e) { mtx.lock(); lastError = e; mtx.unlock(); }   // statusJson reads it in the web thread
 uint32_t retryMs() { return ntpFails >= 5 ? 30UL * 60000 : 60000UL << ntpFails; }
 
 void ntpSync() {
   lastTryMs = millis();
   ntpFails = min(ntpFails + 1, 10);   // cleared when a reply arrives
+  mtx.lock();
+  String name = ntpServer;            // a project reload may change it meanwhile
+  mtx.unlock();
   // Resolve first: Arduino's beginPacket(host) "succeeds" without an address and sends to 0.0.0.0.
   IPAddress server;
-  if (!server.fromString(ntpServer) && !Ethernet.hostByName(ntpServer.c_str(), server)) {
-    lastError = "cannot resolve " + ntpServer + " (no DNS answer: router / internet off?)";
-    LOGW(Sys, "NTP: %s - next try in %lu min", lastError.c_str(), (unsigned long)(retryMs() / 60000));
+  if (!server.fromString(name) && !Ethernet.hostByName(name.c_str(), server)) {
+    setError("cannot resolve " + name + " (no DNS answer: router / internet off?)");
+    LOGW(Sys, "NTP: cannot resolve %s (no DNS answer: router / internet off?) - next try in %lu min", name.c_str(), (unsigned long)(retryMs() / 60000));
     return;
   }
   EthernetUDP u;
-  if (!u.begin(2390)) { lastError = "no UDP socket"; return; }
+  if (!u.begin(2390)) { setError("no UDP socket"); return; }
   uint8_t pkt[48] = {0};
   pkt[0] = 0x23;  // LI 0, version 4, client mode
   u.beginPacket(server, 123);
@@ -139,17 +144,17 @@ void ntpSync() {
     rtos::ThisThread::sleep_for(std::chrono::milliseconds(20));
   }
   u.stop();
-  if (!got) { lastError = "no reply from " + ntpServer; LOGW(Sys, "NTP: %s - next try in %lu min", lastError.c_str(), (unsigned long)(retryMs() / 60000)); return; }
+  if (!got) { setError("no reply from " + name); LOGW(Sys, "NTP: no reply from %s - next try in %lu min", name.c_str(), (unsigned long)(retryMs() / 60000)); return; }
   ntpFails = 0;
   uint32_t secs = ((uint32_t)pkt[40] << 24) | (pkt[41] << 16) | (pkt[42] << 8) | pkt[43];
   uint32_t unix = secs - 2208988800UL;
-  if (unix < 1600000000UL) { lastError = "bad time from server"; return; }
+  if (unix < 1600000000UL) { setError("bad time from server"); return; }
   int32_t off = (int32_t)(unix - (uint32_t)time(nullptr));
   set_time(unix);
   lastSync = unix;
   lastOffset = off;
-  lastError = "";
-  if (!syncedOnce || abs(off) > 2) LOGI(Sys, "Clock synced via NTP %s (was %+ld s off)", ntpServer.c_str(), (long)off);
+  setError("");
+  if (!syncedOnce || abs(off) > 2) LOGI(Sys, "Clock synced via NTP %s (was %+ld s off)", name.c_str(), (long)off);
   syncedOnce = true;
 }
 }  // namespace
@@ -181,17 +186,24 @@ void load() {
   mtx.unlock();
 }
 
-void service() {
-  if (!ntpEnabled || !Net::up() || !ntpServer.length()) return;
-  uint32_t now = millis();
-  bool due = forceSync || (!syncedOnce && (!lastTryMs || now - lastTryMs > retryMs())) ||
-             (syncedOnce && now - lastTryMs > 6UL * 3600 * 1000);
-  if (!due) return;
-  forceSync = false;
-  ntpSync();
+void begin() {
+  static rtos::Thread thread(osPriorityNormal, 4096, nullptr, "ntp");   // DNS + UDP: needs some stack
+  thread.start([] {
+    rtos::ThisThread::sleep_for(std::chrono::seconds(3));   // let the network come up
+    for (;;) {
+      uint32_t now = millis();
+      bool due = forceSync || (!syncedOnce && (!lastTryMs || now - lastTryMs > retryMs())) ||
+                 (syncedOnce && now - lastTryMs > 6UL * 3600 * 1000);
+      if (due && ntpEnabled && Net::up() && ntpServer.length()) {
+        forceSync = false;
+        ntpSync();
+      }
+      wake.wait_any_for(1, std::chrono::seconds(1));
+    }
+  });
 }
 
-void syncNow() { forceSync = true; }
+void syncNow() { forceSync = true; wake.set(1); }
 
 bool localTime(struct tm& out) {
   time_t utc = time(nullptr);
@@ -270,7 +282,10 @@ void statusJson(JsonObject o) {
   n["server"] = ntpServer;
   n["lastSync"] = lastSync;
   n["offset"] = lastOffset;
-  if (lastError.length()) n["error"] = lastError;
+  mtx.lock();
+  String err = lastError;
+  mtx.unlock();
+  if (err.length()) n["error"] = err;
   if (hasLocation) {
     o["lat"] = lat;
     o["lon"] = lon;
