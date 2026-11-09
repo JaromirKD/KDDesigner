@@ -23,6 +23,40 @@ void readPhy() {
 }
 void askPhy() { mbed::mbed_event_queue()->call(readPhy); }
 
+// ---- Data cache ----------------------------------------------------------------------
+// Mbed's H7 Ethernet driver switches the CPU's data cache off when it starts (it does no
+// cache upkeep for its DMA buffers). With it off every variable, stack and table access
+// went to RAM at full latency: the whole firmware ran several times slower (effects ~64 us
+// per fixture). It is switched back on, safely for the Ethernet DMA:
+// - write-through for all memory (FORCEWT): what the DMA reads (packets sent straight from
+//   our buffers, the lwIP heap) is always in RAM, never only in the cache;
+// - the receive buffers (Rx_Buff at 0x30040400, written by the DMA) uncached, MPU region 4:
+//   8 KB at 0x30040000 without its first 1 KB (the descriptors: Mbed's region 0, device
+//   memory). Region 1 (lwIP heap, write-through) and 5 (SDRAM, BigRam.cpp) are Mbed's/ours.
+// Nothing else here uses DMA: the USB stick, DMX UART, QSPI and Machine Control I/O are
+// driven by the CPU. A network re-init can switch it off again: maintain() checks.
+bool cacheOn() {
+  if (SCB->CCR & SCB_CCR_DC_Msk) return false;
+  HAL_MPU_Disable();
+  MPU_Region_InitTypeDef r = {};
+  r.Enable = MPU_REGION_ENABLE;
+  r.Number = MPU_REGION_NUMBER4;
+  r.BaseAddress = 0x30040000;
+  r.Size = MPU_REGION_SIZE_8KB;
+  r.SubRegionDisable = 0x01;
+  r.TypeExtField = MPU_TEX_LEVEL1;   // TEX 1, not C, not B = normal memory, not cached
+  r.AccessPermission = MPU_REGION_FULL_ACCESS;
+  r.DisableExec = MPU_INSTRUCTION_ACCESS_DISABLE;
+  r.IsShareable = MPU_ACCESS_SHAREABLE;
+  r.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
+  r.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+  HAL_MPU_ConfigRegion(&r);
+  HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
+  SCB->CACR |= SCB_CACR_FORCEWT_Msk;
+  SCB_EnableDCache();   // invalidates first: RAM is up to date while the cache was off
+  return true;
+}
+
 // The same interface Arduino's Ethernet object uses (the core makes it this way).
 EthernetInterface* eth() { return static_cast<EthernetInterface*>(EthInterface::get_default_instance()); }
 bool hasAddress() { return eth()->get_connection_status() == NSAPI_STATUS_GLOBAL_UP; }
@@ -253,6 +287,7 @@ void begin(const NetConfig& cfg) {
 
   artUdp.begin(kArtPort);
   sacnUdp.begin(kSacnPort);
+  cacheOn();
   isUp = true;
   IPAddress ip = Ethernet.localIP();
   LOGI(Net, "IP %d.%d.%d.%d  MAC %02X:%02X:%02X:%02X:%02X:%02X", ip[0], ip[1], ip[2], ip[3], mac[0],
@@ -262,6 +297,7 @@ void begin(const NetConfig& cfg) {
 void maintain(uint32_t now) {
   if (!isUp || now - lastPhy < 1000) return;
   lastPhy = now;
+  if (cacheOn()) LOGI(Net, "Data cache switched on again (the Ethernet driver had switched it off)");
   askPhy();   // read now, used next second
   if (sacnJoined) macAcceptGroup(sacnJoined);   // in case the driver re-initialised the MAC
   int8_t c = cable;

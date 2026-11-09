@@ -102,7 +102,9 @@ String targetText(const std::vector<String>& t, size_t i, const std::vector<std:
 }
 
 bool run(const std::vector<String>& t, String& r, const Vars* vars) {
-  auto is = [&](size_t i, const char* w) { return t.size() > i && t[i].equalsIgnoreCase(w); };
+  // strcasecmp, not String::equalsIgnoreCase(const char*): that makes a temporary String (a heap
+  // allocation) for every word compared, ~60 of them before "var" was found.
+  auto is = [&](size_t i, const char* w) { return t.size() > i && !strcasecmp(t[i].c_str(), w); };
   int idx;
   uint32_t fade;
 

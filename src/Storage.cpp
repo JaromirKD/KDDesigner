@@ -90,7 +90,15 @@ bool readFile(const char* path, BigRam::Buffer& out, size_t maxLen) {
   bool ok = size >= 0 && (size_t)size <= maxLen && out.reserve(size);
   if (!ok) LOGE(Usb, "%s too large (%ld bytes)", path, size);
   else {
-    out.len = fread(out.data, 1, size, f);
+    // Through internal RAM: the buffer is in cached SDRAM (BigRam), and a big fread may let
+    // the USB controller's DMA write it directly, behind the cache.
+    char buf[512];
+    size_t n;
+    out.len = 0;
+    while (out.len < (size_t)size && (n = fread(buf, 1, min(sizeof(buf), (size_t)size - out.len), f)) > 0) {
+      memcpy(out.data + out.len, buf, n);
+      out.len += n;
+    }
     out.data[out.len] = 0;
     ok = out.len == (size_t)size;
   }
@@ -102,7 +110,15 @@ bool writeFile(const char* path, const char* data, size_t len) {
   if (!isMounted) return false;
   FILE* f = fopen(path, "wb");
   if (!f) return false;
-  size_t n = fwrite(data, 1, len, f);
+  // In blocks through internal RAM: data may be in cached SDRAM (see readFile).
+  char buf[512];
+  size_t n = 0;
+  while (n < len) {
+    size_t k = min(sizeof(buf), len - n);
+    memcpy(buf, data + n, k);
+    if (fwrite(buf, 1, k, f) != k) break;
+    n += k;
+  }
   fclose(f);
   return n == len;
 }

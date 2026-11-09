@@ -52,6 +52,8 @@ size_t toJson(const LogEntry& e, char* buf, size_t len);
 
 // Call from the main loop: drains new entries to Serial and the USB log file.
 void flush();
+void writeFile();     // new lines -> the stick's log file (the "log" thread once started)
+void startWriter();   // from then on the stick is written by its own thread, not flush()
 
 // Lines of the USB log files (old and current) between from and to (epoch) whose text
 // contains a or the IP address b (case-insensitive; b may be empty), the last `max` of them, as

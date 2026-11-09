@@ -12,7 +12,7 @@ namespace {
 
 // Channels the grand master, blackout and dimmer curve leave alone. The fixture library
 // (data/www/fixture-lib.js, oflName) names control channels so they start with one of these.
-bool isExemptChannel(const String& n) {
+bool isExemptChannel(const Slot& n) {
   static const char* const kPrefixes[] = {"pan", "tilt", "zoom", "focus", "gobo", "prism", "cw", "color_wheel", "macro", "ctrl", "speed", "pos", "enable",
                                           "shutter", "strobe", "fx", "sound", "iris", "frost", "blade", "mode", "cto", "cct", "none"};
   for (auto p : kPrefixes) if (n.startsWith(p)) return true;
@@ -42,12 +42,11 @@ ColorSlots colorSlots(const Fixture& f) {
   ColorSlots c;
   auto first = [](const Slot*& to, const Slot& s) { if (!to) to = &s; };
   for (const auto& s : f.slots) {
-    const String& n = s.name;
-    if (n == "dim" || n == "intensity" || n == "i" || n == "master") first(c.dim, s);
-    else if (n == "r" || n == "red") first(c.r, s);
-    else if (n == "g" || n == "green") first(c.g, s);
-    else if (n == "b" || n == "blue") first(c.b, s);
-    else if (n == "w" || n == "white") first(c.w, s);
+    if (s.is("dim") || s.is("intensity") || s.is("i") || s.is("master")) first(c.dim, s);
+    else if (s.is("r") || s.is("red")) first(c.r, s);
+    else if (s.is("g") || s.is("green")) first(c.g, s);
+    else if (s.is("b") || s.is("blue")) first(c.b, s);
+    else if (s.is("w") || s.is("white")) first(c.w, s);
   }
   return c;
 }
@@ -82,10 +81,10 @@ void presetLevels(const Fixture& f, int dim, bool hasColor, uint8_t r, uint8_t g
   put(c.b, bb);
 }
 
-// Effect target for one fixture of a track: k of n, at its map position (if any).
-FxTarget effectTarget(const Fixture& f, size_t k, size_t n, const std::vector<std::pair<int, std::pair<float, float>>>& mapPos) {
+// Effect target for one fixture of a track: k of n, at its map position (pos: x, y or nullptr).
+FxTarget effectTarget(const Fixture& f, size_t k, size_t n, const float* pos) {
   FxTarget x{(uint8_t)f.u, -1, -1, -1, -1, -1, false, (float)k / n, 0.5f};
-  for (const auto& mp : mapPos) if (mp.first == f.id) { x.x = mp.second.first; x.y = mp.second.second; }
+  if (pos) { x.x = pos[0]; x.y = pos[1]; }
   const ColorSlots c = colorSlots(f);
   if (c.dim) { x.d = channelOf(f, *c.dim); x.dWide = c.dim->wide; }
   if (c.r) x.r = channelOf(f, *c.r);
@@ -152,22 +151,30 @@ bool parse(const char* json, size_t len, String& err) {
   for (JsonObjectConst o : d["fixtures"].as<JsonArrayConst>()) {
     Fixture f;
     f.id = o["id"] | 0;
-    f.name = o["name"] | "";
     f.u = universeRef(nu, o["universe"]);
     f.address = o["address"] | 1;
     f.curve = parseCurve(o["curve"] | "linear");
     f.footprint = 0;
     for (JsonVariantConst c : o["channels"].as<JsonArrayConst>()) {
-      String name = c.as<const char*>();
-      bool w = name.endsWith(":16");
-      if (w) name.remove(name.length() - 3);
-      f.slots.push_back({name, f.footprint, w});
+      const char* name = c | "";
+      size_t len = strlen(name);
+      bool w = len >= 3 && !strcmp(name + len - 3, ":16");
+      if (w) len -= 3;
+      f.slots.push_back({name, (uint8_t)std::min(len, (size_t)255), f.footprint, w});
       f.footprint += w ? 2 : 1;
     }
     if (f.u < 0) { err = "Fixture " + String(f.id) + ": unknown universe"; return false; }
     if (f.address < 1 || f.address + f.footprint - 1 > 512) { err = "Fixture " + String(f.id) + ": address out of range"; return false; }
     nf.push_back(f);
   }
+  // Fixture id -> index: scenes, tracks and maps look fixtures up by id thousands of times
+  // (a search through the list each time was ~10 million compares for a 1360-pixel show).
+  int maxId = 0;
+  for (const auto& f : nf) maxId = std::max(maxId, f.id);
+  BigRam::Vec<int> byId(std::min(maxId, 1 << 20) + 1, -1);
+  for (size_t i = 0; i < nf.size(); i++)
+    if (nf[i].id >= 0 && nf[i].id < (int)byId.size() && byId[nf[i].id] < 0) byId[nf[i].id] = i;
+  auto fixIdx = [&](int id) { return id >= 0 && id < (int)byId.size() ? byId[id] : -1; };
 
   BigRam::Vec<Scene> ns;
   for (JsonObjectConst o : d["scenes"].as<JsonArrayConst>()) {
@@ -179,11 +186,12 @@ bool parse(const char* json, size_t len, String& err) {
       int v = l["v"] | 0;
       if (l["fixture"].is<int>()) {
         int fid = l["fixture"];
-        auto it = std::find_if(nf.begin(), nf.end(), [&](const Fixture& f) { return f.id == fid; });
-        if (it == nf.end()) { err = "Scene " + String(sc.id) + ": unknown fixture " + String(fid); return false; }
+        int fi = fixIdx(fid);
+        if (fi < 0) { err = "Scene " + String(sc.id) + ": unknown fixture " + String(fid); return false; }
+        const Fixture* it = &nf[fi];
         const Slot* slot = nullptr;
         if (l["ch"].is<int>()) { int i = (int)l["ch"] - 1; if (i >= 0 && i < (int)it->slots.size()) slot = &it->slots[i]; }
-        else for (const auto& sl : it->slots) if (sl.name == (l["ch"] | "")) slot = &sl;
+        else for (const auto& sl : it->slots) if (sl.is(l["ch"] | "")) slot = &sl;
         if (!slot) { err = "Scene " + String(sc.id) + ": bad channel on fixture " + String(fid); return false; }
         lv.u = it->u;
         lv.ch = channelOf(*it, *slot);
@@ -222,14 +230,14 @@ bool parse(const char* json, size_t len, String& err) {
     nfp.push_back(prog);
     fxIds.push_back(o["id"] | 0);
   }
-  // Map position per fixture (first map it is on) - the x / y inputs of effects.
-  std::vector<std::pair<int, std::pair<float, float>>> mapPos;
+  // Map position per fixture index (first map it is on) - the x / y inputs of effects. NAN = none.
+  BigRam::Vec<float> mapPos(nf.size() * 2, NAN);
   for (JsonObjectConst m : d["maps"].as<JsonArrayConst>())
     for (JsonObjectConst it : m["items"].as<JsonArrayConst>()) {
-      int id = it["fixture"] | 0;
-      if (std::none_of(mapPos.begin(), mapPos.end(), [&](const std::pair<int, std::pair<float, float>>& q) { return q.first == id; }))
-        mapPos.push_back({id, {it["x"] | 0.5f, it["y"] | 0.5f}});
+      int fi = fixIdx(it["fixture"] | 0);
+      if (fi >= 0 && isnan(mapPos[fi * 2])) { mapPos[fi * 2] = it["x"] | 0.5f; mapPos[fi * 2 + 1] = it["y"] | 0.5f; }
     }
+  auto posOf = [&](int fi) { return isnan(mapPos[fi * 2]) ? (const float*)nullptr : &mapPos[fi * 2]; };
   BigRam::Vec<FxCue> nfc;
 
   BigRam::Vec<Timeline> nt;
@@ -247,9 +255,10 @@ bool parse(const char* json, size_t len, String& err) {
     std::vector<std::vector<int>> tracks;   // fixture indexes per track
     for (JsonObjectConst tr : o["tracks"].as<JsonArrayConst>()) {
       std::vector<int> fx;
+      std::vector<bool> in(nf.size());
       auto add = [&](int id) {
-        for (size_t i = 0; i < nf.size(); i++)
-          if (nf[i].id == id && std::find(fx.begin(), fx.end(), (int)i) == fx.end()) fx.push_back(i);
+        int i = fixIdx(id);
+        if (i >= 0 && !in[i]) { in[i] = true; fx.push_back(i); }
       };
       for (int id : tr["fixtures"].as<JsonArrayConst>()) add(id);
       for (int gid : tr["groups"].as<JsonArrayConst>())
@@ -307,7 +316,7 @@ bool parse(const char* json, size_t len, String& err) {
           Fx::setParam(q, s.c_str(), fc.slots.data());
         }
         fc.level = (c["dim"].isNull() ? 100 : clampInt(c["dim"] | 100, 0, 100)) / 100.0;
-        for (size_t k = 0; k < fx.size(); k++) fc.targets.push_back(effectTarget(nf[fx[k]], k, fx.size(), mapPos));
+        for (size_t k = 0; k < fx.size(); k++) fc.targets.push_back(effectTarget(nf[fx[k]], k, fx.size(), posOf(fx[k])));
         cue.fx = nfc.size();
         nfc.push_back(fc);
         pushCue(cue);
@@ -334,11 +343,14 @@ bool parse(const char* json, size_t len, String& err) {
       if (!fx.empty()) {
         // A scene on a track only plays the channels of the track's fixtures.
         Scene sc{0, "", {}};
+        static uint8_t mine[U][64];   // channels of the track's fixtures (parse runs under g_engine: one at a time)
+        memset(mine, 0, sizeof(mine));
+        for (int fi : fx) {
+          const Fixture& f = nf[fi];
+          for (int k = 0; k < f.footprint; k++) setBit(mine[f.u], f.address - 1 + k);
+        }
         for (const auto& l : it->levels)
-          for (int fi : fx) {
-            const Fixture& f = nf[fi];
-            if (l.u == f.u && l.ch >= f.address - 1 && l.ch < f.address - 1 + f.footprint) { sc.levels.push_back(l); break; }
-          }
+          if (testBit(mine[l.u], l.ch)) sc.levels.push_back(l);
         cue.own = ncs.size();
         ncs.push_back(sc);
       }
@@ -362,7 +374,7 @@ bool parse(const char* json, size_t len, String& err) {
         setBit(wide[f.u], ch);
         setBit(gmExempt[f.u], ch);
         setBit(gmExempt[f.u], ch + 1);
-      } else if (isExemptChannel(sl.name)) {
+      } else if (isExemptChannel(sl)) {
         setBit(gmExempt[f.u], ch);
       } else {
         curveOf[f.u][ch] = f.curve;

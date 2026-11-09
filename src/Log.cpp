@@ -36,6 +36,7 @@ bool serialOpen = false;         // a serial monitor has the USB port open
 uint32_t keptLines = 0, keptUnsaved = 0;
 Lvl levels[(int)Cat::COUNT];
 rtos::Mutex mtx;
+bool writerRunning = false;      // the "log" thread writes the stick (startWriter)
 }  // namespace
 
 namespace Log {
@@ -199,7 +200,16 @@ void flush() {
     }
   }
 
-  // USB file (only while a stick is mounted; anything older than the ring is lost).
+  if (!writerRunning) writeFile();
+}
+
+// USB file (only while a stick is mounted; anything older than the ring is lost). Runs in its
+// own thread once startWriter() was called: opening, appending and closing a file on the stick
+// takes several ms (more with a big log), and in the main loop that delayed the engine - 50
+// trigger fires a second dropped the lights from 40 to 17 fps.
+void writeFile() {
+  LogEntry e;
+  char line[KD_LOG_MSG_LEN + 48];
   if (!Storage::mounted()) return;
   if (fileSeq > lastSeq()) return;
   if (fileSeq < firstSeq()) fileSeq = firstSeq();
@@ -219,6 +229,20 @@ void flush() {
     remove(oldPath(KD_LOG_FILES - 1).c_str());
     for (int i = KD_LOG_FILES - 2; i >= 0; i--) rename(oldPath(i).c_str(), oldPath(i + 1).c_str());
   }
+}
+
+void startWriter() {
+  // Below the main loop: the USB stick is driven by the CPU (no DMA), so writing takes CPU time
+  // that would otherwise come out of engine ticks. It runs in the main loop's 1 ms sleeps.
+  static rtos::Thread writer(osPriorityBelowNormal, 4096, nullptr, "log");
+  if (writerRunning) return;
+  writerRunning = true;
+  writer.start([] {
+    for (;;) {
+      writeFile();
+      rtos::ThisThread::sleep_for(std::chrono::milliseconds(200));   // batches lines: one open/close per 200 ms at most
+    }
+  });
 }
 
 // Epoch of a file line ("2026-11-01 12:00:00 [INFO ] ..."), 0 for "+12.345" (no clock yet).

@@ -70,6 +70,7 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 #define KD_TRIGGER_HISTORY 512    // last fires kept for the history strip on the Triggers page (8 bytes each)
 #define KD_MAX_DMX_IN 4           // Art-Net / sACN universes received for "DMX input" triggers (512 bytes each)
 #define KD_WAIT_CHECK_MS 100      // how often "wait until <condition>" is checked
+#define KD_UDP_BUDGET_US 6000     // UDP/OSC trigger messages handled per main-loop round (time), the rest waits
 
 // ---- Watchdog --------------------------------------------------------------
 // The main loop must come round within this time, or the board restarts. Long

@@ -165,6 +165,7 @@ void setup() {
   Projectors::begin();
   Drivers::begin();
   Web::begin();
+  Log::startWriter();
 
   g_engine.lock();
   Triggers::startup();

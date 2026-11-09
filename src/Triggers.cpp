@@ -237,8 +237,8 @@ void runEnded(Trigger& t) {
 
 // "<word>" or "<word> ..." at the start of a line, any case.
 bool startsWord(const String& line, const char* w) {
-  size_t n = strlen(w);
-  return line.length() >= n && line.substring(0, n).equalsIgnoreCase(w) && (line.length() == n || line[n] == ' ');
+  size_t n = strlen(w);   // in place: runs 3 times per action line
+  return line.length() >= n && !strncasecmp(line.c_str(), w, n) && (line.length() == n || line[n] == ' ');
 }
 
 // The text after the first n words (the raw line still has its quotes and {variables}).
@@ -447,11 +447,13 @@ void dmxInCheck(Trigger& t) {
   }
 }
 
+// Compared in place: every packet is checked against every UDP trigger, and building the
+// prefix as a String each time cost more than the rest of the match.
 bool udpMatches(const String& pattern, const String& msg, Vars& vars) {
-  if (pattern.endsWith("*")) {
-    String prefix = pattern.substring(0, pattern.length() - 1);
-    if (!msg.startsWith(prefix)) return false;
-    String rest = msg.substring(prefix.length());
+  size_t pl = pattern.length();
+  if (pl && pattern[pl - 1] == '*') {
+    if (msg.length() < pl - 1 || strncmp(msg.c_str(), pattern.c_str(), pl - 1)) return false;
+    String rest = msg.substring(pl - 1);
     rest.trim();
     vars.set("1", rest);
     return true;
@@ -485,9 +487,13 @@ void handleOsc(UdpListener& l, int listener, IPAddress from, uint16_t fromPort, 
   }
 }
 
+// Start of this loop's UDP work: a flood of packets is handled KD_UDP_BUDGET_US at a time
+// (the rest waits in the socket, the newest are dropped when it is full). Handling them all
+// at once held the engine lock for seconds: the lights froze.
+uint32_t udpPollStart = 0;
 void handleUdp(UdpListener& l, int listener, bool isCommandPort) {
   int len;
-  while ((len = l.udp.parsePacket()) > 0) {
+  while (micros() - udpPollStart < KD_UDP_BUDGET_US && (len = l.udp.parsePacket()) > 0) {
     int n = l.udp.read(pkt, sizeof(pkt) - 1);
     l.udp.flush();
     if (n <= 0) continue;
@@ -765,6 +771,7 @@ void startup() {
 }
 
 void poll(uint32_t now) {
+  udpPollStart = micros();
   for (size_t i = 0; i < KD_MAX_UDP_PORTS; i++)
     if (listeners[i].open) handleUdp(listeners[i], i, listeners[i].port == Show::settings().udpPort);
 

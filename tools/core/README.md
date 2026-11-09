@@ -44,3 +44,17 @@ Needs WSL with Ubuntu 22.04 (`wsl --install -d Ubuntu-22.04`).
 
 If PlatformIO ever updates `framework-arduino-mbed` to another version, this folder must be
 rebuilt for that version too (the headers come from the package, the library from here).
+
+## Heap wrappers (redo after every rebuild)
+
+Mbed's malloc wrappers (`mbed_alloc_wrappers.o`: a statistics mutex and memory tracing on every
+call, realloc as malloc + copy + free) made each allocation cost ~3000 CPU cycles. `src/Heap.cpp`
+has lean versions. `libmbed.a` is linked whole (`--whole-archive`), so Mbed's versions are made
+**weak** in this copy of the library, and ours win. After rebuilding or replacing `libmbed.a`, run
+once (PowerShell, in the project folder):
+
+```bash
+& "$env:USERPROFILE\.platformio\packages\toolchain-gccarmnoneeabi\bin\arm-none-eabi-objcopy.exe" --weaken-symbol=__wrap__malloc_r --weaken-symbol=__wrap__free_r --weaken-symbol=__wrap__realloc_r --weaken-symbol=__wrap__calloc_r --weaken-symbol=__wrap__memalign_r --weaken-symbol=malloc_wrapper --weaken-symbol=free_wrapper --weaken-symbol=mbed_stats_heap_get tools\core\variants\PORTENTA_H7_M7\libs\libmbed.a
+```
+
+Without it the build stops with "multiple definition of `__wrap__malloc_r`".

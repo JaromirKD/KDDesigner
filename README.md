@@ -559,6 +559,27 @@ The controller guards against that:
 - **UDP/OSC from the controller's own IP is ignored** (it is logged once). A broadcast `send udp` comes back in, and would fire your own triggers. To start your own trigger, use `fire trigger`.
 - `fire trigger` chains stop after 8 levels deep, and at most 32 variable changes are handled per engine frame.
 
+## Capacity (measured)
+
+Measured on 9 Nov 2026 on a Portenta Machine Control with a deliberately extreme show: 8 universes full of RGB pixels (1360 fixtures), every one running an effect, a second timeline crossfading full-rig scenes over it, and 108 triggers. Re-run the measurements with `tools/stress/` (see the comment at the top of `stress.js`). A normal show uses a fraction of this.
+
+| What | Result |
+|---|---|
+| Art-Net out | 8 universes at 40 fps (38.9 measured, no gaps over 50 ms); at 60 fps 61-62 fps, but frames less even (gaps up to 35 ms) |
+| Art-Net + sACN together | 16 universes (8 + 8), ~1000 packets/s |
+| Engine tick | 13 ms for this show (budget 25 ms at 40 fps); a 120-fixture show ~1 ms |
+| UDP / OSC messages in | lights stay at 40 fps even when flooded with 3000 messages/s; ~350-400 trigger fires/s with this show (more with a lighter one); extra messages are dropped |
+| One trigger | max 100 fires per second, then paused 10 s (loop protection, above): a fast OSC fader on one trigger hits this |
+| UDP round trip (`reply`) | 3-7 ms typical, up to ~15 ms (a message that arrives during an engine tick waits for it) |
+| Sending | 500 UDP or OSC messages in ~0.2 s, 100 TCP lines in ~0.1 s; at most 16 HTTP requests waiting (more are refused: "HTTP queue full") |
+| `repeat … every 0.01` | runs, but the timing wobbles: gaps up to ~50 ms |
+| Web API | ~65 requests/s from one client, ~90/s from 4; with 8 at once most connections are refused |
+| Everything at once | 16 universes out + 450 messages/s in + 2 web clients: lights at ~36 fps, 7-10% of the messages lost, no restart |
+| Memory | a trigger costs ~400 bytes: ~400-500 triggers fit next to a big show |
+| Saving a project | ~36 KB/s onto the stick (a 400 KB show takes ~11 s; the lights keep running) |
+
+A burst (`repeat 500 times send udp …`) runs in one go: the lights pause for those ~0.2 s.
+
 ## Logging
 
 - A 512-entry RAM ring is streamed live to every open browser via Server-Sent Events. The UI has filters per level and category, search with highlight, pause, export, and a warning badge.

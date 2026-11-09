@@ -166,8 +166,9 @@ void fireScene(Playback& p, const Scene& s, uint32_t fadeMs, Path path, uint32_t
   startTrackFade(p, track, now, fadeMs, path, -1);
 }
 
+// v01 is 0..1 (clamped by the caller): + 0.5 and truncate = lround, without the library call.
 void setTarget(Playback& p, int u, int ch, bool wide, double v01) {
-  putTarget(p, u, ch, wide, (int)lround(v01 * (wide ? 65535 : 255)));
+  putTarget(p, u, ch, wide, (int)(v01 * (wide ? 65535 : 255) + 0.5));
 }
 
 // One frame of the effect on a track: run the program per fixture into p.to.
@@ -175,12 +176,19 @@ void setTarget(Playback& p, int u, int ch, bool wide, double v01) {
 void runEffect(Playback& p, int track, uint32_t now) {
   const FxCue& fc = fxCues[p.tf[track].fx];
   const Fx::Program& prog = fxProgs[fc.prog];
-  double* s = fxScratch.data();
+  // Slots on the stack (the cue's start values copied once): from SDRAM for every fixture
+  // they cost more than the effect itself. Big programs use the shared scratch.
+  const int kStack = 64;
+  double local[kStack], base[kStack];
+  const bool onStack = prog.slots <= kStack;
+  double* s = onStack ? local : fxScratch.data();
+  const double* init = fc.slots.data();
+  if (onStack) { memcpy(base, init, sizeof(double) * prog.slots); init = base; }
   const int n = fc.targets.size();
   const double t = (now - p.tf[track].fxStart) / 1000.0;
   for (int i = 0; i < n; i++) {
     const FxTarget& x = fc.targets[i];
-    memcpy(s, fc.slots.data(), sizeof(double) * prog.slots);
+    memcpy(s, init, sizeof(double) * prog.slots);
     s[Fx::T] = t;
     s[Fx::I] = i;
     s[Fx::N] = n;

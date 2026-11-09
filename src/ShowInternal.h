@@ -9,9 +9,16 @@
 namespace ShowImpl {
 constexpr int U = KD_MAX_UNIVERSES;
 
-// A fixture channel: "dim" is 8-bit, "pos:16" is a 16-bit pair (coarse + fine).
-struct Slot { String name; int offset; bool wide; };
-struct Fixture { int id; String name; int u; int address; BigRam::Vec<Slot> slots; int footprint; uint8_t curve; };
+// A fixture channel: "dim" is 8-bit, "pos:16" is a 16-bit pair (coarse + fine). The name
+// points into the project JSON (doc, SDRAM; kept as long as these tables), without ":16":
+// an Arduino String per channel put ~100 bytes per fixture on the small heap, and a
+// 1360-fixture show ran it dry while a save held the old and new tables.
+struct Slot {
+  const char* name; uint8_t len; int offset; bool wide;
+  bool is(const char* s) const { return strlen(s) == len && !strncmp(name, s, len); }
+  bool startsWith(const char* p) const { size_t n = strlen(p); return n <= len && !strncmp(name, p, n); }
+};
+struct Fixture { int id; int u; int address; BigRam::Vec<Slot> slots; int footprint; uint8_t curve; };
 
 enum Curve : uint8_t { CurveLinear, CurveSquare, CurveNonDim, CurvePreheat5, CurvePreheat10 };
 
