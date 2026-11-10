@@ -8,7 +8,7 @@
 const LIB = { list: null, loading: null, failed: '', source: '' };
 function loadLibrary(then) {
   if (LIB.list || LIB.failed) return;
-  LIB.loading ??= api('fixture-library.json')
+  LIB.loading ??= apiProgress('fixture-library.json', 'Loading the fixture library')
     .then((j) => { LIB.list = KDLib.parse(j.text, 'library').types; LIB.source = j.source; })
     .catch((e) => { LIB.failed = e.message; });
   if (then) LIB.loading.then(then);

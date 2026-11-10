@@ -17,8 +17,10 @@ const dgram = require('dgram');
 const http = require('http');
 const net = require('net');
 
-const [IP, TEST, A1, A2] = process.argv.slice(2);
-if (!IP || !TEST) { console.error('usage: stress.js <ip> <test> [args]'); process.exit(1); }
+// Also require()d by soak.js (overnight run), which sets the address with setIp().
+let [IP, TEST, A1, A2] = process.argv.slice(2);
+const MAIN = require.main === module;
+if (MAIN && (!IP || !TEST)) { console.error('usage: stress.js <ip> <test> [args]'); process.exit(1); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (arr, p) => { if (!arr.length) return null; const s = [...arr].sort((a, b) => a - b); return +s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))].toFixed(1); };
 const nowMs = () => Number(process.hrtime.bigint()) / 1e6;
@@ -162,13 +164,27 @@ function listenUdp(port) {
 async function fire(name) { const t0 = nowMs(); const r = await cmd(`fire trigger "${name}"`); return { ok: r.ok, ms: +(nowMs() - t0).toFixed(0), reply: (r.body || r.err || '').slice(0, 120) }; }
 const span = (g) => g.n > 1 ? +(g.last - g.first).toFixed(0) : 0;
 
-async function burst() {
+// The show's TCP device ("pctcp") connects to this server; the controller retries every 10 s.
+// keep = leave it open after the burst (soak.js), so the controller stays connected between rounds.
+const tcp = { n: 0, conns: 0, open: new Set(), first: 0, last: 0 };
+let tcpSrv = null;
+function tcpServer() {
+  if (!tcpSrv) tcpSrv = net.createServer((c) => {
+    tcp.conns++; tcp.open.add(c);
+    c.on('data', (d) => { const t = nowMs(); if (!tcp.n) tcp.first = t; tcp.last = t; tcp.n += (d.toString().match(/\n/g) || []).length; });
+    c.on('close', () => tcp.open.delete(c));
+    c.on('error', () => {});
+  }).listen(9100);
+}
+async function burst(keep) {
   const u = listenUdp(9001), o = listenUdp(9002);
-  const tcp = { n: 0, conns: 0, first: 0, last: 0 };
-  const ts = net.createServer((c) => { tcp.conns++; c.on('data', (d) => { const t = nowMs(); if (!tcp.n) tcp.first = t; tcp.last = t; tcp.n += d.toString().split('\n').filter(Boolean).length; }); c.on('error', () => {}); }).listen(9100);
+  tcpServer();
+  Object.assign(tcp, { n: 0, conns: 0, first: 0, last: 0 });
   const h = { n: 0, first: 0, last: 0 };
   const hs = http.createServer((q, s) => { const t = nowMs(); if (!h.n) h.first = t; h.last = t; h.n++; s.end('ok'); }).listen(9200);
-  await sleep(6000);   // TCP device reconnects every few s: let it connect first
+  await sleep(1000);
+  for (let k = 0; k < 30 && !tcp.open.size; k++) await sleep(500);   // wait for the TCP device to connect
+  const ts = { close: () => { if (keep) return; for (const c of tcp.open) c.destroy(); tcpSrv.close(); tcpSrv = null; } };
   const res = { test: 'burst' };
   res.udp = await fire('Burst UDP'); await sleep(1500); res.udp.got = u.got.n; res.udp.spanMs = span(u.got);
   res.osc = await fire('Burst OSC'); await sleep(1500); res.osc.got = o.got.n; res.osc.spanMs = span(o.got);
@@ -210,7 +226,9 @@ async function withStats(name, fn) {
   console.log(JSON.stringify(Object.assign({ test: name }, res)));
 }
 
-(async () => {
+module.exports = { setIp: (ip) => { IP = ip; }, req, status, cmd, brief, capture, udpin, osc, echo, burst, tcpServer, stream, httpLoad, pct, sleep, nowMs };
+
+if (MAIN) (async () => {
   const secs = (v, d) => (v ? +v : d);
   switch (TEST) {
     case 'status': console.log(JSON.stringify(brief(await status()), null, 1)); break;

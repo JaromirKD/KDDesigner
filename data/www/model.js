@@ -31,9 +31,17 @@
     return [...ids].filter((id) => p.fixtures.some((f) => f.id === id));
   }
 
+  // A map position (0..1 of width / height) as effect x / y. With the map's "round effects"
+  // (square) the long side stays 0..1 and the short side becomes a smaller range around 0.5,
+  // so a circle effect is round on a wide map. = the mapPos loop in ShowParse.cpp.
+  function effectXY(m, x, y) {
+    const a = +m?.aspect || 1.6;   // the UI's default shape (normalize)
+    if (!m?.square || a === 1) return { x, y };
+    return a > 1 ? { x, y: 0.5 + (y - 0.5) / a } : { x: 0.5 + (x - 0.5) * a, y };
+  }
   // Where a fixture is for effects (x / y): the first map it is on, or null.
   function mapPosition(p, id) {
-    for (const m of p.maps || []) { const it = m.items.find((x) => x.fixture === id); if (it) return it; }
+    for (const m of p.maps || []) { const it = m.items.find((x) => x.fixture === id); if (it) return effectXY(m, it.x, it.y); }
     return null;
   }
 
@@ -59,6 +67,31 @@
     const f = a.m * 100 + a.d, t = b.m * 100 + b.d;
     return f <= t ? md >= f && md <= t : md >= f || md <= t;
   }
+  // Is a calendar entry { from, to, days } on date y-m-d? (= periodOn in Clock.cpp.) No "from" =
+  // all year; "days" (["mon", …]) limits it to those weekdays, missing = every day.
+  const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  function periodOn(e, y, m, d) {
+    if (e.days && !e.days.includes(WEEKDAYS[((days(y, m, d) % 7) + 11) % 7])) return false;
+    const md = m * 100 + d, ymd = y * 10000 + md;
+    return e.from ? inPeriod(md, ymd, e.from, e.to || e.from) : true;
+  }
+  // Dates are stored MM-DD / YYYY-MM-DD (calendar) but shown and typed European: DD-MM / DD-MM-YYYY.
+  // Both return null for text that isn't a date.
+  function dateShow(s) {
+    const a = String(s || '').split('-');
+    if (a.length === 3 && /^\d{4}$/.test(a[0])) return `${a[2].padStart(2, '0')}-${a[1].padStart(2, '0')}-${a[0]}`;
+    if (a.length === 2 && a.every((x) => /^\d{1,2}$/.test(x))) return `${a[1].padStart(2, '0')}-${a[0].padStart(2, '0')}`;
+    return null;
+  }
+  function dateStore(s) {
+    const a = String(s || '').trim().split(/[-./]/);
+    if (!a.every((x) => /^\d+$/.test(x))) return null;
+    const ok = (d, m) => m >= 1 && m <= 12 && d >= 1 && d <= [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+    const p2 = (n) => String(n).padStart(2, '0');
+    if (a.length === 3 && a[2].length === 4 && ok(+a[0], +a[1])) return `${a[2]}-${p2(+a[1])}-${p2(+a[0])}`;
+    if (a.length === 2 && ok(+a[0], +a[1])) return `${p2(+a[1])}-${p2(+a[0])}`;
+    return null;
+  }
   // Sunrise / sunset in UTC minutes from midnight (NOAA approximation; can be < 0 or > 1440
   // far from Greenwich), or null in polar day/night.
   function sunUtc(y, m, d, lat, lon, rise) {
@@ -72,7 +105,32 @@
     return Math.round(720 - 4 * (lon + (rise ? ha : -ha)) - eq);
   }
 
-  const api = { slots, footprint, channelRoles, trackFixtureIds, mapPosition, EASE, days, inPeriod, sunUtc };
+  // Settings > Network: problems with a fixed address, as { field, text }. The firmware checks
+  // the same (fixedProblem in Net.cpp) and uses DHCP instead of a setting that can't work.
+  function ipNum(s) {
+    const m = /^\s*(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\s*$/.exec(String(s ?? ''));
+    if (!m || m.slice(1).some((x) => +x > 255)) return null;
+    return ((+m[1] << 24) | (+m[2] << 16) | (+m[3] << 8) | +m[4]) >>> 0;
+  }
+  function netProblems(n) {
+    if (!n || n.dhcp !== false) return [];
+    const out = [], bad = (field, text) => out.push({ field, text });
+    const ip = ipNum(n.ip), m = ipNum(n.mask), gw = String(n.gateway || '').trim() ? ipNum(n.gateway) : 0;
+    const inv = m === null ? 0 : ~m >>> 0;
+    if (m === null) bad('mask', 'Subnet mask: not an address like 255.255.255.0');
+    else if (m === 0 || ((inv & (inv + 1)) >>> 0) !== 0) bad('mask', 'Subnet mask: not a valid mask (like 255.255.255.0 or 255.255.0.0)');
+    if (ip === null) bad('ip', 'IP address: not an address like 192.168.1.50');
+    else if (ip >>> 24 === 0 || ip >>> 24 === 127 || ip >>> 24 >= 224) bad('ip', 'IP address: this range can\'t be used for a device');
+    else if (m !== null && !out.length && ((ip & inv) >>> 0 === 0 || (ip & inv) >>> 0 === inv)) bad('ip', 'IP address: this is the network or broadcast address of the subnet');
+    if (gw === null) bad('gateway', 'Gateway: not an address (leave it empty for none)');
+    else if (gw && ip !== null && m !== null && ((gw & m) >>> 0 !== (ip & m) >>> 0)) bad('gateway', 'Gateway: not in the same subnet as the IP address');
+    else if (gw && gw === ip) bad('gateway', 'Gateway: the same as the IP address');
+    for (const k of ['dns', 'dns2'])
+      if (String(n[k] || '').trim() && ipNum(n[k]) === null) bad(k, `DNS server${k === 'dns2' ? ' 2' : ''}: not an address (leave it empty for none)`);
+    return out;
+  }
+
+  const api = { slots, footprint, channelRoles, trackFixtureIds, mapPosition, effectXY, EASE, days, inPeriod, periodOn, dateShow, dateStore, sunUtc, netProblems };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KDModel = api;
 })(typeof window !== 'undefined' ? window : globalThis);

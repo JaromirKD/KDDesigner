@@ -1,6 +1,7 @@
 {
   "name": "Museum building - start-up and shut-down",
   "settings": {
+    "dateOrder": "dmy",
     "tzOffsetMin": 60,
     "udpPort": 4000,
     "sacnPriority": 100,

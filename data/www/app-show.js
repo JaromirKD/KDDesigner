@@ -26,10 +26,12 @@ function fxParamNote(q) {
   return `<div class="fx-note">${q.note ? `${esc(q.note)} · ` : ''}<span class="muted">${range}</span></div>`;
 }
 // Fixtures for a preview: those on a map (with positions), a strip of n RGB cells, or an n x n grid.
+// x / y = what the effect gets; on a map, sx / sy = where the dot is drawn (they differ with
+// the map's "round effects", KDModel.effectXY).
 function fxPreviewFixtures(src) {
   if (Array.isArray(src)) return src;
   const p = P(), m = src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
-  if (m) return m.items.map((it) => ({ f: fixture(it.fixture), x: it.x, y: it.y })).filter((o) => o.f);
+  if (m) return m.items.map((it) => ({ f: fixture(it.fixture), sx: it.x, sy: it.y, ...KDModel.effectXY(m, it.x, it.y) })).filter((o) => o.f);
   if (src?.startsWith('grid:')) {
     const g = +src.slice(5) || 10;
     return Array.from({ length: g * g }, (_, k) => ({ f: { channels: ['r', 'g', 'b'] }, x: (k % g) / (g - 1), y: Math.floor(k / g) / (g - 1) }));
@@ -56,7 +58,7 @@ function fxPreviewColor(prog, base, outs, i, n, x, y, t, level = 1) {
 function fxPreviewHtml(src) {
   const p = P(), fx = fxPreviewFixtures(src), m = src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
   if (m) return `<div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, 'calc(50 * var(--vh))')}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
-    ${fx.map((o, k) => `<div class="mfx" style="left:${o.x * 100}%;top:${o.y * 100}%" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div>`;
+    ${mapShapesHtml(m)}${fx.map((o, k) => `<div class="mfx" style="left:${o.sx * 100}%;top:${o.sy * 100}%" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div>`;
   if (src?.startsWith('grid:')) return `<div class="fx-prev grid" style="grid-template-columns:repeat(${Math.round(Math.sqrt(fx.length))},1fr)">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
   return `<div class="fx-prev strip">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
 }
@@ -70,14 +72,16 @@ function setFxOverlay(on) {
 // The overlay runs the effect at every spot of a coarse grid over the map (x, y of that spot),
 // as an RGB fixture at full level, so the pattern shows between and under the fixtures too.
 // i / n / u are those of the nearest fixture, so list-order effects show each fixture's area.
-function fxOverlayPainter(cv, prog, base, fx) {
+function fxOverlayPainter(cv, prog, base, fx, m) {
   const W = 64, H = Math.max(8, Math.min(96, Math.round((W * cv.clientHeight) / Math.max(1, cv.clientWidth))));
   cv.width = W;
   cv.height = H;
   const g = cv.getContext('2d'), img = g.createImageData(W, H), s = new Float64Array(base.length), n = Math.max(1, fx.length);
   const rgb = { r: true, g: true, b: true }, near = new Int32Array(W * H);
+  // Each spot's effect x / y (the map's "round effects" applies here too).
+  const ex = new Float64Array(W * H), ey = new Float64Array(W * H);
   for (let k = 0; k < W * H; k++) {   // nearest fixture, once (not every frame)
-    const x = ((k % W) + 0.5) / W, y = (Math.floor(k / W) + 0.5) / H;
+    const q = KDModel.effectXY(m, ((k % W) + 0.5) / W, (Math.floor(k / W) + 0.5) / H), x = (ex[k] = q.x), y = (ey[k] = q.y);
     let best = 0, bd = Infinity;
     fx.forEach((o, j) => { const d = (o.x - x) ** 2 + (o.y - y) ** 2; if (d < bd) { bd = d; best = j; } });
     near[k] = best;
@@ -85,7 +89,7 @@ function fxOverlayPainter(cv, prog, base, fx) {
   return (t) => {
     for (let k = 0; k < W * H; k++) {
       s.set(base);
-      s[0] = t; s[1] = near[k]; s[2] = n; s[3] = near[k] / n; s[4] = ((k % W) + 0.5) / W; s[5] = (Math.floor(k / W) + 0.5) / H;
+      s[0] = t; s[1] = near[k]; s[2] = n; s[3] = near[k] / n; s[4] = ex[k]; s[5] = ey[k];
       KDFX.run(prog, s);
       const o = KDFX.toFixture(s, rgb);
       img.data[k * 4] = o.r * 255; img.data[k * 4 + 1] = o.g * 255; img.data[k * 4 + 2] = o.b * 255; img.data[k * 4 + 3] = 255;
@@ -99,7 +103,7 @@ function runFxPreview(box, prog, src, values = {}, level = 1) {
   const fx = fxPreviewFixtures(src), base = KDFX.slotsFor(prog, values), cells = [...box.querySelectorAll('[data-pv]')], t0 = performance.now();
   const outs = fx.map((o) => fxOutputs(o.f));   // once, not every frame
   const glow = fx.length <= 40;   // the glow is costly to draw for hundreds of dots every frame
-  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, base, fx);
+  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, base, fx, typeof src === 'string' && src.startsWith('map:') ? P().maps[+src.slice(4)] : null);
   pageAnimation('fxPreview', () => {
     const t = (performance.now() - t0) / 1000;
     if (paintOvl) paintOvl(t);
@@ -132,6 +136,7 @@ views.effects = () => {
       <div class="row"><input data-p="effects.${S.sel.effect}.name" value="${esc(e.name)}" style="font-size:16px;flex:1" data-r>
         <select id="fxBase" title="Swap this effect's code for a base effect. Timeline cues that use it keep using it; Ctrl+Z undoes."><option value="">Change to base effect…</option>${fxTplOptions()}</select>
         <button class="btn small ghost" data-del="effects.${S.sel.effect}">Delete</button></div>
+      <div class="used-row">${usedHtml('effects', e)}</div>
       <div class="fx-ed">
         <div class="fx-code"><pre class="fx-gutter" id="fxGutter"></pre><textarea id="fxCode" spellcheck="false" wrap="off">${esc(e.code || '')}</textarea></div>
         <div class="fx-err" id="fxErr"></div>
@@ -248,13 +253,22 @@ function sceneDmx(sc) {
   }
   return dmx;
 }
+// Ids of the fixtures that have at least one level in the scene.
+const sceneFixtures = (sc) => new Set(sc.levels.filter((l) => l.fixture != null).map((l) => l.fixture));
 function paintSceneLook(sc) {
-  const dmx = sceneDmx(sc), inScene = new Set(sc.levels.map((l) => l.fixture)), els = $$('[data-scfx]'), glow = els.length <= 40;
+  const dmx = sceneDmx(sc), inScene = sceneFixtures(sc), els = $$('[data-scfx]'), glow = els.length <= 40;
   for (const el of els) {
-    const f = fixture(+el.dataset.scfx);
-    el.classList.toggle('out', !inScene.has(f.id));
+    const f = fixture(+el.dataset.scfx), on = inScene.has(f.id);
+    el.classList.toggle('out', !on);
+    el.classList.toggle('in', on);
     paintDot(el.querySelector('.dot'), fixtureLook(f, dmx), glow);
   }
+  const n = $('#scCount');
+  if (n) n.innerHTML = sceneCountHtml(sc, inScene);
+}
+function sceneCountHtml(sc, inScene) {
+  const raw = sc.levels.filter((l) => l.fixture == null).length;
+  return `<b>${inScene.size}</b> of ${P().fixtures.length} fixtures in this scene${raw ? ` · ${raw} raw channel${raw > 1 ? 's' : ''}` : ''}`;
 }
 // Sets a channel of some fixtures in the scene (adds the level where it's missing).
 function setSceneLevel(sc, fixtures, ch, v) {
@@ -272,7 +286,7 @@ function setSceneLevel(sc, fixtures, ch, v) {
 }
 function sceneProgrammerHtml(sc) {
   const p = P(), sel = p.fixtures.filter((f) => S.scSel.has(f.id));
-  if (!sel.length) return '<p class="muted">Click fixtures above to set them in this scene (Shift/Ctrl+click or drag an area for several). Faded = not in this scene.</p>';
+  if (!sel.length) return '<p class="muted">Click fixtures above to set them in this scene (Shift/Ctrl+click or drag an area for several). Green dot = in this scene, faded and dashed = not in it.</p>';
   const lev = (f, ch) => sc.levels.find((l) => l.fixture === f.id && l.ch === ch);
   const chans = [];
   for (const f of sel) for (const s of slots(f)) if (!chans.some((c) => c.name === s.name)) chans.push(s);
@@ -319,26 +333,33 @@ views.scenes = () => {
   if (sc) {
     for (const id of [...S.scSel]) if (!fixture(id)) S.scSel.delete(id);
     S.scMap = Math.min(S.scMap, p.maps.length - 1);
-    const m = p.maps[S.scMap];
-    const chip = (f) => `<button class="sc-chip${S.scSel.has(f.id) ? ' sel' : ''}" data-scfx="${f.id}" title="${esc(f.name)} · ${f.universe}.${f.address}"><span class="dot">${fxIcon(f)}</span>${esc(f.name)}</button>`;
+    const m = p.maps[S.scMap], inScene = sceneFixtures(sc);
+    // "Only in this scene" hides the others (they can't be picked then, so it's off by default).
+    const shown = (f) => !S.scOnly || inScene.has(f.id);
+    const mark = (f) => (inScene.has(f.id) ? ' in' : ' out') + (S.scSel.has(f.id) ? ' sel' : '');
+    const chip = (f) => `<button class="sc-chip${mark(f)}" data-scfx="${f.id}" title="${esc(f.name)} · ${f.universe}.${f.address}${inScene.has(f.id) ? ' · in this scene' : ' · not in this scene'}"><span class="dot">${fxIcon(f)}</span>${esc(f.name)}</button>`;
     const pick = `<select id="scMap" title="Where to pick fixtures">${p.maps.map((x, i) => `<option value="${i}"${x === m ? ' selected' : ''}>Map: ${esc(x.name)}</option>`).join('')}<option value="-1"${m ? '' : ' selected'}>List of all fixtures</option></select>`;
     if (m) {
-      const placed = new Set(m.items.map((it) => it.fixture)), rest = p.fixtures.filter((f) => !placed.has(f.id));
+      const placed = new Set(m.items.map((it) => it.fixture)), rest = p.fixtures.filter((f) => !placed.has(f.id) && shown(f));
       // Not taller than ~60 % of the screen until you drag it bigger, so the controls stay in view.
       look = `<div class="map-wrap"><div class="map-canvas sc-map${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="scCanvas" style="${mapSizeStyle('kd.mapH.scenes', m.aspect, 'calc(60 * var(--vh))')}">
-        ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}
-        ${m.items.map((it) => { const f = fixture(it.fixture); return f ? mapDotHtml(f, it, S.scSel.has(f.id) ? ' sel' : '', m.labels !== false, 'data-scfx') : ''; }).join('')}<div class="band" hidden></div>${mapResizeHtml('kd.mapH.scenes')}</div></div>
+        ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}${mapShapesHtml(m)}
+        ${m.items.map((it) => { const f = fixture(it.fixture); return f && shown(f) ? mapDotHtml(f, it, mark(f), m.labels !== false, 'data-scfx') : ''; }).join('')}<div class="band" hidden></div>${mapResizeHtml('kd.mapH.scenes')}</div></div>
         ${rest.length ? `<div class="sc-chips"><span class="muted">Not on this map:</span>${rest.map(chip).join('')}</div>` : ''}`;
-    } else look = `<div class="sc-chips sc-all">${p.fixtures.map(chip).join('') || '<span class="muted">No fixtures yet - add them on the Fixtures page.</span>'}</div>`;
+    } else look = `<div class="sc-chips sc-all">${p.fixtures.filter(shown).map(chip).join('') || `<span class="muted">${p.fixtures.length ? 'No fixtures in this scene yet.' : 'No fixtures yet - add them on the Fixtures page.'}</span>`}</div>`;
     // Groups: one click selects a whole group (Shift/Ctrl+click adds it to the selection).
     const groups = p.groups.length ? `<div class="sc-groups"><span class="muted">Groups:</span>${p.groups.map((g) => {
-      const on = g.fixtures.length && g.fixtures.every((id) => S.scSel.has(id));
-      return `<button class="sc-grp${on ? ' on' : ''}" data-scgrp="${g.id}" title="Select this group (Shift/Ctrl+click adds it)">${esc(g.name)} <span class="muted">${g.fixtures.length}</span></button>`;
+      const on = g.fixtures.length && g.fixtures.every((id) => S.scSel.has(id)), n = g.fixtures.filter((id) => inScene.has(id)).length;
+      return `<button class="sc-grp${on ? ' on' : ''}" data-scgrp="${g.id}" title="Select this group (Shift/Ctrl+click adds it) · ${n} of ${g.fixtures.length} in this scene">${esc(g.name)} <span class="muted">${n ? `${n}/` : ''}${g.fixtures.length}</span></button>`;
     }).join('')}</div>` : '';
-    look = `<div class="row map-tools">${pick}<span class="muted">Shows the scene's look · click to select · drag an area · Esc clears · Ctrl+A all</span></div>${groups}${look}`;
+    look = `<div class="row map-tools">${pick}
+        <span class="sc-count" id="scCount">${sceneCountHtml(sc, inScene)}</span>
+        <label class="row muted" title="Hide the fixtures that are not in this scene"><input type="checkbox" id="scOnly"${S.scOnly ? ' checked' : ''}> Only fixtures in this scene</label>
+        <button class="btn small ghost" id="scSelIn"${inScene.size ? '' : ' disabled'} title="Select every fixture that is in this scene">Select those in scene</button></div>
+      <div class="row muted sc-legend"><span class="sc-key in"></span>in the scene <span class="sc-key out"></span>not in the scene · click to select · drag an area · Esc clears · Ctrl+A all</div>${groups}${look}`;
   }
   return `<h2>Scenes</h2><div class="split">
-    <div><div class="list">${p.scenes.map((s, i) => `<div class="item${i === S.sel.scene ? ' sel' : ''}" data-sel="scene:${i}"><span class="id">${s.id}</span>${esc(s.name)}</div>`).join('')}</div>
+    <div><div class="list">${p.scenes.map((s, i) => `<div class="item${i === S.sel.scene ? ' sel' : ''}" data-sel="scene:${i}"><span class="id">${s.id}</span>${esc(s.name)}<span class="spacer"></span><span class="muted" title="Fixtures in this scene">${sceneFixtures(s).size}</span></div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="scene">+ Scene</button></div></div>
     <div>${sc ? `
       <div class="row"><input data-p="scenes.${S.sel.scene}.name" value="${esc(sc.name)}" style="font-size:16px;flex:1">
@@ -347,6 +368,7 @@ views.scenes = () => {
         <label class="row muted" title="Send changes as live channel overrides while editing"><input type="checkbox" id="preview"${S.preview ? ' checked' : ''}> Live preview</label>
         <button class="btn small" data-cmd="clear overrides">Clear preview</button>
         <button class="btn small ghost" data-del="scenes.${S.sel.scene}">Delete</button></div>
+      <div class="used-row">${usedHtml('scenes', sc)}</div>
       ${look}
       ${sceneProgrammerHtml(sc)}
       <details class="sc-table"${S.scTable ? ' open' : ''}><summary>All levels in this scene (${sc.levels.length}) - also raw universe.channel levels</summary>
@@ -416,6 +438,8 @@ function wireSceneLook(sc) {
   if (!LIB.list && p.fixtures.some((f) => f.type && !findType(f.type))) loadLibrary(() => S.view === 'scenes' && render());
   paintSceneLook(sc);
   $('#scMap').addEventListener('change', (e) => { S.scMap = +e.target.value; render(); });
+  $('#scOnly').addEventListener('change', (e) => { S.scOnly = e.target.checked; render(); });
+  $('#scSelIn').addEventListener('click', () => { S.scSel = sceneFixtures(sc); render(); });
   $('.sc-table').addEventListener('toggle', (e) => {
     S.scTable = e.target.open;
     if (S.scTable && !$('.sc-table table')) render();   // built on first open
@@ -539,7 +563,10 @@ views.timelines = () => {
         ${S.tlCursor ? `<button class="btn" data-tlplay title="Play from the cursor (Space)">▶ from ${(S.tlCursor / 1000).toFixed(1)} s</button>` : ''}
         <button class="btn" data-tlpause title="Pause / carry on (Space, Shift+Space)">❚❚</button>
         <button class="btn" data-cmd="stop timeline ${t.id} fade 2">■ Release</button>
+        <button class="btn small tl-live${S.tlLive ? ' on' : ''}" id="tlLive" title="Live editing: every change to this timeline goes to the controller at once and a running timeline carries on with it. Not saved: press Save to keep it. Off = changes only reach the controller when you save.">● Live editing</button>
+        <span class="muted tl-live-msg" id="tlLiveMsg"></span>
         <button class="btn small ghost" data-del="timelines.${ti}">Delete</button></div>
+      <div class="used-row">${usedHtml('timelines', t)}</div>
       <div class="row" style="margin-top:10px">
         <label class="muted">Length (s)</label><input type="number" min="0" step="0.1" style="width:90px" data-p="timelines.${ti}.length" data-t="sec" value="${(t.length || 0) / 1000}" data-r>
         <label class="muted"><input type="checkbox" data-p="timelines.${ti}.loop" data-t="bool"${t.loop ? ' checked' : ''}> Loop</label>
@@ -568,6 +595,35 @@ views.timelines = () => {
         <td><button class="btn small ghost" data-del="timelines.${ti}.cues.${i}">✕</button></td></tr>`).join('')}</table>`
     : '<span class="muted">Select or create a timeline.</span>'}</div></div>`;
 };
+// ---- Live editing: the open timeline goes to the controller (PUT /api/timeline, not saved)
+// whenever it differs from what the controller has. S.tlLiveSent = id -> the JSON it has
+// (unknown: the saved one if nothing is unsaved). A save reloads the controller: start again.
+S.tlLive = (() => { try { return localStorage.getItem('kd.tlLive') !== '0'; } catch { return true; } })();
+S.tlLiveSent = {};
+S.tlLiveErr = {};   // id -> why the controller refused the last version
+async function tlLiveSync(t) {
+  const paint = () => {
+    const m = $('#tlLiveMsg'), err = S.tlLive && t ? S.tlLiveErr[t.id] : '';
+    if (!m) return;
+    m.textContent = err ? `not live: ${err}` : '';
+    m.title = err ? 'The controller cannot play this version yet - does it use a new scene, effect or fixture? Save first.' : '';
+  };
+  paint();
+  if (!S.tlLive || !t) return;
+  const json = JSON.stringify(t);
+  if (S.tlLiveSent[t.id] == null && !S.dirty) S.tlLiveSent[t.id] = json;   // the controller has the saved one
+  if (S.tlLiveSent[t.id] === json || S.tlLiveBusy) return;
+  S.tlLiveBusy = true;
+  try {
+    await api('/api/timeline', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: json });
+    delete S.tlLiveErr[t.id];
+  } catch (e) {
+    S.tlLiveErr[t.id] = e.message;
+  }
+  S.tlLiveSent[t.id] = json;   // a refused one isn't sent again until it changes
+  S.tlLiveBusy = false;
+  paint();
+}
 // What a cue does, in a few words.
 function cueLabel(c, t) {
   if (c.trigger != null) {
@@ -642,9 +698,13 @@ function rampSvg(path, out) {
   return `<svg viewBox="0 0 1 1" preserveAspectRatio="none"><polygon points="${out ? '' : '0,0 '}${pts} 1,0" /><polyline points="${pts}" /></svg>`;
 }
 // Inside of a clip: fade-in / fade-out ramps, label, fade handles, edges to resize.
+// Level of a clip in % (effect level or preset intensity), null when it has none (scene, colour only).
+const cueLevel = (c) => (c.effect != null ? c.dim ?? 100 : isPreset(c) ? c.dim ?? null : null);
 function blkInner(t, c, end) {
-  const span = Math.max(1, end - c.t), fin = Math.min(c.fade || 0, span), fout = c.len ? Math.min(c.out || 0, span) : 0;
+  const span = Math.max(1, end - c.t), fin = Math.min(c.fade || 0, span), fout = c.len ? Math.min(c.out || 0, span) : 0, lv = cueLevel(c);
+  // The level as a line across the clip (dark above it), like a fader: drag it up or down.
   return `${c.effect != null || (c.scene != null && !isPreset(c)) ? '<canvas class="thumb"></canvas>' : ''}
+    ${lv != null ? `<div class="lv-shade" style="height:${100 - lv}%"></div><i class="lv" data-h="level" style="top:${100 - lv}%" title="Level ${lv}% - drag up or down"></i>` : ''}
     ${fin ? `<div class="ramp" style="width:${(fin / span) * 100}%">${rampSvg(c.path)}</div>` : ''}
     ${fout ? `<div class="ramp out" style="width:${(fout / span) * 100}%">${rampSvg('linear', true)}</div>` : ''}
     <span>${esc(cueLabel(c, t))}${c.len ? '' : ' →'}</span>
@@ -797,9 +857,9 @@ function trackFixturesHtml(t, r) {
       return `<label class="chk${viaGroup ? ' muted' : ''}" title="${viaGroup ? 'In the track through a group' : ''}"><input type="checkbox" data-trackfx="${f.id}"${on.has(f.id) ? ' checked' : ''}${viaGroup ? ' disabled' : ''}>${esc(f.name)}</label>`;
     }).join('')}</div>
     ${p.maps.length > 1 ? `<div class="row"><span class="muted" style="min-width:70px">Map</span><div class="seg">${p.maps.map((x, i) => `<button class="${i === mi ? 'on' : ''}" data-trackmap="${i}">${esc(x.name)} <small>(${x.items.filter((it) => on.has(it.fixture)).length}/${x.items.length})</small></button>`).join('')}</div></div>` : ''}
-    ${m ? (onMap.length ? `<div class="mini-map" style="aspect-ratio:${m.aspect}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}
-      ${onMap.map((it) => { const f = fixture(it.fixture); return `<div class="mfx${on.has(f.id) ? ' sel' : ''}" data-trackfx-map="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)}"><span class="dot">${fxIcon(f)}</span><span class="lbl">${esc(f.name)}</span></div>`; }).join('')}</div>
-      <p class="muted keys">Click fixtures on map '${esc(m.name)}' to add or remove them.</p>`
+    ${m ? (onMap.length ? `<div class="mini-map${onMap.length > 40 ? ' dense' : ''}" id="trackMap" style="aspect-ratio:${m.aspect}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${mapShapesHtml(m)}
+      ${onMap.map((it) => { const f = fixture(it.fixture); return `<div class="mfx${on.has(f.id) ? ' sel' : ''}" data-trackfx-map="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)}"><span class="dot">${fxIcon(f)}</span>${m.labels !== false ? `<span class="lbl">${esc(f.name)}</span>` : ''}</div>`; }).join('')}<div class="band" hidden></div></div>
+      <p class="muted keys">Map '${esc(m.name)}': click a fixture to add or remove it · drag on the map to choose an area (only those) · Shift/Ctrl+drag adds an area · Alt+drag removes one</p>`
       : `<p class="muted keys">Map '${esc(m.name)}' has no fixtures on it yet - place them on the Map page.</p>`) : ''}
     <input type="hidden" data-base="${base}"></div>`;
 }
@@ -885,6 +945,13 @@ views.timelines.after = () => {
   const markSel = () => $$('[data-cue]', grid).forEach((b) => b.classList.toggle('sel', sel.has(t.cues[+b.dataset.cue])));
   const newKind = (r) => (trackFxIds(t.tracks[r]).length ? 'preset' : 'scene');
   const info = (msg) => { $('#tlInfo').textContent = msg; };   // live numbers while dragging
+  // Redraws one clip after its level or colour changed (without a re-render, while dragging).
+  const refreshBlk = (el, c) => {
+    const end = cueEnd(t, c, len);
+    if (isPreset(c)) { el.style.setProperty('--solid', presetCss(c)); el.style.setProperty('--ba', c.dim != null ? 0.25 + (c.dim / 100) * 0.6 : 0.6); }
+    el.innerHTML = blkInner(t, c, end);
+    paintClip(t, c, el, end);
+  };
   $$('.blk', grid).forEach((el) => { const c = t.cues[+el.dataset.cue]; paintClip(t, c, el, cueEnd(t, c, len)); });
   // Clips and trigger cues. Body: click selects (Shift/Ctrl+click adds), drag moves the
   // selection in time and to other tracks (Ctrl+drag copies). Edges change start/length,
@@ -924,6 +991,13 @@ views.timelines.after = () => {
         return;
       }
       if (!isLight(c)) return;
+      if (mode === 'level') {
+        const b = el.getBoundingClientRect();
+        c.dim = Math.max(0, Math.min(100, Math.round((1 - (ev.clientY - b.top) / b.height) * 100)));
+        refreshBlk(el, c);
+        info(`level ${c.dim}%`);
+        return;
+      }
       const r = o.track;
       if (mode === 'right') {
         // Up to the next clip on the track (it is not pushed away).
@@ -1085,6 +1159,14 @@ views.timelines.after = () => {
     tlPause(t, !pb.paused);
   }));
   $$('[data-tlplay]').forEach((b) => b.addEventListener('click', () => tlPlayFrom(t, S.tlCursor || 0)));
+  $('#tlLive').addEventListener('click', () => {
+    S.tlLive = !S.tlLive;
+    try { localStorage.setItem('kd.tlLive', S.tlLive ? '1' : '0'); } catch { /* private mode */ }
+    if (!S.tlLive) toast('Live editing off: changes reach the controller when you save');
+    render();
+  });
+  // Several times a second (also while dragging a clip): send the timeline when it changed.
+  pagePoll('tlLive', () => tlLiveSync(t), 250);
   $$('[data-tlsnap]').forEach((b) => b.addEventListener('click', () => { S.tlSnap = b.dataset.tlsnap; render(); }));
   $$('[data-trackedit]').forEach((b) => b.addEventListener('click', () => { const r = +b.dataset.trackedit; S.trackEdit = S.trackEdit === r ? null : r; render(); }));
   $$('[data-trackdel]').forEach((b) => b.addEventListener('click', () => {
@@ -1108,6 +1190,23 @@ views.timelines.after = () => {
     if (!tr.fixtures.includes(id) && trackFxIds(tr).includes(id)) return toast('This fixture is in the track through a group', true);
     toggleFx(id, !tr.fixtures.includes(id));
   }));
+  // Area selection on the track's map, like the Map page. The track's own fixtures that are
+  // not on this map stay; fixtures it gets through a group aren't added a second time.
+  const tmap = $('#trackMap');
+  if (tmap && tr) {
+    const m = P().maps[Math.min(S.trackMap ?? S.sel.map ?? 0, P().maps.length - 1)];
+    const onMap = new Set(m.items.map((it) => it.fixture)), before = JSON.stringify(tr.fixtures);
+    const viaGroup = () => new Set(trackFxIds({ ...tr, fixtures: [] }));
+    const paint = () => { const on = new Set(trackFxIds(tr)); $$('[data-trackfx-map]', tmap).forEach((n) => n.classList.toggle('sel', on.has(+n.dataset.trackfxMap))); };
+    const begin = bandSelect(tmap, m.items.filter((it) => fixture(it.fixture)), () => new Set(tr.fixtures.filter((id) => onMap.has(id))),
+      (s) => { const g = viaGroup(); tr.fixtures = [...tr.fixtures.filter((id) => !onMap.has(id)), ...[...s].filter((id) => !g.has(id))]; },
+      paint, () => { if (JSON.stringify(tr.fixtures) !== before) markDirty(); render(); }, false);
+    // Shift+drag can start on a fixture too (dense pixel maps); a plain click toggles it (above).
+    $$('[data-trackfx-map]', tmap).forEach((el) => el.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      if (e.button === 0 && (e.shiftKey || e.altKey)) { e.preventDefault(); begin(e, +el.dataset.trackfxMap); }
+    }));
+  }
   $$('[data-trackgrp]').forEach((el) => el.addEventListener('change', () => {
     const id = +el.dataset.trackgrp;
     tr.groups = el.checked ? [...new Set([...tr.groups, id])] : tr.groups.filter((x) => x !== id);
@@ -1140,7 +1239,7 @@ views.timelines.after = () => {
       else { c.params = c.params || {}; c.params[id.slice(4)] = hex; }
       markDirty();
       const blk = grid.querySelector(`.blk[data-cue="${S.sel.cue}"]`);
-      if (blk && id === 'cue') { blk.style.setProperty('--bc', hex); blk.style.setProperty('--solid', presetCss(c)); }
+      if (blk && id === 'cue') { blk.style.setProperty('--bc', hex); refreshBlk(blk, c); }
       if (blk && id !== 'cue') paintClip(t, c, blk, cueEnd(t, c, len));
       if (id !== 'cue') startCuePreview();
       if (done) { S.cwFocus = document.activeElement === el ? id : null; render(); }
@@ -1157,6 +1256,14 @@ views.timelines.after = () => {
     if (blk) paintClip(t, c, blk, cueEnd(t, c, len));
   }));
   $$('[data-fxparam]').forEach((i) => i.addEventListener('change', () => render()));
+  // Level / intensity slider: the clip follows while dragging (this runs before the binding on #main).
+  $$(`.cue-ed [data-p$=".dim"]`).forEach((i) => i.addEventListener('input', () => {
+    if (i.value === '') return;
+    c.dim = Math.max(0, Math.min(100, +i.value));
+    const blk = grid.querySelector(`.blk[data-cue="${S.sel.cue}"]`);
+    if (blk) refreshBlk(blk, c);
+    if (c.effect != null) startCuePreview();
+  }));
   $$('[data-fxreset]').forEach((b) => b.addEventListener('click', () => { delete c.params[b.dataset.fxreset]; markDirty(); render(); }));
   // Live preview of an effect cue on the track's fixtures.
   function startCuePreview() {

@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include "Config.h"
 
+namespace BigRam { struct Text; }
+
 enum class Lvl : uint8_t { Debug, Info, Warn, Error };
 enum class Cat : uint8_t { Sys, Usb, Net, Dmx, ArtNet, Sacn, Show, Trig, Web, Cmd, Pjl, COUNT };
 
@@ -58,7 +60,7 @@ void startWriter();   // from then on the stick is written by its own thread, no
 // Lines of the USB log files (old and current) between from and to (epoch) whose text
 // contains a or the IP address b (case-insensitive; b may be empty), the last `max` of them, as
 // [{"e":..,"l":..,"c":"..","m":".."},...]. For the Monitoring detail view of one device.
-void search(const String& a, const String& b, uint32_t from, uint32_t to, size_t max, String& out);
+void search(const String& a, const String& b, uint32_t from, uint32_t to, size_t max, BigRam::Text& out);
 }  // namespace Log
 
 // The level is checked before the arguments are worked out: a filtered debug line with

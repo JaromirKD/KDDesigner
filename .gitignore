@@ -8,10 +8,15 @@ updates/
 # Written by the PC mock while it runs: the previous save, the log files and
 # the device history
 data/show/project.bak
+data/show/backups/
 data/show/logs/
+examples/*/backups/
 
 # Another project with its own git repository (Sourcetree)
 inspiration/PharosGuiCreator/
+
+# Overnight stress test results (tools/stress/soak.js)
+tools/stress/soak-results/
 
 # Old backups
 backup-*.zip

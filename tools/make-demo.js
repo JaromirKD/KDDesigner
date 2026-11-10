@@ -53,6 +53,20 @@ const grid = pixels.map((f, k) => { const row = Math.floor(k / 8), col = row % 2
 const circle = pars.map((f, k) => { const a = (k / 8) * Math.PI * 2 - Math.PI / 2; return [f, 0.5 + 0.38 * Math.cos(a), 0.5 + 0.38 * Math.sin(a)]; });
 const map = (id, name, aspect, items) => ({ id, name, aspect, background: '', snap: true, labels: true, items: items.map(([fixture, x, y]) => ({ fixture, x: +x.toFixed(4), y: +y.toFixed(4) })) });
 const maps = [map(1, 'Stage plan', 1.5, stage), map(2, 'Pixel grid 8 x 4', 2, grid), map(3, 'Circle', 1, circle)];
+// The stage plan: a floor plan drawn with shapes and texts (no background image), and
+// "Round effects" so circle effects are round on its 3:2 shape.
+Object.assign(maps[0], {
+  square: true,
+  shapes: [
+    { type: 'rect', x: 0.15, y: 0.12, w: 0.7, h: 0.5, color: '#8aa0b8', width: 2, fill: '#8aa0b8', alpha: 0.12 },
+    { type: 'line', x: 0.15, y: 0.62, w: 0.7, h: 0, color: '#d0a050', width: 3 },
+    // The orchestra pit over the stage floor: hatched, in front of the stage rectangle.
+    { type: 'rect', x: 0.35, y: 0.52, w: 0.3, h: 0.1, color: '#d0a050', width: 1, fill: '#d0a050', pattern: 'hatch', alpha: 0.6 },
+    { type: 'ellipse', x: 0.42, y: 0.7, w: 0.16, h: 0.12, color: '#8aa0b8', width: 1.5, fill: '#8aa0b8', pattern: 'checker', alpha: 0.2 },
+    { type: 'text', x: 0.5, y: 0.37, text: 'STAGE', size: 4, color: '#d0d8e2' },
+    { type: 'text', x: 0.5, y: 0.76, text: 'FOH desk', size: 2, color: '#d0d8e2' },
+  ],
+});
 
 // ---------- scenes ----------
 const L = (ids, ch, v) => ids.map((fixture) => ({ fixture, ch, v }));
@@ -138,16 +152,19 @@ trig('Mode -> Emergency', 'mode', { group: 'System', mode: 'Emergency' },
 trig('Mode changed -> label', 'mode', {}, ['panel lbl_mode text {group}: {mode}']);
 trig('Emergency released', 'input', { io: 'in0', edge: 'rising' }, ['stop timeline "Emergency" fade 3', 'io Beacon off', 'mode System Idle', 'fire trigger "Start inloop"'], ['mode System is Emergency']);
 
-sec('== CLOCK & CALENDAR', 'green', 'Opening hours. The Schedule page shows the next 7 days of these.');
+sec('== CLOCK & CALENDAR', 'green', 'Opening hours. The Schedule page shows these in a month view and the next 7 days.');
 trig('Morning start', 'time', { at: '09:30:00', days: ['mon', 'tue', 'wed', 'thu', 'fri'] },
   ['mode Museum "Starting up"', 'pc all wake', 'projector all on', '# wait for the projector before switching its input', 'wait until device "PJ left" is online timeout 120', 'projector all input 31', 'fire trigger "Start inloop"'],
-  ['calendar Closed inactive'], { whileRunning: 'ignore', notes: 'Weekdays 09:30, not on closed days (Schedule > Calendar).' });
-trig('Weekend start', 'time', { at: '10:30:00', days: ['sat', 'sun'] }, ['fire trigger "Morning start"'], ['calendar Closed inactive', 'date between 03-01 10-31']);
+  ['calendar Open active', 'calendar Closed inactive'], { whileRunning: 'ignore', notes: 'Weekdays 09:30 on opening days (calendar period Open: Tue-Sun), not on closed days (Schedule > Calendar).' });
+trig('Weekend start', 'time', { at: '10:30:00', days: ['sat', 'sun'] }, ['fire trigger "Morning start"'], ['calendar Closed inactive', 'date between 01-03 31-10']);
 trig('Closing', 'time', { at: '17:30:00' }, ['release all fade 10', 'projector all off', 'mode Museum Closed', 'sleep 30', 'pc all shutdown']);
 subSec('Exterior lights', 'A sub section: smaller heading, indented with its triggers.');
 trig('Sunset: exterior on', 'time', { at: 'sunset', offset: -15 }, ['start timeline "Exterior evening"'], ['calendar Closed inactive']);
 trig('Sunrise: exterior off', 'time', { at: 'sunrise', offset: 30 }, ['stop timeline "Exterior evening" fade 10']);
 trig('Summer season (log)', 'time', { at: '09:00:00' }, ['log Summer season: open longer today'], ['calendar Summer active', 'day is sat,sun']);
+trig('Closed day starts', 'calendar', { calendar: 'Closed', state: 'active' }, ['release all fade 10', 'projector all off', 'log Closed today ({calendar} {state})'],
+  [], { notes: 'Calendar change: fires just after midnight when the "Closed" period starts (or when a calendar edit starts it today).' });
+trig('Summer season ends', 'calendar', { calendar: 'Summer', state: 'inactive' }, ['log Summer season is over']);
 trig('Poll media server', 'interval', { seconds: 60 }, ['http get http://192.168.1.95/api/status'], ['time between sunrise sunset']);
 
 sec('== SHOW TASK LISTS', 'purple', 'Manual triggers = task lists that other triggers (buttons, UDP, clock) fire by name.');
@@ -164,6 +181,7 @@ trig('Main show finished', 'timeline_end', { timeline: 2 }, ['var show_count += 
 trig('Stop all', 'manual', {}, ['mode System Idle', 'release all fade 3', 'send osc qlab /cue/*/stop', 'send udp screens "STOP\\r"', 'panel "Start show" reset', 'panel lbl_status text Stopped', 'panel lbl_status color #ff9f43']);
 trig('Flash walls once', 'manual', {}, ['set 1.10-29 255', 'sleep 0.2', 'clear override 1.10-29'], [], { notes: 'Used by "Flash walls 6x": {count} is the round.' });
 trig('Flash walls 6x', 'manual', {}, ['repeat "Flash walls once" 6 times every 0.5', 'log Walls flashed 6 times']);
+trig('Find the first fixtures', 'manual', {}, ['locate 1-4 for 8'], [], { notes: 'Locate: fixtures 1-4 blink white for 8 s to find them in the room (also Fixtures / Map: Locate, or the L key). "locate off" stops it.' });
 trig('Relay chase', 'manual', {}, ['repeat 4 times every 0.5 kissbox io 1.{i} on', 'sleep 1', 'kissbox io 1 all 0 0 0 0 0 0 0 0']);
 trig('Step through scenes', 'manual', {}, ['log Step {count}', 'scene {=1+count%3} fade 1'], [], { notes: 'Fired with repeat by the Teststand button: {count} = 1, 2, 3…' });
 trig('Winch up', 'manual', {}, ['start timeline "Winch move"'], ['io in2 is on'], { notes: 'Only when the safety contact (in2) is closed.' });
@@ -183,10 +201,7 @@ trig('CLICK Projectors on', 'panel', { control: 'Projectors on', event: 'click' 
 trig('CLICK Projectors off', 'panel', { control: 'Projectors off', event: 'click' }, ['projector all off']);
 trig('Hall projectors mute', 'manual', {}, ['projector hall mute on'], [], { notes: 'Projector group "hall" (Devices > Projectors): one command for both hall projectors.' });
 trig('CLICK Teststand', 'panel', { control: 'Teststand', event: 'click' }, ['mode System Maintenance', 'repeat trigger "Step through scenes" every 2 times 6']);
-trig('Code A', 'panel', { control: 'A', event: 'click' }, [], [], { notes: 'Step 1 of the secret service code (no actions needed).' });
-trig('Code B', 'panel', { control: 'B', event: 'click' }, []);
-trig('Code C', 'panel', { control: 'C', event: 'click' }, []);
-trig('Service code A-C-B', 'sequence', { steps: ['Code A', 'Code C', 'Code B'], within: 5 }, ['mode System Maintenance', 'start timeline "Inloop"', 'panel lbl_mode text Service mode', 'panel "Show progress" unlock'], [], { notes: 'Press A, C, B within 5 s on the Technician page.' });
+trig('HOLD Service mode (5 s)', 'panel', { control: 'Service', event: 'hold', hold: 5 }, ['mode System Maintenance', 'start timeline "Inloop"', 'panel lbl_mode text Service mode', 'panel "Show progress" unlock'], [], { notes: 'Hold the Service button on the Technician page for 5 s.' });
 
 sec('== EXTERNAL CONTROL', 'orange', 'UDP, OSC, TCP, HTTP, Art-Net/sACN in, DMX change.');
 trig('UDP SHOW <name>', 'udp', { match: 'SHOW*' }, ['log UDP asked for show {1} from {sender_ip}', 'if var visitors >= 0 then fire trigger "Start main show"']);
@@ -262,9 +277,7 @@ const panel = { theme: {}, panels: [
     { type: 'button', name: 'Blackout', text: 'Blackout (double-click)', color: '#000000' },
     { type: 'slider', name: 'Fader', text: 'Vertical slider', vertical: true, min: 0, max: 1, step: 0.01, rows: 3 },
     { type: 'spacer' },
-    { type: 'button', name: 'A', text: 'A', color: '#424242' },
-    { type: 'button', name: 'B', text: 'B', color: '#424242' },
-    { type: 'button', name: 'C', text: 'C', color: '#424242' },
+    { type: 'button', name: 'Service', text: 'Service (hold 5 s)', color: '#424242', span: 3 },
     { type: 'button', name: 'Groups page', text: 'Groups…', color: '#424242', goto: 3 },
     { type: 'button', name: 'Back', text: '← Back', color: '#424242', goto: 1, span: 4 },
   ] },
@@ -290,9 +303,11 @@ for (const pg of panel.pages) pg.panel = pg.panel || 1;
 // ---------- assemble ----------
 const project = {
   name: 'KD Feature demo',
-  settings: { tzOffsetMin: 60, udpPort: 4000, sacnPriority: 100,
+  settings: { dateOrder: 'dmy', tzOffsetMin: 60, udpPort: 4000, sacnPriority: 100,
     monitor: { interval: 60, timeout: 1000, failures: 2 }, time: { ntp: 'pool.ntp.org', ntpEnabled: true, dst: 'eu' }, location: { lat: 52.16, lon: 4.49 }, outputs:{ dmx: true, artnet: true, sacn: true, dmxFps: 40, artnetFps: 30, sacnFps: 40, artnetChangesOnly: true, sacnChangesOnly: false } },
-  network: { dhcp: true, ip: '192.168.1.50', mask: '255.255.255.0', gateway: '192.168.1.1' },
+  // DHCP stays on (opening the demo must not move a controller); the fixed setting incl. DNS is
+  // what Settings > Network shows when DHCP is switched off.
+  network: { dhcp: true, ip: '192.168.1.50', mask: '255.255.255.0', gateway: '192.168.1.1', dns: '192.168.1.1', dns2: '1.1.1.1' },
   // Per state: colour / icon (Modes page, panel header) and actions when it starts / ends.
   // System starts in Idle at power-up; Museum keeps its state and follows variable museum_state.
   modes: [
@@ -333,7 +348,7 @@ const project = {
   projectors: [
     { id: 1, name: 'PJ left', ip: '192.168.1.101', port: 4352, password: '' },
     { id: 2, name: 'PJ right', ip: '192.168.1.102', port: 4352, password: 'panasonic' },
-    { id: 3, name: 'PJ foyer', ip: '192.168.1.199', port: 4352, password: '' },
+    { id: 3, name: 'PJ foyer', ip: '192.168.1.199', port: 4352, password: '', lowercase: true },   // sends %1powr 1
   ],
   panel, triggers,
   variables: [
@@ -357,7 +372,9 @@ const project = {
     { name: 'daylight', type: 'number', initial: 0 },
     { name: 'pharos_tl1', type: 'text', initial: '' },
   ],
+  // Stored MM-DD (shown DD-MM). Open: no dates = all year, on these weekdays (closed on Mondays).
   calendar: [
+    { name: 'Open', days: ['tue', 'wed', 'thu', 'fri', 'sat', 'sun'] },
     { name: 'Closed', from: '12-25', to: '12-26' },
     { name: 'Closed', from: '01-01', to: '01-01' },
     { name: 'Summer', from: '07-01', to: '08-31' },

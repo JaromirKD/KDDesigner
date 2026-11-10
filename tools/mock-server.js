@@ -15,6 +15,21 @@ const WWW = path.join(ROOT, 'www');
 const SHOW = path.resolve(process.argv[3] || path.join(ROOT, 'show'));
 const PROJECT = path.join(SHOW, 'project.json');
 const MEDIA = path.join(SHOW, 'media');
+// Project backups, = Storage::keepBackup: a save keeps the previous project.json as
+// backups/YYYY-MM-DD_HH-MM-SS.json (the time it was replaced), the newest KEEP_BACKUPS.
+const BACKUPS = path.join(SHOW, 'backups'), KEEP_BACKUPS = 10;
+const backupName = (n) => /^[\w.-]{6,40}$/.test(n) && n.endsWith('.json') && !n.includes('..');
+const backupList = () => { try { return fs.readdirSync(BACKUPS).filter(backupName).sort(); } catch { return []; } };
+function keepBackup() {
+  if (!fs.existsSync(PROJECT)) return;
+  fs.mkdirSync(BACKUPS, { recursive: true });
+  const d = new Date(), z = (n) => String(n).padStart(2, '0');
+  let name = `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}_${z(d.getHours())}-${z(d.getMinutes())}-${z(d.getSeconds())}.json`;
+  if (fs.existsSync(path.join(BACKUPS, name))) name = name.replace(/\.json$/, '-2.json');
+  fs.copyFileSync(PROJECT, path.join(BACKUPS, name));
+  const all = backupList();
+  for (const n of all.slice(0, Math.max(0, all.length - KEEP_BACKUPS))) fs.unlinkSync(path.join(BACKUPS, n));
+}
 if (!fs.existsSync(PROJECT)) {
   fs.mkdirSync(SHOW, { recursive: true });
   fs.writeFileSync(PROJECT, JSON.stringify({ name: 'New show', fixtures: [], groups: [], scenes: [], timelines: [], triggers: [], universes: [{ id: 1, name: 'Universe 1', dmxPort: 1, artnet: 0, sacn: 1 }] }, null, 1));
@@ -170,9 +185,11 @@ function pjSend(x, body) {
     } else if (body === 'POWR ?') value = String(st.power);
     else if (body === 'LAMP ?') value = '1234 1';
     else if (!/^(AVMT 3[01]|INPT \d\d)$/.test(body)) value = 'ERR1';
-    st.last = `${body} -> ${value}`;
-    if (value === 'ERR1') log(2, 'PJLINK', `${x.name}: ${body} failed: undefined command`);
-    else log(1, 'PJLINK', `${x.name}: ${body} -> ${value}`);
+    // "lowercase" projectors get the command word in lower case (withCase in Projectors.cpp).
+    const sent = x.lowercase ? body.slice(0, 4).toLowerCase() + body.slice(4) : body;
+    st.last = `${sent} -> ${value}`;
+    if (value === 'ERR1') log(2, 'PJLINK', `${x.name}: ${sent} failed: undefined command`);
+    else log(1, 'PJLINK', `${x.name}: ${sent} -> ${value}`);
   }, 300);
 }
 // ---- monitoring (mirrors src/Monitor.cpp + the PJLink poll) ----------------
@@ -683,6 +700,33 @@ function drvStatus() {
   });
 }
 const overrides = new Map();
+// locate <ids> [for <s>]: the dimmer and R/G/B/W channels (else the first channel) of those
+// fixtures blink white until loc.until (= Show::locate in ShowParse.cpp).
+const loc = { until: 0, start: 0, chans: [] };
+function locate(ids, ms) {
+  if (String(ids).toLowerCase() === 'off') { loc.until = 0; return 'Locate off'; }
+  const chans = [];
+  let n = 0, missing = 0;
+  for (const part of String(ids).split(',')) {
+    const m = /^(\d+)(?:-(\d+))?$/.exec(part);
+    if (!m) throw new Error('expected fixture numbers, e.g. locate 3,5,8-12');
+    if (m[2] && +m[2] < +m[1]) throw new Error('bad range in ' + ids);
+    for (let id = +m[1]; id <= Math.min(+(m[2] || m[1]), +m[1] + 4096); id++) {
+      const f = project.fixtures.find((x) => x.id === id);
+      if (!f) { missing++; continue; }
+      const ro = channelRoles(f), list = [ro.dim, ro.r, ro.g, ro.b, ro.w].filter(Boolean);
+      const sl = list.length ? list : slots(f).slice(0, 1);
+      for (const s of sl) { chans.push([f.universe, f.address - 1 + s.offset]); if (s.wide) chans.push([f.universe, f.address + s.offset]); }
+      n++;
+    }
+  }
+  if (!n) throw new Error('no such fixture: ' + ids);
+  ms = Math.max(500, Math.min(60000, ms || 0));
+  Object.assign(loc, { start: Date.now(), until: Date.now() + ms, chans: chans.filter(([, c]) => c >= 0 && c < 512) });
+  const msg = `Locating ${n} fixture${n === 1 ? '' : 's'} for ${(ms / 1000).toFixed(1)} s${missing ? ` (${missing} not found)` : ''}`;
+  log(1, 'SHOW', msg);
+  return msg;
+}
 let out = {};          // universeId -> Uint8Array(512)
 
 function absLevels(scene) {
@@ -884,6 +928,9 @@ function tick() {
     }
   for (const [k, v] of overrides) { const [u, c] = k.split('.'); if (next[u]) next[u][c - 1] = v; }
   for (const u in next) for (let i = 0; i < 512; i++) next[u][i] = blackout ? 0 : next[u][i] * gm;
+  // Locate blinks over everything, grand master and blackout included (= tick in Show.cpp).
+  if (loc.until && now >= loc.until) loc.until = 0;
+  if (loc.until) { const v = (now - loc.start) % 750 < 500 ? 255 : 0; for (const [u, c] of loc.chans) if (next[u]) next[u][c] = v; }
   out = next;
   watchDmx();
 }
@@ -925,6 +972,35 @@ function release(pb, fade) {
   pb.releasing = true;
   pb.mFrom = pb.master; pb.mTo = 0; pb.mStart = Date.now(); pb.mLen = fade;
   if (!fade) pb.dead = true;
+}
+// Live editing (PUT /api/timeline = Show::liveTimeline): what ShowParse would refuse in one timeline.
+function liveTimelineError(t) {
+  if (!t || typeof t !== 'object' || !Array.isArray(t.cues) || !Array.isArray(t.tracks)) return 'Not a timeline';
+  if (t.tracks.length > 16) return `Timeline ${t.id}: too many tracks (max 16)`;
+  for (const c of t.cues) {
+    if (c.trigger != null) { if (!String(c.trigger).trim()) return `Timeline ${t.id}: trigger cue without a trigger`; continue; }
+    const fx = trackFixtures(t, c.track || 0);
+    if (c.effect != null) {
+      if (!(project.effects || []).some((e) => e.id === c.effect)) return `Timeline ${t.id}: unknown effect ${c.effect}`;
+      if (!fx.length) return `Timeline ${t.id}: effect cue on a track without fixtures`;
+    } else if (c.dim != null || c.color != null) {
+      if (!fx.length) return `Timeline ${t.id}: preset cue on a track without fixtures`;
+    } else if (!project.scenes.some((s) => s.id === c.scene)) return `Timeline ${t.id}: unknown scene ${c.scene}`;
+  }
+  return null;
+}
+// A running copy carries on where it is with the new cues (timelineReplaced in Show.cpp): cues
+// before that point jump in without fades, from the live look; paused / ended stay so.
+function timelineReplaced(t) {
+  const pb = pbs.find((p) => p.kind === 'timeline' && p.id === t.id);
+  if (!pb || pb.releasing) return;
+  const now = Date.now(), paused = pb.paused, ended = pb.ended;
+  let at = Math.max(0, (paused ? pb.pausedAt : now) - pb.start);
+  if (t.length && at >= t.length) at = t.loop ? at % t.length : t.length - 1;
+  Object.assign(pb, { start: now - at, catchUp: at, next: 0, paused: false, ended: false, ch: new Map(), tf: {}, fx: {}, rel: {}, last: {}, priority: t.priority || 0 });
+  tick();   // the new cues up to here, at once
+  if (ended) pb.ended = true;
+  if (paused) { pb.paused = true; pb.pausedAt = now; }
 }
 
 // ---- command helpers (src/Cmd.cpp) -----------------------------------------
@@ -1141,6 +1217,9 @@ const SchedM = {
     return +hm[1] * 60 + +hm[2];
   },
   today() { const n = new Date(); return { md: (n.getMonth() + 1) * 100 + n.getDate(), ymd: n.getFullYear() * 10000 + (n.getMonth() + 1) * 100 + n.getDate() }; },
+  on(c) { const n = new Date(); return Model.periodOn(c, n.getFullYear(), n.getMonth() + 1, n.getDate()); },   // a calendar row today
+  // "date between" text -> stored order (MM-DD): typed DD-MM in projects with settings.dateOrder "dmy".
+  condDate(s) { return project.settings?.dateOrder === 'dmy' ? Model.dateStore(s) : /^(\d{4}-)?\d{1,2}-\d{1,2}$/.test(s) ? s : null; },
 };
 const hm = (m) => m < 0 ? undefined : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 let ntpLast = 0;
@@ -1367,6 +1446,7 @@ function execLine(line, src, vars) {
     for (let c = +m[2]; c <= +(m[3] || m[2]); c++) setCh ? overrides.set(`${m[1]}.${c}`, v) : overrides.delete(`${m[1]}.${c}`);
     r = setCh ? `Set ${spec} = ${v}` : `Override cleared ${spec}`;
   } else if (w[0] === 'clear' && w[1] === 'overrides') { overrides.clear(); r = 'Overrides cleared'; }
+  else if (w[0] === 'locate' && (t.length === 2 || (t.length === 4 && w[2] === 'for'))) r = locate(t[1], t.length === 4 ? Math.round(+t[3] * 1000) : 5000);
   else if (w[0] === 'grandmaster' && t.length === 2) { gm = Math.max(0, Math.min(1, +t[1] / 100)); log(1, 'SHOW', `Grand master ${t[1]}%`); r = `Grand master ${t[1]}%`; }
   else if (w[0] === 'blackout' && (w[1] === 'on' || w[1] === 'off')) { blackout = w[1] === 'on'; log(2, 'SHOW', `Blackout ${blackout ? 'ON' : 'off'}`); r = `Blackout ${w[1]}`; }
   else if (w[0] === 'log' && t.length > 1) { log(1, 'CMD', t.slice(1).join(' ')); r = 'Logged'; }
@@ -1610,10 +1690,14 @@ function checkCondition(c) {
   if (w[0] === 'calendar' && t.length === 3 && /^(active|inactive)$/.test(w[2])) {
     const rows = (project.calendar || []).filter((c) => c.name.toLowerCase() === w[1]);
     if (!rows.length) return `unknown calendar entry '${t[1]}'`;
-    const { md, ymd } = SchedM.today();
-    return rows.some((c) => SchedM.inPeriod(md, ymd, c.from, c.to)) === (w[2] === 'active');
+    return rows.some(SchedM.on) === (w[2] === 'active');
   }
-  if (w[0] === 'date' && w[1] === 'between' && t.length === 4) { const { md, ymd } = SchedM.today(); return SchedM.inPeriod(md, ymd, t[2], t[3]); }
+  if (w[0] === 'date' && w[1] === 'between' && t.length === 4) {
+    const a = SchedM.condDate(t[2]), b = SchedM.condDate(t[3]);
+    if (!a || !b) return project.settings?.dateOrder === 'dmy' ? 'dates are DD-MM or DD-MM-YYYY' : 'dates are MM-DD or YYYY-MM-DD';
+    const { md, ymd } = SchedM.today();
+    return SchedM.inPeriod(md, ymd, a, b);
+  }
   if (w[0] === 'time' && w[1] === 'between' && t.length === 4) {
     try {
       const a = SchedM.clockMin(t[2]), b = SchedM.clockMin(t[3]), n = now.getHours() * 60 + now.getMinutes();
@@ -1676,20 +1760,21 @@ function fireByHand(t, why, vars) {
   if (user) userRun++;
   try { runTrigger(t, why, vars); } finally { if (user) userRun--; }
 }
-// Per-trigger state the firmware keeps in its Trigger struct (cooldown, hold/double, sequence, DMX in).
+// Per-trigger state the firmware keeps in its Trigger struct (cooldown, hold/double, DMX in).
 let trigRt = new Map();
-const rt = (t) => trigRt.get(t.id) || (trigRt.set(t.id, { lastRun: 0, pressAt: 0, lastPress: 0, seqPos: 0, seqStart: 0 }), trigRt.get(t.id));
+const rt = (t) => trigRt.get(t.id) || (trigRt.set(t.id, { lastRun: 0, pressAt: 0, lastPress: 0, skipStart: 0, skipCount: 0 }), trigRt.get(t.id));
 const secs = (v, d) => (v == null || v === '' ? d : +v) * 1000;
 const isRunningT = (id) => scheduled.some((s) => s.id === id && s.line != null);
 // Last fires for the history strip, like Triggers::remember (src codes as in Triggers.h).
 const TRIG_HISTORY = 512, SRC_HAND = 0xffff, SRC_REPEAT = 0xfffe, SRC_DELAYED = 0xfffd, SRC_QUEUED = 0xfffc;
 const trigHistory = [];
-function remember(t, why) {
+// skipped: it fired but a condition was false ([ms, id, src, 1]).
+function remember(t, why, skipped) {
   if (t.type === 'dmx_change' || (t.type === 'dmx_in' && (t.when || 'change') === 'change') || t.internal) return;
   const tl = /^timeline (\d+)/.exec(why);
   const src = why === 'repeat' ? SRC_REPEAT : why === 'delayed' ? SRC_DELAYED : why === 'queued' ? SRC_QUEUED
     : running && running !== t.id ? running : userRun ? SRC_HAND : tl ? 0x8000 | +tl[1] : 0;
-  trigHistory.push([Date.now() - bootAt, t.id, src]);
+  trigHistory.push(skipped ? [Date.now() - bootAt, t.id, src, 1] : [Date.now() - bootAt, t.id, src]);
   if (trigHistory.length > TRIG_HISTORY) trigHistory.shift();
 }
 const bootAt = Date.now();
@@ -1701,64 +1786,63 @@ function runEnded(t) {
   scheduled = scheduled.filter((s) => s !== q);
   runTrigger(t, 'queued', q.vars);
 }
-// A trigger fired: move the sequences it is a step of along (stepFired).
-function stepFired(t, now) {
-  for (const s of project.triggers) {
-    if (s.enabled === false || s.type !== 'sequence' || s === t) continue;
-    const steps = (s.steps || []).map((r) => { try { return trigRef(String(r).trim()).id; } catch { return -1; } });
-    if (!steps.length || !steps.includes(t.id)) continue;
-    const r = rt(s);
-    if (r.seqPos && now - r.seqStart > secs(s.within, 5)) r.seqPos = 0;
-    if (steps[r.seqPos] !== t.id) r.seqPos = 0;
-    if (steps[r.seqPos] !== t.id) continue;
-    if (!r.seqPos) r.seqStart = now;
-    if (++r.seqPos < steps.length) continue;
-    r.seqPos = 0;
-    runTrigger(s, 'sequence');
-  }
-}
+// "Test" in the web UI (/api/trigger?id=&test=1): what each condition and action line of
+// one fire by hand did, = Triggers::test. Only that trigger's own run, not the triggers it fires
+// (their replies show on its "fire trigger" line). lines: {k: c|a|n, i, ok, t, r}.
+let trace = null;
+const tracing = (t, d) => trace && trace.id === t.id && depth === d;
 function runTrigger(t, why, vars, quiet) {
   if (t.type === 'comment') return;
   if (safeMode && !userRun) { log(0, 'TRIG', `Trigger ${t.id} '${t.name}' not run (${why}): safe mode`); return; }
-  for (const c of t.conditions || []) {
+  const tr = tracing(t, 0) ? trace.lines : null;
+  for (const c of (t.conditions || []).filter((x) => x.trim())) {
     const ok = checkCondition(c);
+    tr?.push({ k: 'c', ok: ok === true, t: c, r: typeof ok === 'string' ? ok : '' });
     if (ok !== true) {
-      if (typeof ok === 'string') log(2, 'TRIG', `Trigger ${t.id} '${t.name}': condition '${c}' invalid: ${ok}`);
-      else log(0, 'TRIG', `Trigger ${t.id} '${t.name}' skipped (${why}): '${c}' is false`);
+      if (typeof ok === 'string') { log(2, 'TRIG', `Trigger ${t.id} '${t.name}': condition '${c}' invalid: ${ok}`); return; }
+      // The UI reads this line (Triggers.cpp runTrigger): info, at most 10 a second per trigger.
+      const r = rt(t), now = Date.now(), from = running && running !== t.id ? ` from trigger ${running}` : '';
+      if (now - r.skipStart >= 1000) { r.skipStart = now; r.skipCount = 0; }
+      const dbg = quiet || t.type === 'dmx_change' || (t.type === 'dmx_in' && (t.when || 'change') === 'change') || ++r.skipCount > 10;
+      log(dbg ? 0 : 1, 'TRIG', `Trigger ${t.id} '${t.name}' skipped (${why}${from}): condition false: '${c}'`);
+      remember(t, why, true);
       return;
     }
   }
   if (depth > 8) { log(3, 'TRIG', `Trigger ${t.id}: nesting too deep (loop?)`); return; }
   // "Only active in" a mode group's states (not when fired by hand).
   const only = t.onlyIn;
-  if (only?.group && only.states?.length && !(userRun && !running)) {
+  if (only?.group && only.states?.length) {
     const g = byRef(modeGroups(), only.group, (x) => x.name), cur = (g && modeCur[g.name]) || '';
-    if (!only.states.some((s) => s.toLowerCase() === cur.toLowerCase())) { log(0, 'TRIG', `Trigger ${t.id} '${t.name}' skipped (${why}): only active when ${only.group} is ${only.states[0]}`); return; }
+    const inIt = only.states.some((s) => s.toLowerCase() === cur.toLowerCase());
+    if (!inIt && !(userRun && !running)) { log(0, 'TRIG', `Trigger ${t.id} '${t.name}' skipped (${why}): only active when ${only.group} is ${only.states[0]}`); return; }
+    if (!inIt) tr?.push({ k: 'n', ok: true, t: `Only active when ${only.group} is ${only.states.join(' / ')} (now ${cur || 'none'}): runs anyway because you fired it by hand` });
   }
   const now = Date.now(), r = rt(t), cd = secs(t.cooldown, 0);
   // Fired by hand skips the cooldown, so it can be tested.
-  if (cd && r.lastRun && now - r.lastRun < cd && !(userRun && !running)) {
-    log(0, 'TRIG', `Trigger ${t.id} '${t.name}' skipped (${why}): cooldown, ${cd - (now - r.lastRun)} ms left`);
-    return;
+  if (cd && r.lastRun && now - r.lastRun < cd) {
+    if (!(userRun && !running)) { log(0, 'TRIG', `Trigger ${t.id} '${t.name}' skipped (${why}): cooldown, ${cd - (now - r.lastRun)} ms left`); return; }
+    tr?.push({ k: 'n', ok: true, t: `In its cooldown (${((cd - (now - r.lastRun)) / 1000).toFixed(1)} s left): runs anyway because you fired it by hand` });
   }
   const wr = t.whileRunning || 'again';
   if (wr !== 'again' && why !== 'queued' && isRunningT(t.id)) {
-    if (wr === 'ignore') { log(0, 'TRIG', `Trigger ${t.id} '${t.name}' ignored (${why}): still running`); return; }
+    if (wr === 'ignore') { tr?.push({ k: 'n', ok: false, t: 'Still running (sleep, wait or repeat) and set to ignore fires meanwhile: not run' }); log(0, 'TRIG', `Trigger ${t.id} '${t.name}' ignored (${why}): still running`); return; }
     if (wr === 'queue') {
+      tr?.push({ k: 'n', ok: false, t: 'Still running and set to queue: runs when the current run ends (not traced)' });
       if (scheduled.some((s) => s.id === t.id && s.kind === 'queued')) { log(0, 'TRIG', `Trigger ${t.id} '${t.name}' ignored (${why}): one is already queued`); return; }
       try { schedule({ id: t.id, due: Infinity, kind: 'queued', vars: { ...(vars || {}) } }); log(0, 'TRIG', `Trigger ${t.id} '${t.name}' queued (${why}): runs when the current run ends`); } catch {}
       return;
     }
+    tr?.push({ k: 'n', ok: true, t: 'Was still running: restarted (what it still had waiting is dropped)' });
     scheduled = scheduled.filter((s) => !(s.id === t.id && s.line != null));
     log(0, 'TRIG', `Trigger ${t.id} '${t.name}' restarts (${why})`);
   }
-  if (overloaded(t, now)) return;
+  if (overloaded(t, now)) { tr?.push({ k: 'n', ok: false, t: 'Paused: it fired too often (feedback loop?)' }); return; }
   r.lastRun = now;
   const from = running && running !== t.id ? ` from trigger ${running}` : '';
   log(quiet || (t.type === 'dmx_in' && (t.when || 'change') === 'change') ? 0 : 1, 'TRIG', `Trigger ${t.id} '${t.name}' fired (${why}${from})`);
   remember(t, why);
   runActions(t, 0, vars);
-  stepFired(t, now);
 }
 // Like runActions in Triggers.cpp: "sleep <s>", "wait until <cond> [timeout <s>]" and a
 // "repeat <n> times every <s> <command>" loop schedule the rest of the actions.
@@ -1769,31 +1853,35 @@ function runActions(t, from, vars) {
   depth++;
   let later = false;
   const sched = (job) => { try { schedule(job); return true; } catch { return false; } };
+  const tr = tracing(t, 1) ? trace.lines : null;
+  const note = (i, ok, r) => tr?.push({ k: 'a', i, ok, t: acts[i], r });
   for (let i = from; i < acts.length; i++) {
     const line = expandVars(acts[i], vars).trim();
     const m = /^sleep(\s+(.*))?$/i.exec(line);
     if (m) {
       const s = (m[2] || '').trim();
-      if (!/^\d+(\.\d+)?$/.test(s)) { log(2, 'CMD', `[trigger ${t.id}] '${line}' failed: expected: sleep <seconds>`); continue; }
+      if (!/^\d+(\.\d+)?$/.test(s)) { note(i, false, 'expected: sleep <seconds>'); log(2, 'CMD', `[trigger ${t.id}] '${line}' failed: expected: sleep <seconds>`); continue; }
       if (i + 1 < acts.length) {
         later = sched({ id: t.id, due: Date.now() + parseFloat(s) * 1000, every: 0, remaining: 0, count: 1, vars: { ...(vars || {}) }, line: i + 1 });
         if (later) log(0, 'CMD', `[trigger ${t.id}] sleep ${s} s`);
       }
+      note(i, true, i + 1 < acts.length ? `the lines below run ${s} s later (not shown here)` : 'last line: nothing after it');
       break;
     }
     if (/^wait(\s|$)/i.test(line)) {
       const w = /^wait\s+until\s+(.+)$/i.exec(line);
-      if (!w) { log(2, 'CMD', `[trigger ${t.id}] '${line}' failed: expected: wait until <condition> [timeout <seconds>]`); continue; }
+      if (!w) { note(i, false, 'expected: wait until <condition> [timeout <seconds>]'); log(2, 'CMD', `[trigger ${t.id}] '${line}' failed: expected: wait until <condition> [timeout <seconds>]`); continue; }
       let cond = w[1].trim(), timeout = 0;
       const to = /^(.*\S)\s+timeout\s+(\d+(?:\.\d+)?)$/i.exec(cond);
       if (to) { cond = to[1]; timeout = +to[2] * 1000; }
       const ok = checkCondition(cond);
-      if (ok === true) continue;
-      if (typeof ok === 'string') { log(2, 'CMD', `[trigger ${t.id}] wait until '${cond}': ${ok}`); break; }
+      if (ok === true) { note(i, true, 'already true: carries on'); continue; }
+      if (typeof ok === 'string') { note(i, false, ok); log(2, 'CMD', `[trigger ${t.id}] wait until '${cond}': ${ok}`); break; }
       if (i + 1 < acts.length) {
         later = sched({ id: t.id, due: timeout ? Date.now() + timeout : 0, kind: 'wait', text: cond, vars: { ...(vars || {}) }, line: i + 1 });
         if (later) log(0, 'CMD', `[trigger ${t.id}] waiting until ${cond}`);
       }
+      note(i, true, `not true yet: the lines below run once it is${timeout ? ` (gives up after ${timeout / 1000} s)` : ''} (not shown here)`);
       break;
     }
     // repeat <n> times [every <s>] <command>, or repeat <trigger> <n> times [every|for <s>] (= fire trigger).
@@ -1805,13 +1893,15 @@ function runActions(t, from, vars) {
       const cmd = rp ? acts[i].trim().replace(ev ? /^(\S+\s+){5}/ : /^(\S+\s+){3}/, '')   // raw: {i} is filled per run
         : `fire trigger "${rt2[1].replace(/^"|"$/g, '')}"`;
       const v = { ...(vars || {}) };
-      let k = 1;
-      for (; k <= n && (k === 1 || !ms); k++) { v.i = v.count = String(k); safeExec(cmd, 'trigger ' + t.id, v); }
-      if (k > n) continue;
+      let k = 1, bad = 0, first = null;
+      for (; k <= n && (k === 1 || !ms); k++) { v.i = v.count = String(k); const x = safeExec(cmd, 'trigger ' + t.id, v); first = first || x; if (!x.ok) bad++; }
+      if (k > n) { note(i, !bad, `ran ${n} time${n > 1 ? 's' : ''}${bad ? `, ${bad} failed` : ''}: ${first?.reply || ''}`); continue; }
       later = sched({ id: t.id, due: Date.now() + ms, every: ms, remaining: n - k + 1, count: k, kind: 'loop', text: cmd, vars: v, line: i });
+      note(i, first?.ok !== false, `round 1: ${first?.reply || ''} · the other ${n - 1} rounds every ${ms / 1000} s, then the lines below (not shown here)`);
       break;
     }
-    safeExec(acts[i], 'trigger ' + t.id, vars);
+    const x = safeExec(acts[i], 'trigger ' + t.id, vars);
+    note(i, x.ok, x.reply || (!line || line.startsWith('#') ? 'comment / empty: skipped' : ''));
   }
   depth--;
   running = was;
@@ -1894,6 +1984,19 @@ setInterval(() => {   // hold timers (input / panel) and DMX input, like Trigger
   }
   dmxInCheck();
 }, 20);
+// Calendar change (Triggers::poll): a period starts or ends. The first reading is only noted;
+// what was seen is kept across a reload, so a calendar edit that changes today fires.
+const calSeen = new Map();   // calendar name (lower case) -> active
+setInterval(() => {
+  for (const t of project.triggers || []) {
+    if (t.enabled === false || t.type !== 'calendar' || !t.calendar) continue;
+    const k = t.calendar.toLowerCase(), a = (project.calendar || []).some((c) => c.name.toLowerCase() === k && SchedM.on(c));
+    const was = calSeen.get(k);
+    calSeen.set(k, a);
+    if (was == null || was === a || a !== ((t.state || 'active') === 'active')) continue;
+    runTrigger(t, a ? 'calendar active' : 'calendar inactive', { calendar: t.calendar, state: a ? 'active' : 'inactive' });
+  }
+}, 1000);
 function onTimelineCue(id, ref) {
   try { runTrigger(trigRef(ref), `timeline ${id} cue`, { timeline: String(id) }); }
   catch (e) { log(2, 'TRIG', `Timeline ${id}: trigger cue: ${e.message}`); }
@@ -1902,6 +2005,7 @@ function onTimelineEnd(id) { for (const t of project.triggers) if (t.enabled !==
 function loadProject() {
   project = JSON.parse(fs.readFileSync(PROJECT, 'utf8'));
   pbs = [];
+  loc.until = 0;   // its fixtures may have moved (= Show::parse)
   scheduled = [];
   rates = new Map();
   trigRt = new Map();
@@ -1966,16 +2070,71 @@ http.createServer(async (req, res) => {
     }, 8000);
     return json(res, 200, { ok: true, reply: `Firmware ${r.version} stored, restarting to install it`, restart: true });
   }
-  if (p === '/api/project' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(fs.readFileSync(PROJECT)); }
+  if (p === '/api/network/try' && req.method === 'POST') {   // NetSafe::startTry / Net::requestTry
+    const n = project.network || {};
+    const bad = Model.netProblems(n)[0];
+    if (bad) return json(res, 400, { ok: false, reply: bad.text });
+    if (netTrial) return json(res, 400, { ok: false, reply: 'A network test is already running' });
+    netTrial = { old: netLive, to: JSON.parse(JSON.stringify(n)), start: Date.now() };
+    netLive = netTrial.to;
+    netResult = '';
+    log(2, 'NET', `Network test: switching to ${netText(netLive)} now; back to ${netText(netTrial.old)} in ${NET_TRIAL_MS / 1000} s unless a browser confirms from the new address`);
+    return json(res, 200, { ok: true, reply: `Switching; back after ${NET_TRIAL_MS / 1000} s unless confirmed` });
+  }
+  if (p === '/api/network/confirm' && req.method === 'POST') {
+    const ok = !!netTrial && Date.now() - netTrial.start > 1500;
+    if (ok) { log(1, 'NET', `Network test confirmed: keeping ${netText(netTrial.to)}`); netTrial = null; netResult = 'kept'; }
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ ok, reply: ok ? 'Network setting kept' : 'Nothing to confirm (no network test running, or it only just started)' }));
+  }
+  if (p === '/api/backups') {   // = Web.cpp: ?name= one backup, else the list (newest first)
+    const name = url.searchParams.get('name');
+    if (name) {
+      if (!backupName(name) || !fs.existsSync(path.join(BACKUPS, name))) return json(res, 404, { ok: false, reply: 'no such backup' });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(fs.readFileSync(path.join(BACKUPS, name)));
+    }
+    return json(res, 200, { backups: backupList().reverse().map((n) => ({ name: n, size: fs.statSync(path.join(BACKUPS, n)).size })), keep: KEEP_BACKUPS });
+  }
+  if (p === '/api/project' && req.method === 'GET') {   // with its length, like the firmware (the UI's loading bar)
+    const b = fs.readFileSync(PROJECT);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': b.length });
+    return res.end(b);
+  }
   if (p === '/api/project') {
     const b = await body(req);
     try { JSON.parse(b); } catch (e) { return json(res, 400, { ok: false, reply: 'JSON error: ' + e.message }); }
-    fs.copyFileSync(PROJECT, PROJECT.replace(/\.json$/, '.bak'));
-    fs.writeFileSync(PROJECT, b);
+    if (SAVE_LOAD_MS) await new Promise((r) => setTimeout(r, SAVE_LOAD_MS));
+    // = Storage::saveProject: the reply once loaded, the stick write after it (here the file is
+    // written at once, unless KD_SAVE_FAIL; "busy" lasts KD_SAVE_WRITE_MS).
+    if (!SAVE_FAIL) {
+      fs.copyFileSync(PROJECT, PROJECT.replace(/\.json$/, '.bak'));
+      keepBackup();
+      fs.writeFileSync(PROJECT, b);
+    }
     if (safeMode) { safeMode = false; log(1, 'TRIG', 'Safe mode off - triggers run again'); }
     loadProject();
+    const seq = ++saveSt.seq;
+    saveSt.busyUntil = Date.now() + SAVE_WRITE_MS;
     log(1, 'WEB', `Project saved (${b.length} bytes)`);
-    return json(res, 200, { ok: true, reply: 'Saved and loaded' });
+    clearTimeout(saveSt.timer);
+    saveSt.timer = setTimeout(() => {
+      saveSt.ms = SAVE_WRITE_MS;
+      if (SAVE_FAIL) { saveSt.failed = seq; saveSt.error = 'Write to the storage device failed (full or removed?)'; log(3, 'USB', `Project NOT written to the stick: ${saveSt.error} - it runs, but is lost at the next restart. Save again`); }
+      else { saveSt.written = seq; log(1, 'USB', `Project written to the stick (${b.length} bytes, ${SAVE_WRITE_MS} ms)`); }
+    }, SAVE_WRITE_MS);
+    return json(res, 200, { ok: true, reply: 'Saved and loaded', seq });
+  }
+  if (p === '/api/timeline' && req.method === 'PUT') {   // live editing, not saved (Show::liveTimeline)
+    let t;
+    try { t = JSON.parse(await body(req)); } catch (e) { return json(res, 400, { ok: false, reply: 'JSON error: ' + e.message }); }
+    const err = liveTimelineError(t);
+    if (err) return json(res, 400, { ok: false, reply: err });
+    const i = project.timelines.findIndex((x) => x.id === t.id);
+    if (i < 0) project.timelines.push(t); else project.timelines[i] = t;
+    timelineReplaced(t);
+    log(1, 'SHOW', `Timeline ${t.id} '${t.name}' changed live (not saved)`);
+    return json(res, 200, { ok: true, reply: 'Live' });
   }
   if (p === '/api/cmd') {
     const lines = (await body(req)).split('\n').filter((l) => l.trim());
@@ -1992,6 +2151,11 @@ http.createServer(async (req, res) => {
   if (p === '/api/trigger') {
     const t = project.triggers.find((x) => x.id === +url.searchParams.get('id'));
     if (!t) return json(res, 400, { ok: false, reply: 'Unknown trigger' });
+    if (url.searchParams.get('test')) {
+      const tr = (trace = { id: t.id, lines: [] });
+      try { fireByHand(t, 'manual'); } finally { trace = null; }
+      return json(res, 200, { ok: true, reply: `Fired trigger ${t.id}`, lines: tr.lines });
+    }
     fireByHand(t, 'manual');
     return json(res, 200, { ok: true, reply: `Fired trigger ${t.id}` });
   }
@@ -2124,12 +2288,63 @@ function sampleHeap() {
   heap.minFree = heap.minFree ? Math.min(heap.minFree, heap.free) : heap.free;
   return { ...heap };
 }
+// Net::statusJson: what the interface uses. The mock has no network of its own: it acts as if
+// the setting in use (the saved one at start, then network tests) were real (a fixed address
+// as typed, DHCP as the PC's loopback).
+let netLive = null, netTrial = null, netResult = '';
+const NET_TRIAL_MS = +process.env.KD_NET_TRIAL_MS || 120000;   // shorter for tests
+const netText = (n) => (n.dhcp !== false ? 'DHCP' : n.ip);
+function mockNet() {
+  const n = netLive || (netLive = JSON.parse(JSON.stringify(project.network || { dhcp: true })));
+  const fixed = n.dhcp === false;
+  return { mock: true, testable: !!process.env.KD_NET_TRIAL_MS, mode: fixed ? 'fixed' : 'dhcp', link: true, mac: '02:4B:44:00:00:01',
+    ip: fixed ? n.ip || '' : '127.0.0.1', mask: fixed ? n.mask || '' : '255.0.0.0', gateway: fixed ? n.gateway || '' : '',
+    dns: fixed ? [n.dns || n.gateway, n.dns2].filter(Boolean) : [],
+    ...(netTrial ? { trial: { left: Math.max(0, Math.round((NET_TRIAL_MS - (Date.now() - netTrial.start)) / 1000)), to: netText(netTrial.to), back: netText(netTrial.old) } } : {}),
+    ...(netResult ? { trialResult: netResult } : {}) };
+}
+// Net::maintain + NetSafe::idle: an unconfirmed test goes back, and so does the project file.
+setInterval(() => {
+  if (!netTrial || Date.now() - netTrial.start <= NET_TRIAL_MS) return;
+  const old = netTrial.old;
+  netLive = old; netTrial = null; netResult = 'reverted';
+  log(3, 'NET', `Network test not confirmed in ${NET_TRIAL_MS / 1000} s: back to ${netText(old)} (the project gets that setting again)`);
+  try {
+    const p = JSON.parse(fs.readFileSync(PROJECT, 'utf8'));
+    p.network = old;
+    fs.copyFileSync(PROJECT, PROJECT.replace(/\.json$/, '.bak'));
+    fs.writeFileSync(PROJECT, JSON.stringify(p, null, 1));
+    loadProject();
+  } catch (e) { log(3, 'NET', 'Network test went back, but project.json could not be changed back: ' + e.message); }
+}, 500);
+// What the controller would send per second (Show::sendOutputs): DMX frames while DMX is on
+// (the DMX thread sends every port, used or not), Art-Net/sACN one packet per universe that uses
+// the protocol per frame; "changes only" sends a still universe about once a second.
+function mockSent() {
+  const us = project.universes || [];
+  const n = (use, has) => us.filter((u) => u[use] ?? has(u)).length;
+  const rate = (on, fps, still, count) => (on ? count * (still ? 1 : fps) : 0);
+  return {
+    dmxFps: outputs.dmx ? outputs.dmxFps : 0,
+    artTx: rate(outputs.artnet, outputs.artnetFps, outputs.artnetChangesOnly, n('useArtnet', (u) => (u.artnet ?? -1) >= 0)),
+    sacnTx: rate(outputs.sacn, outputs.sacnFps, outputs.sacnChangesOnly, n('useSacn', (u) => (u.sacn || 0) > 0)),
+  };
+}
+// Saving (= Storage's save thread in the firmware): KD_SAVE_LOAD_MS delays the reply ("loading"),
+// KD_SAVE_WRITE_MS the "stick write" after it, KD_SAVE_FAIL=1 makes that write fail - to try the
+// UI's progress bar and its errors.
+const SAVE_LOAD_MS = +process.env.KD_SAVE_LOAD_MS || 0, SAVE_WRITE_MS = +process.env.KD_SAVE_WRITE_MS || 0;
+const SAVE_FAIL = process.env.KD_SAVE_FAIL === '1';
+const saveSt = { seq: 0, written: 0, failed: 0, error: '', ms: 0, busyUntil: 0, timer: 0 };
 function status() {
   const now = Date.now();
   return {
     version: upd.version, uptime: now - t0, started: 'power on',
     update: { target: updTarget(), ready: true, bootloader: 25, ...(upd.last ? { last: upd.last, lastOk: true } : {}), ...(upd.restarting ? { restarting: true } : {}) }, time: clock ? Math.floor(now / 1000) : 0, usb: true, ip: '127.0.0.1',
-    stats: { engineFps: 40, dmxFps: 40, artTx: 80, artRx: 1, sacnTx: 80, sacnRx: 0, udpRx: 0, tickUs: 180 + Math.floor(Math.random() * 40), loopUs: 900, http: httpCount, heap: sampleHeap() },
+    net: mockNet(),
+    save: { seq: saveSt.seq, written: saveSt.written, busy: now < saveSt.busyUntil, ms: saveSt.ms,
+            ...(saveSt.failed > saveSt.written ? { failed: saveSt.failed, error: saveSt.error } : {}) },   // = Storage::saveStatusJson
+    stats: { engineFps: 40, ...mockSent(), artRx: 1, sacnRx: 0, udpRx: 0, tickUs: 180 + Math.floor(Math.random() * 40), loopUs: 900, http: httpCount, heap: sampleHeap() },
     logSeq: seq, project: project.name, projectVersion, gm: Math.round(gm * 100), blackout, outputs, labels,
     modes: Object.fromEntries(modeGroups().map((g) => [g.name, modeCur[g.name] || ''])), mode: modeCur[modeGroups()[0]?.name] || '',
     modeFor: Object.fromEntries(modeGroups().filter((g) => modeCur[g.name]).map((g) => [g.name, modeSecs(g.name)])),
@@ -2143,7 +2358,7 @@ function status() {
         dst: false, tzOffsetMin: s.tzOffsetMin ?? 60, dstRule: s.time?.dst || 'eu',
         ntp: { enabled: s.time?.ntpEnabled !== false, server: s.time?.ntp || 'pool.ntp.org', lastSync: ntpLast || Math.floor(t0 / 1000), offset: 0 },
         sunrise: hm(SchedM.sun(true)), sunset: hm(SchedM.sun(false)),
-        calendar: [...new Set((project.calendar || []).filter((c) => SchedM.inPeriod(md, ymd, c.from, c.to)).map((c) => c.name))],
+        calendar: [...new Set((project.calendar || []).filter(SchedM.on).map((c) => c.name))],
       };
     })(),
     io: {

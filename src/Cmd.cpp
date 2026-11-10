@@ -14,11 +14,18 @@
 #include "Projectors.h"
 #include "Show.h"
 #include "State.h"
+#include "Storage.h"
 #include "Triggers.h"
 #include "Util.h"
 
 namespace {
 bool reloadPending = false;   // a "reload" from a trigger's actions, done by reloadDue()
+
+// A save may still be on its way to the stick (Storage's save thread): reload what was saved,
+// not the file before it. Main loop: well inside the watchdog (a big show writes in ~2 s).
+void waitForSave() {
+  if (!Storage::waitProject(8000)) LOGW(Cmd, "reload: the last save is still being written - loading the file as it is");
+}
 
 const char* cmdSource = "";   // who runs the command now (exec's source), for "mode" in the log
 
@@ -160,6 +167,10 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     return true;
   }
   if (is(0, "clear") && is(1, "overrides")) { Show::clearOverrides(); r = "Overrides cleared"; return true; }
+  // locate <fixtures> [for <seconds>] | locate off: flash fixtures white to find them (5 s)
+  if (is(0, "locate") && (t.size() == 2 || (t.size() == 4 && is(2, "for")))) {
+    return Show::locate(t[1], t.size() == 4 ? seconds(t[3]) : 5000, r);
+  }
   if (is(0, "grandmaster") && t.size() == 2) {
     Show::setGrandMaster(t[1].toFloat() / 100.0f);
     r = "Grand master " + t[1] + "%";
@@ -370,6 +381,7 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     // From a trigger's actions: after its run (the reload replaces the trigger table and the
     // action text that run is reading). Cmd::reloadDue() in the main loop does it.
     if (Triggers::inRun()) { reloadPending = true; r = "Project reloads after this trigger"; return true; }
+    waitForSave();
     if (!Show::loadFile(KD_PROJECT_PATH, r)) return false;
     Project::loadModules();
     r = "Project reloaded";
@@ -386,6 +398,7 @@ bool reloadDue() {
   if (!reloadPending || Triggers::inRun()) return false;
   reloadPending = false;
   String r;
+  waitForSave();
   if (Show::loadFile(KD_PROJECT_PATH, r)) Project::loadModules();
   else LOGE(Cmd, "reload: %s", r.c_str());
   return true;

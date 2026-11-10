@@ -1,6 +1,7 @@
 {
   "name": "KD Feature demo",
   "settings": {
+    "dateOrder": "dmy",
     "tzOffsetMin": 60,
     "udpPort": 4000,
     "sacnPriority": 100,
@@ -33,7 +34,9 @@
     "dhcp": true,
     "ip": "192.168.1.50",
     "mask": "255.255.255.0",
-    "gateway": "192.168.1.1"
+    "gateway": "192.168.1.1",
+    "dns": "192.168.1.1",
+    "dns2": "1.1.1.1"
   },
   "modes": [
     {
@@ -2401,7 +2404,8 @@
       "name": "PJ foyer",
       "ip": "192.168.1.199",
       "port": 4352,
-      "password": ""
+      "password": "",
+      "lowercase": true
     }
   ],
   "panel": {
@@ -2650,21 +2654,10 @@
           },
           {
             "type": "button",
-            "name": "A",
-            "text": "A",
-            "color": "#424242"
-          },
-          {
-            "type": "button",
-            "name": "B",
-            "text": "B",
-            "color": "#424242"
-          },
-          {
-            "type": "button",
-            "name": "C",
-            "text": "C",
-            "color": "#424242"
+            "name": "Service",
+            "text": "Service (hold 5 s)",
+            "color": "#424242",
+            "span": 3
           },
           {
             "type": "button",
@@ -2874,7 +2867,7 @@
       "color": "green",
       "actions": [],
       "conditions": [],
-      "notes": "Opening hours. The Schedule page shows the next 7 days of these."
+      "notes": "Opening hours. The Schedule page shows these in a month view and the next 7 days."
     },
     {
       "id": 6,
@@ -2899,10 +2892,11 @@
         "fire trigger \"Start inloop\""
       ],
       "conditions": [
+        "calendar Open active",
         "calendar Closed inactive"
       ],
       "whileRunning": "ignore",
-      "notes": "Weekdays 09:30, not on closed days (Schedule > Calendar)."
+      "notes": "Weekdays 09:30 on opening days (calendar period Open: Tue-Sun), not on closed days (Schedule > Calendar)."
     },
     {
       "id": 7,
@@ -2919,7 +2913,7 @@
       ],
       "conditions": [
         "calendar Closed inactive",
-        "date between 03-01 10-31"
+        "date between 01-03 31-10"
       ]
     },
     {
@@ -2989,6 +2983,33 @@
     },
     {
       "id": 12,
+      "name": "Closed day starts",
+      "type": "calendar",
+      "calendar": "Closed",
+      "state": "active",
+      "color": "green",
+      "actions": [
+        "release all fade 10",
+        "projector all off",
+        "log Closed today ({calendar} {state})"
+      ],
+      "conditions": [],
+      "notes": "Calendar change: fires just after midnight when the \"Closed\" period starts (or when a calendar edit starts it today)."
+    },
+    {
+      "id": 13,
+      "name": "Summer season ends",
+      "type": "calendar",
+      "calendar": "Summer",
+      "state": "inactive",
+      "color": "green",
+      "actions": [
+        "log Summer season is over"
+      ],
+      "conditions": []
+    },
+    {
+      "id": 14,
       "name": "Poll media server",
       "type": "interval",
       "seconds": 60,
@@ -3010,7 +3031,7 @@
       "notes": "Manual triggers = task lists that other triggers (buttons, UDP, clock) fire by name."
     },
     {
-      "id": 13,
+      "id": 15,
       "name": "Start inloop",
       "type": "manual",
       "color": "purple",
@@ -3026,7 +3047,7 @@
       ]
     },
     {
-      "id": 14,
+      "id": 16,
       "name": "Start main show",
       "type": "manual",
       "color": "purple",
@@ -3048,7 +3069,7 @@
       "whileRunning": "ignore"
     },
     {
-      "id": 15,
+      "id": 17,
       "name": "Show: start video",
       "type": "manual",
       "color": "purple",
@@ -3063,7 +3084,7 @@
       "notes": "Fired by a ◆ trigger cue at 2 s on timeline \"Main show\". The brightsign event/var lines go through the KD plugin (kdlink) in the presentation."
     },
     {
-      "id": 16,
+      "id": 18,
       "name": "Lobby: back to loop",
       "type": "manual",
       "color": "purple",
@@ -3075,7 +3096,7 @@
       "notes": "Plays a file directly in a BrightSign zone (KD plugin)."
     },
     {
-      "id": 17,
+      "id": 19,
       "name": "Lobby: show test pattern",
       "type": "manual",
       "color": "purple",
@@ -3086,7 +3107,7 @@
       "notes": "Plays the file of the presentation's \"Testpattern\" state in the Video zone (KD plugin); the presentation carries on when it ends."
     },
     {
-      "id": 18,
+      "id": 20,
       "name": "Show: halfway",
       "type": "manual",
       "color": "purple",
@@ -3099,7 +3120,7 @@
       "notes": "Trigger cue at 30 s: shows the show-device commands."
     },
     {
-      "id": 19,
+      "id": 21,
       "name": "Main show finished",
       "type": "timeline_end",
       "timeline": 2,
@@ -3112,7 +3133,7 @@
       "conditions": []
     },
     {
-      "id": 20,
+      "id": 22,
       "name": "Stop all",
       "type": "manual",
       "color": "purple",
@@ -3128,7 +3149,7 @@
       "conditions": []
     },
     {
-      "id": 21,
+      "id": 23,
       "name": "Flash walls once",
       "type": "manual",
       "color": "purple",
@@ -3141,7 +3162,7 @@
       "notes": "Used by \"Flash walls 6x\": {count} is the round."
     },
     {
-      "id": 22,
+      "id": 24,
       "name": "Flash walls 6x",
       "type": "manual",
       "color": "purple",
@@ -3152,7 +3173,18 @@
       "conditions": []
     },
     {
-      "id": 23,
+      "id": 25,
+      "name": "Find the first fixtures",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "locate 1-4 for 8"
+      ],
+      "conditions": [],
+      "notes": "Locate: fixtures 1-4 blink white for 8 s to find them in the room (also Fixtures / Map: Locate, or the L key). \"locate off\" stops it."
+    },
+    {
+      "id": 26,
       "name": "Relay chase",
       "type": "manual",
       "color": "purple",
@@ -3164,7 +3196,7 @@
       "conditions": []
     },
     {
-      "id": 24,
+      "id": 27,
       "name": "Step through scenes",
       "type": "manual",
       "color": "purple",
@@ -3176,7 +3208,7 @@
       "notes": "Fired with repeat by the Teststand button: {count} = 1, 2, 3…"
     },
     {
-      "id": 25,
+      "id": 28,
       "name": "Winch up",
       "type": "manual",
       "color": "purple",
@@ -3198,7 +3230,7 @@
       "notes": "Every kind of panel event: click, hold, double click, change (slider, dial, colour, XY, toggle)."
     },
     {
-      "id": 26,
+      "id": 29,
       "name": "CLICK Start show",
       "type": "panel",
       "control": "Start show",
@@ -3214,7 +3246,7 @@
       "notes": "Visitor button: 30 s cooldown so pressing it again does nothing."
     },
     {
-      "id": 27,
+      "id": 30,
       "name": "CLICK Inloop",
       "type": "panel",
       "control": "Inloop",
@@ -3226,7 +3258,7 @@
       "conditions": []
     },
     {
-      "id": 28,
+      "id": 31,
       "name": "CLICK Stop",
       "type": "panel",
       "control": "Stop",
@@ -3238,7 +3270,7 @@
       "conditions": []
     },
     {
-      "id": 29,
+      "id": 32,
       "name": "HOLD All off (3 s)",
       "type": "panel",
       "control": "All off",
@@ -3254,7 +3286,7 @@
       "conditions": []
     },
     {
-      "id": 30,
+      "id": 33,
       "name": "DOUBLE Blackout",
       "type": "panel",
       "control": "Blackout",
@@ -3268,7 +3300,7 @@
       "conditions": []
     },
     {
-      "id": 31,
+      "id": 34,
       "name": "House level slider",
       "type": "panel",
       "control": "House level",
@@ -3280,7 +3312,7 @@
       "conditions": []
     },
     {
-      "id": 32,
+      "id": 35,
       "name": "Grand master dial",
       "type": "panel",
       "control": "Grand master",
@@ -3292,7 +3324,7 @@
       "conditions": []
     },
     {
-      "id": 33,
+      "id": 36,
       "name": "Wall colour wheel",
       "type": "panel",
       "control": "Wall colour",
@@ -3306,7 +3338,7 @@
       "conditions": []
     },
     {
-      "id": 34,
+      "id": 37,
       "name": "Mover XY pad",
       "type": "panel",
       "control": "Mover position",
@@ -3319,7 +3351,7 @@
       "conditions": []
     },
     {
-      "id": 35,
+      "id": 38,
       "name": "Fog toggle",
       "type": "panel",
       "control": "Fog",
@@ -3331,7 +3363,7 @@
       "conditions": []
     },
     {
-      "id": 36,
+      "id": 39,
       "name": "CLICK Projectors on",
       "type": "panel",
       "control": "Projectors on",
@@ -3343,7 +3375,7 @@
       "conditions": []
     },
     {
-      "id": 37,
+      "id": 40,
       "name": "CLICK Projectors off",
       "type": "panel",
       "control": "Projectors off",
@@ -3355,7 +3387,7 @@
       "conditions": []
     },
     {
-      "id": 38,
+      "id": 41,
       "name": "Hall projectors mute",
       "type": "manual",
       "color": "cyan",
@@ -3366,7 +3398,7 @@
       "notes": "Projector group \"hall\" (Devices > Projectors): one command for both hall projectors."
     },
     {
-      "id": 39,
+      "id": 42,
       "name": "CLICK Teststand",
       "type": "panel",
       "control": "Teststand",
@@ -3379,46 +3411,12 @@
       "conditions": []
     },
     {
-      "id": 40,
-      "name": "Code A",
-      "type": "panel",
-      "control": "A",
-      "event": "click",
-      "color": "cyan",
-      "actions": [],
-      "conditions": [],
-      "notes": "Step 1 of the secret service code (no actions needed)."
-    },
-    {
-      "id": 41,
-      "name": "Code B",
-      "type": "panel",
-      "control": "B",
-      "event": "click",
-      "color": "cyan",
-      "actions": [],
-      "conditions": []
-    },
-    {
-      "id": 42,
-      "name": "Code C",
-      "type": "panel",
-      "control": "C",
-      "event": "click",
-      "color": "cyan",
-      "actions": [],
-      "conditions": []
-    },
-    {
       "id": 43,
-      "name": "Service code A-C-B",
-      "type": "sequence",
-      "steps": [
-        "Code A",
-        "Code C",
-        "Code B"
-      ],
-      "within": 5,
+      "name": "HOLD Service mode (5 s)",
+      "type": "panel",
+      "control": "Service",
+      "event": "hold",
+      "hold": 5,
       "color": "cyan",
       "actions": [
         "mode System Maintenance",
@@ -3427,7 +3425,7 @@
         "panel \"Show progress\" unlock"
       ],
       "conditions": [],
-      "notes": "Press A, C, B within 5 s on the Technician page."
+      "notes": "Hold the Service button on the Technician page for 5 s."
     },
     {
       "id": 10006,
@@ -3928,6 +3926,17 @@
   ],
   "calendar": [
     {
+      "name": "Open",
+      "days": [
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ]
+    },
+    {
       "name": "Closed",
       "from": "12-25",
       "to": "12-26"
@@ -4048,6 +4057,69 @@
           "fixture": 24,
           "x": 0.601,
           "y": 0.6
+        }
+      ],
+      "square": true,
+      "shapes": [
+        {
+          "type": "rect",
+          "x": 0.15,
+          "y": 0.12,
+          "w": 0.7,
+          "h": 0.5,
+          "color": "#8aa0b8",
+          "width": 2,
+          "fill": "#8aa0b8",
+          "alpha": 0.12
+        },
+        {
+          "type": "line",
+          "x": 0.15,
+          "y": 0.62,
+          "w": 0.7,
+          "h": 0,
+          "color": "#d0a050",
+          "width": 3
+        },
+        {
+          "type": "rect",
+          "x": 0.35,
+          "y": 0.52,
+          "w": 0.3,
+          "h": 0.1,
+          "color": "#d0a050",
+          "width": 1,
+          "fill": "#d0a050",
+          "pattern": "hatch",
+          "alpha": 0.6
+        },
+        {
+          "type": "ellipse",
+          "x": 0.42,
+          "y": 0.7,
+          "w": 0.16,
+          "h": 0.12,
+          "color": "#8aa0b8",
+          "width": 1.5,
+          "fill": "#8aa0b8",
+          "pattern": "checker",
+          "alpha": 0.2
+        },
+        {
+          "type": "text",
+          "x": 0.5,
+          "y": 0.37,
+          "text": "STAGE",
+          "size": 4,
+          "color": "#d0d8e2"
+        },
+        {
+          "type": "text",
+          "x": 0.5,
+          "y": 0.76,
+          "text": "FOH desk",
+          "size": 2,
+          "color": "#d0d8e2"
         }
       ]
     },

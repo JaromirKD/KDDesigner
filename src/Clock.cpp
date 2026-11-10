@@ -9,13 +9,14 @@
 
 namespace {
 struct Date { int y, m, d; };  // y = 0: every year
-struct Period { String name; Date from, to; };
+struct Period { String name; Date from, to; uint8_t days = 0x7F; };  // days: bit 0 = Sunday
 
 int tzMin = 60;
 String dstRule = "eu";
 String ntpServer = "pool.ntp.org";
 bool ntpEnabled = true;
 bool hasLocation = false;
+bool dmy = false;               // settings.dateOrder "dmy": "date between" conditions are DD-MM / DD-MM-YYYY
 double lat = 0, lon = 0;
 std::vector<Period> calendar;
 rtos::Mutex mtx;
@@ -77,11 +78,17 @@ bool today(Date& d) {
   return true;
 }
 
-// "MM-DD" or "YYYY-MM-DD"
-bool parseDate(const String& s, Date& out) {
+// "MM-DD" or "YYYY-MM-DD" (how calendar periods are stored); with dayFirst "DD-MM" or
+// "DD-MM-YYYY" (how "date between" conditions are typed in a project with dateOrder "dmy").
+bool parseDate(const String& s, Date& out, bool dayFirst = false) {
   int a = 0, b = 0, c = 0;
-  if (sscanf(s.c_str(), "%d-%d-%d", &a, &b, &c) == 3 && a > 1900) out = {a, b, c};
-  else if (sscanf(s.c_str(), "%d-%d", &a, &b) == 2 && a <= 12) out = {0, a, b};
+  int n = sscanf(s.c_str(), "%d-%d-%d", &a, &b, &c);
+  if (dayFirst) {
+    if (n == 3 && c > 1900) out = {c, b, a};
+    else if (n == 2) out = {0, b, a};
+    else return false;
+  } else if (n == 3 && a > 1900) out = {a, b, c};
+  else if (n == 2 && a <= 12) out = {0, a, b};
   else return false;
   return out.m >= 1 && out.m <= 12 && out.d >= 1 && out.d <= 31;
 }
@@ -93,6 +100,10 @@ bool inPeriod(const Date& t, const Date& a, const Date& b) {
   }
   int x = t.m * 100 + t.d, from = a.m * 100 + a.d, to = b.m * 100 + b.d;  // yearly, may wrap new year
   return from <= to ? (x >= from && x <= to) : (x >= from || x <= to);
+}
+// A calendar period on a date: its dates and its weekdays (= periodOn in model.js).
+bool periodOn(const Date& t, const Period& p) {
+  return (p.days >> weekday(daysFromCivil(t.y, t.m, t.d)) & 1) && inPeriod(t, p.from, p.to);
 }
 
 // NOAA approximation: minutes after UTC midnight of sunrise/sunset; -1 if none.
@@ -165,12 +176,22 @@ void load() {
   JsonDocument& doc = Show::projectDoc();
   JsonObjectConst s = doc["settings"];
   std::vector<Period> cal;
+  static const char* const kDays[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
   for (JsonObjectConst o : doc["calendar"].as<JsonArrayConst>()) {
     Period p;
     p.name = o["name"] | "";
-    if (!p.name.length() || !parseDate(o["from"] | "", p.from) || !parseDate(o["to"] | (o["from"] | ""), p.to)) {
+    String from = o["from"] | "", to = o["to"] | "";
+    if (!to.length()) to = from;
+    if (!from.length()) { from = "01-01"; to = "12-31"; }   // no dates: all year (weekdays only)
+    if (!p.name.length() || !parseDate(from, p.from) || !parseDate(to, p.to)) {
       LOGW(Sys, "Calendar '%s': bad date", p.name.c_str());
       continue;
+    }
+    JsonArrayConst days = o["days"];   // ["mon", ...]; missing = every day
+    if (!days.isNull()) {
+      p.days = 0;
+      for (JsonVariantConst d : days)
+        for (int i = 0; i < 7; i++) if (strcasecmp(d | "", kDays[i]) == 0) p.days |= 1 << i;
     }
     cal.push_back(p);
   }
@@ -179,6 +200,7 @@ void load() {
   dstRule = s["time"]["dst"] | "eu";
   ntpServer = s["time"]["ntp"] | "pool.ntp.org";
   ntpEnabled = s["time"]["ntpEnabled"] | true;
+  dmy = strcmp(s["dateOrder"] | "", "dmy") == 0;
   hasLocation = !s["location"]["lat"].isNull();
   lat = s["location"]["lat"] | 0.0;
   lon = s["location"]["lon"] | 0.0;
@@ -252,7 +274,7 @@ bool calendarActive(const String& name, bool& known) {
   for (auto& p : calendar)
     if (p.name.equalsIgnoreCase(name)) {
       known = true;
-      if (haveDate && inPeriod(t, p.from, p.to)) active = true;  // several periods may share a name
+      if (haveDate && periodOn(t, p)) active = true;  // several periods may share a name
     }
   mtx.unlock();
   return active;
@@ -260,7 +282,7 @@ bool calendarActive(const String& name, bool& known) {
 
 bool dateBetween(const String& from, const String& to, String& err) {
   Date a, b, t;
-  if (!parseDate(from, a) || !parseDate(to, b)) { err = "dates are MM-DD or YYYY-MM-DD"; return false; }
+  if (!parseDate(from, a, dmy) || !parseDate(to, b, dmy)) { err = dmy ? "dates are DD-MM or DD-MM-YYYY" : "dates are MM-DD or YYYY-MM-DD"; return false; }
   if (!today(t)) return false;
   return inPeriod(t, a, b);
 }
@@ -299,7 +321,7 @@ void statusJson(JsonObject o) {
   if (today(d)) {
     mtx.lock();
     for (auto& p : calendar)
-      if (inPeriod(d, p.from, p.to)) {
+      if (periodOn(d, p)) {
         bool dup = false;
         for (JsonVariant v : act) if (p.name == v.as<const char*>()) dup = true;
         if (!dup) act.add(p.name);

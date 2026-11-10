@@ -20,6 +20,7 @@ struct Projector {
   IPAddress ip;
   uint16_t port = 4352;
   String password;
+  bool lower = false;          // send command words in lower case ("%1powr 1"): some projectors want that
   // live state
   bool online = false;
   bool everSeen = false;
@@ -66,12 +67,24 @@ bool readLine(EthernetClient& c, String& line) {
   return false;
 }
 
+// Replies are compared ignoring case: projectors that want lower-case commands
+// may also answer "pjlink 0" or "err1".
+bool startsNoCase(const String& s, const char* with) { return strncasecmp(s.c_str(), with, strlen(with)) == 0; }
+
 const char* errText(const String& code) {
-  if (code == "ERR1") return "undefined command";
-  if (code == "ERR2") return "out of parameter";
-  if (code == "ERR3") return "unavailable time (warming/cooling?)";
-  if (code == "ERR4") return "projector/display failure";
+  if (!strcasecmp(code.c_str(), "ERR1")) return "undefined command";
+  if (!strcasecmp(code.c_str(), "ERR2")) return "out of parameter";
+  if (!strcasecmp(code.c_str(), "ERR3")) return "unavailable time (warming/cooling?)";
+  if (!strcasecmp(code.c_str(), "ERR4")) return "projector/display failure";
   return nullptr;
+}
+
+// "POWR 1" -> "powr 1": only the 4-letter command word, parameters stay as typed.
+String withCase(const String& body, bool lower) {
+  String out = body;
+  if (lower)
+    for (unsigned k = 0; k < out.length() && k < 4 && out[k] != ' '; k++) out.setCharAt(k, (char)tolower((unsigned char)out[k]));
+  return out;
 }
 
 // One TCP session: greeting, optional auth, then several commands (the auth
@@ -88,21 +101,21 @@ bool session(const Projector& p, const std::vector<String>& bodies, std::vector<
   String greet;
   if (!readLine(c, greet)) { c.stop(); err = "no greeting"; return false; }
   String prefix;
-  if (greet.startsWith("PJLINK 1 ")) {
+  if (startsNoCase(greet, "PJLINK 1 ")) {
     if (!p.password.length()) { c.stop(); err = "projector requires a password"; return false; }
     prefix = md5hex(greet.substring(9) + p.password);
-  } else if (greet.startsWith("PJLINK ERRA")) {
+  } else if (startsNoCase(greet, "PJLINK ERRA")) {
     c.stop(); err = "authentication error"; return false;
-  } else if (!greet.startsWith("PJLINK 0")) {
+  } else if (!startsNoCase(greet, "PJLINK 0")) {
     c.stop(); err = "unexpected greeting '" + greet + "'"; return false;
   }
 
   for (size_t i = 0; i < bodies.size(); i++) {
-    String out = (i == 0 ? prefix : String("")) + "%1" + bodies[i] + "\r";
+    String out = (i == 0 ? prefix : String("")) + "%1" + withCase(bodies[i], p.lower) + "\r";
     c.write((const uint8_t*)out.c_str(), out.length());
     String resp;
     if (!readLine(c, resp)) { values[i] = "no response"; if (i == 0) { c.stop(); err = "no response"; return false; } break; }
-    if (resp.startsWith("PJLINK ERRA")) { c.stop(); err = "wrong password"; return false; }
+    if (startsNoCase(resp, "PJLINK ERRA")) { c.stop(); err = "wrong password"; return false; }
     int eq = resp.indexOf('=');
     if (eq < 0) { values[i] = "bad response '" + resp + "'"; continue; }
     values[i] = resp.substring(eq + 1);
@@ -251,6 +264,7 @@ void load() {
     if (!p.ip.fromString(o["ip"] | "")) { LOGW(Pjl, "Projector %d: invalid IP", p.id); continue; }
     p.port = o["port"] | 4352;
     p.password = o["password"] | "";
+    p.lower = o["lowercase"] | false;
     p.nextPoll = now + 1000 + nl.size() * 500;  // stagger the first polls
     nl.push_back(p);
   }

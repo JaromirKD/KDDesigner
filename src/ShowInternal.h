@@ -45,7 +45,12 @@ extern uint8_t gmExempt[U][64];        // position/beam channels the grand maste
 extern uint8_t wide[U][64];            // coarse channel of a 16-bit pair
 extern uint8_t curveOf[U][512];        // dimmer curve per channel
 
+// Locate (Show::locate): these channels flash full / off over everything until locUntil (0 = off).
+extern uint8_t locMask[U][64];
+extern uint32_t locStart, locUntil;
+
 void stopAllPlaybacks();               // before a new project is swapped in
+void timelineReplaced(int idx);        // live edit: a running copy carries on with the new cues
 
 // Run for every channel every frame. always_inline: the firmware is built for size (-Os),
 // which made even these function calls (half the time of the fade and mix loops).

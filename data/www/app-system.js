@@ -133,7 +133,7 @@ function devicesEmail(p) {
 }
 function devicesProjectors(p) {
   return `<h3>Projectors <span class="muted" style="text-transform:none;letter-spacing:0">PJLink · TCP 4352</span></h3>
-  <table><tr><th class="narrow">ID</th><th>Name</th><th>IP address</th><th class="narrow">Port</th><th>Password</th><th>Status</th><th>Control</th><th></th></tr>
+  <table><tr><th class="narrow">ID</th><th>Name</th><th>IP address</th><th class="narrow">Port</th><th>Password</th><th title="How the command words are sent. PJLink says upper case; some projectors only answer lower case.">Commands</th><th>Status</th><th>Control</th><th></th></tr>
   ${p.projectors.map((x, i) => {
     const st = pjState(x.id);
     return `<tr>
@@ -142,6 +142,8 @@ function devicesProjectors(p) {
     <td><input data-p="projectors.${i}.ip" value="${esc(x.ip)}" pattern="^(\\d{1,3}\\.){3}\\d{1,3}$"></td>
     <td><input data-p="projectors.${i}.port" data-t="num" type="number" min="1" max="65535" value="${x.port ?? 4352}"></td>
     <td><input data-p="projectors.${i}.password" type="password" value="${esc(x.password || '')}" placeholder="none" autocomplete="new-password"></td>
+    <td><select data-p="projectors.${i}.lowercase" data-t="bool-sel" title="PJLink says upper case (%1POWR 1); some projectors only answer lower case (%1powr 1)">
+      <option value="0"${x.lowercase ? '' : ' selected'}>UPPER case</option><option value="1"${x.lowercase ? ' selected' : ''}>lower case</option></select></td>
     <td data-pjst="${x.id}" title="${esc(st.last)}"><span class="dot ${st.dot}"></span>${esc(st.text)}</td>
     <td><div class="row nowrap">${pjButtons(x.id)}</div></td>
     <td><button class="btn small ghost" data-del="projectors.${i}">✕</button></td></tr>`;
@@ -607,17 +609,39 @@ const Sched = {
   },
 };
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-// Timed triggers in the next 7 days, with calendar/date conditions evaluated per day.
-function upcomingEvents() {
-  const p = P(), out = [];
-  const now = S.status?.clock?.local ? new Date(S.status.clock.local.replace(' ', 'T')) : new Date();
-  for (let k = 0; k < 7; k++) {
-    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k);
-    const y = day.getFullYear(), m = day.getMonth() + 1, d = day.getDate();
-    const wd = DAYS[day.getDay()], md = m * 100 + d, ymd = y * 10000 + md;
-    for (const t of p.triggers) {
-      if (t.type !== 'time' || t.enabled === false || (t.days && !t.days.includes(wd))) continue;
-      let min;
+// The controller's date (its clock may differ from this PC's).
+function schedNow() {
+  return S.status?.clock?.local ? new Date(S.status.clock.local.replace(' ', 'T')) : new Date();
+}
+// Calendar names (lower case) active on a date: KDModel.periodOn per row (= Clock.cpp).
+function calActiveOn(dt) {
+  const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
+  return new Set(P().calendar.filter((e) => e.name && KDModel.periodOn(e, y, m, d)).map((e) => e.name.toLowerCase()));
+}
+// A colour per calendar name (in list order), for the month view.
+const CAL_COLORS = ['#4aa3ff', '#3ecf8e', '#ffb020', '#c084fc', '#ff5c5c', '#3ad1e0', '#f472b6', '#a3e635'];
+function calColor(name) {
+  const names = [...new Set(P().calendar.map((e) => (e.name || '').toLowerCase()).filter(Boolean))];
+  return CAL_COLORS[Math.max(0, names.indexOf(String(name).toLowerCase())) % CAL_COLORS.length];
+}
+// Timed triggers on one day, with calendar/date conditions evaluated for that day. Calendar
+// change triggers show at 00:00 on the days their period starts or ends. after = minutes: leave
+// out what runs before that (today, already passed); -1 = the whole day.
+function dayEvents(day, after = -1, prepared = schedTriggers()) {
+  const out = [];
+  const y = day.getFullYear(), m = day.getMonth() + 1, d = day.getDate();
+  const wd = DAYS[day.getDay()], md = m * 100 + d, ymd = y * 10000 + md;
+  const act = calActiveOn(day);
+  let before = null;   // yesterday's calendar, only worked out when needed
+  for (const { t, conds } of prepared) {
+    let min;
+    if (t.type === 'calendar') {
+      before ??= calActiveOn(new Date(y, m - 1, d - 1));
+      const k = t.calendar.toLowerCase(), on = act.has(k);
+      if (on === before.has(k) || on !== ((t.state || 'active') === 'active')) continue;
+      min = 0;
+    } else {
+      if (t.days && !t.days.includes(wd)) continue;
       if (t.at === 'sunrise' || t.at === 'sunset') {
         const base = Sched.sun(y, m, d, t.at === 'sunrise');
         if (base < 0) continue;
@@ -626,39 +650,108 @@ function upcomingEvents() {
         const [h, mi] = String(t.at || '00:00').split(':').map(Number);
         min = h * 60 + mi;
       }
-      if (k === 0 && min < now.getHours() * 60 + now.getMinutes()) continue;  // already passed today
-      let skip = '';
-      const notes = [];
-      for (const c of t.conditions || []) {
-        const w = tokenize(c).map((x) => x.v);
-        if (w[0] === 'calendar' && w.length === 3) {
-          const act = p.calendar.some((e) => e.name.toLowerCase() === w[1].toLowerCase() && Sched.inPeriod(md, ymd, e.from, e.to));
-          if (act !== (w[2] === 'active')) skip = `calendar ${w[1]} ${act ? 'active' : 'inactive'}`;
-        } else if (w[0] === 'date' && w[1] === 'between' && w.length === 4) {
-          if (!Sched.inPeriod(md, ymd, w[2], w[3])) skip = `outside ${w[2]} – ${w[3]}`;
-        } else if (w[0] === 'day' && w[1] === 'is') {
-          if (!w.slice(2).join(',').split(',').map((x) => x.trim()).includes(wd)) skip = 'other weekday';
-        } else notes.push(c);
-      }
-      // The mode then isn't known yet: shown as a condition.
-      if (t.onlyIn?.group && t.onlyIn.states?.length) notes.push(`${t.onlyIn.group} is ${t.onlyIn.states.join(' or ')}`);
-      out.push({ date: day, min, t, skip, notes });
     }
+    if (min < after) continue;
+    let skip = '';
+    const notes = [];
+    for (const { c, w } of conds) {
+      if (w[0] === 'calendar' && w.length === 3) {
+        const a = act.has(String(w[1]).toLowerCase());
+        if (a !== (w[2] === 'active')) skip = `calendar ${w[1]} ${a ? 'active' : 'inactive'}`;
+      } else if (w[0] === 'date' && w[1] === 'between' && w.length === 4) {
+        const a = KDModel.dateStore(w[2]), b = KDModel.dateStore(w[3]);
+        if (a && b && !Sched.inPeriod(md, ymd, a, b)) skip = `outside ${w[2]} – ${w[3]}`;
+      } else if (w[0] === 'day' && w[1] === 'is') {
+        if (!w.slice(2).join(',').split(',').map((x) => x.trim()).includes(wd)) skip = 'other weekday';
+      } else notes.push(c);
+    }
+    // The mode then isn't known yet: shown as a condition.
+    if (t.onlyIn?.group && t.onlyIn.states?.length) notes.push(`${t.onlyIn.group} is ${t.onlyIn.states.join(' or ')}`);
+    out.push({ date: day, min, t, skip, notes });
   }
-  return out.sort((a, b) => a.date - b.date || a.min - b.min);
+  return out.sort((a, b) => a.min - b.min);
+}
+// The enabled time and calendar-change triggers with their conditions split into words once.
+function schedTriggers() {
+  return P().triggers.filter((t) => t.enabled !== false && (t.type === 'time' || (t.type === 'calendar' && t.calendar)))
+    .map((t) => ({ t, conds: (t.conditions || []).map((c) => ({ c, w: tokenize(c).map((x) => x.v) })) }));
+}
+function upcomingEvents() {
+  const now = schedNow(), prep = schedTriggers(), out = [];
+  for (let k = 0; k < 7; k++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k);
+    // Today: only what's still to come; calendar changes happen at midnight, so not today.
+    out.push(...dayEvents(day, k === 0 ? now.getHours() * 60 + now.getMinutes() : -1, prep).filter((e) => k > 0 || e.t.type !== 'calendar'));
+  }
+  return out;
+}
+const dayLabel = (d) => `${DAYS[d.getDay()][0].toUpperCase()}${DAYS[d.getDay()].slice(1)} ${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}`;
+// One row of the "next 7 days" / chosen day tables.
+function schedEventRow(e, head = '') {
+  return `<tr class="${e.skip ? 'skipped' : ''}"><td class="mono">${head}${hhmm(e.min)}${e.t.type === 'calendar' ? ` <span class="muted">${esc(e.t.calendar)} ${(e.t.state || 'active') === 'active' ? 'starts' : 'ends'}</span>` : e.t.at === 'sunrise' || e.t.at === 'sunset' ? ` <span class="muted">${e.t.at}${e.t.offset ? (e.t.offset > 0 ? '+' : '') + e.t.offset : ''}</span>` : ''}</td>
+    <td><a href="#" data-goto-trigger="${e.t.id}">${e.t.id} · ${esc(e.t.name)}</a></td>
+    <td>${e.skip ? `<span class="muted">skipped: ${esc(e.skip)}</span>` : e.notes.length ? `<span class="muted">if ${esc(e.notes.join(' and '))}</span>` : ''}</td></tr>`;
+}
+// Weekdays Monday first (European week), as the DAYS keys.
+const WEEK = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+// A calendar period row: name, from/to (typed DD-MM, stored MM-DD), weekdays, active today.
+function calRowHtml(e, i, today) {
+  const on = (d) => !e.days || e.days.includes(d);
+  const active = KDModel.periodOn(e, today.getFullYear(), today.getMonth() + 1, today.getDate());
+  return `<div class="cal-row">
+    <span class="cal-dot" style="background:${calColor(e.name)}"></span>
+    <input class="cal-name" data-p="calendar.${i}.name" value="${esc(e.name)}" placeholder="Name" data-r>
+    <span class="cal-dates"><input class="mono" data-cal-date="${i}.from" value="${esc(e.from ? KDModel.dateShow(e.from) ?? e.from : '')}" placeholder="all year" title="DD-MM every year, or DD-MM-YYYY once">
+      <span class="muted">to</span>
+      <input class="mono" data-cal-date="${i}.to" value="${esc(e.to ? KDModel.dateShow(e.to) ?? e.to : '')}" placeholder="${e.from ? 'same day' : ''}" title="DD-MM every year, or DD-MM-YYYY once; empty = the same day"${e.from ? '' : ' disabled'}></span>
+    <span class="cal-days">${WEEK.map((d) => `<button class="cal-wd${on(d) ? ' on' : ''}" data-cal-day="${i}:${d}" title="${on(d) ? 'Active' : 'Not active'} on ${d}">${d[0].toUpperCase() + d[1]}</button>`).join('')}</span>
+    <span class="cal-today">${active ? '<span class="tag mon-warn">active today</span>' : '<span class="muted">—</span>'}</span>
+    <button class="btn small ghost" data-del="calendar.${i}" title="Delete">✕</button>
+  </div>`;
+}
+// Month view: per day the active calendar periods and the timed triggers (skipped ones dimmed).
+function monthHtml() {
+  const now = schedNow();
+  const mv = (S.schedMonth ??= { y: now.getFullYear(), m: now.getMonth() });
+  const first = new Date(mv.y, mv.m, 1), start = new Date(mv.y, mv.m, 1 - (first.getDay() + 6) % 7);
+  const weeks = Math.ceil(((first.getDay() + 6) % 7 + new Date(mv.y, mv.m + 1, 0).getDate()) / 7);
+  const sel = S.schedDay ?? euDate(now), prep = schedTriggers(), todayKey = euDate(now);
+  let cells = '';
+  for (let k = 0; k < weeks * 7; k++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + k), key = euDate(d);
+    const cal = [...new Set(P().calendar.filter((e) => e.name && KDModel.periodOn(e, d.getFullYear(), d.getMonth() + 1, d.getDate())).map((e) => e.name))];
+    const ev = dayEvents(d, -1, prep), shown = ev.slice(0, 4);
+    cells += `<div class="cal-day${d.getMonth() !== mv.m ? ' other' : ''}${key === todayKey ? ' today' : ''}${key === sel ? ' sel' : ''}" data-cal-pick="${key}"
+      ${cal.length ? `style="--cal-tint:${calColor(cal[0])}"` : ''}>
+      <div class="cal-num">${d.getDate()}</div>${ev.length ? `<span class="cal-count" title="${ev.length} timed trigger${ev.length > 1 ? 's' : ''}">${ev.length}</span>` : ''}
+      ${cal.map((n) => `<div class="cal-tag" style="--c:${calColor(n)}">${esc(n)}</div>`).join('')}
+      ${shown.map((e) => `<div class="cal-ev${e.skip ? ' skipped' : ''}" title="${esc(`${hhmm(e.min)} ${e.t.name}${e.skip ? ' – skipped: ' + e.skip : ''}`)}"><span class="mono">${hhmm(e.min)}</span> ${esc(e.t.name)}</div>`).join('')}
+      ${ev.length > shown.length ? `<div class="cal-ev muted">+${ev.length - shown.length} more</div>` : ''}
+    </div>`;
+  }
+  const [sd, sm, sy] = sel.split('-').map(Number), selDate = new Date(sy, sm - 1, sd), selEv = dayEvents(selDate, -1, prep);
+  return `<div class="row cal-nav">
+      <button class="btn small" data-cal-month="-1" title="Previous month">◀</button>
+      <b class="cal-title">${MONTHS[mv.m]} ${mv.y}</b>
+      <button class="btn small" data-cal-month="1" title="Next month">▶</button>
+      <button class="btn small" data-cal-month="0">Today</button>
+    </div>
+    <div class="cal-month">${WEEK.map((d) => `<div class="cal-head">${d[0].toUpperCase() + d.slice(1)}</div>`).join('')}${cells}</div>
+    <h4 style="margin:12px 0 4px">${dayLabel(selDate)}-${sy}${(() => { const c = [...calActiveOn(selDate)]; return c.length ? ` <span class="muted">· ${esc(P().calendar.filter((e) => c.includes((e.name || '').toLowerCase())).map((e) => e.name).filter((n, i, a) => a.indexOf(n) === i).join(', '))}</span>` : ''; })()}</h4>
+    ${selEv.length ? `<table class="sched"><tr><th>When</th><th>Trigger</th><th>Note</th></tr>${selEv.map((e) => schedEventRow(e)).join('')}</table>` : '<p class="muted">No time triggers on this day.</p>'}`;
 }
 views.schedule = () => {
   const p = P(), s = p.settings, c = S.status?.clock;
-  const today = new Date();
+  const today = schedNow();
   const ty = today.getFullYear(), tm = today.getMonth() + 1, td = today.getDate();
   const rise = Sched.sun(ty, tm, td, true), set = Sched.sun(ty, tm, td, false);
   const ev = upcomingEvents();
   let lastDay = '';
   return `<h2>Schedule</h2>
-  <div class="grid">
+  <div class="sched-top">
     <div class="card"><h3 style="margin-top:0">Controller clock</h3>
       <div class="mon-rows">
-        <span class="muted">Local time</span><span>${c?.set ? esc(c.local) + (c.dst ? ' (summer time)' : '') : '<span class="bad">not set</span>'}</span>
+        <span class="muted">Local time</span><span>${c?.set ? esc(euStamp(c.local)) + (c.dst ? ' (summer time)' : '') : '<span class="bad">not set</span>'}</span>
         <span class="muted">NTP</span><span>${!s.time.ntpEnabled ? 'off' : c?.ntp?.error ? `<span class="bad">${esc(c.ntp.error)}</span>` : c?.ntp?.lastSync ? 'synced ' + ago(c.ntp.lastSync) : 'waiting…'}</span>
         <span class="muted">Sunrise</span><span>${c?.sunrise || (rise >= 0 ? hhmm(rise) : '—')}</span>
         <span class="muted">Sunset</span><span>${c?.sunset || (set >= 0 ? hhmm(set) : '—')}</span>
@@ -666,36 +759,67 @@ views.schedule = () => {
       </div>
       <div class="row" style="margin-top:10px"><button class="btn small" data-cmd="ntp sync">Sync now</button><button class="btn small" id="syncBrowser">Set from this browser</button></div></div>
     <div class="card"><h3 style="margin-top:0">Time & location</h3>
-      <div class="form" style="grid-template-columns:110px 1fr">
-        <label>Time zone</label><div class="row nowrap"><span class="muted">UTC</span><input type="number" step="15" data-p="settings.tzOffsetMin" data-t="num" value="${s.tzOffsetMin}" style="width:80px" data-r><span class="muted">min (CET = 60)</span></div>
+      <div class="form sched-form">
+        <label>Time zone</label><div class="row"><span class="muted">UTC</span><input type="number" step="15" data-p="settings.tzOffsetMin" data-t="num" value="${s.tzOffsetMin}" style="width:80px" data-r><span class="muted">min (CET = 60)</span></div>
         <label>Summer time</label><select data-p="settings.time.dst" data-r>${[['eu', 'Europe (last Sun Mar – last Sun Oct)'], ['us', 'USA (2nd Sun Mar – 1st Sun Nov)'], ['none', 'none']].map(([v, n]) => `<option value="${v}"${s.time.dst === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
-        <label>NTP server</label><div class="row nowrap"><input type="checkbox" data-p="settings.time.ntpEnabled" data-t="bool"${s.time.ntpEnabled ? ' checked' : ''}><input data-p="settings.time.ntp" value="${esc(s.time.ntp)}"></div>
+        <label>NTP server</label><div class="row nowrap"><input type="checkbox" data-p="settings.time.ntpEnabled" data-t="bool"${s.time.ntpEnabled ? ' checked' : ''}><input data-p="settings.time.ntp" value="${esc(s.time.ntp)}" style="flex:1"></div>
         <label>Latitude</label><input type="number" step="0.0001" data-p="settings.location.lat" data-t="num" value="${s.location.lat ?? ''}" placeholder="52.16" data-r>
         <label>Longitude</label><input type="number" step="0.0001" data-p="settings.location.lon" data-t="num" value="${s.location.lon ?? ''}" placeholder="4.49 (east +)" data-r>
       </div></div>
   </div>
-  <h3>Calendar periods</h3>
-  <p class="muted" style="margin-top:-4px">Holidays, closed days, seasons… Use them as conditions: <code>calendar Closed inactive</code>. MM-DD repeats every year; YYYY-MM-DD is that date only. Several rows may share a name.</p>
-  <table style="max-width:720px"><tr><th>Name</th><th>From</th><th>To</th><th>Today</th><th></th></tr>
-  ${p.calendar.map((e, i) => `<tr>
-    <td><input data-p="calendar.${i}.name" value="${esc(e.name)}" data-r></td>
-    <td><input data-p="calendar.${i}.from" value="${esc(e.from)}" placeholder="12-24" class="mono" data-r></td>
-    <td><input data-p="calendar.${i}.to" value="${esc(e.to || '')}" placeholder="12-26" class="mono" data-r></td>
-    <td>${Sched.inPeriod(tm * 100 + td, ty * 10000 + tm * 100 + td, e.from || '01-01', e.to || e.from || '01-01') ? '<span class="tag mon-warn">active</span>' : '<span class="muted">—</span>'}</td>
-    <td><button class="btn small ghost" data-del="calendar.${i}">✕</button></td></tr>`).join('')}</table>
-  <div class="row" style="margin-top:6px"><button class="btn small" data-add="calendar">+ Period</button></div>
-  <h3>Next 7 days</h3>
+  <div class="card sched-card"><h3 style="margin-top:0">Calendar periods</h3>
+    <p class="muted" style="margin-top:-4px">Opening days, holidays, closed days, seasons… Use them as conditions: <code>calendar Closed inactive</code>.
+      Dates are DD-MM (every year) or DD-MM-YYYY (that year only); no dates = all year. The day buttons limit a period to those weekdays. Several rows may share a name.</p>
+    <div class="cal-list">${p.calendar.map((e, i) => calRowHtml(e, i, today)).join('') || '<p class="muted">No periods yet.</p>'}</div>
+    <div class="row" style="margin-top:8px"><button class="btn small" data-add="calendar">+ Period</button></div>
+  </div>
+  <div class="card sched-card"><h3 style="margin-top:0">Month</h3>${monthHtml()}</div>
+  <div class="card sched-card"><h3 style="margin-top:0">Next 7 days</h3>
   ${ev.length ? `<table class="sched"><tr><th>When</th><th>Trigger</th><th>Note</th></tr>${ev.map((e) => {
-    const dayLabel = e.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-    const head = dayLabel !== lastDay ? `<b>${esc(dayLabel)}</b> ` : '';
-    lastDay = dayLabel;
-    return `<tr class="${e.skip ? 'skipped' : ''}"><td class="mono">${head}${hhmm(e.min)}${e.t.at === 'sunrise' || e.t.at === 'sunset' ? ` <span class="muted">${e.t.at}${e.t.offset ? (e.t.offset > 0 ? '+' : '') + e.t.offset : ''}</span>` : ''}</td>
-      <td><a href="#" data-goto-trigger="${e.t.id}">${e.t.id} · ${esc(e.t.name)}</a></td>
-      <td>${e.skip ? `<span class="muted">skipped: ${esc(e.skip)}</span>` : e.notes.length ? `<span class="muted">if ${esc(e.notes.join(' and '))}</span>` : ''}</td></tr>`;
-  }).join('')}</table>` : '<p class="muted">No time triggers in the next 7 days.</p>'}`;
+    const dl = dayLabel(e.date);
+    const head = dl !== lastDay ? `<b>${esc(dl)}</b> ` : '';
+    lastDay = dl;
+    return schedEventRow(e, head);
+  }).join('')}</table>` : '<p class="muted">No time triggers in the next 7 days.</p>'}</div>`;
 };
 views.schedule.after = () => {
   $('#syncBrowser').addEventListener('click', setClockFromPc);
+  // Dates are typed DD-MM / DD-MM-YYYY and stored MM-DD / YYYY-MM-DD (what the firmware reads).
+  $$('[data-cal-date]').forEach((el) => el.addEventListener('change', () => {
+    const [i, k] = el.dataset.calDate.split('.'), e = P().calendar[+i], v = el.value.trim();
+    if (!e) return;
+    if (!v) delete e[k];
+    else {
+      const st = KDModel.dateStore(v);
+      if (!st) { el.classList.add('invalid'); toast('Dates are DD-MM (every year) or DD-MM-YYYY, e.g. 24-12', true); return; }
+      e[k] = st;
+    }
+    if (!e.from) delete e.to;
+    markDirty();
+    render();
+  }));
+  $$('[data-cal-day]').forEach((b) => b.addEventListener('click', () => {
+    const [i, d] = b.dataset.calDay.split(':'), e = P().calendar[+i];
+    const set = new Set(e.days || DAYS);
+    set.has(d) ? set.delete(d) : set.add(d);
+    if (set.size === 7) delete e.days;
+    else e.days = DAYS.filter((x) => set.has(x));
+    markDirty();
+    render();
+  }));
+  $$('[data-cal-month]').forEach((b) => b.addEventListener('click', () => {
+    const n = +b.dataset.calMonth, now = schedNow(), mv = S.schedMonth;
+    if (!n) { S.schedMonth = { y: now.getFullYear(), m: now.getMonth() }; S.schedDay = euDate(now); }
+    else { const d = new Date(mv.y, mv.m + n, 1); S.schedMonth = { y: d.getFullYear(), m: d.getMonth() }; }
+    render();
+  }));
+  $$('[data-cal-pick]').forEach((el) => el.addEventListener('click', (ev) => {
+    if (ev.target.closest('a')) return;
+    S.schedDay = el.dataset.calPick;
+    const [, m, y] = S.schedDay.split('-').map(Number);
+    S.schedMonth = { y, m: m - 1 };   // a day of the next/previous month opens that month
+    render();
+  }));
 };
 
 // ---------------------------------------------------------------------------
@@ -887,18 +1011,49 @@ function monDetailWire(it) {
   });
   reload();
 }
+// The history (one small day file) comes first and draws the graph at once; the log lines
+// (a search through the log files on the stick, the slow part) follow and are added to it.
+// The controller answers one request at a time, so asking both together only made the graph
+// wait for the log. Refreshes (every 15 s) ask only for log lines newer than the last one, and
+// a time window that is already over is not read again at all.
+const MD_LOG_MAX = 300;   // = the firmware's /api/devlog limit (Web.cpp)
 async function monDetailLoad(it) {
   const { from, to } = monRange(), key = S.monOpen;
-  const q = `name=${encodeURIComponent(it.name)}&from=${from}&to=${to}`;
-  let lines, logs;
+  const id = `${key}|${from}|${to}`, c = S.mdCache?.id === id ? S.mdCache : null;
+  const nowAt = () => (S.status?.time > 1600000000 ? S.status.time : Date.now() / 1000);
+  if (c && c.at > to) return;   // fetched after the window ended: nothing new can come
+  const q = (f) => `name=${encodeURIComponent(it.name)}&from=${f}&to=${to}`;
+  const gone = () => S.monOpen !== key || !$('#mdGraph');   // closed or another device opened meanwhile
+  let lines;
   try {
-    [lines, logs] = await Promise.all([api(`/api/history?${q}`), api(`/api/devlog?${q}&ip=${encodeURIComponent(it.ip || '')}`)]);
+    lines = await api(`/api/history?${q(from)}`);
   } catch (e) {
     if ($('#mdStats')) $('#mdStats').innerHTML = `<span class="bad">Could not read the history: ${esc(e.message)}</span>`;
     return;
   }
-  if (S.monOpen !== key || !$('#mdGraph')) return;   // closed or another device opened meanwhile
-  const now = S.status?.time > 1600000000 ? S.status.time : Date.now() / 1000;
+  if (gone()) return;
+  const at = nowAt();
+  if (!c) {
+    monDetailDraw(it, lines, null, from, to, at);   // graph now, log lines when they come
+    $('#mdLog').innerHTML = '<div class="muted" style="padding:6px">Searching the log…</div>';
+  }
+  // New lines only: from the last second we have (its lines come again and replace ours).
+  const lastE = c?.logs.length ? c.logs[c.logs.length - 1].e : null;
+  let logs;
+  try {
+    const got = await api(`/api/devlog?${q(lastE ?? from)}&ip=${encodeURIComponent(it.ip || '')}`);
+    logs = lastE == null ? got : c.logs.filter((m) => m.e < lastE).concat(got).slice(-MD_LOG_MAX);
+  } catch (e) {
+    if (!gone() && !c) $('#mdLogInfo').innerHTML = `<span class="bad">Could not read the log: ${esc(e.message)}</span>`;
+    if (!gone()) monDetailDraw(it, lines, c?.logs || [], from, to, at);
+    return;
+  }
+  if (gone()) return;
+  S.mdCache = { id, logs, at };
+  monDetailDraw(it, lines, logs, from, to, at);
+}
+// logs = null: still loading (the graph without its log lane marks).
+function monDetailDraw(it, lines, logs, from, to, now) {
   const up = histSegments(lines, from, to, now, 'online', 'offline');
   const pw = it.power ? histMask(histSegments(lines, from, to, now, 'on', 'off'), up) : null;
   const lanes = [{ name: 'Online', segs: up, cls: { online: 'h-up', offline: 'h-down' } }];
@@ -913,12 +1068,13 @@ async function monDetailLoad(it) {
     }
   }
   $('#mdStats').innerHTML = histStats(up, pw, from, Math.min(to, now));
-  $('#mdGraph').innerHTML = histGraph(lanes, logs, from, to, now);
+  $('#mdGraph').innerHTML = histGraph(lanes, logs || [], from, to, now);
+  if (!logs) return;
   const box = $('#mdLog');
   box.innerHTML = logs.length ? logs.map((m, i) => `<div class="l L${m.l}" data-i="${i}"><span class="t">${new Date(m.e * 1000).toTimeString().slice(0, 8)}</span><span class="v">${LOG_LVLS[m.l]}</span><span class="c">${m.c}</span><span class="m">${esc(m.m)}</span></div>`).join('')
     : '<div class="muted" style="padding:6px">Nothing in the log about this device in this time.</div>';
   box.scrollTop = box.scrollHeight;
-  $('#mdLogInfo').textContent = `${logs.length}${logs.length >= 300 ? ' (the last 300)' : ''} lines mentioning "${it.name}"${it.ip ? ' or ' + it.ip : ''}`;
+  $('#mdLogInfo').textContent = `${logs.length}${logs.length >= MD_LOG_MAX ? ` (the last ${MD_LOG_MAX})` : ''} lines mentioning "${it.name}"${it.ip ? ' or ' + it.ip : ''}`;
 }
 // [[t0, t1, state], ...] over from..min(to, now); state = up/down value or null (unknown:
 // not checked yet, or the controller was off).
@@ -1050,7 +1206,7 @@ function renderMonitor() {
   const controller = st ? card(Date.now() - S.statusAt < 4000 ? 'online' : 'offline', 'Controller', `${st.ip} · firmware ${st.version}`, [
     ['Uptime', fmtTime(st.uptime).replace(/\.\d$/, '')], ['Last start', startedText(st.started)], ['Storage device', st.usb ? 'mounted' : '<span class="bad">missing</span>'],
     ['Engine', `${s.engineFps} fps · tick ${s.tickUs} µs`], ['DMX', `${s.dmxFps} fps`],
-    ['Art-Net / sACN', `${s.artTx} / ${s.sacnTx} pkt/s`], ['Clock', st.time > 1600000000 ? new Date(st.time * 1000).toLocaleString() : 'not set'],
+    ['Art-Net / sACN', `${s.artTx} / ${s.sacnTx} pkt/s`], ['Clock', st.time > 1600000000 ? euDateTime(new Date(st.time * 1000)) : 'not set'],
     ['Memory', memText(s.heap)], ['Lowest free', s.heap ? kb(s.heap.minFree) + ' (since boot)' : '—'],
   ], memBar(s.heap)) : '';
   const pjCard = (x) => {
@@ -1673,7 +1829,7 @@ function renderModes() {
   $$('[data-mfor]', el).forEach((s) => {
     const secs = S.status?.modeFor?.[P().modes[+s.dataset.mfor]?.name];
     s.textContent = secs != null ? `since ${clockHm(now - secs)} · ${duration(secs)}` : '';
-    s.title = secs != null ? `Since ${new Date((now - secs) * 1000).toLocaleString()}` : '';
+    s.title = secs != null ? `Since ${euDateTime(new Date((now - secs) * 1000))}` : '';
   });
 }
 // The state buttons; also put in by views.modes itself, so the page has its full height before
@@ -1728,6 +1884,85 @@ async function modeHistLoad() {
   S.modeHistHtml = { day: S.modeHistDay, graph: $('#mhGraph').innerHTML, changes: $('#mhChanges').innerHTML };
 }
 
+// Settings > Network: what the controller's interface really uses (/api/status "net").
+function netLiveHtml() {
+  const n = S.status?.net;
+  if (!n) return '<div class="muted">Not known (no answer from the controller, or older firmware).</div>';
+  const mode = { dhcp: 'DHCP', fixed: 'Fixed address', fallback: 'Fallback address: DHCP is on, but no DHCP server answered', 'dhcp-asking': 'Asking DHCP…' }[n.mode] || n.mode;
+  const link = n.link == null ? '?' : n.link ? '<span class="dot ok"></span> Connected' : '<span class="dot bad"></span> No link: check the cable and the switch port';
+  const w = P().network, fixed = w.dhcp === false;
+  const pending = !n.mock && n.ip && (fixed !== (n.mode === 'fixed') || (fixed && (n.ip !== String(w.ip || '').trim() || n.mask !== String(w.mask || '').trim())));
+  const rows = [['Link', link], ['Mode', esc(mode)], ['IP address', esc(n.ip || '—')], ['Subnet mask', esc(n.mask || '—')],
+    ['Gateway', esc(n.gateway || '—')], ['DNS', esc((n.dns || []).join(', ') || '—')], ['MAC', `<code>${esc(n.mac || '')}</code>`]];
+  return `<div class="form">${rows.map(([k, v]) => `<label>${k}</label><span>${v}</span>`).join('')}</div>`
+    + (pending ? '<div class="muted" style="margin-top:6px">The setting on the left differs: it is used after the controller restarts (save first).</div>' : '')
+    + (n.mock ? '<div class="muted" style="margin-top:6px">PC mock: no real network, this shows the saved setting.</div>' : '');
+}
+
+// Network test (NetSafe in the firmware): after saving a changed network setting the controller
+// can switch at once and goes back after 2 minutes unless a browser reaches it at the new
+// address. Any editor page that sees a test running in the status confirms it (it reached the
+// controller); this page also knocks on the new fixed address itself.
+function netTrialSeen() {
+  if (Date.now() - (S.netConfirmAt || 0) < 2000) return;
+  S.netConfirmAt = Date.now();
+  fetch('/api/network/confirm', { method: 'POST' }).then((r) => r.json())
+    .then((j) => { if (j.ok) toast('Network setting kept: the controller answers at this address'); }).catch(() => {});
+}
+async function netTrialOffer() {
+  if (!isLive() && !S.status?.net?.testable) return;   // the PC mock only when started for testing
+  const n = P().network, to = n.dhcp !== false ? 'DHCP' : n.ip;
+  if (!confirm(`The network setting changed (now: ${to}).\n\nOK = switch to it now, safely: the controller goes back to the old setting after 2 minutes unless a browser reaches it at the new address.\n\nCancel = use it after the next restart (without that safety).`)) return;
+  try { await api('/api/network/try', { method: 'POST' }); } catch (e) { toast('Network test not started: ' + e.message, true); return; }
+  netTrialDialog(n);
+}
+function netTrialDialog(n) {
+  const fixed = n.dhcp !== false ? null : `http://${n.ip.trim()}`, start = Date.now(), total = 120;
+  const back = S.status?.net?.ip ? `${S.status.net.mode === 'fixed' ? '' : 'DHCP, '}${S.status.net.ip}` : 'the old setting';
+  const ov = document.createElement('div');
+  ov.className = 'net-ov';
+  ov.innerHTML = `<div class="card"><h3>Network test</h3><div id="ntText"></div><div class="row" style="margin-top:12px">
+    ${fixed && fixed !== location.origin ? `<a class="btn" href="${esc(fixed)}/#settings" target="_blank" rel="noopener">Open ${esc(fixed)}</a>` : ''}
+    <button class="btn ghost" id="ntClose">Close</button></div></div>`;
+  document.body.appendChild(ov);
+  let done = false, knocking = false;
+  const text = (h) => { const el = ov.querySelector('#ntText'); if (el) el.innerHTML = h; };
+  const stop = () => { done = true; clearInterval(timer); };
+  ov.querySelector('#ntClose').addEventListener('click', () => { stop(); ov.remove(); });
+  const tick = () => {
+    if (done) return;
+    const st = S.status?.net, fresh = Date.now() - S.statusAt < 3000 && S.statusAt > start + 1500;
+    // The controller's own count while this page still reaches it, else counted here.
+    const left = fresh && st?.trial ? st.trial.left : Math.max(0, total - Math.round((Date.now() - start) / 1000));
+    if (fresh && !st?.trial && st?.trialResult === 'kept') { stop(); text('<p class="ok">Kept: the controller answers at this address with the new setting.</p>'); return; }
+    if (fresh && !st?.trial && st?.trialResult === 'reverted') {
+      stop();
+      text(`<p class="bad">The new address was not reached in 2 minutes: the controller went back to ${esc(back)}, and its project has the old network setting again.</p>
+        <p><button class="btn" id="ntReload">Reload the project</button></p>`);
+      ov.querySelector('#ntReload').addEventListener('click', () => { S.dirty = false; location.reload(); });
+      return;
+    }
+    text(`<p>The controller switched to <b>${esc(fixed ? n.ip : 'DHCP')}</b>. It goes back to ${esc(back)} in <b>${left} s</b> unless a browser reaches it at the new address.</p>
+      ${fixed ? `<p class="muted">This page tries ${esc(fixed)} every 2 seconds and opens it once it answers. If this PC is in another subnet, open the address from a PC that is.</p>`
+        : '<p class="muted">The new address comes from the DHCP server: find it in the KD Designer launcher (Controllers) or in the router, and open it in a browser. Opening the page there confirms it.</p>'}
+      ${left === 0 ? '<p class="muted">Time is up: the controller should be back at the old address. Waiting for it…</p>' : ''}`);
+    // Knock on the new address (CORS allowed there): any answer = reachable, go there.
+    if (fixed && fixed !== location.origin && !knocking && left > 0) {
+      knocking = true;
+      const ac = new AbortController();
+      setTimeout(() => ac.abort(), 1500);
+      fetch(fixed + '/api/network/confirm', { method: 'POST', signal: ac.signal }).then((r) => r.json()).then(() => {
+        stop();
+        text(`<p class="ok">The controller answers at ${esc(fixed)}: setting kept. Opening it…</p>`);
+        S.dirty = false;
+        setTimeout(() => { location.href = fixed + '/#settings'; }, 1200);
+      }).catch(() => {}).finally(() => { setTimeout(() => (knocking = false), 2000); });
+    }
+  };
+  const timer = setInterval(tick, 500);
+  tick();
+}
+
 views.settings = () => {
   const p = P();
   return `<h2>Settings</h2>
@@ -1744,13 +1979,22 @@ views.settings = () => {
     <button class="btn ghost" id="showNew">New project</button></div>
   <p class="muted">Export saves the project as it is in the editor (unsaved changes included) with its map images as one <code>.kdshow</code> file.
     Open loads such a file into the editor; press Save to put it on the controller. Make or edit a show on a PC with the mock: <code>node tools/mock-server.js 8080 C:\\Shows\\MyShow</code>.</p>
-  <h3>Network (applied after reboot)</h3>
-  <div class="form">
-    <label>DHCP</label><input type="checkbox" data-p="network.dhcp" data-t="bool"${p.network.dhcp ? ' checked' : ''} data-r>
-    ${p.network.dhcp ? '' : `<label>IP address</label><input data-p="network.ip" value="${esc(p.network.ip)}">
-    <label>Subnet mask</label><input data-p="network.mask" value="${esc(p.network.mask)}">
-    <label>Gateway</label><input data-p="network.gateway" value="${esc(p.network.gateway)}">`}
+  <h3>Backups</h3>
+  <p class="muted">Every save keeps the version it replaces on the storage device (<code>show/backups</code>), the last 10. Restore puts one in the editor as unsaved changes: look at it, then press Save (or Undo to go back).</p>
+  <div id="backupList"><span class="muted">Loading…</span></div>
+  <h3>Network</h3>
+  <p class="muted">A changed setting is used after a restart, or at once after saving: the controller then goes back to the old setting after 2 minutes unless a browser reaches it at the new address.
+    Lost the controller anyway? Put a file <code>network-reset.txt</code> on the USB stick and restart: it starts with DHCP (172.16.1.111 without a DHCP server).</p>
+  <div class="net-wrap">
+    <div class="form net-set">
+      <label>DHCP</label><input type="checkbox" data-p="network.dhcp" data-t="bool"${p.network.dhcp ? ' checked' : ''} data-r>
+      ${p.network.dhcp ? '<span></span><span class="muted">The router gives the address, gateway and DNS. Without an answer: 172.16.1.111 until one answers.</span>'
+        : [['ip', 'IP address', '192.168.1.50'], ['mask', 'Subnet mask', '255.255.255.0'], ['gateway', 'Gateway', 'empty = none'], ['dns', 'DNS server', 'empty = the gateway'], ['dns2', 'DNS server 2', 'optional']]
+          .map(([k, l, ph]) => `<label>${l}</label><input data-p="network.${k}" data-net="${k}" value="${esc(p.network[k] || '')}" placeholder="${ph}">`).join('')}
+    </div>
+    <div class="card net-live"><b>In use now</b><div id="netLive">${netLiveHtml()}</div></div>
   </div>
+  <div id="netProblems" class="bad"></div>
   <h3>Controller</h3>
   <div class="row"><button class="btn" id="syncClock">Set clock from this browser</button>
     <button class="btn" data-cmd="reload">Reload project from USB</button></div>
@@ -1769,11 +2013,22 @@ views.settings.after = () => {
   $('#raw').value = JSON.stringify(P(), null, 2);
   $('#syncClock').addEventListener('click', setClockFromPc);
   $('#updFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) installUpdate(f); });
-  pagePoll('updInfo', () => { if (!S.updating) $('#updInfo').innerHTML = updInfoHtml(); }, 2000);
+  pagePoll('updInfo', () => { if (!S.updating) $('#updInfo').innerHTML = updInfoHtml(); $('#netLive').innerHTML = netLiveHtml(); }, 2000);
+  // Checked while typing (the bound value is only written on "change"); Save refuses too.
+  const netCheck = () => {
+    const n = { ...P().network };
+    $$('[data-net]').forEach((el) => (n[el.dataset.net] = el.value));
+    const bad = KDModel.netProblems(n);
+    $$('[data-net]').forEach((el) => el.classList.toggle('invalid', bad.some((b) => b.field === el.dataset.net)));
+    $('#netProblems').innerHTML = bad.map((b) => `<div>${esc(b.text)}</div>`).join('');
+  };
+  $$('[data-net]').forEach((el) => el.addEventListener('input', netCheck));
+  netCheck();
   $('#applyRaw').addEventListener('click', () => {
     try { replaceProject(JSON.parse($('#raw').value)); toast('Project applied - press Save to store it'); } catch (e) { toast('Invalid JSON: ' + e.message, true); }
   });
   attachDisplaySettings();
+  loadBackupList();
   $('#showExport').addEventListener('click', exportShow);
   $('#showOpen').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) openShow(f); });
   $('#showNew').addEventListener('click', () => {
@@ -1884,6 +2139,36 @@ async function installUpdate(f) {
   }
   show(`Updated to ${st.version} - reloading the page`);
   setTimeout(() => location.reload(), 1500);
+}
+
+// ---- Backups: the versions before the last saves (Storage::keepBackup / the mock's keepBackup).
+// Names are "YYYY-MM-DD_HH-MM-SS.json" = when that version was replaced by a save.
+function backupWhen(name) {
+  const m = /^(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d)(-2)?\.json$/.exec(name);
+  return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}:${m[6]}` : name.replace(/\.json$/, '');
+}
+async function loadBackupList() {
+  const box = $('#backupList');
+  let r;
+  try { r = await api('/api/backups'); } catch (e) { r = null; }
+  if (!box?.isConnected) return;
+  const list = r?.backups;
+  if (!Array.isArray(list)) { box.innerHTML = '<span class="muted">This controller keeps no backups yet (update the firmware).</span>'; return; }
+  if (!list.length) { box.innerHTML = '<span class="muted">No backups yet: the first save makes one.</span>'; return; }
+  box.innerHTML = `<table class="tbl backups"><tr><th>In use until</th><th>Size</th><th></th></tr>${list.map((b) => `<tr><td>${esc(backupWhen(b.name))}${/noclock/.test(b.name) ? ' <span class="muted">(clock not set)</span>' : ''}</td>
+    <td class="muted">${b.size != null ? `${Math.round(b.size / 1024)} KB` : ''}</td>
+    <td><button class="btn small" data-restore="${esc(b.name)}">Restore…</button> <a class="btn small ghost" href="/api/backups?name=${encodeURIComponent(b.name)}" download="project-${esc(b.name)}">Download</a></td></tr>`).join('')}</table>`;
+  $$('[data-restore]', box).forEach((btn) => btn.addEventListener('click', () => restoreBackup(btn.dataset.restore)));
+}
+async function restoreBackup(name) {
+  let p;
+  try { p = await apiProgress('/api/backups?name=' + encodeURIComponent(name), 'Loading the backup'); } catch (e) { return toast('Could not read the backup: ' + e.message, true); }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return toast('That backup has no project in it', true);
+  const n = (k) => (p[k] || []).length;
+  if (!confirm(`Restore the version that was in use until ${backupWhen(name)}?\n\n${n('fixtures')} fixtures, ${n('scenes')} scenes, ${n('timelines')} timelines, ${n('triggers')} triggers.\n\nIt goes into the editor as unsaved changes${S.dirty ? ' (your unsaved changes are replaced; Undo brings them back)' : ''}: press Save to put it on the controller. This controller's network settings are kept.`)) return;
+  p.network = JSON.parse(JSON.stringify(P().network));   // an old version must not move the controller to another IP
+  replaceProject(p);
+  toast(`Version of ${backupWhen(name)} in the editor - press Save to keep it${showMediaNames(p).length ? ' (map images replaced since may be missing)' : ''}`);
 }
 
 // ---- Show files (.kdshow): "Save as" / "Open" between the controller and a PC --------

@@ -30,9 +30,11 @@ const char kFwTmp[] = "/ota/UPDATE.TMP";
 const char kInfo[] = "/ota/KDUPD.TXT";     // "<old version>\n<new version>\n", for the log after the restart
 const char kWwwNew[] = "/usb/www_new";
 const char kWwwOld[] = "/usb/www_old";
-// The M7 program: after the 256 KB bootloader, up to the 1 MB M7 half of the flash
-// (the build's "Flash: ... from 786432 bytes").
-const uint32_t kAppStart = 0x08040000, kAppEnd = 0x08100000;
+// The M7 program: after the 256 KB bootloader, up to the end of the 2 MB flash
+// (platformio.ini flash_layout 100_0: the M4 core is not used; the build's
+// "Flash: ... from 1835008 bytes"). Firmware 0.2.0 and older still check for 768 KB
+// (end 0x08100000): the first update to a board running one of those must stay below that.
+const uint32_t kAppStart = 0x08040000, kAppEnd = 0x08200000;
 
 mbed::BlockDevice* raw = nullptr;
 mbed::MBRBlockDevice* part = nullptr;
@@ -290,6 +292,7 @@ void begin() {
 
 void poll() {
   if (!restartAt || (int32_t)(millis() - restartAt) < 0) return;
+  if (Storage::projectBusy() && millis() - restartAt < 10000) return;   // a save on its way to the stick
   Log::flush();
   otafs.unmount();
   Log::markPlannedRestart();   // "Last start: restart", not "unexpected"

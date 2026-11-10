@@ -9,6 +9,7 @@
 namespace D2Ram {
 void* alloc(size_t bytes, size_t align);
 size_t used();
+size_t freeBytes();   // between the alloc()s and the keep() blocks
 // A block at the top of the area that is NOT cleared: D2 SRAM keeps its contents through a
 // reset (watchdog, crash, restart), so what was there before can be read back. Always the
 // same address for the same size; check your own magic number (after power-on it's noise).

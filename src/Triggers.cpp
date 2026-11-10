@@ -19,7 +19,7 @@
 #include "Util.h"
 
 namespace {
-enum class Type { Startup, Time, Interval, Udp, Osc, Input, TimelineEnd, Mode, Panel, DmxChange, Device, Projector, Variable, TcpLine, HttpResp, Manual, Sequence, DmxIn, Comment, Unknown };
+enum class Type { Startup, Time, Interval, Udp, Osc, Input, TimelineEnd, Mode, Panel, DmxChange, Device, Projector, Variable, TcpLine, HttpResp, Manual, Calendar, DmxIn, Comment, Unknown };
 // What a trigger does when it fires while it still runs (waits in a sleep, wait or loop).
 enum WhileRunning : uint8_t { kAgain, kIgnore, kRestart, kQueue };
 
@@ -47,7 +47,7 @@ struct Trigger {
   String io;                    // input: Machine Control point (in3, io5, ai0) instead of a pin
   float level = 5;              // input on an analog point: fires when crossing this value
   bool rising = true, falling = false;
-  int state = -1;
+  int state = -1;               // input: last level; calendar: period active (1) or not (0), -1 = not read yet
   uint32_t changedAt = 0;
   int timeline = 0;
   int universe = -1;            // dmx_change: universe index
@@ -60,15 +60,13 @@ struct Trigger {
   uint32_t rateStart = 0;       // feedback guard: fires counted in the second from rateStart
   int rateCount = 0;
   uint32_t pausedUntil = 0;     // != 0: paused as a loop until then
+  uint32_t skipStart = 0;       // "condition false" log lines counted per second (like rateCount)
+  int skipCount = 0;
   uint32_t cooldownMs = 0, lastRun = 0;   // fires within cooldownMs after a run are skipped
   uint8_t whileRunning = kAgain;
   // input / panel: "hold" fires after holdMs held down, "double" on a second press within withinMs.
-  // sequence: withinMs = from the first step to the last.
   bool hold = false, dbl = false;
   uint32_t holdMs = 2000, withinMs = 500, pressAt = 0, lastPress = 0;
-  BigRam::Vec<int> steps;       // sequence: the trigger ids that must fire in this order
-  size_t seqPos = 0;
-  uint32_t seqStart = 0;
   int dmxIn = -1;               // dmx_in: input slot in Net, channels/lastValues as dmx_change
   uint8_t when = 0;             // dmx_in: 0 any change, 1 goes above level, 2 goes below level
   uint32_t inFrames = 0;
@@ -110,8 +108,10 @@ struct Scheduled {
 };                              // kQueued: fire again when the current run ends (never due)
 
 // Last fires for the history strip: src 0 = its own event, 1-9999 = from that trigger,
-// 0x8000 | n = timeline n, kSrcHand/Repeat/Delayed/Queued as below.
+// 0x8000 | n = timeline n, kSrcHand/Repeat/Delayed/Queued as below. id | kSkipped = it fired but a
+// condition was false, so its actions didn't run (trigger ids stay below 0x8000).
 struct Fired { uint32_t ms; uint16_t id, src; };
+const uint16_t kSkipped = 0x8000;
 const uint16_t kSrcHand = 0xffff, kSrcRepeat = 0xfffe, kSrcDelayed = 0xfffd, kSrcQueued = 0xfffc;
 
 BigRam::Vec<Trigger> triggers;
@@ -129,8 +129,19 @@ uint32_t lastWaitCheck = 0;
 uint8_t pkt[600];
 Fired history[KD_TRIGGER_HISTORY];
 size_t histCount = 0, histNext = 0;
+struct CalSeen { String name; int active; };
+std::vector<CalSeen> calKept;   // only during load()
 
-void remember(const Trigger& t, const char* reason) {
+// "Test" in the web UI (Triggers::test): what each condition and action line of one fire by
+// hand did. Only that trigger's own run (d = depth: 0 in runTrigger, 1 in its runActions), not
+// the triggers it fires: their reply shows on its "fire trigger" line. kind c|a|n (note).
+struct TraceLine { char kind; int line; bool ok; String text, reply; };
+std::vector<TraceLine>* trace = nullptr;
+int traceId = 0;
+inline std::vector<TraceLine>* tracing(const Trigger& t, int d) { return trace && t.id == traceId && depth == d ? trace : nullptr; }
+void traceNote(std::vector<TraceLine>* tr, bool ok, const String& text) { if (tr) tr->push_back({'n', -1, ok, text, ""}); }
+
+void remember(const Trigger& t, const char* reason, bool skipped = false) {
   // One per channel per frame: they would push everything else out.
   if (t.type == Type::DmxChange || (t.type == Type::DmxIn && t.when == 0) || t.internal) return;
   uint16_t src = 0;
@@ -140,7 +151,7 @@ void remember(const Trigger& t, const char* reason) {
   else if (running && running != t.id) src = running;
   else if (userRun) src = kSrcHand;
   else if (!strncmp(reason, "timeline ", 9)) src = 0x8000 | atoi(reason + 9);
-  history[histNext] = {millis(), (uint16_t)t.id, src};
+  history[histNext] = {millis(), (uint16_t)(t.id | (skipped ? kSkipped : 0)), src};
   histNext = (histNext + 1) % KD_TRIGGER_HISTORY;
   if (histCount < KD_TRIGGER_HISTORY) histCount++;
 }
@@ -213,7 +224,7 @@ Type parseType(const char* s) {
       {"osc", Type::Osc}, {"input", Type::Input}, {"timeline_end", Type::TimelineEnd}, {"mode", Type::Mode},
       {"panel", Type::Panel}, {"dmx_change", Type::DmxChange}, {"device", Type::Device}, {"projector", Type::Projector}, {"variable", Type::Variable},
       {"tcp", Type::TcpLine}, {"http", Type::HttpResp}, {"manual", Type::Manual},
-      {"sequence", Type::Sequence}, {"dmx_in", Type::DmxIn}, {"comment", Type::Comment}};
+      {"calendar", Type::Calendar}, {"dmx_in", Type::DmxIn}, {"comment", Type::Comment}};
   for (auto& k : kTypes) if (!strcmp(s, k.n)) return k.t;
   return Type::Unknown;
 }
@@ -273,6 +284,8 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
   running = t.id;
   depth++;
   bool later = false;           // the rest of the lines waits: the run isn't over
+  std::vector<TraceLine>* tr = tracing(t, 1);
+  auto note = [&](size_t i, bool ok, const String& r) { if (tr) tr->push_back({'a', (int)i, ok, String(t.actions[i]), r}); };
   for (size_t i = from; i < t.actions.size(); i++) {
     // Only a sleep / wait / repeat line (or one a variable may turn into one) is looked at
     // here; the rest goes straight to Cmd::exec, which expands the variables itself.
@@ -284,20 +297,21 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
     if (startsWord(line, "sleep")) {
       String s = line.substring(5);
       s.trim();
-      if (!isSeconds(s)) { LOGW(Cmd, "[%s] '%s' failed: expected: sleep <seconds>", src, line.c_str()); continue; }
+      if (!isSeconds(s)) { if (tr) note(i, false, "expected: sleep <seconds>"); LOGW(Cmd, "[%s] '%s' failed: expected: sleep <seconds>", src, line.c_str()); continue; }
       if (i + 1 < t.actions.size()) {
         Scheduled job{t.id, millis() + (uint32_t)(s.toFloat() * 1000), 0, 0, 1, vars ? *vars : Vars()};
         job.line = i + 1;
         later = schedule(job);
         if (later) LOGD(Cmd, "[%s] sleep %s s", src, s.c_str());
       }
+      if (tr) note(i, true, i + 1 < t.actions.size() ? "the lines below run " + s + " s later (not shown here)" : String("last line: nothing after it"));
       break;
     }
     if (startsWord(line, "wait")) {
       // wait until <condition> [timeout <s>]: checked every KD_WAIT_CHECK_MS in poll.
       String cond = line.substring(4), err;
       cond.trim();
-      if (!startsWord(cond, "until")) { LOGW(Cmd, "[%s] '%s' failed: expected: wait until <condition> [timeout <seconds>]", src, line.c_str()); continue; }
+      if (!startsWord(cond, "until")) { if (tr) note(i, false, "expected: wait until <condition> [timeout <seconds>]"); LOGW(Cmd, "[%s] '%s' failed: expected: wait until <condition> [timeout <seconds>]", src, line.c_str()); continue; }
       cond = cond.substring(5);
       cond.trim();
       uint32_t timeout = 0;
@@ -309,8 +323,8 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
         s.trim();
         if (isSeconds(s)) { timeout = (uint32_t)(s.toFloat() * 1000); cond = cond.substring(0, k); cond.trim(); }
       }
-      if (Triggers::checkCondition(cond, err)) continue;   // already true: carry on
-      if (err.length()) { LOGW(Cmd, "[%s] wait until '%s': %s", src, cond.c_str(), err.c_str()); break; }
+      if (Triggers::checkCondition(cond, err)) { if (tr) note(i, true, "already true: carries on"); continue; }   // already true: carry on
+      if (err.length()) { if (tr) note(i, false, err); LOGW(Cmd, "[%s] wait until '%s': %s", src, cond.c_str(), err.c_str()); break; }
       if (i + 1 < t.actions.size()) {
         Scheduled job{t.id, timeout ? (millis() + timeout) | 1 : 0, 0, 0, 1, vars ? *vars : Vars()};
         job.line = i + 1;
@@ -319,6 +333,7 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
         later = schedule(job);
         if (later) LOGD(Cmd, "[%s] waiting until %s", src, cond.c_str());
       }
+      if (tr) note(i, true, "not true yet: the lines below run once it is" + (timeout ? " (gives up after " + String(timeout / 1000.0f, 1) + " s)" : String("")) + " (not shown here)");
       break;
     }
     if (startsWord(line, "repeat")) {
@@ -339,74 +354,91 @@ void runActions(Trigger& t, size_t from, const Vars* vars) {
         // rest carries on in the next main-loop rounds, between engine frames (500 sends in one
         // go stopped the lights for 0.2 s). Like a loop with "every", the lines below wait for it.
         const uint32_t t0 = micros();
+        int bad = 0;
+        String first;
+        bool firstOk = true;
         for (; k <= n && (k == 1 || (!ms && micros() - t0 < KD_BURST_BUDGET_US)); k++) {
           v.set("i", String(k));
           v.set("count", String(k));   // as "repeat trigger" gives the trigger it fires
           String reply;
-          Cmd::exec(cmd, reply, src, &v);
+          bool ok = Cmd::exec(cmd, reply, src, &v);
+          if (!ok) bad++;
+          if (k == 1) { first = reply; firstOk = ok; }
         }
-        if (k > n) continue;   // all done: next line
+        if (k > n) {   // all done: next line
+          if (tr) note(i, !bad, "ran " + String(n) + " time" + (n > 1 ? "s" : "") + (bad ? ", " + String(bad) + " failed" : String("")) + ": " + first);
+          continue;
+        }
         Scheduled job{t.id, millis() + ms, ms, n - k + 1, k, v};
         job.line = i;
         job.kind = kLoop;
         job.text = cmd;
         later = schedule(job);
+        if (tr) note(i, firstOk, "round 1: " + first + " · the other rounds " + (ms ? "every " + String(ms / 1000.0f, 1) + " s" : String("right after")) + ", then the lines below (not shown here)");
         break;
       }
     }
     }
     String reply;
-    Cmd::exec(t.actions[i], reply, src, vars);
+    bool ok = Cmd::exec(t.actions[i], reply, src, vars);
+    if (tr) {
+      const char* p = t.actions[i];
+      while (*p == ' ') p++;
+      if (tr) note(i, ok, reply.length() || !(!*p || *p == '#') ? reply : String("comment / empty: skipped"));
+    }
   }
   depth--;
   running = was;
   if (!later) runEnded(t);
 }
 
-// A trigger fired: move the sequences it is a step of along.
-void stepFired(const Trigger& t, uint32_t now) {
-  for (auto& s : triggers) {
-    if (!s.enabled || s.type != Type::Sequence || s.steps.empty() || s.id == t.id) continue;
-    if (std::find(s.steps.begin(), s.steps.end(), t.id) == s.steps.end()) continue;
-    if (s.seqPos && now - s.seqStart > s.withinMs) s.seqPos = 0;   // too slow: start again
-    if (s.steps[s.seqPos] != t.id) s.seqPos = 0;                    // out of order: start again
-    if (s.steps[s.seqPos] != t.id) continue;
-    if (!s.seqPos) s.seqStart = now;
-    if (++s.seqPos < s.steps.size()) continue;
-    s.seqPos = 0;
-    runTrigger(s, "sequence", nullptr);
-  }
-}
-
 void runTrigger(Trigger& t, const char* reason, const Vars* vars) {
   if (t.type == Type::Comment) return;
   if (safe && !userRun) { LOGD(Trig, "Trigger %d '%s' not run (%s): safe mode", t.id, t.name.c_str(), reason); return; }
+  std::vector<TraceLine>* tr = tracing(t, 0);
   for (auto& c : t.conditions) {
     String err;
-    if (!Triggers::checkCondition(c, err)) {
-      if (err.length()) LOGW(Trig, "Trigger %d '%s': condition '%s' invalid: %s", t.id, t.name.c_str(), c.c_str(), err.c_str());
-      else LOGD(Trig, "Trigger %d '%s' skipped (%s): '%s' is false", t.id, t.name.c_str(), reason, c.c_str());
+    const bool holds = Triggers::checkCondition(c, err);
+    if (tr) tr->push_back({'c', -1, holds, c, err});
+    if (!holds) {
+      if (err.length()) { LOGW(Trig, "Trigger %d '%s': condition '%s' invalid: %s", t.id, t.name.c_str(), c.c_str(), err.c_str()); return; }
+      // The web UI reads this line (grey flash on the row, red diamond in the flow view): keep
+      // "skipped (<reason>[ from trigger N]): condition false: '<condition>'". Info level, at most
+      // KD_TRIGGER_LOG_PER_S a second per trigger like "fired"; per-channel DMX ones stay debug.
+      char from[24] = "";
+      if (running && running != t.id) snprintf(from, sizeof(from), " from trigger %d", running);
+      uint32_t now = millis();
+      if (now - t.skipStart >= 1000) { t.skipStart = now; t.skipCount = 0; }
+      if (t.type == Type::DmxChange || (t.type == Type::DmxIn && t.when == 0) || ++t.skipCount > KD_TRIGGER_LOG_PER_S)
+        LOGD(Trig, "Trigger %d '%s' skipped (%s%s): condition false: '%s'", t.id, t.name.c_str(), reason, from, c.c_str());
+      else LOGI(Trig, "Trigger %d '%s' skipped (%s%s): condition false: '%s'", t.id, t.name.c_str(), reason, from, c.c_str());
+      remember(t, reason, true);
       return;
     }
   }
   if (depth > 8) { LOGE(Trig, "Trigger %d: nesting too deep (loop?)", t.id); return; }
   // "Only active in": like a switched-off trigger while the group is in another state. Fired by
   // hand still runs, so it can be tested.
-  if (t.onlyGroup.length() && !(userRun && !running)) {
+  if (t.onlyGroup.length() && (!(userRun && !running) || tr)) {
     const String& cur = State::current(State::findGroup(t.onlyGroup));
     bool in = false;
     for (auto& s : t.onlyStates) if (s.equalsIgnoreCase(cur)) in = true;
-    if (!in) { LOGD(Trig, "Trigger %d '%s' skipped (%s): only active when %s is %s", t.id, t.name.c_str(), reason, t.onlyGroup.c_str(), t.onlyStates.empty() ? "?" : t.onlyStates[0].c_str()); return; }
+    if (!in && !(userRun && !running)) { LOGD(Trig, "Trigger %d '%s' skipped (%s): only active when %s is %s", t.id, t.name.c_str(), reason, t.onlyGroup.c_str(), t.onlyStates.empty() ? "?" : t.onlyStates[0].c_str()); return; }
+    if (!in) traceNote(tr, true, "Only active when " + t.onlyGroup + " is " + (t.onlyStates.empty() ? String("?") : t.onlyStates[0]) + " (now " + (cur.length() ? cur : String("none")) + "): runs anyway because you fired it by hand");
   }
   uint32_t now = millis();
   // Fired by hand ("Fire now", the console) skips the cooldown, so it can be tested.
-  if (t.cooldownMs && t.lastRun && now - t.lastRun < t.cooldownMs && !(userRun && !running)) {
-    LOGD(Trig, "Trigger %d '%s' skipped (%s): cooldown, %lu ms left", t.id, t.name.c_str(), reason, (unsigned long)(t.cooldownMs - (now - t.lastRun)));
-    return;
+  if (t.cooldownMs && t.lastRun && now - t.lastRun < t.cooldownMs) {
+    if (!(userRun && !running)) {
+      LOGD(Trig, "Trigger %d '%s' skipped (%s): cooldown, %lu ms left", t.id, t.name.c_str(), reason, (unsigned long)(t.cooldownMs - (now - t.lastRun)));
+      return;
+    }
+    if (tr) traceNote(tr, true, "In its cooldown (" + String((t.cooldownMs - (now - t.lastRun)) / 1000.0f, 1) + " s left): runs anyway because you fired it by hand");
   }
   if (t.whileRunning != kAgain && strcmp(reason, "queued") && isRunning(t.id)) {
-    if (t.whileRunning == kIgnore) { LOGD(Trig, "Trigger %d '%s' ignored (%s): still running", t.id, t.name.c_str(), reason); return; }
+    if (t.whileRunning == kIgnore) { if (tr) traceNote(tr, false, "Still running (sleep, wait or repeat) and set to ignore fires meanwhile: not run"); LOGD(Trig, "Trigger %d '%s' ignored (%s): still running", t.id, t.name.c_str(), reason); return; }
     if (t.whileRunning == kQueue) {
+      if (tr) traceNote(tr, false, "Still running and set to queue: runs when the current run ends (not traced)");
       for (auto& s : scheduled) if (s.id == t.id && s.kind == kQueued) { LOGD(Trig, "Trigger %d '%s' ignored (%s): one is already queued", t.id, t.name.c_str(), reason); return; }
       Scheduled job{t.id, 0, 0, 0, 1, vars ? *vars : Vars()};
       job.kind = kQueued;
@@ -416,9 +448,10 @@ void runTrigger(Trigger& t, const char* reason, const Vars* vars) {
     // Restart: drop what the current run still had waiting.
     for (size_t i = 0; i < scheduled.size();)
       if (scheduled[i].id == t.id && scheduled[i].line >= 0) scheduled.erase(scheduled.begin() + i); else i++;
+    if (tr) traceNote(tr, true, "Was still running: restarted (what it still had waiting is dropped)");
     LOGD(Trig, "Trigger %d '%s' restarts (%s)", t.id, t.name.c_str(), reason);
   }
-  if (overloaded(t, now)) return;
+  if (overloaded(t, now)) { if (tr) traceNote(tr, false, "Paused: it fired too often (feedback loop?)"); return; }
   t.lastRun = now | 1;
   // The web UI reads this line (flow view on the Triggers page): keep "fired (<reason>[ from trigger N])".
   char from[24] = "";
@@ -432,7 +465,6 @@ void runTrigger(Trigger& t, const char* reason, const Vars* vars) {
     LOGI(Trig, "Trigger %d '%s' fired (%s%s) - fires more than %d times a second: the rest of this second is not logged", t.id, t.name.c_str(), reason, from, KD_TRIGGER_LOG_PER_S);
   remember(t, reason);
   runActions(t, 0, vars);
-  stepFired(t, now);
 }
 
 // An input switched on or off. Plain edges fire now; "hold" starts the clock (fired
@@ -638,6 +670,10 @@ BigRam::Vec<uint16_t> parseChannels(const String& spec) {
 namespace Triggers {
 
 void load() {
+  // Calendar-change triggers keep what they last saw across a reload, so an edit of the calendar
+  // that makes a period start or end today fires them (a fresh start doesn't: it only notes it).
+  for (auto& t : triggers)
+    if (t.type == Type::Calendar && t.state >= 0) calKept.push_back({t.match, t.state});
   triggers.clear();
   scheduled.clear();
   heldCount = 0;
@@ -655,7 +691,7 @@ void load() {
     const char* wr = o["whileRunning"] | "again";
     t.whileRunning = !strcmp(wr, "ignore") ? kIgnore : !strcmp(wr, "restart") ? kRestart : !strcmp(wr, "queue") ? kQueue : kAgain;
     t.holdMs = (uint32_t)((float)(o["hold"] | 2.0f) * 1000);
-    t.withinMs = (uint32_t)((float)(o["within"] | (t.type == Type::Sequence ? 5.0f : 0.5f)) * 1000);
+    t.withinMs = (uint32_t)((float)(o["within"] | 0.5f) * 1000);
     for (JsonVariantConst a : o["actions"].as<JsonArrayConst>()) t.actions.push_back(a | "");
     // "onlyIn": {"group": "Museum", "states": ["Open", "Starting up"]}
     t.onlyGroup = o["onlyIn"]["group"] | "";
@@ -745,6 +781,13 @@ void load() {
       case Type::Variable: t.event = o["variable"] | ""; t.match = o["value"] | ""; break;   // "" = any
       case Type::TcpLine: t.event = o["device"] | ""; t.match = o["match"] | "*"; break;
       case Type::HttpResp: t.match = o["url"] | ""; break;                                   // URL prefix, "" = any
+      case Type::Calendar: {
+        // "calendar": period name, "state": "active" (the period starts) | "inactive" (it ends).
+        t.match = o["calendar"] | "";
+        t.rising = strcmp(o["state"] | "active", "inactive") != 0;
+        for (auto& k : calKept) if (k.name.equalsIgnoreCase(t.match)) t.state = k.active;
+        break;
+      }
       case Type::DmxChange: {
         t.universe = Show::universeIndex(o["universe"] | 1);
         t.channels = parseChannels(o["channels"] | "1");
@@ -769,20 +812,7 @@ void load() {
     triggers.push_back(std::move(t));
   }
   Net::setDmxInputs(inSacn, inUni, nIn);
-  // Sequence steps refer to other triggers by name or number: resolved once all are loaded.
-  size_t k = 0;
-  for (JsonObjectConst o : Show::projectDoc()["triggers"].as<JsonArrayConst>()) {
-    Trigger& t = triggers[k++];
-    if (t.type != Type::Sequence) continue;
-    for (JsonVariantConst s : o["steps"].as<JsonArrayConst>()) {
-      String ref = s.is<const char*>() ? String(s.as<const char*>()) : String(s.as<long>()), err;
-      ref.trim();
-      if (!ref.length()) continue;
-      int id = findId(ref, err);
-      if (id < 0) LOGW(Trig, "Trigger %d: sequence step: %s", t.id, err.c_str());
-      else t.steps.push_back(id);
-    }
-  }
+  calKept.clear();
   // Mode states' enter / leave actions: "modes": [{"name": "Museum", "states": [...],
   //   "stateInfo": {"Open": {"enter": ["start timeline Inloop"], "leave": [...]}}}]
   modeActs.clear();
@@ -847,6 +877,20 @@ void poll(uint32_t now) {
       } else if (tmv.tm_hour == t.hh && tmv.tm_min == t.mm && tmv.tm_sec == t.ss) {
         runTrigger(t, "time", nullptr);
       }
+    }
+    // Calendar change: a period starts or ends (midnight, or a calendar edit). The first reading
+    // after power-up or once the clock is set is only noted: it isn't a change.
+    for (auto& t : triggers) {
+      if (!t.enabled || t.type != Type::Calendar || !t.match.length()) continue;
+      bool known;
+      int a = Clock::calendarActive(t.match, known) ? 1 : 0;
+      if (t.state < 0 || a == t.state) { t.state = a; continue; }
+      t.state = a;
+      if (a != (t.rising ? 1 : 0)) continue;
+      Vars vars;
+      vars.set("calendar", t.match);
+      vars.set("state", a ? "active" : "inactive");
+      runTrigger(t, a ? "calendar active" : "calendar inactive", &vars);
     }
   }
 
@@ -1145,6 +1189,30 @@ bool fire(int id, String& msg, const Vars* vars, uint32_t delayMs) {
   return true;
 }
 
+// Fire by hand and report each line: {"ok","reply","lines":[{"k":"c|a|n","i","ok","t","r"}]}.
+bool test(int id, String& out) {
+  std::vector<TraceLine> lines;
+  trace = &lines;
+  traceId = id;
+  String msg;
+  bool ok = fire(id, msg);
+  trace = nullptr;
+  JsonDocument d;
+  d["ok"] = ok;
+  d["reply"] = msg;
+  JsonArray a = d["lines"].to<JsonArray>();
+  for (auto& l : lines) {
+    JsonObject o = a.add<JsonObject>();
+    o["k"] = String(l.kind);
+    if (l.line >= 0) o["i"] = l.line;
+    o["ok"] = l.ok;
+    o["t"] = l.text;
+    if (l.reply.length()) o["r"] = l.reply;
+  }
+  serializeJson(d, out);
+  return ok;
+}
+
 bool cancel(int id, String& msg) {
   size_t before = scheduled.size();
   for (size_t i = 0; i < scheduled.size();)
@@ -1293,7 +1361,7 @@ bool checkCondition(const String& cond, String& err) {
     err = "expected: io <point> is on|off or io <point> =|!=|>|<|>=|<= <value>";
     return false;
   }
-  // date between <MM-DD|YYYY-MM-DD> <MM-DD|YYYY-MM-DD>
+  // date between <DD-MM|DD-MM-YYYY> <DD-MM|DD-MM-YYYY> (old projects without dateOrder "dmy": MM-DD)
   if (is(0, "date") && is(1, "between") && t.size() == 4) return Clock::dateBetween(t[2], t[3], err);
   if (is(0, "day") && is(1, "is") && t.size() >= 3) {
     struct tm tmv;
@@ -1386,7 +1454,8 @@ void historyJson(String& out) {
   char buf[40];
   for (size_t k = 0; k < histCount; k++) {
     const Fired& f = history[(start + k) % KD_TRIGGER_HISTORY];
-    snprintf(buf, sizeof(buf), "%s[%lu,%u,%u]", k ? "," : "", (unsigned long)f.ms, f.id, f.src);
+    // [ms, id, src] or [ms, id, src, 1] = condition false (not run).
+    snprintf(buf, sizeof(buf), "%s[%lu,%u,%u%s]", k ? "," : "", (unsigned long)f.ms, (unsigned)(f.id & 0x7fff), (unsigned)f.src, f.id & kSkipped ? ",1" : "");
     out += buf;
   }
   out += "]}";

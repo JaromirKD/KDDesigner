@@ -51,6 +51,7 @@ low) all match.
 | 7b | **Triggers, devices** | Send from a desk / phone app (OSC, UDP, Art-Net in) | Send UDP / OSC / HTTP from this PC, watch the log | Triggers fire as in the mock; projectors / PCs / show devices show online |
 | 8 | **Watchdog** | - | Flash a test build with a deliberate hang, then the normal build again | Board restarts by itself, "Last start: watchdog"; a big-rig save does *not* trip it |
 | 9 | **Network update** | - | Build with a raised `KD_VERSION`, install it via Settings | Restarts, log says "installed", web UI is the new version. Also check whether the bootloader removes `UPDATE.BIN` |
+| 9a | **Network settings** | Put `network-reset.txt` on the stick once (last) | Settings > Network: check "In use now" (DNS 1 + 2, MAC, link when the cable is pulled); save a fixed address this PC reaches (OK = switch now), then one it can't reach (another subnet); then the stick file + restart | Reachable: the page opens the new address, "kept". Unreachable: back after 2 min, project has the old setting. A restart during the 2 min also goes back. The stick file gives DHCP and is removed. `nslookup`-style check: NTP by name still works with the fixed DNS |
 | 10 | **Long run** | Leave it running overnight / a weekend | Read the log and `/api/status` before and after | No restarts, no memory creep, schedule triggers fired on time (sunrise / sunset) |
 
 Steps 4 and 5 can be done without any DMX wiring: Art-Net is the easiest way to see exactly

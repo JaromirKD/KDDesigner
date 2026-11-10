@@ -35,6 +35,8 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 #define KD_PROJECT_PATH "/usb/show/project.json"
 #define KD_PROJECT_TMP "/usb/show/project.tmp"
 #define KD_PROJECT_BAK "/usb/show/project.bak"
+#define KD_BACKUP_DIR "/usb/show/backups"   // the versions before the last saves (Storage::keepBackup)
+#define KD_BACKUPS 10
 #define KD_WWW_ROOT "/usb/www"
 #define KD_MEDIA_DIR "/usb/show/media"     // uploaded images (map backgrounds), served at /media/
 #define KD_MAX_UPLOAD (4UL * 1024 * 1024)
@@ -102,3 +104,8 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 #ifndef KD_FALLBACK_GW
 #define KD_FALLBACK_GW 172, 16, 1, 1
 #endif
+
+// ---- Getting the controller back after a wrong network setting (NetSafe.cpp) --------
+#define KD_NET_TRIAL_MS 120000UL   // a new setting tried from the web UI goes back unless confirmed
+#define KD_NET_TRIAL_PATH "/usb/show/network-trial.json"   // the setting to go back to (survives a restart)
+#define KD_NET_RESET_PATH "/usb/network-reset.txt"         // put on the stick by hand: DHCP at the next start

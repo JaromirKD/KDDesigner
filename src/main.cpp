@@ -20,6 +20,7 @@
 #include "Monitor.h"
 #include "Net.h"
 #include "NetRx.h"
+#include "NetSafe.h"
 #include "Project.h"
 #include "Projectors.h"
 #include "Show.h"
@@ -154,12 +155,18 @@ void setup() {
   else LOGW(Sys, "No SDRAM on this Portenta: big projects may not load");
   Storage::begin(5000);
   Update::begin();          // logs whether a firmware update was just installed
+  NetSafe::bootCheck();     // an unconfirmed network test / network-reset.txt: fix project.json first
 
   String err;
   if (Storage::mounted() && Storage::exists(KD_PROJECT_PATH)) {
     if (!Show::loadFile(KD_PROJECT_PATH, err)) {
       LOGE(Show, "Project load failed: %s", err.c_str());
-      if (Show::loadFile(KD_PROJECT_BAK, err)) LOGW(Show, "Loaded backup project instead");
+      // A network rewrite's .bak (NetSafe), else the newest backup that loads.
+      bool done = Show::loadFile(KD_PROJECT_BAK, err);
+      if (done) LOGW(Show, "Loaded backup project instead");
+      std::vector<String> all = Storage::backups();
+      for (size_t i = all.size(); !done && i-- > 0;)
+        if ((done = Show::loadFile((String(KD_BACKUP_DIR "/") + all[i]).c_str(), err))) LOGW(Show, "Loaded backup %s instead", all[i].c_str());
     }
   } else {
     LOGW(Show, "No project on the storage device - starting empty");
@@ -178,6 +185,7 @@ void setup() {
   Mail::begin();
   Projectors::begin();
   Drivers::begin();
+  Storage::beginWriter();   // project.json written after a save (before Web: a save needs it)
   Web::begin();
   Log::startWriter();
 

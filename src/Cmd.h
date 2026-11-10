@@ -12,6 +12,7 @@
 //   scene <sc> [fade <s>]          release scene <sc> [fade <s>]
 //   release all [fade <s>]
 //   set <universe>.<ch>[-<ch>] <0-255>     clear override <universe>.<ch>[-<ch>]     clear overrides
+//   locate <fixtures, e.g. 3,5,8-12> [for <s>]     locate off
 //   grandmaster <pct>              blackout on|off
 //   mode <group> <state>           (old form "mode <state>" if the state is unique)
 //   mode <group> next|previous|toggle|back   ({mode.<group>} = a group's state in any command)

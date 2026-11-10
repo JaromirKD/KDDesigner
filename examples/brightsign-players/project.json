@@ -1,6 +1,7 @@
 {
   "name": "Media museum - 8 BrightSign players",
   "settings": {
+    "dateOrder": "dmy",
     "tzOffsetMin": 60,
     "udpPort": 4000,
     "sacnPriority": 100,

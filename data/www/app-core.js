@@ -46,6 +46,7 @@ const DEVICE_ICONS = {
   timeline: ['Timeline', '<path d="M2 12h20"/><path d="M8 8.5 11.5 12 8 15.5 4.5 12zM16 9.5l2.5 2.5-2.5 2.5-2.5-2.5z"/>', ''],
   dmx: ['DMX input', '<circle cx="12" cy="12" r="8.5"/><path d="M8 10.5h.01M16 10.5h.01M12 8h.01M9.5 15h.01M14.5 15h.01"/>', ''],
   device: ['Device', '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 15h.01M12 15h.01"/>', ''],
+  calendar: ['Calendar period', '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M7.5 14h.01M12 14h.01M16.5 14h.01M7.5 17.5h.01M12 17.5h.01"/>', ''],
 };
 const devIcon = (key, cls = 'dev-ico') =>
   `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(DEVICE_ICONS[key] || DEVICE_ICONS.device)[1]}</svg>`;
@@ -76,7 +77,7 @@ const TRIGGER_TYPES = [
   ['startup', 'Startup'], ['time', 'Time of day / sunrise / sunset'], ['interval', 'Interval'], ['udp', 'UDP message'], ['osc', 'OSC message'],
   ['input', 'Input (pin / Machine Control)'], ['timeline_end', 'Timeline end'], ['mode', 'Mode change'], ['panel', 'Panel button'],
   ['dmx_change', 'DMX channel change'], ['device', 'Device online/offline'], ['projector', 'Projector alarm (errors, lamp hours)'], ['variable', 'Variable change'],
-  ['tcp', 'TCP message received'], ['http', 'HTTP response'], ['dmx_in', 'DMX input (Art-Net / sACN in)'], ['sequence', 'Sequence (other triggers in order)'],
+  ['tcp', 'TCP message received'], ['http', 'HTTP response'], ['dmx_in', 'DMX input (Art-Net / sACN in)'], ['calendar', 'Calendar change (a period starts / ends)'],
   ['manual', 'Manual / nested list'], ['comment', '— Separator —'],
 ];
 // Variables each trigger type provides to its actions as {name}.
@@ -87,6 +88,7 @@ const TRIGGER_VARS = {
   projector: ['projector', 'alarm', 'state', 'lamp (hours)', 'hours (the limit)'],
   variable: ['variable', 'value', 'old'], tcp: ['device', 'message', '1 (text after a prefix*)'], http: ['url', 'method', 'status', 'body'],
   dmx_change: ['channel', 'index', 'value', '+ your table names'], input: ['input', 'value'], dmx_in: ['channel', 'index', 'value', 'old'],
+  calendar: ['calendar', 'state (active / inactive)'],
 };
 const TRIGGER_COLORS = {
   '': 'none', red: '#ff5c5c', orange: '#ff9f43', amber: '#ffb020', yellow: '#ffd23f', lime: '#a3e635', green: '#3ecf8e',
@@ -126,17 +128,29 @@ const PATHS = [['linear', 'Linear'], ['accelerated', 'Accelerated'], ['braked', 
 const TL_GROUPS = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
 const PANEL_TYPES = ['button', 'toggle', 'slider', 'dial', 'color', 'xy', 'label', 'clock', 'spacer', 'group'];
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+// Dates in the UI are European: DD-MM-YYYY, weeks start on Monday (stored dates: KDModel.dateStore).
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const pad2 = (n) => String(n).padStart(2, '0');
+const euDate = (d) => `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+const euDateTime = (d) => `${euDate(d)} ${d.toTimeString().slice(0, 8)}`;
+// "YYYY-MM-DD HH:MM:SS" (the controller's clock text) -> "DD-MM-YYYY HH:MM:SS"
+const euStamp = (s) => String(s || '').replace(/^(\d{4})-(\d{2})-(\d{2})/, '$3-$2-$1');
+// Stored "12-24" / "2026-12-24" -> "24 December" / "24 December 2026"
+function dateWords(s) {
+  const a = String(s).split('-').map(Number), [y, m, d] = a.length === 3 ? a : [0, ...a];
+  return `${d} ${MONTHS[m - 1] || '?'}${y ? ' ' + y : ''}`;
+}
 const PLACEHOLDER = {
   '{mode}': '<mode>', '{mgroup}': '<mode group>', '{mstate}': '<state>', '{mstep}': 'next|previous|toggle|back', '{dur}': '<time: 90, 30s, 10m, 2h>','{label}': '<label>', '{pctl}': '<panel control>', '{flash}': 'on|off|<colour>', '{pval}': '<value | #rrggbb | x,y>', '{color}': '<colour>', '{trig}': '<trigger name or #>', '{count}': '<count>',
   '{email}': '<to address>', '{device}': '<device>', '{oscaddr}': '</osc/address>', '{hhmm}': '<HH:MM>', '{days}': '<mon,tue,…>',
   '{tl}': '<timeline>', '{sc}': '<scene>', '{sec}': '<seconds>', '{pct}': '<0-100>', '{dmx}': '<0-255>',
-  '{chan}': '<universe>.<ch>[-<ch>]', '{ip}': '<ip address>', '{port}': '<port>', '{text...}': '<text>',
+  '{chan}': '<universe>.<ch>[-<ch>]', '{fixlist}': '<fixture numbers, e.g. 3,5,8-12>', '{ip}': '<ip address>', '{port}': '<port>', '{text...}': '<text>',
   '{onoff}': 'on|off', '{logcat}': '<category>', '{loglvl}': '<level>',
   '{proto}': 'dmx|artnet|sacn', '{pj}': '<projector|all>', '{pjinput}': '<input code>',
   '{pc}': '<pc|all>', '{pcaction}': 'wake|startup|shutdown|reboot', '{devname}': '<device>', '{updown}': 'online|offline',
   '{var}': '<variable>', '{num}': '<number>', '{op}': '= != > < >= <=', '{tcpdev}': '<tcp device>', '{httpmethod}': 'get|post|put|delete',
   '{url}': '<http://…>', '{mbdev}': '<modbus device>', '{mbtable}': 'coil|holding', '{calname}': '<calendar>', '{activity}': 'active|inactive',
-  '{date}': '<MM-DD|YYYY-MM-DD>', '{cond...}': '<condition>', '{command...}': '<command>',
+  '{date}': '<DD-MM|DD-MM-YYYY>', '{cond...}': '<condition>', '{command...}': '<command>',
   '{kiss}': '<kiss-box>', '{knx}': '<knx interface>', '{bsign}': '<brightsign>', '{digi}': '<digidot>', '{netio}': '<netio>', '{pharos}': '<pharos>',
   '{kisspoint}': '<slot>.<channel>', '{kissval}': 'on|off|0-255', '{slot}': '<slot 1-8>', '{knxga}': '<group address or name>', '{knxval}': '<value>',
   '{dpt}': '<dpt, e.g. 1 / 5.001 / 9>', '{path}': '<path>', '{digiscene}': '<scene name or #>', '{netioout}': '<output|all>',
@@ -165,8 +179,8 @@ const P = () => S.project;
 
 function emptyProject() {
   return {
-    name: 'New show', settings: { tzOffsetMin: 60, udpPort: 4000, sacnPriority: 100, outputs: { dmx: true, artnet: true, sacn: true } },
-    network: { dhcp: true, ip: '172.16.1.111', mask: '255.255.255.0', gateway: '172.16.1.1' },
+    name: 'New show', settings: { dateOrder: 'dmy', tzOffsetMin: 60, udpPort: 4000, sacnPriority: 100, outputs: { dmx: true, artnet: true, sacn: true } },
+    network: { dhcp: true, ip: '172.16.1.111', mask: '255.255.255.0', gateway: '172.16.1.1', dns: '', dns2: '' },
     universes: [{ id: 1, name: 'Universe 1', dmxPort: 1, artnet: 0, sacn: 1, useDmx: true, useArtnet: true, useSacn: true }],
     fixtures: [], groups: [], scenes: [], timelines: [], triggers: [], projectors: [], pcs: [], devices: [], modes: [],
     panel: { pages: [] }, email: { server: '', port: 25, user: '', password: '', from: '' },
@@ -178,7 +192,7 @@ function normalize(p) {
     'variables', 'tcp', 'modbus', 'calendar', 'maps', 'effects', 'deviceGroups', 'fixtureTypes', 'drivers']) p[k] = p[k] || [];
   p.deviceGroups.forEach((g) => (g.devices = g.devices || []));
   p.drivers.forEach(normDriver);   // app-drivers.js
-  p.maps.forEach((m) => { m.items = m.items || []; m.aspect = m.aspect || 1.6; });
+  p.maps.forEach((m) => { m.items = m.items || []; m.aspect = m.aspect || 1.6; m.shapes = m.shapes || []; });
   p.panel = p.panel || { pages: [] };
   p.panel.pages = p.panel.pages || [];
   p.panel.pages.forEach((pg) => (pg.controls = pg.controls || []));
@@ -200,7 +214,18 @@ function normalize(p) {
   // stateInfo: {<state>: {color, icon, enter: [actions], leave: [actions]}}.
   p.modes = p.modes.filter((m) => m && typeof m === 'object').map((g) => ({ ...g, name: g.name || 'Mode', states: g.states || [], stateInfo: g.stateInfo || {} }));
   if (legacy.length) p.modes.unshift({ name: 'Mode', states: legacy });
+  // "date between" conditions were MM-DD; since Nov 2026 they're typed European (DD-MM), marked
+  // by settings.dateOrder "dmy" so the firmware and mock read them the same way. Old projects
+  // are rewritten once here (also inside "wait until", and in mode enter/leave actions).
+  const oldOrder = p.settings?.dateOrder !== 'dmy';
   p.settings = Object.assign(e.settings, p.settings);
+  if (oldOrder) {
+    const fix = (s) => typeof s !== 'string' ? s : s.replace(/\bdate between ((?:\d{4}-)?\d{1,2}-\d{1,2}) ((?:\d{4}-)?\d{1,2}-\d{1,2})\b/gi,
+      (all, a, b) => `date between ${KDModel.dateShow(a) || a} ${KDModel.dateShow(b) || b}`);
+    p.triggers.forEach((t) => { t.conditions = t.conditions.map(fix); if (Array.isArray(t.actions)) t.actions = t.actions.map(fix); });
+    p.modes.forEach((g) => Object.values(g.stateInfo || {}).forEach((si) => ['enter', 'leave'].forEach((k) => Array.isArray(si?.[k]) && (si[k] = si[k].map(fix)))));
+    p.settings.dateOrder = 'dmy';
+  }
   p.settings.outputs = Object.assign({ dmx: true, artnet: true, sacn: true, dmxFps: 40, artnetFps: 40, sacnFps: 40, artnetChangesOnly: true, sacnChangesOnly: true }, p.settings.outputs);
   p.settings.monitor = Object.assign({ interval: 60, timeout: 1000, failures: 2 }, p.settings.monitor);
   p.settings.time = Object.assign({ ntp: 'pool.ntp.org', ntpEnabled: true, dst: 'eu' }, p.settings.time);
@@ -220,6 +245,19 @@ function normalize(p) {
     t.tracks.forEach((tr) => { tr.fixtures = tr.fixtures || []; tr.groups = tr.groups || []; });
   });
   p.triggers.forEach((t) => (t.actions = t.actions || []));
+  // Sequence triggers were removed (Nov 2026): an old one becomes a sub separator with what it
+  // did in its notes, so nothing is lost and nothing runs (the firmware skips separators).
+  normalize.sequences = 0;
+  p.triggers = p.triggers.map((t) => {
+    if (t.type !== 'sequence') return t;
+    normalize.sequences++;
+    const notes = ['This was a Sequence trigger (removed from KD Designer). Kept as a note, it does nothing.',
+      `Steps, in this order within ${t.within ?? 5} s: ${(t.steps || []).filter((s) => String(s).trim()).join(', ') || '(none)'}`,
+      ...(t.conditions.length ? ['Conditions:', ...t.conditions.map((c) => '  ' + c)] : []),
+      ...(t.actions.length ? ['Actions:', ...t.actions.map((a) => '  ' + a)] : []),
+      ...(t.notes?.trim() ? ['', t.notes.trim()] : [])];
+    return { id: t.id, type: 'comment', level: 2, name: `Sequence '${t.name || t.id}' (removed)`, ...(t.color ? { color: t.color } : {}), notes: notes.join('\n'), conditions: [], actions: [] };
+  });
   return p;
 }
 
@@ -233,6 +271,78 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(body.reply || body || r.statusText);
   return body;
 }
+// ---------------------------------------------------------------------------
+// Progress bar along the bottom of the header (saving and loading the project): frac 0..1,
+// or null = "busy, no figure". kind 'err' = red, stays until closed (×) or the next use.
+// Never blocks the page: the lights keep running and the editor stays usable.
+// ---------------------------------------------------------------------------
+function progress(label, frac = null, kind = '') {
+  const el = $('#progress');
+  if (!el) return;
+  clearTimeout(progress.timer);
+  el.className = 'progress' + (kind ? ' ' + kind : '') + (frac == null && kind !== 'err' ? ' indet' : '');
+  el.querySelector('.pg-fill').style.width = frac == null ? '' : Math.round(Math.min(1, frac) * 100) + '%';
+  el.querySelector('.pg-text').textContent = label;
+  el.hidden = false;
+}
+function progressHide(afterMs = 0) {
+  clearTimeout(progress.timer);
+  const hide = () => { const el = $('#progress'); if (el && !el.classList.contains('err')) el.hidden = true; };
+  if (afterMs) progress.timer = setTimeout(hide, afterMs); else hide();
+}
+document.addEventListener('click', (e) => { if (e.target.closest?.('#progress .pg-x')) $('#progress').hidden = true; });
+
+// GET with a progress bar: real progress when the size is known (Content-Length of a plain
+// reply; a gzipped one only counts what has come in). Same result and errors as api().
+async function apiProgress(path, label) {
+  const r = await fetch(path);
+  const ct = r.headers.get('content-type') || '';
+  const total = r.headers.get('content-encoding') ? 0 : +r.headers.get('content-length') || 0;
+  let text;
+  if (!r.body?.getReader) text = await r.text();
+  else {
+    const rd = r.body.getReader(), parts = [];
+    let got = 0, shown = 0;
+    for (;;) {
+      const { done, value } = await rd.read();
+      if (done) break;
+      parts.push(value);
+      got += value.length;
+      // Small files come in one go: no bar flashing up for them.
+      if (got - shown > 65536) { shown = got; progress(`${label} ${total ? Math.round(got / total * 100) + ' %' : kb(got)}`, total ? got / total : null); }
+    }
+    text = new TextDecoder().decode(parts.length === 1 ? parts[0] : await new Blob(parts).arrayBuffer());
+    if (shown) progressHide(300);
+  }
+  const body = ct.includes('json') ? JSON.parse(text) : text;
+  if (!r.ok) throw new Error(body.reply || body || r.statusText);
+  return body;
+}
+
+// PUT/POST through XMLHttpRequest: fetch() can't report upload progress. onUp(sent, total);
+// onSent() once the whole body is out (the controller is then loading it).
+function xhrSend(method, path, body, headers, onUp, onSent) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open(method, path);
+    for (const [k, v] of Object.entries(headers || {})) x.setRequestHeader(k, v);
+    let sent = false;
+    x.upload.onprogress = (e) => onUp?.(e.loaded, e.total || body.length);
+    x.upload.onload = () => { sent = true; onSent?.(); };
+    x.onload = () => {
+      let b = x.responseText;
+      try { b = JSON.parse(b); } catch { /* text */ }
+      if (x.status >= 200 && x.status < 300) resolve(b);
+      else reject(Object.assign(new Error((b && b.reply) || b || x.statusText || 'error ' + x.status), { stage: 'load' }));
+    };
+    x.onerror = () => reject(sent ? Object.assign(new Error('the connection was lost while the controller was loading it'), { stage: 'load' })
+                                  : Object.assign(new Error('no connection to the controller'), { stage: 'send' }));
+    x.ontimeout = () => reject(Object.assign(new Error('no answer'), { stage: 'load' }));
+    x.timeout = 120000;
+    x.send(body);
+  });
+}
+
 async function cmd(line) {
   try {
     const r = await api('/api/cmd', { method: 'POST', body: line });
@@ -246,6 +356,11 @@ async function save() {
   // commits on "change", which hasn't fired yet).
   const el = document.activeElement;
   if (el?.dataset?.p) onBound({ target: el, type: 'input' });
+  // A fixed address that can't work would make the controller unreachable after its reboot
+  // (the firmware would fall back to DHCP, but better not to get there).
+  const netBad = KDModel.netProblems(P().network);
+  if (netBad.length) { toast(`Not saved - Settings > Network: ${netBad[0].text}`, true); return; }
+  const netChanged = S.netSaved !== undefined && JSON.stringify(P().network) !== S.netSaved;
   // On a controller: ask once per browser tab, the first save changes the running show.
   if (isLive()) {
     let asked = false;
@@ -255,9 +370,25 @@ async function save() {
       try { sessionStorage.setItem('kd.liveSaveOk', '1'); } catch { /* private mode */ }
     }
   }
+  if (S.saving) { toast('Still saving the previous version - one moment'); return; }
+  S.saving = true;
+  $('#save').disabled = true;
   try {
-    const r = await api('/api/project', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(P(), null, 1) });
+    // Progress: sending (real), then loading into the controller (no figure: it answers when
+    // done). Writing the stick comes after the reply: the "writing to the stick" chip.
+    const body = JSON.stringify(P(), null, 1);
+    progress('Sending the project', 0);
+    const r = await xhrSend('PUT', '/api/project', body, { 'Content-Type': 'application/json' },
+      (sent, total) => progress(`Sending the project ${Math.round(sent / total * 100)} %`, sent / total),
+      () => progress(isLive() ? 'Loading into the controller…' : 'Loading…', null));
+    // The stick write starts now: show it before the next status message says so (older
+    // firmware wrote the stick before answering and sends no seq).
+    if (r.seq && S.status?.save) S.status.save = { ...S.status.save, seq: r.seq, busy: true };
+    progress('Saved', 1);
+    progressHide(800);
     S.dirty = false;
+    S.tlLiveSent = {};   // the controller reloaded: it has the saved timelines (live editing)
+    S.tlLiveErr = {};
     if (undo.timer) undoSnap();
     undo.saved = undo.at;   // undoing back to here is "saved" again
     // Map images that were replaced or removed: only now that the saved project no longer
@@ -268,8 +399,15 @@ async function save() {
     updateHeader();
     toast(r.reply || 'Saved');
     winSend('saved');
+    S.netSaved = JSON.stringify(P().network);
+    if (netChanged) netTrialOffer();
   } catch (e) {
+    const where = e.stage === 'send' ? 'while sending' : 'while loading';
+    progress(`Not saved (${where}): ${e.message}`, 1, 'err');
     toast('Save failed: ' + e.message, true);
+  } finally {
+    S.saving = false;
+    $('#save').disabled = false;
   }
 }
 function toast(msg, err) {
@@ -457,8 +595,6 @@ function renameTriggerRefs(oldName, newName) {
     });
   for (const c of timelineTrigCues())
     if (String(c.trigger).toLowerCase() === oldName.toLowerCase()) { c.trigger = newName; n++; }
-  for (const t of P().triggers)
-    if (t.type === 'sequence') t.steps = (t.steps || []).map((s) => (String(s).toLowerCase() === oldName.toLowerCase() ? (n++, newName) : s));
   return n;
 }
 // Renaming a timeline: "start timeline Inloop", "timeline Inloop running", … follow.
@@ -625,9 +761,21 @@ function updateHeader() {
     chips.push(`<span class="chip ${st.usb ? 'ok' : 'bad'}">Storage device ${st.usb ? 'mounted' : 'missing'}</span>`);
     chips.push(`<span class="chip">${esc(st.ip)}</span>`);
     chips.push(`<span class="chip">engine ${st.stats.engineFps} fps</span>`);
-    chips.push(`<span class="chip">DMX ${st.stats.dmxFps} fps</span>`);
-    chips.push(`<span class="chip">Art-Net ${st.stats.artTx}/s · sACN ${st.stats.sacnTx}/s</span>`);
-    for (const [k, n] of PROTOCOLS) if (st.outputs && !st.outputs[k]) chips.push(`<span class="chip bad">${n} off</span>`);
+    // What really goes out: frames/packets per second as counted by the controller, "off" when
+    // the output is switched off (a protocol that is on but sends nothing shows 0).
+    const pkts = 'packets per second (one per universe per frame; with "changes only" fewer while nothing changes)';
+    const sent = { dmx: [st.stats.dmxFps, ' fps', 'DMX frames per second'], artnet: [st.stats.artTx, '/s', 'Art-Net ' + pkts], sacn: [st.stats.sacnTx, '/s', 'sACN ' + pkts] };
+    const isOff = (k) => st.outputs && !st.outputs[k];
+    if (PROTOCOLS.every(([k]) => isOff(k))) chips.push('<span class="chip bad" title="DMX, Art-Net and sACN are all switched off (the switch on Dashboard / Patch, or the output command)">output off</span>');
+    else for (const [k, n] of PROTOCOLS) {
+      const [v, unit, tip] = sent[k];
+      chips.push(isOff(k) ? `<span class="chip bad" title="Switched off (the switch on Dashboard / Patch, or the output command)">${n} off</span>` : `<span class="chip" title="${tip}">${n} ${v ?? 0}${unit}</span>`);
+    }
+    // The stick write after a save (from any editor): a project that runs but is not stored
+    // yet is lost at a restart, so a failed write stays red until a save gets through.
+    const sv = st.save;
+    if (sv?.failed) chips.push(`<span class="chip bad" title="${esc(sv.error || '')} - the project runs, but a restart would lose it. Save again (and check the storage device).">not on the stick!</span>`);
+    else if (sv?.busy) chips.push('<span class="chip warn" title="The project is saved and running; it is now being written to the storage device. Don\'t switch the controller off until this goes away.">writing to the stick…</span>');
     const pjOff = (st.projectors || []).filter((x) => x.seen && !x.online).length;
     if (pjOff) chips.push(`<span class="chip bad">${pjOff} projector${pjOff > 1 ? 's' : ''} offline</span>`);
     if (st.safeMode) chips.unshift('<span class="chip bad" title="The controller restarted after a crash several times in a row, so triggers only run when you fire them by hand (no Startup). Fix the project and save it, or restart the controller.">SAFE MODE</span>');
@@ -645,6 +793,7 @@ function updateHeader() {
 function onStatus(st) {
   S.status = st;
   S.statusAt = st._at = Date.now();   // st._at: panel controls that follow a timeline move on from here
+  if (st.net?.trial) netTrialSeen();
   if (st.time < 1600000000) {
     api('/api/time', { method: 'POST', body: String(Math.floor(Date.now() / 1000)) }).catch(() => {});
   }

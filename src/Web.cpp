@@ -18,6 +18,7 @@
 #include "Monitor.h"
 #include "Mqtt.h"
 #include "Net.h"
+#include "NetSafe.h"
 #include "Pcs.h"
 #include "Project.h"
 #include "Projectors.h"
@@ -177,11 +178,14 @@ bool readBody(EthernetClient& c, size_t len, String& body) {
 }
 
 // The same into SDRAM, for a project upload (a heap String of that size often can't be had).
+// Big pieces: read() takes them straight from the socket (lib/SocketWrapper), and lwIP copies
+// them with the CPU (no DMA into SDRAM). When nothing is there yet, 1 ms is about what the
+// 2 KB TCP window needs to fill again.
 bool readBody(EthernetClient& c, size_t len, BigRam::Buffer& body) {
   if (!body.reserve(len)) return false;
   uint32_t t0 = millis();
   while (body.len < len && millis() - t0 < 5000) {
-    int n = c.read((uint8_t*)body.data + body.len, min((size_t)1024, len - body.len));
+    int n = c.read((uint8_t*)body.data + body.len, min((size_t)16384, len - body.len));
     if (n > 0) { body.len += n; t0 = millis(); }
     else if (!c.connected()) break;
     else rtos::ThisThread::sleep_for(1ms);
@@ -284,6 +288,7 @@ void buildStatus(JsonDocument& d) {
   d["time"] = (uint32_t)time(nullptr);
   d["usb"] = Storage::mounted();
   d["ip"] = Net::localIP().toString();
+  Net::statusJson(d["net"].to<JsonObject>());
   JsonObject s = d["stats"].to<JsonObject>();
   s["engineFps"] = g_stats.engineFps;
   s["dmxFps"] = g_stats.dmxFps;
@@ -325,6 +330,7 @@ void buildStatus(JsonDocument& d) {
   Io::statusJson(d["io"].to<JsonObject>());
   if (Board::present()) Board::statusJson(d["board"].to<JsonObject>());
   Update::statusJson(d["update"].to<JsonObject>());
+  Storage::saveStatusJson(d["save"].to<JsonObject>());
 }
 
 void handleProjectPut(EthernetClient& c, size_t len) {
@@ -337,6 +343,8 @@ void handleProjectPut(EthernetClient& c, size_t len) {
   String err;
   Log::crumb(Log::kCrumbWeb, "save: waiting for g_engine");
   g_engine.lock();
+  Project::timeStart();
+  Project::timePart("lock");   // waiting for the engine (a frame, a trigger run)
   Log::crumb(Log::kCrumbWeb, "save: Show::parse");
   bool ok = Show::parse(body.data, body.len, err);
   if (ok) {
@@ -345,25 +353,29 @@ void handleProjectPut(EthernetClient& c, size_t len) {
     Triggers::setSafeMode(false);   // the project was fixed (or the user takes the risk)
     Log::crumb(Log::kCrumbWeb, "save: Startup trigger");
     Triggers::startup();
+    Project::timePart("startup");
   }
   g_engine.unlock();
   uint32_t t2 = millis();
-  Log::crumb(Log::kCrumbWeb, "save: writing the stick");
   if (!ok) { LOGW(Web, "Rejected project upload: %s", err.c_str()); sendResult(c, false, err); return; }
 
-  // Atomic-ish save: write tmp, keep the previous version as .bak, swap.
-  if (!Storage::writeFile(KD_PROJECT_TMP, body.data, body.len)) {
-    sendResult(c, false, "Write to the storage device failed");
-    return;
-  }
-  remove(KD_PROJECT_BAK);
-  rename(KD_PROJECT_PATH, KD_PROJECT_BAK);
-  rename(KD_PROJECT_TMP, KD_PROJECT_PATH);
-  uint32_t t3 = millis();
-  // Where a slow save spends its time: receiving it, loading it into the engine, the stick.
-  LOGI(Web, "Project saved (%u bytes: received %lu ms, loaded %lu ms, stick %lu ms)", (unsigned)body.len,
-       (unsigned long)(t1 - t0), (unsigned long)(t2 - t1), (unsigned long)(t3 - t2));
-  sendResult(c, true, "Saved and loaded");
+  // The stick write runs in Storage's save thread (tmp file, backup, swap); its progress is
+  // /api/status "save". The text goes along with it (no copy).
+  uint32_t seq = Storage::saveProject(body.data, body.len);
+  body.data = nullptr;
+  // Where a slow save spends its time: receiving it, loading it into the engine (per step).
+  // The stick time follows in its own line ("Project written to the stick").
+  LOGI(Web, "Project saved (%u bytes: received %lu ms, loaded %lu ms [%s])", (unsigned)body.len,
+       (unsigned long)(t1 - t0), (unsigned long)(t2 - t1), Project::timeText().c_str());
+  JsonDocument d(BigRam::json());
+  d["ok"] = true;
+  d["reply"] = "Saved and loaded";
+  d["seq"] = seq;   // done when /api/status save.written reaches it
+  sendJson(c, d);
+}
+
+void sendLatest(const char* data, size_t len, void* ctx) {
+  sendText(*(EthernetClient*)ctx, 200, "application/json", data, len);
 }
 
 // Media file name: letters, digits, '.', '-', '_' only, and an image extension.
@@ -456,10 +468,39 @@ void handle(EthernetClient& c) {
     buildStatus(d);
     sendJson(c, d);
   } else if (p == "/api/project" && req.method == "GET") {
+    // A save that is still being written to the stick: its text from memory.
     if (!Storage::mounted()) sendResult(c, false, "No storage device");
-    else sendFile(c, KD_PROJECT_PATH, "application/json");
+    else if (!Storage::latestProject(sendLatest, &c)) sendFile(c, KD_PROJECT_PATH, "application/json");
   } else if (p == "/api/project" && (req.method == "PUT" || req.method == "POST")) {
     handleProjectPut(c, req.contentLength);
+  } else if (p == "/api/backups") {
+    // The project versions before the last saves: ?name=<file> = that one, else the list (newest first).
+    String name = queryParam(req.query, "name");
+    if (name.length()) {
+      if (!Storage::backupName(name)) sendResult(c, false, "bad name");
+      else sendFile(c, String(KD_BACKUP_DIR "/") + name, "application/json");
+    } else {
+      JsonDocument d;
+      JsonArray a = d["backups"].to<JsonArray>();
+      std::vector<String> all = Storage::backups();
+      for (size_t i = all.size(); i-- > 0;) {
+        struct stat st;
+        JsonObject o = a.add<JsonObject>();
+        o["name"] = all[i];
+        if (stat((String(KD_BACKUP_DIR "/") + all[i]).c_str(), &st) == 0) o["size"] = (uint32_t)st.st_size;
+      }
+      d["keep"] = KD_BACKUPS;
+      sendJson(c, d);
+    }
+  } else if (p == "/api/timeline" && req.method == "PUT") {
+    // Live editing: one timeline's JSON, played at once, not saved (Show::liveTimeline).
+    BigRam::Buffer body;
+    if (!readBody(c, req.contentLength, body)) { sendResult(c, false, body.data ? "Upload incomplete" : "Too big for the memory"); return; }
+    String err;
+    g_engine.lock();
+    bool ok = Show::liveTimeline(body.data, body.len, err);
+    g_engine.unlock();
+    sendResult(c, ok, ok ? String("Live") : err);
   } else if (p == "/api/cmd" && req.method == "POST") {
     String body, reply;
     readBody(c, min(req.contentLength, (size_t)1024), body);
@@ -501,10 +542,12 @@ void handle(EthernetClient& c) {
     }
   } else if (p == "/api/trigger" && req.method == "POST") {
     String msg;
+    const bool test = queryParam(req.query, "test").length() > 0;   // "Test": the reply says what each line did
     g_engine.lock();
-    bool ok = Triggers::fire(queryParam(req.query, "id").toInt(), msg);
+    bool ok = test ? Triggers::test(queryParam(req.query, "id").toInt(), msg) : Triggers::fire(queryParam(req.query, "id").toInt(), msg);
     g_engine.unlock();
-    sendResult(c, ok, msg);
+    if (test) sendText(c, 200, "application/json", msg);
+    else sendResult(c, ok, msg);
   } else if (p == "/api/trighistory") {
     String out;
     g_engine.lock();
@@ -545,12 +588,12 @@ void handle(EthernetClient& c) {
     sendText(c, 200, "application/json", out);
   } else if (p == "/api/history") {
     // One device's on/off history (Monitoring detail view); reads the stick, no engine lock.
-    String out;
+    BigRam::Text out;
     Monitor::historyJson(queryParam(req.query, "name"), queryParam(req.query, "from").toInt(), queryParam(req.query, "to").toInt(), out);
     sendText(c, 200, "application/json", out);
   } else if (p == "/api/devlog") {
     // Log lines that mention a device (its name or IP) from the log files on the stick.
-    String out;
+    BigRam::Text out;
     Log::search(queryParam(req.query, "name"), queryParam(req.query, "ip"), queryParam(req.query, "from").toInt(), queryParam(req.query, "to").toInt(), 300, out);
     sendText(c, 200, "application/json", out);
   } else if (p == "/api/loglevels") {
@@ -587,6 +630,23 @@ void handle(EthernetClient& c) {
     } else {
       sendResult(c, false, "Bad epoch");
     }
+  } else if (p == "/api/network/try" && req.method == "POST") {
+    // Switch to the saved project's network setting now, with the 2-minute way back (NetSafe).
+    g_engine.lock();
+    NetConfig cfg = Show::settings().net;
+    g_engine.unlock();
+    String msg;
+    bool ok = NetSafe::startTry(cfg, msg);
+    sendResult(c, ok, msg);
+  } else if (p == "/api/network/confirm" && req.method == "POST") {
+    // Sent by the editor page from the controller's new address, which may be another origin
+    // than the page's: readable from anywhere (a plain POST needs no preflight).
+    String msg;
+    bool ok = NetSafe::confirm(msg);
+    String body = String("{\"ok\":") + (ok ? "true" : "false") + ",\"reply\":\"" + msg + "\"}";
+    String h = headerText(200, "application/json", body.length(), "Access-Control-Allow-Origin: *\r\n");
+    writeAll(c, (const uint8_t*)h.c_str(), h.length());
+    writeAll(c, (const uint8_t*)body.c_str(), body.length());
   } else if (p == "/api/media" && (req.method == "PUT" || req.method == "POST")) {
     handleMediaPut(c, queryParam(req.query, "name"), req.contentLength);
   } else if (p == "/api/media" && req.method == "DELETE") {
@@ -625,7 +685,7 @@ void httpLoop() {
   for (;;) {
     EthernetClient c = server.accept();
     if (c) { Log::crumb(Log::kCrumbWeb, "handling a request"); handle(c); Log::crumb(Log::kCrumbWeb, "idle"); }
-    else rtos::ThisThread::sleep_for(5ms);
+    else { NetSafe::idle(); rtos::ThisThread::sleep_for(5ms); }
   }
 }
 

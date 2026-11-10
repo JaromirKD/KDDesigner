@@ -3,6 +3,7 @@
 #include "BigRam.h"
 #include "Dmx.h"
 #include "Log.h"
+#include "Project.h"
 #include "ShowInternal.h"
 #include "Storage.h"
 
@@ -95,6 +96,152 @@ FxTarget effectTarget(const Fixture& f, size_t k, size_t n, const float* pos) {
 }
 
 int universeRef(const BigRam::Vec<UniverseCfg>& list, JsonVariantConst v) { return indexOfUniverse(list, v | 0); }
+
+// What a timeline's cues are made from. Kept after a load (byId, mapPos, fxIds) so the web UI's
+// live editing can send one timeline at a time (Show::liveTimeline) without a reload.
+using Groups = std::vector<std::pair<int, std::vector<int>>>;
+struct TlCtx {
+  const BigRam::Vec<Fixture>& nf;
+  const BigRam::Vec<Scene>& ns;
+  const Groups& grp;
+  const BigRam::Vec<int>& fxIds;
+  const BigRam::Vec<Fx::Program>& nfp;
+  const BigRam::Vec<float>& mapPos;   // x, y per fixture index (NAN = not on a map)
+  const BigRam::Vec<int>& byId;       // fixture id -> index (-1 = none)
+  int fixIdx(int id) const { return id >= 0 && id < (int)byId.size() ? byId[id] : -1; }
+  const float* posOf(int fi) const { return isnan(mapPos[fi * 2]) ? nullptr : &mapPos[fi * 2]; }
+};
+BigRam::Vec<int> keptById, keptFxIds;
+BigRam::Vec<float> keptPos;
+
+Groups readGroups(JsonArrayConst list) {
+  Groups grp;
+  for (JsonObjectConst g : list) {
+    std::vector<int> ids;
+    for (int id : g["fixtures"].as<JsonArrayConst>()) ids.push_back(id);
+    grp.push_back({g["id"] | 0, ids});
+  }
+  return grp;
+}
+
+// One timeline: its tracks' fixtures and its cues. Effect cues go to nfc and track presets /
+// track-limited scenes to ncs (the cues hold their index there).
+bool parseTimeline(JsonObjectConst o, const TlCtx& x, Timeline& t, BigRam::Vec<FxCue>& nfc, BigRam::Vec<Scene>& ncs, String& err) {
+  const auto& nf = x.nf;
+  t.id = o["id"] | 0;
+  t.name = o["name"] | "";
+  t.length = o["length"] | 0;
+  t.loop = o["loop"] | false;
+  t.priority = o["priority"] | 0;
+  t.group = o["group"] | "";
+  // Tracks: each lists fixtures and/or groups; empty = the whole rig (scenes as they are).
+  std::vector<std::vector<int>> tracks;   // fixture indexes per track
+  for (JsonObjectConst tr : o["tracks"].as<JsonArrayConst>()) {
+    std::vector<int> fx;
+    std::vector<bool> in(nf.size());
+    auto add = [&](int id) {
+      int i = x.fixIdx(id);
+      if (i >= 0 && !in[i]) { in[i] = true; fx.push_back(i); }
+    };
+    for (int id : tr["fixtures"].as<JsonArrayConst>()) add(id);
+    for (int gid : tr["groups"].as<JsonArrayConst>())
+      for (auto& g : x.grp) if (g.first == gid) for (int id : g.second) add(id);
+    tracks.push_back(fx);
+  }
+  if ((int)tracks.size() > KD_MAX_TRACKS) { err = "Timeline " + String(t.id) + ": too many tracks (max " + String(KD_MAX_TRACKS) + ")"; return false; }
+  for (JsonObjectConst c : o["cues"].as<JsonArrayConst>()) {
+    // A light cue with a length ("len", ms) ends there, after its fade-out ("out", ms):
+    // its release cue lets the track go, so the gap after it is empty.
+    auto pushCue = [&](const Cue& cue) {
+      t.cues.push_back(cue);
+      uint32_t len = c["len"] | 0;
+      if (!len) return;
+      Cue r = cue;
+      r.scene = r.own = r.fx = -1;
+      r.release = true;
+      r.from = cue.t;
+      r.fade = std::min<uint32_t>(c["out"] | 0, len);
+      r.t = cue.t + len - r.fade;
+      t.cues.push_back(r);
+    };
+    Cue cue;
+    cue.t = c["t"] | 0;
+    cue.fade = c["fade"] | 0;
+    cue.path = parsePath(c["path"] | "linear");
+    cue.scene = cue.own = cue.fx = -1;
+    int tr = c["track"] | 0;
+    cue.track = tr >= 0 && tr < KD_MAX_TRACKS ? tr : 0;
+    if (!c["trigger"].isNull()) {   // trigger cue: "trigger": "Video start" (or a number)
+      cue.trigger = c["trigger"].as<String>();
+      cue.trigger.trim();
+      if (!cue.trigger.length()) { err = "Timeline " + String(t.id) + ": trigger cue without a trigger"; return false; }
+      t.cues.push_back(cue);
+      continue;
+    }
+    static const std::vector<int> kAll;
+    const std::vector<int>& fx = cue.track < tracks.size() ? tracks[cue.track] : kAll;
+    if (!c["effect"].isNull()) {
+      // Effect on the track's fixtures: "effect": id, "params": {"speed": 0.5, "color": "#ff0000"}, "dim": level %.
+      int eid = c["effect"] | 0;
+      auto pi = std::find(x.fxIds.begin(), x.fxIds.end(), eid);
+      if (pi == x.fxIds.end()) { err = "Timeline " + String(t.id) + ": unknown effect " + String(eid); return false; }
+      if (fx.empty()) { err = "Timeline " + String(t.id) + ": effect cue on a track without fixtures"; return false; }
+      FxCue fc;
+      fc.prog = pi - x.fxIds.begin();
+      const Fx::Program& prog = x.nfp[fc.prog];
+      fc.slots.resize(prog.slots);
+      Fx::init(prog, fc.slots.data());
+      JsonObjectConst pv = c["params"];
+      for (const auto& q : prog.params) {
+        JsonVariantConst v = pv[q.name];
+        if (v.isNull()) continue;
+        String s = v.as<String>();
+        Fx::setParam(q, s.c_str(), fc.slots.data());
+      }
+      fc.level = (c["dim"].isNull() ? 100 : clampInt(c["dim"] | 100, 0, 100)) / 100.0;
+      for (size_t k = 0; k < fx.size(); k++) fc.targets.push_back(effectTarget(nf[fx[k]], k, fx.size(), x.posOf(fx[k])));
+      cue.fx = nfc.size();
+      nfc.push_back(fc);
+      pushCue(cue);
+      continue;
+    }
+    if (!c["dim"].isNull() || !c["color"].isNull()) {
+      // Preset on a track: intensity and/or colour for the track's fixtures.
+      if (fx.empty()) { err = "Timeline " + String(t.id) + ": preset cue on a track without fixtures"; return false; }
+      int dim = c["dim"].isNull() ? -1 : clampInt(c["dim"] | 0, 0, 100);
+      const char* col = c["color"] | "";
+      bool hasColor = col[0] == '#' && strlen(col) == 7;
+      uint32_t rgb = hasColor ? strtoul(col + 1, nullptr, 16) : 0;
+      Scene sc{0, "", {}};
+      for (int fi : fx) presetLevels(nf[fi], dim, hasColor, rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff, sc.levels);
+      cue.own = ncs.size();
+      ncs.push_back(sc);
+      pushCue(cue);
+      continue;
+    }
+    int sid = c["scene"] | 0;
+    auto it = std::find_if(x.ns.begin(), x.ns.end(), [&](const Scene& sc) { return sc.id == sid; });
+    if (it == x.ns.end()) { err = "Timeline " + String(t.id) + ": unknown scene " + String(sid); return false; }
+    cue.scene = it - x.ns.begin();
+    if (!fx.empty()) {
+      // A scene on a track only plays the channels of the track's fixtures.
+      Scene sc{0, "", {}};
+      static uint8_t mine[U][64];   // channels of the track's fixtures (parse runs under g_engine: one at a time)
+      memset(mine, 0, sizeof(mine));
+      for (int fi : fx) {
+        const Fixture& f = nf[fi];
+        for (int k = 0; k < f.footprint; k++) setBit(mine[f.u], f.address - 1 + k);
+      }
+      for (const auto& l : it->levels)
+        if (testBit(mine[l.u], l.ch)) sc.levels.push_back(l);
+      cue.own = ncs.size();
+      ncs.push_back(sc);
+    }
+    pushCue(cue);
+  }
+  std::stable_sort(t.cues.begin(), t.cues.end(), [](const Cue& a, const Cue& b) { return a.t < b.t; });
+  return true;
+}
 }  // namespace
 
 namespace Show {
@@ -107,6 +254,7 @@ bool parse(const char* json, size_t len, String& err) {
   Log::crumb(Log::kCrumbLoad, "parse: JSON");
   DeserializationError de = deserializeJson(d, json, len);
   if (de) { err = String("JSON error: ") + de.c_str(); return false; }
+  Project::timePart("json");
 
   Settings s;
   s.name = d["name"] | "Untitled";
@@ -124,9 +272,14 @@ bool parse(const char* json, size_t len, String& err) {
   s.sacnChangesOnly = outs["sacnChangesOnly"] | true;
   JsonObjectConst n = d["network"];
   s.net.dhcp = n["dhcp"] | true;
-  s.net.ip.fromString(n["ip"] | "172.16.1.111");
-  s.net.mask.fromString(n["mask"] | "255.255.255.0");
-  s.net.gateway.fromString(n["gateway"] | "172.16.1.1");
+  // fromString can leave half a bad address behind: parse into a copy (bad / empty = 0.0.0.0,
+  // which Net::begin refuses for the address and mask: DHCP then).
+  auto addr = [](const char* t) { IPAddress a; return a.fromString(t) ? a : IPAddress(0, 0, 0, 0); };
+  s.net.ip = addr(n["ip"] | "172.16.1.111");
+  s.net.mask = addr(n["mask"] | "255.255.255.0");
+  s.net.gateway = addr(n["gateway"] | "172.16.1.1");
+  s.net.dns = addr(n["dns"] | "");
+  s.net.dns2 = addr(n["dns2"] | "");
 
   // Everything is parsed into new tables and only swapped in when valid.
   BigRam::Vec<UniverseCfg> nu;
@@ -167,6 +320,7 @@ bool parse(const char* json, size_t len, String& err) {
     if (f.address < 1 || f.address + f.footprint - 1 > 512) { err = "Fixture " + String(f.id) + ": address out of range"; return false; }
     nf.push_back(f);
   }
+  Project::timePart("fixtures");
   // Fixture id -> index: scenes, tracks and maps look fixtures up by id thousands of times
   // (a search through the list each time was ~10 million compares for a 1360-pixel show).
   int maxId = 0;
@@ -210,17 +364,13 @@ bool parse(const char* json, size_t len, String& err) {
     ns.push_back(sc);
   }
 
+  Project::timePart("scenes");
   // Fixture groups (by id), so a track can follow a group.
-  std::vector<std::pair<int, std::vector<int>>> grp;
-  for (JsonObjectConst g : d["groups"].as<JsonArrayConst>()) {
-    std::vector<int> ids;
-    for (int id : g["fixtures"].as<JsonArrayConst>()) ids.push_back(id);
-    grp.push_back({g["id"] | 0, ids});
-  }
+  Groups grp = readGroups(d["groups"].as<JsonArrayConst>());
   // Effects: compile them all; a script error rejects the project with its line number.
   Log::crumb(Log::kCrumbLoad, "parse: effects");
   BigRam::Vec<Fx::Program> nfp;
-  std::vector<int> fxIds;
+  BigRam::Vec<int> fxIds;
   size_t maxSlots = 16;
   for (JsonObjectConst o : d["effects"].as<JsonArrayConst>()) {
     Fx::Program prog;
@@ -232,138 +382,41 @@ bool parse(const char* json, size_t len, String& err) {
   }
   // Map position per fixture index (first map it is on) - the x / y inputs of effects. NAN = none.
   BigRam::Vec<float> mapPos(nf.size() * 2, NAN);
-  for (JsonObjectConst m : d["maps"].as<JsonArrayConst>())
+  // "Round effects" (square) on a map: the long side stays 0..1, the short side shrinks around
+  // 0.5, so circles stay round on a wide map (= effectXY in model.js).
+  for (JsonObjectConst m : d["maps"].as<JsonArrayConst>()) {
+    float a = m["aspect"] | 1.6f;   // the web UI's default shape
+    bool sq = (m["square"] | false) && a > 0 && a != 1;
     for (JsonObjectConst it : m["items"].as<JsonArrayConst>()) {
       int fi = fixIdx(it["fixture"] | 0);
-      if (fi >= 0 && isnan(mapPos[fi * 2])) { mapPos[fi * 2] = it["x"] | 0.5f; mapPos[fi * 2 + 1] = it["y"] | 0.5f; }
+      if (fi < 0 || !isnan(mapPos[fi * 2])) continue;
+      float x = it["x"] | 0.5f, y = it["y"] | 0.5f;
+      if (sq && a > 1) y = 0.5f + (y - 0.5f) / a;
+      else if (sq) x = 0.5f + (x - 0.5f) * a;
+      mapPos[fi * 2] = x;
+      mapPos[fi * 2 + 1] = y;
     }
-  auto posOf = [&](int fi) { return isnan(mapPos[fi * 2]) ? (const float*)nullptr : &mapPos[fi * 2]; };
+  }
   BigRam::Vec<FxCue> nfc;
+  Project::timePart("effects");
 
   BigRam::Vec<Timeline> nt;
   BigRam::Vec<Scene> ncs;
   Log::crumb(Log::kCrumbLoad, "parse: timelines");
+  const TlCtx ctx{nf, ns, grp, fxIds, nfp, mapPos, byId};
   for (JsonObjectConst o : d["timelines"].as<JsonArrayConst>()) {
     Timeline t;
-    t.id = o["id"] | 0;
-    t.name = o["name"] | "";
-    t.length = o["length"] | 0;
-    t.loop = o["loop"] | false;
-    t.priority = o["priority"] | 0;
-    t.group = o["group"] | "";
-    // Tracks: each lists fixtures and/or groups; empty = the whole rig (scenes as they are).
-    std::vector<std::vector<int>> tracks;   // fixture indexes per track
-    for (JsonObjectConst tr : o["tracks"].as<JsonArrayConst>()) {
-      std::vector<int> fx;
-      std::vector<bool> in(nf.size());
-      auto add = [&](int id) {
-        int i = fixIdx(id);
-        if (i >= 0 && !in[i]) { in[i] = true; fx.push_back(i); }
-      };
-      for (int id : tr["fixtures"].as<JsonArrayConst>()) add(id);
-      for (int gid : tr["groups"].as<JsonArrayConst>())
-        for (auto& g : grp) if (g.first == gid) for (int id : g.second) add(id);
-      tracks.push_back(fx);
-    }
-    if ((int)tracks.size() > KD_MAX_TRACKS) { err = "Timeline " + String(t.id) + ": too many tracks (max " + String(KD_MAX_TRACKS) + ")"; return false; }
-    for (JsonObjectConst c : o["cues"].as<JsonArrayConst>()) {
-      // A light cue with a length ("len", ms) ends there, after its fade-out ("out", ms):
-      // its release cue lets the track go, so the gap after it is empty.
-      auto pushCue = [&](const Cue& cue) {
-        t.cues.push_back(cue);
-        uint32_t len = c["len"] | 0;
-        if (!len) return;
-        Cue r = cue;
-        r.scene = r.own = r.fx = -1;
-        r.release = true;
-        r.from = cue.t;
-        r.fade = std::min<uint32_t>(c["out"] | 0, len);
-        r.t = cue.t + len - r.fade;
-        t.cues.push_back(r);
-      };
-      Cue cue;
-      cue.t = c["t"] | 0;
-      cue.fade = c["fade"] | 0;
-      cue.path = parsePath(c["path"] | "linear");
-      cue.scene = cue.own = cue.fx = -1;
-      int tr = c["track"] | 0;
-      cue.track = tr >= 0 && tr < KD_MAX_TRACKS ? tr : 0;
-      if (!c["trigger"].isNull()) {   // trigger cue: "trigger": "Video start" (or a number)
-        cue.trigger = c["trigger"].as<String>();
-        cue.trigger.trim();
-        if (!cue.trigger.length()) { err = "Timeline " + String(t.id) + ": trigger cue without a trigger"; return false; }
-        t.cues.push_back(cue);
-        continue;
-      }
-      static const std::vector<int> kAll;
-      const std::vector<int>& fx = cue.track < tracks.size() ? tracks[cue.track] : kAll;
-      if (!c["effect"].isNull()) {
-        // Effect on the track's fixtures: "effect": id, "params": {"speed": 0.5, "color": "#ff0000"}, "dim": level %.
-        int eid = c["effect"] | 0;
-        auto pi = std::find(fxIds.begin(), fxIds.end(), eid);
-        if (pi == fxIds.end()) { err = "Timeline " + String(t.id) + ": unknown effect " + String(eid); return false; }
-        if (fx.empty()) { err = "Timeline " + String(t.id) + ": effect cue on a track without fixtures"; return false; }
-        FxCue fc;
-        fc.prog = pi - fxIds.begin();
-        const Fx::Program& prog = nfp[fc.prog];
-        fc.slots.resize(prog.slots);
-        Fx::init(prog, fc.slots.data());
-        JsonObjectConst pv = c["params"];
-        for (const auto& q : prog.params) {
-          JsonVariantConst v = pv[q.name];
-          if (v.isNull()) continue;
-          String s = v.as<String>();
-          Fx::setParam(q, s.c_str(), fc.slots.data());
-        }
-        fc.level = (c["dim"].isNull() ? 100 : clampInt(c["dim"] | 100, 0, 100)) / 100.0;
-        for (size_t k = 0; k < fx.size(); k++) fc.targets.push_back(effectTarget(nf[fx[k]], k, fx.size(), posOf(fx[k])));
-        cue.fx = nfc.size();
-        nfc.push_back(fc);
-        pushCue(cue);
-        continue;
-      }
-      if (!c["dim"].isNull() || !c["color"].isNull()) {
-        // Preset on a track: intensity and/or colour for the track's fixtures.
-        if (fx.empty()) { err = "Timeline " + String(t.id) + ": preset cue on a track without fixtures"; return false; }
-        int dim = c["dim"].isNull() ? -1 : clampInt(c["dim"] | 0, 0, 100);
-        const char* col = c["color"] | "";
-        bool hasColor = col[0] == '#' && strlen(col) == 7;
-        uint32_t rgb = hasColor ? strtoul(col + 1, nullptr, 16) : 0;
-        Scene sc{0, "", {}};
-        for (int fi : fx) presetLevels(nf[fi], dim, hasColor, rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff, sc.levels);
-        cue.own = ncs.size();
-        ncs.push_back(sc);
-        pushCue(cue);
-        continue;
-      }
-      int sid = c["scene"] | 0;
-      auto it = std::find_if(ns.begin(), ns.end(), [&](const Scene& sc) { return sc.id == sid; });
-      if (it == ns.end()) { err = "Timeline " + String(t.id) + ": unknown scene " + String(sid); return false; }
-      cue.scene = it - ns.begin();
-      if (!fx.empty()) {
-        // A scene on a track only plays the channels of the track's fixtures.
-        Scene sc{0, "", {}};
-        static uint8_t mine[U][64];   // channels of the track's fixtures (parse runs under g_engine: one at a time)
-        memset(mine, 0, sizeof(mine));
-        for (int fi : fx) {
-          const Fixture& f = nf[fi];
-          for (int k = 0; k < f.footprint; k++) setBit(mine[f.u], f.address - 1 + k);
-        }
-        for (const auto& l : it->levels)
-          if (testBit(mine[l.u], l.ch)) sc.levels.push_back(l);
-        cue.own = ncs.size();
-        ncs.push_back(sc);
-      }
-      pushCue(cue);
-    }
-    std::stable_sort(t.cues.begin(), t.cues.end(), [](const Cue& a, const Cue& b) { return a.t < b.t; });
+    if (!parseTimeline(o, ctx, t, nfc, ncs, err)) return false;
     nt.push_back(t);
   }
 
+  Project::timePart("timelines");
   Log::crumb(Log::kCrumbLoad, "parse: commit");
   // Commit.
   stopAllPlaybacks();
   clearOverrides();
+  locUntil = 0;   // the fixtures it pointed at may have moved
+  memset(locMask, 0, sizeof(locMask));
   memset(gmExempt, 0, sizeof(gmExempt));
   memset(wide, 0, sizeof(wide));
   memset(curveOf, 0, sizeof(curveOf));
@@ -392,6 +445,9 @@ bool parse(const char* json, size_t len, String& err) {
   fxProgs = std::move(nfp);
   fxCues = std::move(nfc);
   fxScratch.assign(maxSlots, 0);
+  keptById = std::move(byId);
+  keptPos = std::move(mapPos);
+  keptFxIds = std::move(fxIds);
   cfg = s;
   // Trigger notes are documentation only: they stay in project.json on the stick, not in RAM.
   for (JsonObject o : d["triggers"].as<JsonArray>()) { o.remove("notes"); o.remove("level"); }   // + separator level (main/sub heading)
@@ -403,9 +459,11 @@ bool parse(const char* json, size_t len, String& err) {
   d.remove("effects");   // compiled into fxProgs
   // Device drivers: channel names and command buttons are for the web UI only.
   for (JsonObject o : d["drivers"].as<JsonArray>()) { o.remove("names"); o.remove("commands"); }
+  Project::timePart("commit");
   Log::crumb(Log::kCrumbLoad, "parse: keep JSON");
-  doc = std::move(d);
+  doc = std::move(d);   // frees the previous project's JSON
   Log::crumb(Log::kCrumbLoad, "parse: done");
+  Project::timePart("old json");
   Dmx::setEnabled(cfg.outDmx);
   Dmx::setFps(cfg.dmxFps);
   projectVersion++;
@@ -418,6 +476,104 @@ bool loadFile(const char* path, String& err) {
   BigRam::Buffer json;
   if (!Storage::readFile(path, json)) { err = String("Cannot read ") + path; return false; }
   return parse(json.data, json.len, err);
+}
+
+// Live editing in the web UI: one timeline (its project.json object) replaces the loaded one
+// with the same id, or is added, without a reload and without touching the stick. It is
+// built from the loaded fixtures, scenes and effects: anything new there needs a save first.
+// The timeline's effect cues / cue scenes reuse its old places in fxCues / cueScenes (no other
+// timeline points at those), so editing all evening doesn't keep growing them.
+bool liveTimeline(const char* json, size_t len, String& err) {
+  JsonDocument d(BigRam::json());
+  DeserializationError de = deserializeJson(d, json, len);
+  if (de) { err = String("JSON error: ") + de.c_str(); return false; }
+  JsonObjectConst o = d.as<JsonObjectConst>();
+  const Groups grp = readGroups(doc["groups"].as<JsonArrayConst>());   // still in the kept JSON
+  const TlCtx ctx{fixtures, scenes, grp, keptFxIds, fxProgs, keptPos, keptById};
+  Timeline t;
+  BigRam::Vec<FxCue> nfc;
+  BigRam::Vec<Scene> ncs;
+  if (!parseTimeline(o, ctx, t, nfc, ncs, err)) return false;
+  int idx = -1;
+  for (size_t i = 0; i < timelines.size(); i++) if (timelines[i].id == t.id) idx = i;
+  // Free the old timeline's places, then hand them out again.
+  std::vector<int> freeFx, freeSc;
+  if (idx >= 0)
+    for (const auto& c : timelines[idx].cues) {
+      if (c.fx >= 0) freeFx.push_back(c.fx);
+      if (c.own >= 0) freeSc.push_back(c.own);
+    }
+  auto place = [](auto& list, auto& items, std::vector<int>& freeAt) {
+    std::vector<int> at(items.size());
+    for (size_t k = 0; k < items.size(); k++) {
+      if (k < freeAt.size()) { at[k] = freeAt[k]; list[freeAt[k]] = std::move(items[k]); }
+      else { at[k] = list.size(); list.push_back(std::move(items[k])); }
+    }
+    for (size_t k = items.size(); k < freeAt.size(); k++) list[freeAt[k]] = {};   // unused now: empty
+    return at;
+  };
+  std::vector<int> fxAt = place(fxCues, nfc, freeFx), scAt = place(cueScenes, ncs, freeSc);
+  for (auto& c : t.cues) {
+    if (c.fx >= 0) c.fx = fxAt[c.fx];
+    if (c.own >= 0) c.own = scAt[c.own];
+  }
+  if (idx < 0) { idx = timelines.size(); timelines.push_back(std::move(t)); }
+  else timelines[idx] = std::move(t);
+  timelineReplaced(idx);
+  LOGI(Show, "Timeline %d '%s' changed live (not saved)", timelines[idx].id, timelines[idx].name.c_str());
+  return true;
+}
+
+// Locate: the dimmer and R/G/B/W channels of these fixtures (only the first channel of one
+// without them, so pan/tilt never jump) blink white for ms (tick in Show.cpp). Here because
+// it needs the patch tables and colorSlots, like the presets. A new locate replaces the last.
+bool locate(const String& ids, uint32_t ms, String& msg) {
+  if (!strcasecmp(ids.c_str(), "off")) {
+    locUntil = 0;
+    memset(locMask, 0, sizeof(locMask));
+    msg = "Locate off";
+    return true;
+  }
+  static uint8_t mask[U][64];   // static: off the caller's thread stack (callers hold g_engine)
+  memset(mask, 0, sizeof(mask));
+  int n = 0, missing = 0;
+  const char* s = ids.c_str();
+  while (*s) {
+    char* end;
+    long a = strtol(s, &end, 10), b = a;
+    if (end == s) { msg = "expected fixture numbers, e.g. locate 3,5,8-12"; return false; }
+    if (*end == '-') { const char* q = end + 1; b = strtol(q, &end, 10); if (end == q || b < a) { msg = "bad range in " + ids; return false; } }
+    if (*end && *end != ',') { msg = "expected fixture numbers, e.g. locate 3,5,8-12"; return false; }
+    if (b - a > 4096) b = a + 4096;
+    for (long id = a; id <= b; id++) {
+      const int fi = id >= 0 && id < (long)keptById.size() ? keptById[id] : -1;
+      if (fi < 0) { missing++; continue; }
+      const Fixture& f = fixtures[fi];
+      const ColorSlots c = colorSlots(f);
+      const Slot* list[] = {c.dim, c.r, c.g, c.b, c.w};
+      bool any = false;
+      for (const Slot* sl : list) {
+        if (!sl) continue;
+        any = true;
+        const int ch = channelOf(f, *sl);
+        if (ch >= 0 && ch < 512) setBit(mask[f.u], ch);
+        if (sl->wide && ch + 1 < 512) setBit(mask[f.u], ch + 1);
+      }
+      if (!any && !f.slots.empty()) { const int ch = channelOf(f, f.slots[0]); if (ch >= 0 && ch < 512) setBit(mask[f.u], ch); }
+      n++;
+    }
+    s = *end ? end + 1 : end;
+  }
+  if (!n) { msg = "no such fixture: " + ids; return false; }
+  if (ms < 500) ms = 500;
+  if (ms > 60000) ms = 60000;
+  memcpy(locMask, mask, sizeof(locMask));
+  locStart = millis();
+  locUntil = locStart + ms;
+  if (!locUntil) locUntil = 1;   // 0 means off
+  msg = "Locating " + String(n) + " fixture" + (n == 1 ? "" : "s") + " for " + String(ms / 1000.0f, 1) + " s" + (missing ? " (" + String(missing) + " not found)" : "");
+  LOGI(Show, "%s", msg.c_str());
+  return true;
 }
 
 }  // namespace Show

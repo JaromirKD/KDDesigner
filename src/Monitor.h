@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+namespace BigRam { struct Text; }
+
 // Health monitoring of PCs and network devices (ICMP ping) plus the shared
 // check interval also used by the PJLink projector poll.
 // Project JSON:
@@ -40,5 +42,5 @@ void record(const char* kind, const String& name, const char* state);   // any t
 void flushHistory();                                                      // main loop
 // Lines of one device (plus boot/alive) between from and to (epoch, max 7 days) as
 // [[epoch,"state"],...], starting at the first line of from's day file.
-void historyJson(const String& name, uint32_t from, uint32_t to, String& out);
+void historyJson(const String& name, uint32_t from, uint32_t to, BigRam::Text& out);
 }  // namespace Monitor

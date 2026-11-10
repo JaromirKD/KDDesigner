@@ -38,7 +38,9 @@
 //   http           an HTTP response arrives ("url" prefix or empty) vars {url} {status} {body}
 //   time           also "at": "sunrise" | "sunset" with "offset" minutes
 //   manual         only fired by other triggers ("fire trigger"), the UI or the panel
-//   sequence       the "steps" triggers (names or numbers) fire in this order within "within" s
+//   calendar       a calendar period ("calendar" = its name) becomes "state" active | inactive
+//                  (checked every second; the first reading after power-up is not a change)
+//                  vars {calendar} {state}
 //   dmx_in         Art-Net / sACN received ("protocol", "universe", "channels"); "when"
 //                  change | above | below "level" (0-255). vars {channel} {index} {value} {old}
 //   comment        a separator in the trigger list, never fires
@@ -53,7 +55,7 @@
 //   mode <group> is|not <state> | mode <group> is <state> for <duration> (90, 30s, 10m, 2h)
 //   timeline <tl> running | timeline <tl> stopped
 //   time between <t> <t> (HH:MM, sunrise, sunset-30) | day is mon,tue,... | device <name> is online|offline
-//   var <name> =|!=|>|<|>=|<= <value> | calendar <name> active|inactive | date between <MM-DD> <MM-DD>
+//   var <name> =|!=|>|<|>=|<= <value> | calendar <name> active|inactive | date between <DD-MM> <DD-MM>
 //   io <point> is on|off | io <point> =|!=|>|<|>=|<= <value>
 namespace Triggers {
 void load();                 // (re)reads triggers from the loaded project
@@ -76,6 +78,8 @@ void onHttpResponse(const String& method, const String& url, int status, const S
 // Returns the id, or -1 with err set (unknown or ambiguous name).
 int findId(const String& ref, String& err);
 bool fire(int triggerId, String& msg, const Vars* vars = nullptr, uint32_t delayMs = 0);
+// "Test" in the web UI: fire by hand and say what each condition / action line did (JSON).
+bool test(int triggerId, String& json);
 bool cancel(int triggerId, String& msg);
 bool repeat(int triggerId, uint32_t everyMs, int times, String& msg);  // times 0 = forever
 bool stopRepeat(int triggerId, String& msg);

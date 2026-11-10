@@ -255,27 +255,23 @@ int arduino::MbedClient::read() {
   return ret;
 }
 
+// KD Designer: after the ring buffer, the rest comes straight from the socket. The ring holds
+// only SOCKET_BUFFER_SIZE (256) bytes and readSocket() sleeps 1 ms whenever it is full, so a
+// big upload (a project save) came in at ~190 KB/s. Both run under the mutex, and the ring
+// always holds older bytes than the socket, so the order stays right. A close or error from
+// recv() is left for readSocket() to see (it gets the same answer on its next try).
 int arduino::MbedClient::read(uint8_t *data, size_t len) {
   if (sock == nullptr)
     return 0;
   mutex->lock();
-  int avail = available();
-
-  if (!avail) {
-    mutex->unlock();
-    return -1;
-  }
-
-  if ((int)len > avail) {
-    len = avail;
-  }
-
-  for (size_t i = 0; i < len; i++) {
-    data[i] = rxBuffer.read_char();
+  size_t got = 0;
+  while (got < len && rxBuffer.available()) data[got++] = rxBuffer.read_char();
+  if (got < len && sock != nullptr) {
+    nsapi_size_or_error_t r = sock->recv(data + got, len - got);
+    if (r > 0) { got += r; _status = true; }
   }
   mutex->unlock();
-
-  return len;
+  return got ? (int)got : -1;
 }
 
 int arduino::MbedClient::peek() {

@@ -65,6 +65,10 @@ const TRIGGER_TEMPLATES = [
       { type: 'time', name: 'Lights off at night', at: '23:00:00', color: 'orange', actions: [`release scene ${h.sc(0)} fade 60`] }] }) },
   { cat: 'Opening hours', name: 'Weekend programme', desc: 'Another timeline on Saturday and Sunday, only during the day.',
     make: (h) => ({ triggers: [{ type: 'time', name: 'Weekend show', at: '10:00:00', days: ['sat', 'sun'], conditions: ['time between 09:00 18:00'], color: 'amber', actions: [`start timeline ${h.tl(1)}`] }] }) },
+  { cat: 'Opening hours', name: 'Holiday starts and ends', desc: 'When the calendar period "Closed" starts (just after midnight) everything fades out and a line goes in the log; when it ends, the idle loop starts again. Add the period on the Schedule page.',
+    make: (h) => ({ triggers: [
+      { type: 'calendar', name: 'Holiday starts', calendar: P().calendar[0]?.name || 'Closed', state: 'active', color: 'amber', actions: ['release all fade 10', 'log Holiday: {calendar} {state}'] },
+      { type: 'calendar', name: 'Holiday ends', calendar: P().calendar[0]?.name || 'Closed', state: 'inactive', color: 'amber', actions: [`start timeline ${h.tl(1)}`] }] }) },
 
   { cat: 'Technician', name: 'Projectors on, then the input', desc: 'Switches the projectors on, waits until one answers, gives the lamps time and then picks HDMI 1.',
     make: (h) => ({ triggers: [{ type: 'manual', name: 'Projectors on', color: 'purple',
@@ -84,11 +88,6 @@ const TRIGGER_TEMPLATES = [
       actions: [`stop timeline ${h.tl(0)}`, 'sleep 1', `start timeline ${h.tl(0)}`] }] }) },
   { cat: 'Technician', name: 'All off (long press)', desc: 'Hold a panel button for 3 s to fade everything out.',
     make: (h) => ({ triggers: [{ type: 'panel', name: 'All off', control: h.btn(2), event: 'hold', hold: 3, color: 'red', actions: ['release all fade 3'] }] }) },
-  { cat: 'Technician', name: 'Secret service code', desc: 'Left, left, right on two panel buttons within 5 s switches to service mode. The two button triggers are only steps.',
-    make: (h) => ({ triggers: [
-      { type: 'panel', name: 'Code: left', control: h.btn(0), event: 'click', color: 'grey', actions: [] },
-      { type: 'panel', name: 'Code: right', control: h.btn(1), event: 'click', color: 'grey', actions: [] },
-      { type: 'sequence', name: 'Service code', steps: ['Code: left', 'Code: left', 'Code: right'], within: 5, color: 'grey', actions: [h.mode(2), 'log Service code entered'] }] }) },
   { cat: 'Technician', name: 'Double click: blackout on/off', desc: 'A double click on a panel button switches blackout on and off, kept in an on/off variable.',
     make: (h) => ({ variables: [{ name: 'blackout_on', type: 'bool', initial: false, persist: false }], triggers: [
       { type: 'panel', name: 'Blackout double click', control: h.btn(0), event: 'double', within: 0.5, color: 'grey', actions: ['var blackout_on toggle'] },
@@ -175,11 +174,7 @@ function addTemplate(tpl) {
     if (n !== c.name) renamed.set(c.name.toLowerCase(), n);
     c.name = n;
   }
-  if (renamed.size)
-    for (const c of copies) {
-      c.actions = c.actions.map((a) => renameRefsInLine(a, renamed));
-      if (c.steps) c.steps = c.steps.map((s) => renamed.get(String(s).toLowerCase()) ?? s);
-    }
+  if (renamed.size) for (const c of copies) c.actions = c.actions.map((a) => renameRefsInLine(a, renamed));
   const newVars = (m.variables || []).filter((v) => !p.variables.some((x) => x.name.toLowerCase() === v.name.toLowerCase()));
   p.variables.push(...newVars);
   renumberTriggers(p);
@@ -322,12 +317,15 @@ function drawTrigHist() {
   const p = P(), now = Date.now(), zero = d.at - d.now;   // wall-clock time of the controller's ms 0
   const span = (S.histRange ?? 600) * 1000 || Math.max(60000, now - (zero + (d.h[0]?.[0] ?? d.now)));
   const from = now - span;
-  const fires = d.h.map(([ms, id, src]) => ({ at: zero + ms, id, src })).filter((f) => f.at >= from);
+  // [ms, id, src, 1] = it fired but a condition was false (nothing ran): an outlined red mark.
+  const fires = d.h.map(([ms, id, src, no]) => ({ at: zero + ms, id, src, no: !!no })).filter((f) => f.at >= from);
   const byId = new Map();
   for (const f of fires) (byId.get(f.id) || byId.set(f.id, []).get(f.id)).push(f);
   const rows = p.triggers.filter((t) => t.type !== 'comment' && byId.has(t.id));
   const unknown = [...byId.keys()].filter((id) => !rows.some((t) => t.id === id));
-  $('#histInfo').textContent = `${fires.length} fire${fires.length === 1 ? '' : 's'} of ${rows.length} trigger${rows.length === 1 ? '' : 's'}` +
+  const nNo = fires.filter((f) => f.no).length;
+  $('#histInfo').textContent = `${fires.length - nNo} fire${fires.length - nNo === 1 ? '' : 's'} of ${rows.length} trigger${rows.length === 1 ? '' : 's'}` +
+    (nNo ? ` · ${nNo} skipped by a false condition (outlined red)` : '') +
     (d.h.length >= 512 ? ' · the controller keeps the last 512' : '') + ' · hover a mark for the time and source, click a row to open the trigger';
   if (!rows.length && !unknown.length) { body.innerHTML = '<p class="muted" style="margin:8px">Nothing fired in this time.</p>'; return; }
   const LW = 210, RH = 18, W = Math.max(400, body.clientWidth - 2), TW = W - LW - 10, AX = 18;
@@ -341,10 +339,12 @@ function drawTrigHist() {
     axis += `<line class="hist-grid" x1="${x(tk)}" x2="${x(tk)}" y1="${AX}" y2="${AX + rows.length * RH}"/><text class="hist-ax" x="${x(tk)}" y="12" text-anchor="middle">${hhmm(tk)}</text>`;
   const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
   const rowSvg = (t, r) => {
-    const y = AX + r * RH, list = byId.get(t.id), col = trigColor(t.color) || 'var(--accent)';
+    const y = AX + r * RH, list = byId.get(t.id), col = trigColor(t.color) || 'var(--accent)', no = list.filter((f) => f.no).length;
     return `<g class="hist-row" data-sel="trigger:${p.triggers.indexOf(t)}"><rect class="hist-bg" x="0" y="${y}" width="${W}" height="${RH}"/>
-      <text class="hist-lbl" x="6" y="${y + 13}"><tspan class="fl-id">${t.id}</tspan> ${esc(cut(t.name || '', 24))}</text><text class="hist-n" x="${LW - 8}" y="${y + 13}" text-anchor="end">${list.length}</text>
-      ${list.map((f) => `<rect class="hist-tick" x="${x(f.at) - 1.5}" y="${y + 3}" width="3" height="${RH - 6}" style="fill:${col}"><title>#${t.id} ${esc(t.name)} · ${new Date(f.at).toLocaleTimeString()} · ${esc(histSource(f.src))}</title></rect>`).join('')}</g>`;
+      <text class="hist-lbl" x="6" y="${y + 13}"><tspan class="fl-id">${t.id}</tspan> ${esc(cut(t.name || '', 24))}</text><text class="hist-n" x="${LW - 8}" y="${y + 13}" text-anchor="end">${list.length - no}${no ? `<tspan class="hist-no"> +${no}✕</tspan>` : ''}</text>
+      ${list.map((f) => f.no
+    ? `<rect class="hist-tick no" x="${x(f.at) - 1.5}" y="${y + 4}" width="3" height="${RH - 8}"><title>#${t.id} ${esc(t.name)} · ${new Date(f.at).toLocaleTimeString()} · ${esc(histSource(f.src))} · condition false: not run</title></rect>`
+    : `<rect class="hist-tick" x="${x(f.at) - 1.5}" y="${y + 3}" width="3" height="${RH - 6}" style="fill:${col}"><title>#${t.id} ${esc(t.name)} · ${new Date(f.at).toLocaleTimeString()} · ${esc(histSource(f.src))}</title></rect>`).join('')}</g>`;
   };
   const H = AX + rows.length * RH + 4;
   body.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${axis}${rows.map(rowSvg).join('')}

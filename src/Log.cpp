@@ -258,30 +258,64 @@ static uint32_t lineEpoch(const char* s) {
   return (uint32_t)(days * 86400L + h * 3600L + mi * 60L + sec);
 }
 
-// w in s as a whole word: device "io" is not in "connection", IP 10.0.0.5 not in 10.0.0.50.
-static bool hasWord(const String& s, const String& w) {
-  for (int i = s.indexOf(w); i >= 0; i = s.indexOf(w, i + 1)) {
-    char before = i ? s[i - 1] : ' ', after = s[i + w.length()];
+// w in s as a whole word, ignoring case: device "io" is not in "connection", IP 10.0.0.5 not
+// in 10.0.0.50. In place: two lower-cased Strings per line cost more than reading the line.
+static bool hasWord(const char* s, const char* w, size_t wl) {
+  if (!wl) return false;
+  const int w0 = tolower((unsigned char)w[0]);
+  for (const char* p = s; *p; p++) {
+    if (tolower((unsigned char)*p) != w0 || strncasecmp(p, w, wl)) continue;
+    char before = p > s ? p[-1] : ' ', after = p[wl];   // p[wl] exists: wl chars matched
     if (!isalnum((unsigned char)before) && !isalnum((unsigned char)after)) return true;
   }
   return false;
 }
 
-void search(const String& a, const String& b, uint32_t from, uint32_t to, size_t max, String& out) {
-  out = "[]";
-  if (!a.length()) return;
-  std::vector<String> hits;
-  String la = a, lb = b;
-  la.toLowerCase();
-  lb.toLowerCase();
+// Epoch of the first line with a clock time in a log file, 0 if none in its first lines (or no file).
+static uint32_t firstEpoch(const char* path, bool& exists) {
+  FILE* f = fopen(path, "r");   // stdio's small buffer: one short read
+  exists = f != nullptr;
+  if (!f) return 0;
   char line[KD_LOG_MSG_LEN + 48];
+  uint32_t e = 0;
+  for (int i = 0; i < 20 && !e && fgets(line, sizeof(line), f); i++) e = lineEpoch(line);
+  fclose(f);
+  return e;
+}
+
+// Opening one device in Monitoring took many seconds: up to 5 x 8 MB of log files, read in
+// stdio's 1 KB pieces, two Strings per line, and a heap String for the reply. Now files wholly
+// outside the window are not opened, reading goes in 8 KB pieces (Storage::Reader), lines are
+// matched in place and the hits are kept in SDRAM.
+void search(const String& a, const String& b, uint32_t from, uint32_t to, size_t max, BigRam::Text& out) {
+  out.add('[');
+  if (!a.length() || !Storage::mounted() || !max) { out.add(']'); return; }
+  BigRam::Vec<LogEntry> hits;   // the last `max`, as a ring from `next`
+  hits.reserve(max);
+  size_t next = 0;
+  char line[KD_LOG_MSG_LEN + 48];
+
+  // Each file starts where the older one ends (system.4.log oldest ... system.log being
+  // written), so file n covers start[n] .. start[newer one].
+  uint32_t start[KD_LOG_FILES];
+  bool exists[KD_LOG_FILES];
+  for (int n = 0; n < KD_LOG_FILES; n++) start[n] = firstEpoch(oldPath(n).c_str(), exists[n]);
+
   for (int n = KD_LOG_FILES - 1; n >= 0; n--) {   // oldest first
-    FILE* f = Storage::mounted() ? fopen(oldPath(n).c_str(), "r") : nullptr;
+    if (!exists[n]) continue;
+    if (start[n] && start[n] > to) break;          // this one and the newer ones start after the window
+    int newer = n - 1;
+    while (newer >= 0 && !exists[newer]) newer--;
+    if (newer >= 0 && start[newer] && start[newer] < from) continue;   // all of it is before the window
+
+    Storage::Reader r(oldPath(n).c_str());
+    FILE* f = r.f;
     if (!f) continue;
     // The lines are in time order: find the start of the window by halving, not by reading it all.
+    // Every seek costs one buffer (8 KB) read, so stop halving at that size.
     fseek(f, 0, SEEK_END);
     long lo = 0, hi = ftell(f);
-    while (hi - lo > 4096) {
+    while (hi - lo > 8192) {
       long mid = (lo + hi) / 2;
       fseek(f, mid, SEEK_SET);
       fgets(line, sizeof(line), f);   // the rest of a cut line
@@ -294,36 +328,39 @@ void search(const String& a, const String& b, uint32_t from, uint32_t to, size_t
       uint32_t e = lineEpoch(line);
       if (e > to) break;
       if (e < from) continue;
-      // "<date> <time> [LEVEL] CAT    message"
-      char lvl[8] = "", cat[8] = "";
-      int used = 0;
-      if (sscanf(line + 19, " [%7[^] ] ] %7s %n", lvl, cat, &used) < 2 || !used) continue;
-      String msg = String(line + 19 + used);
-      msg.trim();
-      String lm = msg;
-      lm.toLowerCase();
-      if (!hasWord(lm, la) && !(lb.length() && hasWord(lm, lb))) continue;
-      Lvl l = Lvl::Info;
-      lvlFromName(lvl, l);
+      // "YYYY-MM-DD HH:MM:SS [LEVEL] CAT    message" (formatLine): fixed columns.
+      if (line[19] != ' ' || line[20] != '[' || line[26] != ']' || strlen(line) < 35) continue;
+      char* msg = line + 35;
+      size_t ml = strlen(msg);
+      while (ml && (unsigned char)msg[ml - 1] <= ' ') msg[--ml] = 0;
+      if (!hasWord(msg, a.c_str(), a.length()) && !hasWord(msg, b.c_str(), b.length())) continue;
       LogEntry le;
       le.seq = 0;
       le.ms = 0;
       le.epoch = e;
-      le.lvl = l;
+      char lvl[6] = "", cat[7] = "";
+      sscanf(line + 21, "%5[A-Z]", lvl);
+      sscanf(line + 28, "%6[A-Z]", cat);
+      le.lvl = Lvl::Info;
+      lvlFromName(lvl, le.lvl);
       le.cat = Cat::Sys;
       catFromName(cat, le.cat);
-      strncpy(le.msg, msg.c_str(), sizeof(le.msg) - 1);
+      strncpy(le.msg, msg, sizeof(le.msg) - 1);
       le.msg[sizeof(le.msg) - 1] = 0;
-      char buf[KD_LOG_MSG_LEN * 2 + 96];
-      if (!toJson(le, buf, sizeof(buf))) continue;
-      hits.push_back(buf);
-      if (hits.size() > max) hits.erase(hits.begin());
+      if (hits.size() < max) hits.push_back(le);
+      else hits[next] = le;
+      next = (next + 1) % max;
     }
-    fclose(f);
   }
-  out = "[";
-  for (size_t i = 0; i < hits.size(); i++) { if (i) out += ','; out += hits[i]; }
-  out += "]";
+  char buf[KD_LOG_MSG_LEN * 2 + 96];
+  size_t count = hits.size(), first = count < max ? 0 : next;
+  for (size_t i = 0; i < count; i++) {
+    size_t k = toJson(hits[(first + i) % count], buf, sizeof(buf));
+    if (!k) continue;
+    if (out.len > 1) out.add(',');
+    out.add(buf, k);
+  }
+  out.add(']');
 }
 
 }  // namespace Log

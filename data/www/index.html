@@ -21,9 +21,11 @@
   <button id="undoBtn" class="btn" title="Undo (Ctrl+Z)" disabled>↶</button>
   <button id="redoBtn" class="btn" title="Redo (Ctrl+Y)" disabled>↷</button>
   <button id="save" class="btn primary" title="Save project to USB (Ctrl+S)">Save</button>
+  <div id="progress" class="progress" hidden><div class="pg-track"><div class="pg-fill"></div></div><div class="pg-label"><span class="pg-text"></span><button class="pg-x" title="Close">×</button></div></div>
 </header>
 <nav class="side" id="nav">
   <button data-view="dashboard">Dashboard</button>
+  <button data-view="devices">Devices</button>
   <button data-view="modes">Modes</button>
   <button data-view="patch">Patch</button>
   <button data-view="fixtures">Fixtures</button>
@@ -35,7 +37,6 @@
   <button data-view="variables">Variables</button>
   <button data-view="schedule">Schedule</button>
   <button data-view="panel">Panel</button>
-  <button data-view="devices">Devices</button>
   <button data-view="monitor">Monitoring <span id="monBadge" class="badge"></span></button>
   <button data-view="console">Console</button>
   <button data-view="log">Log <span id="logBadge" class="badge"></span></button>

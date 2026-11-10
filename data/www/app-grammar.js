@@ -23,6 +23,9 @@ const GRAMMAR = [
   ['set {chan} {dmx}', 'Override channel(s), e.g. set 1.10-12 255'],
   ['clear override {chan}', 'Remove the override on channel(s) only, e.g. clear override 1.10-12'],
   ['clear overrides', 'Remove all channel overrides'],
+  ['locate {fixlist}', 'Flash fixtures white for 5 s to find them in the room (fixture numbers, e.g. 3,5,8-12)'],
+  ['locate {fixlist} for {sec}', 'Flash fixtures white for this many seconds (up to 60)'],
+  ['locate off', 'Stop locating'],
   ['grandmaster {pct}', 'Set the grand master'],
   ['blackout {onoff}', 'Blackout on or off'],
   ['mode {mgroup} {mstate}', 'Set the state of a mode group, e.g. mode Curtains Open'],
@@ -168,7 +171,7 @@ const COND_GRAMMAR = [
   ['device {devname} is {updown}', 'Only when a monitored PC / device / projector is online or offline'],
   ['var {var} {op} {text...}', 'Compare a variable, e.g. var visitors > 50'],
   ['calendar {calname} {activity}', 'Only when a calendar period is (not) active today'],
-  ['date between {date} {date}', 'Only between two dates: MM-DD (every year) or YYYY-MM-DD'],
+  ['date between {date} {date}', 'Only between two dates: DD-MM (every year) or DD-MM-YYYY'],
   ['io {iopoint} is {onoff}', 'Only when a Machine Control input or output is on / off'],
   ['io {iopoint} {op} {num}', 'Compare a Machine Control reading, e.g. io ai0 > 5 (volts, mA or Ω)'],
 ].map(([p, doc, o]) => ({ pattern: p, parts: p.split(' '), doc, hidden: !!o?.hidden }));
@@ -268,7 +271,7 @@ function matchPart(part, tok) {
     case '{mbtable}': return /^(coil|holding|register)$/i.test(tok);
     case '{calname}': return p.calendar.some((c) => c.name.toLowerCase() === tok.toLowerCase());
     case '{activity}': return /^(active|inactive)$/i.test(tok);
-    case '{date}': return /^(\d{4}-)?\d{1,2}-\d{1,2}$/.test(tok);
+    case '{date}': return KDModel.dateStore(tok) != null && /^\d{1,2}-\d{1,2}(-\d{4})?$/.test(tok);
     case '{days}': return tok.split(',').every((d) => DAYS.includes(d.trim().toLowerCase()));
     case '{tl}': return !!findRef(p.timelines, tok);
     case '{sc}': return !!findRef(p.scenes, tok);
@@ -287,6 +290,7 @@ function matchPart(part, tok) {
     case '{pcaction}': return /^(wake|startup|shutdown|reboot)$/i.test(tok);
     case '{devname}': return monitoredNames().some((n) => n.toLowerCase() === tok.toLowerCase());
     case '{updown}': return /^(online|offline)$/i.test(tok);
+    case '{fixlist}': return tok.toLowerCase() !== 'off' && /^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(tok) && tok.split(',').some((r) => { const [a, b = a] = r.split('-').map(Number); return p.fixtures.some((f) => f.id >= a && f.id <= b); });
     case '{chan}': {
       const m = /^(\d+)\.(\d+)(?:-(\d+))?$/.exec(tok);
       return !!m && !!p.universes.find((u) => u.id === +m[1]) && +m[2] >= 1 && +(m[3] || m[2]) <= 512 && +(m[3] || m[2]) >= +m[2];
@@ -379,7 +383,8 @@ function candidates(part, partial) {
     case '{mbtable}': return [['coil', 'on/off output'], ['holding', '16-bit register']].filter(([v]) => v.startsWith(pl)).map(([v, d]) => ({ insert: v, label: v, desc: d, key: 'mt' + v }));
     case '{calname}': return names([...new Set(p.calendar.map((c) => c.name))], 'calendar', 'cn');
     case '{activity}': return ['active', 'inactive'].filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'ac' + v }));
-    case '{date}': return presets(['12-24', '12-31', '01-01', new Date().toISOString().slice(0, 10)], '<MM-DD | YYYY-MM-DD>');
+    case '{date}': { const n = new Date(), p2 = (x) => String(x).padStart(2, '0');
+      return presets(['24-12', '31-12', '01-01', `${p2(n.getDate())}-${p2(n.getMonth() + 1)}-${n.getFullYear()}`], '<DD-MM | DD-MM-YYYY>'); }
     case '{days}': return presets(['mon,tue,wed,thu,fri', 'sat,sun'], '<mon,tue,…>');
     case '{email}': return hint('<name@domain>');
     case '{tl}': return named(p.timelines, 'timeline');
@@ -951,12 +956,13 @@ const KEYWORD_HELP = {
   text: 'Pharos: a text slot. Panel: the text shown on the control.', beacon: 'Blink the controller’s LEDs so you can find it.',
   restart: 'Off for a moment, then on again (NETIO short off; the time is set on the NETIO or given in seconds).',
   pulse: 'On for a moment, then off again (NETIO short on; Machine Control: for the seconds given).',
+  locate: 'Find fixtures in the room: they blink full white (on top of everything, also a blackout), then go back to the show by themselves.',
   io: 'An input or output of the Portenta Machine Control (Devices → Machine Control): in0-7, out0-7, io0-11, ai0-2, ao0-3 or the name you gave it.',
 };
 const PART_CLASS = {
   '{tl}': 'ref', '{sc}': 'ref', '{trig}': 'ref', '{mode}': 'ref', '{mgroup}': 'ref', '{mstate}': 'ref', '{mstep}': 'kw', '{dur}': 'num', '{device}': 'ref', '{pj}': 'ref', '{label}': 'ref', '{pctl}': 'ref', '{flash}': 'kw', '{pval}': 'num', '{logcat}': 'ref', '{proto}': 'kw',
   '{sec}': 'num', '{pct}': 'num', '{dmx}': 'num', '{port}': 'num', '{count}': 'num', '{pjinput}': 'num',
-  '{ip}': 'addr', '{chan}': 'addr', '{oscaddr}': 'addr', '{email}': 'addr', '{hhmm}': 'addr', '{days}': 'addr', '{color}': 'addr',
+  '{ip}': 'addr', '{chan}': 'addr', '{fixlist}': 'addr', '{oscaddr}': 'addr', '{email}': 'addr', '{hhmm}': 'addr', '{days}': 'addr', '{color}': 'addr',
   '{onoff}': 'kw', '{loglvl}': 'kw', '{text...}': 'str', '{pc}': 'ref', '{pcaction}': 'kw', '{devname}': 'ref', '{updown}': 'kw',
   '{var}': 'ref', '{num}': 'num', '{op}': 'kw', '{tcpdev}': 'ref', '{httpmethod}': 'kw', '{url}': 'addr', '{mbdev}': 'ref', '{mbtable}': 'kw',
   '{calname}': 'ref', '{activity}': 'kw', '{date}': 'addr',
@@ -1012,7 +1018,7 @@ function partHelp(part, tok, g) {
     case '{url}': return `Plain http (no https). The response fires HTTP triggers with {status} and {body}.`;
     case '{op}': return { '=': 'equals', '==': 'equals', '!=': 'not equal', '>': 'greater than', '<': 'less than', '>=': 'at least', '<=': 'at most' }[tok] || '';
     case '{calname}': { const act = S.status?.clock?.calendar?.includes(tok); return `Calendar period “${tok}”${S.status?.clock ? (act ? ' · active today' : ' · not active today') : ''}`; }
-    case '{date}': return /^\d{4}-/.test(tok) ? `${tok} (that date only)` : `${tok} (every year)`;
+    case '{date}': { const s = KDModel.dateStore(tok); return s ? `${dateWords(s)}${s.length > 5 ? ' (that date only)' : ' (every year)'}` : 'DD-MM (every year) or DD-MM-YYYY'; }
     case '{devname}': { const h = hostState(tok); return `Monitored: ${tok}${h ? ` · currently ${h}` : ''}`; }
     case '{updown}': return tok === 'online' ? 'Answered the last check.' : 'Failed the configured number of checks in a row.';
     case '{pc}': return tok.toLowerCase() === 'all' ? 'All PCs' : findRef(p.pcs, tok) || !findKindGroup('pc', tok) ? ref(p.pcs, 'PC', (o) => ` · ${o.ip}${o.mac ? ' · ' + o.mac : ''}`) : groupTip(findKindGroup('pc', tok), 'PC');
@@ -1072,6 +1078,11 @@ function partHelp(part, tok, g) {
     case '{pjinput}': { const i = PJ_INPUTS.find(([v]) => v === tok); return `PJLink input ${tok}${i ? ' · ' + i[1] : ''}`; }
     case '{ip}': return `IP address ${tok}`;
     case '{chan}': { const m = /^(\d+)\.(\d+)(?:-(\d+))?$/.exec(tok); return m ? `Universe ${m[1]}, channel ${m[2]}${m[3] ? '–' + m[3] : ''}` : 'universe.channel'; }
+    case '{fixlist}': {
+      const ids = new Set(tok.split(',').flatMap((r) => { const [a, b = a] = r.split('-').map(Number); return P().fixtures.filter((f) => f.id >= a && f.id <= b).map((f) => f.id); }));
+      const names = [...ids].slice(0, 6).map((id) => fixture(id)?.name).filter(Boolean);
+      return `${ids.size} fixture${ids.size === 1 ? '' : 's'}: ${names.join(', ')}${ids.size > 6 ? ', …' : ''}`;
+    }
     case '{oscaddr}': return `OSC address ${tok}`;
     case '{email}': return `Email recipient ${tok}`;
     case '{text...}':
@@ -1111,9 +1122,12 @@ function classifyBase(line, grammar) {
       const help = KEYWORD_HELP[part] || '';
       return { start: tok.start, end: tok.end, cls: i === 0 ? 'cmd' : 'kw', tip: i === 0 ? `${g.doc}.\n${sigText(g)}` + (help ? `\n${help}` : '') : help };
     }
-    return { start: tok.start, end: tok.end, cls: PART_CLASS[part] || 'str', tip: partHelp(part, tok.v, g) };
+    return { start: tok.start, end: tok.end, cls: PART_CLASS[part] || 'str', tip: partHelp(part, tok.v, g), part, v: tok.v };
   });
 }
+// The references in one line: [{part: '{sc}', v: 'Intro'}] for every placeholder that matched
+// (also inside if/then/else, wait until and repeat), for "Where used".
+const lineRefs = (line, grammar = GRAMMAR) => classify(line, grammar).filter((r) => r.part && r.part !== '{text...}');
 function attachHighlight(input, grammar) {
   const wrap = document.createElement('div');
   wrap.className = 'hl';

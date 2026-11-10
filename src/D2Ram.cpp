@@ -39,5 +39,6 @@ void* alloc(size_t bytes, size_t align) {
 }
 
 size_t used() { return next ? next - kStart : 0; }
+size_t freeBytes() { start(); return top > next ? top - next : 0; }
 
 }  // namespace D2Ram

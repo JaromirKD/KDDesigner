@@ -1,6 +1,7 @@
 {
   "name": "Auditorium - lecture hall",
   "settings": {
+    "dateOrder": "dmy",
     "tzOffsetMin": 60,
     "udpPort": 4000,
     "sacnPriority": 100,

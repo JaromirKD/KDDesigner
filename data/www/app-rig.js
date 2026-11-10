@@ -8,7 +8,7 @@ views.dashboard = () => `
     <div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">Running</h3><div id="pbs"></div><div id="sched"></div></div>
     <div class="card"><h3 style="margin-top:0">System</h3><div id="sys"></div></div>
     <div class="card"><h3 style="margin-top:0">Outputs</h3><div id="outs" class="row"></div>
-      <p class="muted" style="margin:8px 0 0">Live switch until reboot. Set the saved default under Patch.</p></div>
+      <p class="muted" style="margin:8px 0 0">Switches the output at once and changes the project setting (same switch as under Patch): save to keep it after a restart.</p></div>
     ${P().projectors.length ? `<div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">Projectors</h3><div id="pjs"></div></div>` : ''}
     ${P().pcs.length ? `<div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">PCs</h3><div id="pcs"></div></div>` : ''}
   </div>
@@ -49,9 +49,9 @@ function renderPlaybacks() {
     (st?.paused || []).map((s) => `<div class="pb row"><span class="tag bad">paused</span>
     <b>${s.trigger} · ${esc(trigName(s.trigger))}</b><span class="spacer"></span>
     <span class="muted" title="It fired over 100 times in a second: probably a feedback loop">loop? runs again in ${Math.ceil(Math.max(0, s.in) / 1000)}s</span></div>`).join('');
-  const outs = st?.outputs;
-  $('#outs').innerHTML = outs ? PROTOCOLS.map(([k, n]) =>
-    `<button class="toggle${outs[k] ? ' on' : ''}" data-cmd="output ${k} ${outs[k] ? 'off' : 'on'}">${n} ${outs[k] ? 'on' : 'off'}${outs[k + 'Fps'] ? ` · ${outs[k + 'Fps']} fps` : ''}</button>`).join('') : '';
+  // Only when it changed: rebuilding at every status update (~10/s) could swallow a click.
+  const outsHtml = PROTOCOLS.map(([k, n]) => outputSwitch(k, n)).join(''), outsEl = $('#outs');
+  if (outsEl.dataset.html !== outsHtml) { outsEl.innerHTML = outsHtml; outsEl.dataset.html = outsHtml; }
   const pjs = $('#pjs');
   if (pjs) {
     pjs.innerHTML = P().projectors.map((x) => {
@@ -72,7 +72,7 @@ function renderPlaybacks() {
       <label>Firmware</label><span>${esc(st.version)}</span>
       <label>Uptime</label><span>${fmtTime(st.uptime).replace(/\.\d$/, '')}</span>
       <label>Last start</label><span>${startedText(st.started)}</span>
-      <label>Clock</label><span>${st.time > 1600000000 ? new Date(st.time * 1000).toLocaleString() : 'not set'}</span>
+      <label>Clock</label><span>${st.time > 1600000000 ? euDateTime(new Date(st.time * 1000)) : 'not set'}</span>
       <label>Engine</label><span>${s.engineFps} fps · tick ${s.tickUs} µs</span>
       <label>Main loop</label><span>worst ${s.loopUs} µs</span>
       <label>Memory</label><span>${memText(s.heap)}</span>
@@ -81,6 +81,26 @@ function renderPlaybacks() {
       <label>UDP in</label><span>${s.udpRx}/s</span>
       <label>HTTP</label><span>${s.http} requests</span>
     </div>` : '<span class="muted">Waiting for controller…</span>';
+}
+// One switch per protocol, the same on Dashboard and Patch: it changes the project setting
+// (settings.outputs, saved with the project) and switches the output live at once. Saving
+// reloads the settings, so live and saved only differ after the `output … on|off` command
+// (a trigger or the console): the switch then says what is really being sent.
+function outputSwitch(k, n) {
+  const on = !!P().settings.outputs[k], live = S.status?.outputs;
+  const differs = live && !!live[k] !== on;
+  const extra = differs ? ` · now ${live[k] ? 'on' : 'off'} until save/restart` : on && live?.[k + 'Fps'] ? ` · ${live[k + 'Fps']} fps` : '';
+  return `<button class="toggle${on ? ' on' : ''}" data-out="${k}"
+    title="${differs ? `Switched ${live[k] ? 'on' : 'off'} live by the output command; the project says ${on ? 'on' : 'off'} (back at the next save or restart). ` : ''}Click to switch ${on ? 'off' : 'on'} now and in the project">${n} ${on ? 'on' : 'off'}${extra}</button>`;
+}
+async function toggleOutput(k) {
+  const o = P().settings.outputs, on = !o[k];
+  o[k] = on;
+  if (S.status?.outputs) S.status.outputs[k] = on;   // Patch isn't redrawn by the status: don't show "until save" for our own click
+  markDirty();
+  render();
+  const r = await cmd(`output ${k} ${on ? 'on' : 'off'}`);
+  if (!r.ok) toast(r.reply, true);
 }
 function renderRecent() {
   const el = $('#recent');
@@ -95,9 +115,9 @@ views.patch = () => {
   const use = (i, key, on) => `<input type="checkbox" data-p="universes.${i}.${key}" data-t="bool"${on ? ' checked' : ''} data-r>`;
   return `<h2>Patch</h2>
   <h3>Protocols</h3>
-  <table class="proto" style="max-width:720px"><tr><th>Protocol</th><th>Frames per second</th><th>Send</th></tr>
+  <table class="proto" style="max-width:720px"><tr><th>Protocol (same switch as on the Dashboard)</th><th>Frames per second</th><th>Send</th></tr>
   ${PROTOCOLS.map(([k, n]) => `<tr>
-    <td><label class="toggle${outs[k] ? ' on' : ''}"><input type="checkbox" data-p="settings.outputs.${k}" data-t="bool"${outs[k] ? ' checked' : ''} data-r>${n}</label></td>
+    <td>${outputSwitch(k, n)}</td>
     <td><div class="row nowrap"><input type="number" min="1" max="${k === 'dmx' ? 44 : 60}" data-p="settings.outputs.${k}Fps" data-t="num" value="${outs[k + 'Fps']}" style="width:70px">
       <span class="muted">${k === 'dmx' ? 'max 44 (a 512-slot frame takes ~23 ms)' : 'max 60'}</span></div></td>
     <td>${k === 'dmx' ? '<span class="muted">continuous (DMX512 always refreshes)</span>'
@@ -105,7 +125,7 @@ views.patch = () => {
           <option value="1"${outs[k + 'ChangesOnly'] ? ' selected' : ''}>only changes (+ 1 s keep-alive)</option>
           <option value="0"${outs[k + 'ChangesOnly'] ? '' : ' selected'}>continuously at this rate</option></select>`}</td></tr>`).join('')}
   </table>
-  <p class="muted">Saved with the project. Change live with <code>output artnet off</code> or <code>output sacn fps 30</code> (until reboot).
+  <p class="muted">The switch works at once and is saved with the project. From a trigger, <code>output artnet off</code> or <code>output sacn fps 30</code> changes it only live (until the next save or restart).
     Some nodes and media servers expect a continuous stream; "only changes" saves network traffic.</p>
   <h3>Universes</h3>
   <table class="uni"><tr><th class="narrow">ID</th><th>Name</th><th class="${outs.dmx ? '' : 'off'}">DMX port</th><th class="${outs.artnet ? '' : 'off'}">Art-Net port-address → destination</th><th class="${outs.sacn ? '' : 'off'}">sACN universe</th><th></th></tr>
@@ -361,6 +381,7 @@ views.fixtures = () => {
   } else if (sel.length === 1) {
     const x = sel[0], i = p.fixtures.indexOf(x), use = fixtureUse(x.id);
     editor = `<div class="row"><span class="id muted">#${x.id}</span><input data-p="fixtures.${i}.name" value="${esc(x.name)}" style="font-size:16px;flex:1" data-r>
+        <button class="btn small" id="fxLocate" title="Flash it white for 5 s to find it in the room (L)">Locate</button>
         <button class="btn small ghost" id="fxDelSel">Delete</button></div>
       <div class="form" style="margin-top:10px">
         ${fixtureFieldsHtml(x)}
@@ -368,7 +389,7 @@ views.fixtures = () => {
         <label>Used in</label><span class="muted">${[use.scenes.length ? `${use.scenes.length} scene(s)` : '', use.tracks.length ? `tracks ${use.tracks.map(esc).join(', ')}` : '', use.maps.length ? `map ${use.maps.map((m) => esc(m.name)).join(', ')}` : ''].filter(Boolean).join(' · ') || 'nothing yet'}</span>
       </div>`;
   } else if (sel.length > 1) {
-    editor = `<div class="row"><b>${sel.length} fixtures selected</b><button class="btn small ghost" id="fxDelSel" style="margin-left:auto">Delete</button></div>
+    editor = `<div class="row"><b>${sel.length} fixtures selected</b><button class="btn small" id="fxLocate" style="margin-left:auto" title="Flash them white for 5 s to find them in the room (L)">Locate</button><button class="btn small ghost" id="fxDelSel">Delete</button></div>
       <div class="form" style="margin-top:10px">
         <label>Type</label><div class="row"><button class="btn small" id="fxBulkType" title="Make them all another fixture type">Change type…</button></div>
         <label>Universe</label><select id="fxBulkU"><option value="">— keep —</option>${p.universes.map((u) => `<option value="${u.id}">${u.id} · ${esc(u.name)}</option>`).join('')}</select>
@@ -387,7 +408,7 @@ views.fixtures = () => {
       <div class="row" style="margin-top:8px">
         <button class="btn small primary" id="fxAddOpen">+ Add fixtures…</button><button class="btn small" data-add="fixture" title="A fixture with one dim channel; type its channels yourself">+ Empty</button>
         <button class="btn small ghost" id="fxTypesOpen" title="Your own fixture definitions, and importing fixture files">Fixture types…</button></div>
-      <p class="muted keys">Ctrl/Shift+click to select several · Ctrl+C / V copy & paste · Ctrl+D duplicate · Del delete · ↑↓ select · Ctrl+A all</p>
+      <p class="muted keys">Ctrl/Shift+click to select several · Ctrl+C / V copy & paste · Ctrl+D duplicate · L locate · Del delete · ↑↓ select · Ctrl+A all · ? all keys</p>
       <h3 style="margin-top:14px">Groups</h3>
       <div class="list">${p.groups.map((g) => `<div class="item${g.id === S.fxGroup ? ' sel' : ''}" data-fxgroupsel="${g.id}"><span class="id">${g.id}</span><span style="flex:1">${esc(g.name)}</span><span class="tag">${g.fixtures.length}</span></div>`).join('') || '<span class="muted">No groups yet.</span>'}</div>
       <div class="row" style="margin-top:8px"><button class="btn small" id="fxGroupNew">${sel.length ? `+ Group from ${sel.length} selected` : '+ Group'}</button></div>
@@ -485,6 +506,7 @@ views.fixtures.after = () => {
   $('#grpAddSel')?.addEventListener('click', () => { grp.fixtures = [...new Set([...grp.fixtures, ...S.fxSel])]; markDirty(); render(); });
   $('#grpSelect')?.addEventListener('click', () => { S.fxSel = new Set(grp.fixtures); S.fxGroup = null; render(); });
   $('#fxDelSel')?.addEventListener('click', () => deleteFixtures([...S.fxSel]));
+  $('#fxLocate')?.addEventListener('click', () => locateFixtures([...S.fxSel]));
   $('#fxBulkType')?.addEventListener('click', () => openChangeType(p.fixtures.filter((x) => S.fxSel.has(x.id)).map((x) => x.id)));
   const sel = () => p.fixtures.filter((x) => S.fxSel.has(x.id));
   $('#fxBulkU')?.addEventListener('change', (e) => { if (!e.target.value) return; sel().forEach((x) => (x.universe = +e.target.value)); markDirty(); render(); });
@@ -504,6 +526,21 @@ views.fixtures.after = () => {
     render();
   });
 };
+// Locate: the controller flashes these fixtures white for 5 s ("locate 3,5,8-12"), to find
+// them in the room while patching. Numbers as ranges, so a big selection stays one short line.
+async function locateFixtures(ids) {
+  const list = [...new Set(ids)].filter((id) => fixture(id)).sort((a, b) => a - b);
+  if (!list.length) return toast('Select fixtures first', true);
+  const parts = [];
+  for (let i = 0; i < list.length; i++) {
+    let j = i;
+    while (j + 1 < list.length && list[j + 1] === list[j] + 1) j++;
+    parts.push(j > i ? `${list[i]}-${list[j]}` : `${list[i]}`);
+    i = j;
+  }
+  const r = await cmd(`locate ${parts.join(',')}`);
+  toast(r.reply + (r.ok && S.dirty ? ' - fixtures not saved yet use their saved address' : ''), !r.ok);
+}
 // Fixture list keys.
 views.fixtures.keys = (e) => {
   const p = P(), mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
@@ -513,6 +550,7 @@ views.fixtures.keys = (e) => {
   else if (mod && k === 'v' && S.fxClip?.length) { e.preventDefault(); copyFixtures(S.fxClip); toast(`Pasted ${S.fxClip.length} fixture(s) at the next free addresses`); }
   else if (mod && k === 'd' && sel.length) { e.preventDefault(); copyFixtures(sel); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && sel.length) { e.preventDefault(); deleteFixtures(sel.map((x) => x.id)); }
+  else if (k === 'l' && !mod && !e.altKey && sel.length) { e.preventDefault(); locateFixtures(sel.map((x) => x.id)); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && p.fixtures.length) {
     e.preventDefault();
     const cur = p.fixtures.findIndex((x) => x.id === [...S.fxSel].pop());
@@ -557,6 +595,69 @@ function paintDot(dot, look, glow = true) {
   const [r, g, b] = (look?.color.match(/[\d.]+/g) || [0, 0, 0]).map(Number);
   dot.classList.toggle('lit', !!look && look.level > 0.35 && 0.3 * r + 0.59 * g + 0.11 * b > 110);
 }
+// ---- Floor-plan shapes on a map (web UI only: the firmware drops maps after loading) -----
+// m.shapes = [{type: 'rect'|'ellipse'|'line'|'text', x, y, w, h, color, fill, alpha, width, text, size}],
+// x/y/w/h 0..1 of the map's width/height. rect/ellipse: x/y = top-left corner, w/h >= 0;
+// line: from x/y to x+w / y+h (w/h may be negative); text: x/y = its centre, size = % of the
+// map's width (so it grows with the map). Drawn under the fixtures on every map view.
+const SHAPE_TOOLS = [['select', '↖ Select'], ['rect', '▭ Rectangle'], ['ellipse', '◯ Ellipse'], ['line', '╱ Line'], ['text', 'T Text']];
+const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Ellipse', line: 'Line', text: 'Text' };
+const SHAPE_COLOR = '#8aa0b8';
+// Fill patterns (shape.pattern; none = solid). Drawn in a 10 x 10 cell that is square on screen
+// (2 % of the map's width, so it scales with the map); c = the fill colour.
+const SHAPE_PATTERNS = {
+  hatch: ['Hatched ╱', (c) => `<path d="M-1,11 L11,-1 M-1,1 L1,-1 M9,11 L11,9" stroke="${c}" stroke-width="1.3"/>`],
+  back: ['Hatched ╲', (c) => `<path d="M-1,-1 L11,11 M9,-1 L11,1 M-1,9 L1,11" stroke="${c}" stroke-width="1.3"/>`],
+  cross: ['Crossed ╳', (c) => `<path d="M-1,11 L11,-1 M-1,1 L1,-1 M9,11 L11,9 M-1,-1 L11,11 M9,-1 L11,1 M-1,9 L1,11" stroke="${c}" stroke-width="1.1"/>`],
+  grid: ['Grid ┼', (c) => `<path d="M5,0 V10 M0,5 H10" stroke="${c}" stroke-width="1.1"/>`],
+  checker: ['Checkered', (c) => `<path d="M0,0 H5 V5 H0 Z M5,5 H10 V10 H5 Z" fill="${c}"/>`],
+  dots: ['Dotted', (c) => `<circle cx="5" cy="5" r="1.7" fill="${c}"/>`],
+};
+// Colour presets for shapes and texts: floor-plan greys first, then a few clear colours.
+const SHAPE_SWATCHES = [['#8aa0b8', 'Blue grey'], ['#d0d8e2', 'Light grey'], ['#ffffff', 'White'], ['#5a6472', 'Dark grey'], ['#1e2329', 'Almost black'],
+  ['#d0a050', 'Wood / amber'], ['#e05a4a', 'Red'], ['#4caf6a', 'Green'], ['#4a90e2', 'Blue'], ['#f2c94c', 'Yellow'], ['#9b6ad6', 'Purple']];
+// Swatches after a colour picker: data-shsw = which setting (color / fill), cur = its colour now.
+const shapeSwatches = (key, cur) => `<span class="row shape-sw">${SHAPE_SWATCHES.map(([c, n]) => `<span class="swatch${(cur || '').toLowerCase() === c ? ' on' : ''}" data-shsw="${key}" data-c="${c}" title="${n}" style="background:${c}"></span>`).join('')}</span>`;
+let shapeUid = 0;   // pattern ids: unique in the page, also with two map views
+// edit = the Map page's floor-plan mode: shapes can be clicked, the selected one has handles.
+const mapShapesHtml = (m, edit = false) => (m.shapes?.length || edit ? `<div class="shape-layer">${mapShapesInner(m, edit)}</div>` : '');
+function mapShapesInner(m, edit) {
+  const sh = m.shapes || [];
+  if (!sh.length) return '';
+  const pc = (v) => +(v * 100).toFixed(3), defs = [];
+  const svg = sh.map((s, k) => {
+    if (s.type === 'text') return '';
+    const d = edit ? ` data-shape="${k}"` : '';
+    const st = `stroke="${esc(s.color || SHAPE_COLOR)}" stroke-width="${s.width ?? 2}" vector-effect="non-scaling-stroke"`;
+    if (s.type === 'line') return `<g${d}><line x1="${pc(s.x)}" y1="${pc(s.y)}" x2="${pc(s.x + s.w)}" y2="${pc(s.y + s.h)}" ${st} stroke-linecap="round"/>
+      ${edit ? `<line class="hit" x1="${pc(s.x)}" y1="${pc(s.y)}" x2="${pc(s.x + s.w)}" y2="${pc(s.y + s.h)}" stroke="transparent" stroke-width="12" vector-effect="non-scaling-stroke"/>` : ''}</g>`;
+    let fill = 'fill="none"';
+    if (s.fill && SHAPE_PATTERNS[s.pattern]) {
+      const id = `shp${++shapeUid}`;
+      defs.push(`<pattern id="${id}" patternUnits="userSpaceOnUse" width="2" height="${+(2 * (m.aspect || 1)).toFixed(3)}" viewBox="0 0 10 10" preserveAspectRatio="none">${SHAPE_PATTERNS[s.pattern][1](esc(s.fill))}</pattern>`);
+      fill = `fill="url(#${id})" fill-opacity="${s.alpha ?? 0.35}"`;
+    } else if (s.fill) fill = `fill="${esc(s.fill)}" fill-opacity="${s.alpha ?? 0.35}"`;
+    return s.type === 'ellipse'
+      ? `<ellipse${d} cx="${pc(s.x + s.w / 2)}" cy="${pc(s.y + s.h / 2)}" rx="${pc(s.w / 2)}" ry="${pc(s.h / 2)}" ${st} ${fill}/>`
+      : `<rect${d} x="${pc(s.x)}" y="${pc(s.y)}" width="${pc(s.w)}" height="${pc(s.h)}" ${st} ${fill}/>`;
+  }).join('');
+  const texts = sh.map((s, k) => (s.type === 'text' ? `<div class="map-text${edit && S.mapShapeSel === k ? ' sel' : ''}"${edit ? ` data-shape="${k}"` : ''} style="left:${pc(s.x)}%;top:${pc(s.y)}%;font-size:calc(${s.size || 3} * 1cqw);color:${esc(s.color || '#d0d8e2')}">${esc(s.text || '')}</div>` : '')).join('');
+  return `<svg class="map-shapes${edit ? ' edit' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none">${defs.length ? `<defs>${defs.join('')}</defs>` : ''}${svg}</svg>${texts}${edit ? shapeHandlesHtml(sh[S.mapShapeSel]) : ''}`;
+}
+// The selected shape's frame and handles: 8 for a rectangle/ellipse (corners change width and
+// height together, the sides only one of them), the two ends of a line, none for text.
+function shapeHandlesHtml(s) {
+  if (!s) return '';
+  const pc = (v) => +(v * 100).toFixed(3);
+  if (s.type === 'line') return ['a', 'b'].map((h) => `<div class="shape-h" data-sh="${h}" style="left:${pc(h === 'a' ? s.x : s.x + s.w)}%;top:${pc(h === 'a' ? s.y : s.y + s.h)}%"></div>`).join('');
+  if (s.type === 'text') return '';
+  const xs = { w: s.x, '': s.x + s.w / 2, e: s.x + s.w }, ys = { n: s.y, '': s.y + s.h / 2, s: s.y + s.h };
+  return `<div class="map-selbox" style="left:${pc(s.x)}%;top:${pc(s.y)}%;width:${pc(s.w)}%;height:${pc(s.h)}%;border-radius:0"></div>`
+    + ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h) => {
+      const v = h.match(/[ns]/)?.[0] || '', u = h.match(/[ew]/)?.[0] || '';
+      return `<div class="shape-h ${h}" data-sh="${h}" style="left:${pc(xs[u])}%;top:${pc(ys[v])}%"></div>`;
+    }).join('');
+}
 // Map size: drag the bar under a map to make it taller or shorter. The width follows from the
 // map's shape (never wider than the page); stored per page in this browser, like the pane widths.
 function mapSizeStyle(key, aspect, dflt = '') {
@@ -594,8 +695,8 @@ function attachMapResize(canvas, aspect) {
 const MAP_SHAPES = [['h', 'Line ↔'], ['v', 'Line ↕'], ['d', 'Diagonal line'], ['circle', 'Circle'], ['arc', 'Half circle'], ['rect', 'Rectangle (outline)'],
   ['grid', 'Grid'], ['snake', 'Grid, zigzag wired (snake)'], ['zigzag', 'Zigzag line']];
 // Shape options: order 'pos' = fixtures keep their neighbours, 'patch' = by universe/address
-// (how pixels are wired); cols = grid columns (0 = square-ish).
-S.shapeOpt = { order: 'pos', cols: 0 };
+// (how pixels are wired); cols / rows = grid size (0 = worked out).
+S.shapeOpt = { order: 'pos', cols: 0, rows: 0 };
 function selBox(its, asp) {
   const xs = its.map((it) => it.x * asp), ys = its.map((it) => it.y);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
@@ -623,7 +724,9 @@ function shapeItems(its, shape, asp, opt = S.shapeOpt) {
   // The order fixtures go into the shape: patch order, or by where they are now (cmp).
   const patch = [...its].sort((a, c) => { const fa = fixture(a.fixture), fc = fixture(c.fixture); return fa.universe - fc.universe || fa.address - fc.address; });
   const ord = (cmp) => (opt.order === 'patch' ? patch : [...its].sort(cmp));
-  const cols = Math.max(1, Math.min(n, opt.cols || Math.ceil(Math.sqrt(n)))), rows = Math.ceil(n / cols);
+  // Columns and rows as asked; one of them empty = worked out from the other, both = square-ish.
+  // More fixtures than rows x columns: extra rows.
+  const cols = Math.max(1, Math.min(n, opt.cols || (opt.rows ? Math.ceil(n / opt.rows) : Math.ceil(Math.sqrt(n))))), rows = Math.max(Math.ceil(n / cols), Math.min(n, opt.rows || 0));
   // Grid cell k -> x, y (snake: every other row runs back, like zigzag-wired LED matrices).
   // Rows at least as far apart as the columns, so a long row becomes a square-ish grid.
   let W = Math.max(b.w, 0.25), H = rows > 1 ? Math.max(b.h, (W * (rows - 1)) / Math.max(1, cols - 1)) : 0;
@@ -666,10 +769,12 @@ function shapeItems(its, shape, asp, opt = S.shapeOpt) {
   keepInside(its);
 }
 // Rotates (ang in radians) and/or scales positions around a centre (square units), from orig.
+// scale = one factor, or [sx, sy] to stretch width and height separately (before turning).
 function turnItems(its, orig, c, ang, asp, scale = 1) {
-  const cos = Math.cos(ang) * scale, sin = Math.sin(ang) * scale;
+  const [sx, sy] = Array.isArray(scale) ? scale : [scale, scale];
+  const cos = Math.cos(ang), sin = Math.sin(ang);
   its.forEach((it, k) => {
-    const dx = orig[k].x * asp - c.x, dy = orig[k].y - c.y;
+    const dx = (orig[k].x * asp - c.x) * sx, dy = (orig[k].y - c.y) * sy;
     it.x = Math.max(0, Math.min(1, (c.x + dx * cos - dy * sin) / asp));
     it.y = Math.max(0, Math.min(1, c.y + dx * sin + dy * cos));
   });
@@ -684,16 +789,83 @@ function transformSel(m, deg, scale = 1) {
   markDirty();
   render();
 }
+// The snap grid: m.grid cells across and down (default 80), x and y each 0..1.
+const MAP_GRIDS = [10, 20, 40, 80];
+const mapGrid = (m) => (MAP_GRIDS.includes(+m.grid) ? +m.grid : 80);
+const snapTo = (m, v) => Math.round(v * mapGrid(m)) / mapGrid(m);
+// Lines of the snap grid over the map (at most 40 each way, so a fine grid isn't a grey haze).
+function mapGridHtml(m) {
+  if (m.snap === false) return '';
+  const n = mapGrid(m), step = n > 40 ? 2 : 1;
+  return `<div class="map-grid" style="--gc:${n / step}"></div>`;
+}
+// Align / distribute / snap the selected fixtures (the selection bar).
+function arrangeSel(m, how) {
+  const its = m.items.filter((it) => S.mapSel.has(it.fixture));
+  if (!its.length) return;
+  const xs = its.map((it) => it.x), ys = its.map((it) => it.y);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const spread = (k, lo, hi) => [...its].sort((a, b) => a[k] - b[k]).forEach((it, i, all) => (it[k] = all.length > 1 ? lo + ((hi - lo) * i) / (all.length - 1) : it[k]));
+  switch (how) {
+    case 'left': its.forEach((it) => (it.x = x0)); break;
+    case 'hcenter': its.forEach((it) => (it.x = (x0 + x1) / 2)); break;
+    case 'right': its.forEach((it) => (it.x = x1)); break;
+    case 'top': its.forEach((it) => (it.y = y0)); break;
+    case 'vcenter': its.forEach((it) => (it.y = (y0 + y1) / 2)); break;
+    case 'bottom': its.forEach((it) => (it.y = y1)); break;
+    case 'hspace': spread('x', x0, x1); break;
+    case 'vspace': spread('y', y0, y1); break;
+    case 'snap': its.forEach((it) => { it.x = snapTo(m, it.x); it.y = snapTo(m, it.y); }); break;
+  }
+  its.forEach((it) => { it.x = Math.round(it.x * 1e4) / 1e4; it.y = Math.round(it.y * 1e4) / 1e4; });
+  markDirty();
+  render();
+}
+const ARRANGE = [['left', '⇤ Left edges'], ['hcenter', '↔ Centres (one column)'], ['right', '⇥ Right edges'], ['top', '⤒ Top edges'], ['vcenter', '↕ Middles (one row)'], ['bottom', '⤓ Bottom edges'],
+  ['hspace', '⟷ Space evenly left to right'], ['vspace', '⟷ Space evenly top to bottom']];
+// Copy / paste positions, also to another map: the same spot of the room when both maps
+// have the same shape; otherwise the same layout (square units) around the middle.
+function mapCopy(m) {
+  const its = m.items.filter((it) => S.mapSel.has(it.fixture));
+  if (!its.length) return toast('Select fixtures on the map first', true);
+  S.mapClip = { aspect: m.aspect, map: m.id, items: its.map((it) => ({ fixture: it.fixture, x: it.x, y: it.y })) };
+  toast(`Copied the positions of ${its.length} fixture${its.length > 1 ? 's' : ''} - Ctrl+V on another map puts them there`);
+}
+function mapPaste(m) {
+  const c = S.mapClip;
+  if (!c?.items.length) return toast('Nothing copied yet (select fixtures, Ctrl+C)', true);
+  const list = c.items.filter((x) => fixture(x.fixture));
+  const k = c.aspect / m.aspect, same = Math.abs(k - 1) < 0.01;
+  const put = list.map((x) => {
+    let it = m.items.find((q) => q.fixture === x.fixture);
+    if (!it) m.items.push((it = { fixture: x.fixture, x: 0, y: 0 }));
+    Object.assign(it, { x: same ? x.x : 0.5 + (x.x - 0.5) * k, y: x.y });
+    return it;
+  });
+  if (!same) {
+    // Wider (or taller) than this map: shrink it, the same both ways, so it keeps its shape.
+    const b = selBox(put, m.aspect), f = Math.min(1, (0.96 * m.aspect) / (b.w || 1), 0.96 / (b.h || 1));
+    // Around its own centre (square units, not clamped yet), then moved back inside.
+    if (f < 1) put.forEach((it) => { it.x = (b.cx + (it.x * m.aspect - b.cx) * f) / m.aspect; it.y = b.cy + (it.y - b.cy) * f; });
+    keepInside(put);
+  }
+  S.mapSel = new Set(list.map((x) => x.fixture));
+  toast(`Pasted ${list.length} position${list.length > 1 ? 's' : ''}${c.map === m.id ? ' (same map: back where they were copied)' : ''}`);
+  markDirty();
+  render();
+}
 // Drag on empty map space selects the fixtures in the rectangle (Shift/Ctrl adds).
 // getSel/setSel read and replace the selection (a Set of fixture ids); paint() shows it.
 // Returns begin(e, id): a fixture's own pointerdown calls it for Shift+drag, so an area can
 // also start on a fixture (in a dense pixel grid there is hardly any empty space); without
 // dragging, that Shift+click toggles fixture id.
-function bandSelect(canvas, items, getSel, setSel, paint, done) {
+// Alt+drag takes the area out of the selection. clearOnClick = false: a click on empty space
+// keeps the selection (the timeline track map, where the selection is the track's fixtures).
+function bandSelect(canvas, items, getSel, setSel, paint, done, clearOnClick = true) {
   const at = (e) => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
   const begin = (e, toggleId) => {
     canvas.setPointerCapture(e.pointerId);
-    const band = canvas.querySelector('.band'), a = at(e), add = e.shiftKey || e.ctrlKey || e.metaKey;
+    const band = canvas.querySelector('.band'), a = at(e), sub = e.altKey, add = e.shiftKey || e.ctrlKey || e.metaKey || sub;
     const before = new Set(add ? getSel() : []);
     let moved = false;
     const move = (ev) => {
@@ -704,7 +876,7 @@ function bandSelect(canvas, items, getSel, setSel, paint, done) {
       Object.assign(band.style, { left: x0 * 100 + '%', top: y0 * 100 + '%', width: (x1 - x0) * 100 + '%', height: (y1 - y0) * 100 + '%' });
       band.hidden = false;
       const s = new Set(before);
-      for (const it of items) if (it.x >= x0 && it.x <= x1 && it.y >= y0 && it.y <= y1) s.add(it.fixture);
+      for (const it of items) if (it.x >= x0 && it.x <= x1 && it.y >= y0 && it.y <= y1) sub ? s.delete(it.fixture) : s.add(it.fixture);
       setSel(s);
       paint();
     };
@@ -713,7 +885,7 @@ function bandSelect(canvas, items, getSel, setSel, paint, done) {
       canvas.removeEventListener('pointermove', move);
       band.hidden = true;
       if (!moved && toggleId != null) { const s = new Set(getSel()); s.has(toggleId) ? s.delete(toggleId) : s.add(toggleId); setSel(s); }
-      else if (!moved && !add) setSel(new Set());   // a click on empty space clears the selection
+      else if (!moved && !add && clearOnClick) setSel(new Set());   // a click on empty space clears the selection
       done();
     }, { once: true });
   };
@@ -722,12 +894,17 @@ function bandSelect(canvas, items, getSel, setSel, paint, done) {
 }
 views.map = () => {
   const p = P();
+  if (S.mapShapeOf !== S.sel.map) { S.mapShapeSel = null; S.mapShapeOf = S.sel.map; }   // another map
   if (!p.maps.length) return `<h2>Map</h2>
     <p class="muted">A map is a floor plan (an image of the venue, or an empty grid) with your fixtures placed on it, like the Layout in Pharos Designer.
       Select fixtures on it to make groups or fill timeline tracks, and see what they're doing live.</p>
     <button class="btn" data-add="map">+ Map</button>`;
   S.sel.map = Math.min(S.sel.map, p.maps.length - 1);
   const m = p.maps[S.sel.map], base = `maps.${S.sel.map}`;
+  // Floor-plan mode: draw and edit shapes; S.mapShapeSel = index of the selected shape.
+  const shapeMode = !!S.mapShapes;
+  if (S.mapShapeSel != null && !m.shapes[S.mapShapeSel]) S.mapShapeSel = null;
+  const shape = shapeMode && S.mapShapeSel != null ? m.shapes[S.mapShapeSel] : null;
   const placed = new Set(m.items.map((it) => it.fixture));
   // The selection can hold fixtures that aren't on this map (picked in the list to drag on).
   for (const id of [...S.mapSel]) if (!fixture(id)) S.mapSel.delete(id);
@@ -746,7 +923,7 @@ views.map = () => {
     const rotTop = y0 > 0.1 ? `calc(${y0 * 100}% - 34px)` : `calc(${y1 * 100}% + 34px)`;
     selFrame = `<div class="map-selbox" style="left:calc(${x0 * 100}% - 16px);top:calc(${y0 * 100}% - 16px);width:calc(${(x1 - x0) * 100}% + 32px);height:calc(${(y1 - y0) * 100}% + 32px)"></div>
       <div class="map-handle rot" id="mapRot" style="left:${((x0 + x1) / 2) * 100}%;top:${rotTop}" title="Drag to rotate (Shift = 15° steps)">⟳</div>
-      <div class="map-handle size" id="mapScale" style="left:calc(${x1 * 100}% + 16px);top:calc(${y1 * 100}% + 16px)" title="Drag to spread out or pull together">⤡</div>`;
+      <div class="map-handle size" id="mapScale" style="left:calc(${x1 * 100}% + 16px);top:calc(${y1 * 100}% + 16px)" title="Drag to stretch width and height (Shift = keep proportions)">⤡</div>`;
   }
   return `<h2>Map</h2><div class="split">
     <div>
@@ -776,15 +953,36 @@ views.map = () => {
         <label class="btn small" title="JPG/PNG/WebP/SVG, max 4 MB, stored on the storage device">${m.background ? 'Replace image' : 'Background image…'}<input type="file" id="mapBg" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
         ${m.background ? '<button class="btn small ghost" id="mapBgDel">Remove image</button>' : ''}
         <select id="mapAspect" title="Shape of the map">${ASPECTS.map(([a, n]) => `<option value="${a}"${Math.abs(a - m.aspect) < 0.01 ? ' selected' : ''}>${n}</option>`).join('')}${ASPECTS.some(([a]) => Math.abs(a - m.aspect) < 0.01) ? '' : `<option selected value="${m.aspect}">image (${(+m.aspect).toFixed(2)})</option>`}</select>
-        <label class="muted"><input type="checkbox" data-p="${base}.snap" data-t="bool"${m.snap !== false ? ' checked' : ''}> Snap</label>
+        <label class="muted" title="Fixtures and shapes jump to the grid when moved (the lines show it)"><input type="checkbox" data-p="${base}.snap" data-t="bool"${m.snap !== false ? ' checked' : ''} data-r> Snap</label>
+        ${m.snap !== false ? `<select id="mapGridN" title="Grid: cells across and down">${MAP_GRIDS.map((n) => `<option value="${n}"${mapGrid(m) === n ? ' selected' : ''}>grid ${n}</option>`).join('')}</select>` : ''}
+        ${S.mapClip?.items.length && !shapeMode ? `<button class="btn small" id="mapPaste" title="Put the copied fixtures on this map at their copied positions (Ctrl+V)">Paste ${S.mapClip.items.length} position${S.mapClip.items.length > 1 ? 's' : ''}</button>` : ''}
         <label class="muted"><input type="checkbox" data-p="${base}.labels" data-t="bool"${m.labels !== false ? ' checked' : ''} data-r> Names</label>
         <label class="muted"><input type="checkbox" id="mapLive"${S.mapLive !== false ? ' checked' : ''}> Live</label>
+        <label class="muted" title="Effects get x and y with the same scale both ways, so a circle effect is round on this map, not stretched. Off = x and y each run 0..1 across the map (older shows)."><input type="checkbox" data-p="${base}.square" data-t="bool"${m.square ? ' checked' : ''}> Round effects</label>
+        <button class="btn small${shapeMode ? ' on' : ''}" id="mapShapeMode" title="Draw rectangles, ellipses, lines and text (a simple floor plan). While on, fixtures can't be moved.">✎ Floor plan${m.shapes.length ? ` (${m.shapes.length})` : ''}</button>
       </div>
-      <div class="map-wrap"><div class="map-canvas${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="mapCanvas" style="${mapSizeStyle('kd.mapH.map', m.aspect)}">
+      ${shapeMode ? `<div class="row map-tools"><div class="seg">${SHAPE_TOOLS.map(([v, n]) => `<button class="${(S.mapTool || 'select') === v ? 'on' : ''}" data-maptool="${v}">${n}</button>`).join('')}</div>
+        <span class="muted">${(S.mapTool || 'select') === 'select' ? 'Click a shape to select it, drag to move, drag the handles to resize.' : S.mapTool === 'text' ? 'Click on the map to place a text.' : 'Drag on the map to draw.'}</span></div>` : ''}
+      <div class="map-wrap"><div class="map-canvas${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}${shapeMode ? ' shape-mode' : ''}${shapeMode && (S.mapTool || 'select') !== 'select' ? ' drawing' : ''}" id="mapCanvas" style="${mapSizeStyle('kd.mapH.map', m.aspect)}">
         ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}
-        ${items}${selFrame}<div class="band" id="mapBand" hidden></div>${mapResizeHtml('kd.mapH.map')}</div></div>
-      <p class="muted keys">Click to select · Shift/Ctrl+click adds · drag on empty space selects an area · drag to move · arrows nudge (Shift = more) · ⟳ handle or [ ] rotates, ⤡ handle or - + resizes (Shift = more) · Del removes from the map · Ctrl+A selects all</p>
-      ${sel.length ? `<div class="map-selbar">
+        ${mapGridHtml(m)}${mapShapesHtml(m, shapeMode)}
+        ${items}${shapeMode ? '' : selFrame}<div class="band" id="mapBand" hidden></div>${mapResizeHtml('kd.mapH.map')}</div></div>
+      ${shapeMode ? `<p class="muted keys">Click a shape to select · drag to move · handles resize (corners: width and height, Shift = keep proportions; sides: one of them) · arrows nudge (Shift = more) · PgUp/PgDn one step forward/back (Shift = to the front/back) · Del removes · Ctrl+D duplicates · Esc deselects</p>
+      ${shape ? `<div class="map-selbar"><b>${SHAPE_NAMES[shape.type]}</b>
+        ${shape.type === 'text' ? `<input id="shText" value="${esc(shape.text || '')}" placeholder="Text" style="width:180px">
+          <label class="muted nowrap">Size <input type="number" id="shSize" min="0.5" max="30" step="0.5" value="${shape.size || 3}" style="width:64px"></label>` : ''}
+        <label class="muted nowrap" title="${shape.type === 'text' ? 'Text colour' : 'Line colour'}">${shape.type === 'text' ? 'Colour' : 'Line'} <input type="color" id="shColor" value="${esc(shape.color || (shape.type === 'text' ? '#d0d8e2' : SHAPE_COLOR))}"></label>${shapeSwatches('color', shape.color || (shape.type === 'text' ? '#d0d8e2' : SHAPE_COLOR))}
+        ${shape.type !== 'text' ? `<label class="muted nowrap">Width <input type="number" id="shWidth" min="0" max="20" step="0.5" value="${shape.width ?? 2}" style="width:56px"></label>` : ''}
+        ${shape.type === 'rect' || shape.type === 'ellipse' ? `<label class="muted nowrap"><input type="checkbox" id="shFillOn"${shape.fill ? ' checked' : ''}> Fill</label>
+          ${shape.fill ? `<input type="color" id="shFill" value="${esc(shape.fill)}" title="Fill colour">${shapeSwatches('fill', shape.fill)}
+            <select id="shPattern" title="Fill pattern"><option value="">Solid</option>${Object.entries(SHAPE_PATTERNS).map(([v, [n]]) => `<option value="${v}"${shape.pattern === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
+            <input type="range" id="shAlpha" min="0.05" max="1" step="0.05" value="${shape.alpha ?? 0.35}" title="How solid the fill is" style="width:90px">` : ''}` : ''}
+        <span class="seg" title="Order of overlapping shapes (texts are always on top)">
+          <button id="shBack" title="To the back, under all other shapes (Shift+PgDn)">⤓ Back</button><button data-shstep="-1" title="One step back (PgDn)">↓</button><button data-shstep="1" title="One step forward (PgUp)">↑</button><button id="shFront" title="To the front, over all other shapes (Shift+PgUp)">⤒ Front</button></span>
+        <button class="btn small" id="shDup" title="Ctrl+D">Duplicate</button>
+        <button class="btn small ghost" id="shDel">Delete</button></div>` : ''}`
+      : `<p class="muted keys">Click to select · Shift/Ctrl+click adds · drag on empty space selects an area (Shift/Ctrl adds, Alt removes) · drag to move · arrows nudge (Shift = more) · ⟳ handle or [ ] rotates, ⤡ handle stretches (Shift = keep proportions), - + spread out (Shift = more) · Del removes from the map · Ctrl+A selects all</p>`}
+      ${sel.length && !shapeMode ? `<div class="map-selbar">
         <b>${sel.length} selected</b>${sel.length > sits.length ? `<span class="muted">${sel.length - sits.length} not on this map yet - drag them on from the list</span>` : ''}
         <button class="btn small" id="mapGroup">Make group</button>
         ${p.groups.length ? `<select id="mapAddGroup"><option value="">Add to group…</option>${p.groups.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>` : ''}
@@ -793,11 +991,17 @@ views.map = () => {
           <select id="mapShapeOrder" title="Which fixture goes where in the shape">
             <option value="pos"${S.shapeOpt.order === 'pos' ? ' selected' : ''}>keep neighbours</option>
             <option value="patch"${S.shapeOpt.order === 'patch' ? ' selected' : ''}>in patch order (address)</option></select>
-          <label class="muted nowrap" title="Columns of a grid; empty = square">Columns <input type="number" id="mapShapeCols" min="1" max="512" value="${S.shapeOpt.cols || ''}" placeholder="auto" style="width:64px"></label>
+          <label class="muted nowrap" title="Columns of a grid; empty = from the rows, or square">Columns <input type="number" id="mapShapeCols" min="1" max="512" value="${S.shapeOpt.cols || ''}" placeholder="auto" style="width:64px"></label>
+          <label class="muted nowrap" title="Rows of a grid; empty = from the columns, or square">Rows <input type="number" id="mapShapeRows" min="1" max="512" value="${S.shapeOpt.rows || ''}" placeholder="auto" style="width:64px"></label>
           <button class="btn small" data-rot="-15" title="Rotate 15° anticlockwise ([ key)">⟲</button><button class="btn small" data-rot="15" title="Rotate 15° clockwise (] key)">⟳</button>
-          <button class="btn small" data-scale="0.9" title="Closer together (- key)">−</button><button class="btn small" data-scale="1.1" title="Further apart (+ key)">+</button>` : ''}
+          <button class="btn small" data-scale="0.9" title="Closer together (- key)">−</button><button class="btn small" data-scale="1.1" title="Further apart (+ key)">+</button>
+          <span class="nowrap" title="Rotate the selection around its centre by this many degrees (minus = anticlockwise)"><input type="number" id="mapRotDeg" value="${S.mapRotDeg ?? 90}" step="1" style="width:58px">° <button class="btn small" id="mapRotGo">Rotate</button></span>
+          <select id="mapArrange" title="Line the selected fixtures up, or spread them evenly"><option value="">Align…</option>${ARRANGE.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select>` : ''}
+        ${sits.length ? `<button class="btn small" id="mapSnapSel" title="Move the selected fixtures to the nearest grid point">Snap to grid</button>
+          <button class="btn small" id="mapCopy" title="Copy their positions, to paste on another map (Ctrl+C)">Copy positions</button>` : ''}
+        <button class="btn small" id="mapLocate" title="Flash the selected fixtures white for a few seconds, to find them in the room (L)">Locate</button>
         <button class="btn small ghost" id="mapRemove">Remove from map</button></div>` : ''}
-      ${one ? `<div class="form" style="margin-top:10px">
+      ${one && !shapeMode ? `<div class="form" style="margin-top:10px">
         <label>Name</label><input data-p="fixtures.${fi}.name" value="${esc(one.name)}" data-r>
         <label>Universe</label><select data-p="fixtures.${fi}.universe" data-t="num" data-r>${opts(p.universes, one.universe, (u) => u.id)}</select>
         <label>Address</label><input type="number" min="1" max="512" data-p="fixtures.${fi}.address" data-t="num" value="${one.address}" data-r>
@@ -811,7 +1015,16 @@ views.map.after = () => {
   if (!m) return;
   const canvas = $('#mapCanvas');
   attachMapResize(canvas, m.aspect);
-  const snap =(v) => (m.snap !== false ? Math.round(v * 80) / 80 : v);
+  const snap = (v) => (m.snap !== false ? snapTo(m, v) : v);
+  $('#mapGridN')?.addEventListener('change', (e) => { m.grid = +e.target.value; markDirty(); render(); });
+  $('#mapPaste')?.addEventListener('click', () => mapPaste(m));
+  $('#mapCopy')?.addEventListener('click', () => mapCopy(m));
+  $('#mapSnapSel')?.addEventListener('click', () => arrangeSel(m, 'snap'));
+  $('#mapArrange')?.addEventListener('change', (e) => { if (e.target.value) arrangeSel(m, e.target.value); });
+  $('#mapRotDeg')?.addEventListener('change', (e) => (S.mapRotDeg = +e.target.value || 0));
+  $('#mapRotDeg')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { S.mapRotDeg = +e.target.value || 0; transformSel(m, S.mapRotDeg); } });
+  $('#mapRotGo')?.addEventListener('click', () => { S.mapRotDeg = +$('#mapRotDeg').value || 0; transformSel(m, S.mapRotDeg); });
+  $('#mapLocate')?.addEventListener('click', () => locateFixtures([...S.mapSel]));
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const at = (e) => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
   const itemOf = (id) => m.items.find((it) => it.fixture === id);
@@ -846,7 +1059,11 @@ views.map.after = () => {
     el.addEventListener('pointerup', () => { el.removeEventListener('pointermove', move); if (moved) markDirty(); render(); }, { once: true });
   }));
   // Drag on empty space: select an area.
-  const bandBegin = bandSelect(canvas, m.items, () => S.mapSel, (s) => (S.mapSel = s), paintSel, render);
+  // (In floor-plan mode the map edits shapes instead; fixtures can't be clicked then.)
+  const bandBegin = S.mapShapes ? null : bandSelect(canvas, m.items, () => S.mapSel, (s) => (S.mapSel = s), paintSel, render);
+  if (S.mapShapes) wireMapShapes(canvas, m, snap);
+  $('#mapShapeMode').addEventListener('click', () => { S.mapShapes = !S.mapShapes; S.mapTool = 'select'; render(); });
+  $$('[data-maptool]').forEach((b) => b.addEventListener('click', () => { S.mapTool = b.dataset.maptool; S.mapShapeSel = null; render(); }));
   // The fixture list: click selects, Ctrl+click adds/removes one, Shift+click selects the range
   // from the last click. The selection (S.mapSel, also fixtures not on this map) is the same
   // as on the map. Dragging a selected row drops all selected fixtures onto the map at once.
@@ -1001,6 +1218,7 @@ views.map.after = () => {
   $('#mapShape')?.addEventListener('change', (e) => { if (e.target.value) applyShape(e.target.value); });
   $('#mapShapeOrder')?.addEventListener('change', (e) => { S.shapeOpt.order = e.target.value; redo(); });
   $('#mapShapeCols')?.addEventListener('change', (e) => { S.shapeOpt.cols = Math.max(0, Math.min(512, +e.target.value || 0)); redo(); });
+  $('#mapShapeRows')?.addEventListener('change', (e) => { S.shapeOpt.rows = Math.max(0, Math.min(512, +e.target.value || 0)); redo(); });
   $$('[data-rot]').forEach((b) => b.addEventListener('click', () => transformSel(m, +b.dataset.rot)));
   $$('[data-scale]').forEach((b) => b.addEventListener('click', () => transformSel(m, 0, +b.dataset.scale)));
   // The frame's handles: drag to rotate or to spread out / pull together around the centre.
@@ -1034,9 +1252,11 @@ views.map.after = () => {
     turnItems(its, orig, c, a, m.aspect);
     $('#mapRot').textContent = `${Math.round(((a * 180) / Math.PI + 540) % 360 - 180)}°`;
   });
-  handleDrag($('#mapScale'), (its, orig, c, p0, pt) => {
+  // Size handle: width and height separately (a row only gets longer); Shift = keep the proportions.
+  handleDrag($('#mapScale'), (its, orig, c, p0, pt, ev) => {
     const d0 = Math.hypot(p0.x - c.x, p0.y - c.y) || 1e-3;
-    turnItems(its, orig, c, 0, m.aspect, Math.max(0.05, Math.hypot(pt.x - c.x, pt.y - c.y) / d0));
+    const f = (a, b) => (Math.abs(b) > 1e-3 ? Math.max(0.02, a / b) : 1);
+    turnItems(its, orig, c, 0, m.aspect, ev.shiftKey ? Math.max(0.05, Math.hypot(pt.x - c.x, pt.y - c.y) / d0) : [f(pt.x - c.x, p0.x - c.x), f(pt.y - c.y, p0.y - c.y)]);
   });
   // Live: colour each fixture with what it outputs now.
   if (S.mapLive !== false) {
@@ -1049,10 +1269,171 @@ views.map.after = () => {
     }, 300);
   }
 };
+// Floor-plan mode on the Map page: draw shapes with the chosen tool, select / move / resize them.
+// One pointerdown on the canvas (the shape layer is redrawn while dragging, so no per-shape
+// listeners); snap = the map's 1/80 grid when Snap is on.
+function wireMapShapes(canvas, m, snap) {
+  const layer = canvas.querySelector('.shape-layer');
+  const at = (e) => { const r = canvas.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; };
+  const redraw = () => (layer.innerHTML = mapShapesInner(m, true));
+  // Shift on a line: 0 / 45 / 90° (in real proportions, so 45° looks like 45° on a wide map).
+  const lineSnap = (dx, dy) => {
+    const a = Math.round(Math.atan2(dy, dx * m.aspect) / (Math.PI / 4)) * (Math.PI / 4), len = Math.hypot(dx * m.aspect, dy);
+    return [(Math.cos(a) * len) / m.aspect, Math.sin(a) * len];
+  };
+  const drag = (e, onMove, onEnd) => {
+    e.preventDefault();
+    e.stopPropagation();
+    canvas.setPointerCapture(e.pointerId);
+    const p0 = at(e);
+    let moved = false;
+    const move = (ev) => {
+      const pt = at(ev);
+      if (!moved && Math.hypot(pt.x - p0.x, pt.y - p0.y) < 0.004) return;
+      moved = true;
+      onMove(p0, pt, ev);
+      redraw();
+    };
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', () => { canvas.removeEventListener('pointermove', move); onEnd(moved); }, { once: true });
+    return p0;
+  };
+  // Stored with 4 decimals (no 0.6000000000000001 in project.json).
+  const tidy = (s) => { for (const k of ['x', 'y', 'w', 'h']) if (s?.[k] != null) s[k] = Math.round(s[k] * 1e4) / 1e4; };
+  const done = (moved) => { if (moved) { tidy(m.shapes[S.mapShapeSel]); markDirty(); } render(); };
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('.map-resize')) return;
+    const tool = S.mapTool || 'select', hd = e.target.closest('[data-sh]'), hit = e.target.closest('[data-shape]');
+    const s = m.shapes[S.mapShapeSel];
+    if (hd && s) {
+      // Resize: corners move two sides (Shift = keep proportions), sides one; line ends.
+      const o = { ...s }, h = hd.dataset.sh;
+      return drag(e, (p0, pt, ev) => {
+        if (s.type === 'line') {
+          const ex = o.x + o.w, ey = o.y + o.h, fx = h === 'a' ? ex : o.x, fy = h === 'a' ? ey : o.y;   // the end that stays
+          let [dx, dy] = [snap(pt.x) - fx, snap(pt.y) - fy];
+          if (ev.shiftKey) [dx, dy] = lineSnap(dx, dy);
+          if (h === 'a') Object.assign(s, { x: fx + dx, y: fy + dy, w: -dx, h: -dy });
+          else Object.assign(s, { w: dx, h: dy });
+          return;
+        }
+        let L = o.x, R = o.x + o.w, T = o.y, B = o.y + o.h;
+        if (h.includes('w')) L = snap(pt.x);
+        if (h.includes('e')) R = snap(pt.x);
+        if (h.includes('n')) T = snap(pt.y);
+        if (h.includes('s')) B = snap(pt.y);
+        if (ev.shiftKey && h.length === 2 && o.w && o.h) {
+          const ax = h.includes('w') ? R : L, ay = h.includes('n') ? B : T;   // the corner that stays
+          const k = Math.max(Math.abs((h.includes('w') ? L : R) - ax) / o.w, Math.abs((h.includes('n') ? T : B) - ay) / o.h);
+          if (h.includes('w')) L = ax - o.w * k; else R = ax + o.w * k;
+          if (h.includes('n')) T = ay - o.h * k; else B = ay + o.h * k;
+        }
+        Object.assign(s, { x: Math.min(L, R), y: Math.min(T, B), w: Math.max(0.002, Math.abs(R - L)), h: Math.max(0.002, Math.abs(B - T)) });
+      }, done);
+    }
+    if (tool !== 'select') {
+      // Draw a new shape (text: placed where clicked).
+      const p0 = at(e);
+      const n = tool === 'text' ? { type: 'text', x: snap(p0.x), y: snap(p0.y), text: 'Text', size: 3 }
+        : { type: tool, x: snap(p0.x), y: snap(p0.y), w: 0, h: 0, color: SHAPE_COLOR, width: 2 };
+      m.shapes.push(n);
+      S.mapShapeSel = m.shapes.length - 1;
+      const x0 = n.x, y0 = n.y;   // where the drag started (snapped)
+      return drag(e, (q, pt, ev) => {
+        if (tool === 'text') return;
+        let dx = snap(pt.x) - x0, dy = snap(pt.y) - y0;
+        if (tool === 'line') { if (ev.shiftKey) [dx, dy] = lineSnap(dx, dy); return Object.assign(n, { w: dx, h: dy }); }
+        if (ev.shiftKey) { const sz = Math.max(Math.abs(dx) * m.aspect, Math.abs(dy)); dx = Math.sign(dx || 1) * (sz / m.aspect); dy = Math.sign(dy || 1) * sz; }   // square / circle
+        Object.assign(n, { x: Math.min(x0, x0 + dx), y: Math.min(y0, y0 + dy), w: Math.abs(dx), h: Math.abs(dy) });
+      }, (moved) => {
+        // A click without dragging draws nothing (except a text).
+        if (tool !== 'text' && (!moved || Math.hypot(n.w, n.h) < 0.01)) { m.shapes.pop(); S.mapShapeSel = null; return render(); }
+        S.mapTool = 'select';
+        tidy(n);
+        markDirty();
+        render();
+        if (tool === 'text') { const t = $('#shText'); t?.focus(); t?.select(); }
+      });
+    }
+    if (hit) {
+      // Select, and drag to move it.
+      const k = +hit.dataset.shape, sh = m.shapes[k], o = { ...sh };
+      S.mapShapeSel = k;
+      redraw();
+      return drag(e, (p0, pt) => {
+        let x = snap(o.x + pt.x - p0.x), y = snap(o.y + pt.y - p0.y);
+        // Stays on the map: the whole box (a line: both ends; a text: its centre).
+        const w = sh.type === 'text' ? 0 : o.w, h = sh.type === 'text' ? 0 : o.h;
+        x = Math.max(Math.max(0, -w), Math.min(Math.min(1, 1 - w), x));
+        y = Math.max(Math.max(0, -h), Math.min(Math.min(1, 1 - h), y));
+        Object.assign(sh, { x, y });
+      }, done);
+    }
+    if (S.mapShapeSel != null) { S.mapShapeSel = null; render(); }   // a click on empty space
+  });
+  // The selected shape's settings (typing in the text redraws only the map, keeping the focus).
+  const s = m.shapes[S.mapShapeSel];
+  if (!s) return;
+  const set = (k, v, full) => { s[k] = v; markDirty(); full ? render() : redraw(); };
+  $('#shText')?.addEventListener('input', (e) => set('text', e.target.value));
+  $('#shSize')?.addEventListener('change', (e) => set('size', Math.max(0.5, Math.min(30, +e.target.value || 3))));
+  $('#shColor').addEventListener('input', (e) => set('color', e.target.value));
+  $('#shWidth')?.addEventListener('change', (e) => set('width', Math.max(0, Math.min(20, +e.target.value || 0))));
+  $('#shFillOn')?.addEventListener('change', (e) => set('fill', e.target.checked ? s.color || SHAPE_COLOR : '', true));
+  $('#shFill')?.addEventListener('input', (e) => set('fill', e.target.value));
+  $('#shAlpha')?.addEventListener('input', (e) => set('alpha', +e.target.value));
+  $$('[data-shsw]').forEach((el) => el.addEventListener('click', () => set(el.dataset.shsw, el.dataset.c, true)));
+  $('#shPattern')?.addEventListener('change', (e) => set('pattern', e.target.value || undefined));
+  $('#shBack').addEventListener('click', () => shapeOrder(m, -Infinity));
+  $('#shFront').addEventListener('click', () => shapeOrder(m, Infinity));
+  $$('[data-shstep]').forEach((b) => b.addEventListener('click', () => shapeOrder(m, +b.dataset.shstep)));
+  $('#shDup').addEventListener('click', () => shapeDuplicate(m));
+  $('#shDel').addEventListener('click', () => shapeDelete(m));
+}
+function shapeDuplicate(m) {
+  const s = m.shapes[S.mapShapeSel];
+  if (!s) return;
+  const c = { ...s, x: Math.min(0.98, s.x + 0.025), y: Math.min(0.98, s.y + 0.025) };
+  m.shapes.push(c);
+  S.mapShapeSel = m.shapes.length - 1;
+  markDirty();
+  render();
+}
+// Moves the selected shape d places up (later = drawn on top) or down; ±Infinity = front / back.
+function shapeOrder(m, d) {
+  const k = S.mapShapeSel, s = m.shapes[k];
+  if (!s) return;
+  const to = Math.max(0, Math.min(m.shapes.length - 1, k + d));
+  if (to === k) return;
+  m.shapes.splice(k, 1);
+  m.shapes.splice(to, 0, s);
+  S.mapShapeSel = to;
+  markDirty();
+  render();
+}
+function shapeDelete(m) {
+  if (!m.shapes[S.mapShapeSel]) return;
+  m.shapes.splice(S.mapShapeSel, 1);
+  S.mapShapeSel = null;
+  markDirty();
+  render();
+}
 // Map keys: nudge, delete from map, select all.
 views.map.keys = (e) => {
   const m = P()?.maps[S.sel.map];
   if (!m) return;
+  if (S.mapShapes) {
+    // Floor-plan mode: the keys work on the selected shape.
+    const s = m.shapes[S.mapShapeSel], st = e.shiftKey ? 0.025 : 0.005;
+    const d = { ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st] }[e.key];
+    if (e.key === 'Escape') { S.mapTool = 'select'; S.mapShapeSel = null; render(); }
+    if (!s) return;
+    if (d) { e.preventDefault(); s.x = Math.round((s.x + d[0]) * 1e4) / 1e4; s.y = Math.round((s.y + d[1]) * 1e4) / 1e4; markDirty(); render(); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); shapeDelete(m); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); shapeDuplicate(m); }
+    else if (e.key === 'PageUp' || e.key === 'PageDown') { e.preventDefault(); shapeOrder(m, (e.key === 'PageUp' ? 1 : -1) * (e.shiftKey ? Infinity : 1)); }
+    return;
+  }
   const its = m.items.filter((it) => S.mapSel.has(it.fixture));
   const step = e.shiftKey ? 0.025 : 0.005;
   const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
@@ -1078,7 +1459,9 @@ views.map.keys = (e) => {
     e.preventDefault();
     S.mapSel = new Set(m.items.map((it) => it.fixture));
     render();
-  }
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); mapCopy(m); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); mapPaste(m); }
+  else if (e.key.toLowerCase() === 'l' && !e.ctrlKey && !e.metaKey && !e.altKey && S.mapSel.size) { e.preventDefault(); locateFixtures([...S.mapSel]); }
 };
 
 // ---- Colour wheel: hue = angle, saturation = distance from the centre, plus brightness.

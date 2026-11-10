@@ -200,6 +200,25 @@ Still open:
 - Each `EthernetClient` still costs a 4 KB reader-thread stack plus buffers; with ~205 KB free that
   is fine, but watch the heap line with many TCP devices / projectors.
 
+## 5d. Flash layout and faster saving (10 Nov 2026, measured on the Machine Control)
+- **All flash to the M7** (`flash_layout = 100_0`, `kAppEnd` 0x08200000): Machine Control build
+  702 KB of 1.75 MB (38 %), firmware.bin 720 KB. USB upload tested; a network update with it (and one over 768 KB)
+  still to test. Boards on 0.2.0 accept at most 768 KB for the first update.
+- **Fixed: a save could restart the board** (watchdog): `Io::load()` waited for the I/O thread
+  while holding `g_engine`, and a connect to a TCP / Modbus device that is off takes ~18.4 s
+  (Mbed's lwIP `connect()` ignores the socket timeout). The I/O thread now picks up new device
+  lists itself. The 18 s connect is still there: while a device is off, the I/O thread's other
+  work (HTTP requests, PLC polls, TCP lines) waits that long every retry. Real fix: a
+  non-blocking connect in the rebuilt `libmbed.a` (LWIP `socket_connect`), or a thread per device.
+- Saving a 399 KB show: 6.1-6.8 s -> ~0.9 s to "Saved" + ~1.5 s stick write in the background.
+  Done: string sharing in ArduinoJson (`lib/ArduinoJson`, 1.8 -> 0.6 s), reads straight from the
+  socket (`lib/SocketWrapper` `read()`, 2.1 -> 0.1 s), stick in 32 KB pieces from D2 SRAM, the
+  stick write in its own thread (`Storage::saveProject`), progress bar in the UI.
+- Not done: **gzip upload** (todo 38c) - receiving takes 0.1 s now, so inflating would cost more
+  than it saves on a LAN. Reading the JSON (0.6 s) still grows with the number of *different*
+  strings (fixture names, trigger lines): each new one is compared with all before it. A hash
+  index in `StringPool` would fix that if a big show needs it.
+
 ## 6. Later
 - **First test on the Portenta** (step by step in [HARDWARE-TEST-PLAN.md](HARDWARE-TEST-PLAN.md); started 6 Nov 2026, see 5c): USB stick mount, Ethernet, DMX timing on the RS485 pins (check `Config.h` against the carrier board), Art-Net/sACN, the web UI from the stick (copy the whole new `www` folder), and effects (`Fx.cpp` has only been checked by reading).
   **Watchdog** (added 1 Nov 2026): after a normal boot "Last start" should say `power on`; a project save with a big rig must not trip it (15 s); a network update must still install (the bootloader runs after a system reset, which stops the watchdog). Test a hang once, e.g. a temporary `while (1) {}` in a command, and check the board comes back with `watchdog`.

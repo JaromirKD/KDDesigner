@@ -12,10 +12,13 @@
 using namespace std::chrono_literals;
 
 namespace {
-// Locking: `dev` guards the device lists (taken by the io thread while it works,
-// and by load()); `q` guards the small queues and the public state the main
-// thread reads, so commands and conditions never wait on a slow device.
-rtos::Mutex dev, q;
+// Locking: the device lists (tcps, mbs) belong to the io thread alone; load() leaves
+// new ones in nextTcps / nextMbs and the thread swaps them in between rounds. `q` guards
+// those, the small queues and the public state the main thread reads, so commands,
+// conditions and a project load never wait on a slow device. (load() used to wait for the
+// round to end while holding g_engine: a connect to a device that is off takes ~18 s,
+// whatever the socket timeout, so a save then hung the main loop into the watchdog.)
+rtos::Mutex q;
 rtos::Thread thread(osPriorityNormal, 8 * 1024, nullptr, "io");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 
 // Takes the oldest item of a queue guarded by q; false when it is empty.
@@ -65,7 +68,12 @@ struct TcpPub { String name, ip, lastLine; uint16_t port; int state; uint32_t la
 
 std::vector<TcpDev> tcps;
 std::vector<TcpPub> tcpPub;                       // guarded by q
+// Lines waiting for the io thread, all devices together. 64 lost lines of a 100-line burst
+// (overnight soak test, 10 Nov 2026): the io thread only empties this every 10 ms, and not at
+// all while an http request runs (up to 5 s). A full queue drops the line and says so.
+#define KD_TCP_QUEUE 512
 std::deque<std::pair<String, String>> tcpOut;     // device, text (q)
+uint32_t tcpDropped = 0;                          // (q) lines dropped since the last warning
 std::deque<Tcp::Line> tcpIn;                      // (q)
 
 void tcpPublish(const TcpDev& d, int state, const String* line) {
@@ -80,6 +88,15 @@ void tcpPublish(const TcpDev& d, int state, const String* line) {
 
 void tcpService() {
   uint32_t now = millis();
+  static uint32_t warnedAt = 0;
+  if (tcpDropped && now - warnedAt >= 1000) {   // one warning a second, not one per line
+    q.lock();
+    uint32_t n = tcpDropped;
+    tcpDropped = 0;
+    q.unlock();
+    warnedAt = now;
+    LOGW(Sys, "TCP send queue full (%d lines waiting): %u line(s) dropped", KD_TCP_QUEUE, (unsigned)n);
+  }
   for (auto& d : tcps) {
     if (!d.connected) {
       if ((int32_t)(now - d.retryAt) < 0) continue;
@@ -112,10 +129,19 @@ void tcpService() {
     for (auto it = tcpOut.begin(); it != tcpOut.end();)
       if (it->first == d.name) { outs.push_back(it->second); it = tcpOut.erase(it); } else ++it;
     q.unlock();
-    for (auto& o : outs) {
-      String data = o + d.eol;
-      d.c.write((const uint8_t*)data.c_str(), data.length());
+    for (size_t i = 0; i < outs.size(); i++) {
+      String data = outs[i] + d.eol;
+      if (d.c.write((const uint8_t*)data.c_str(), data.length()) == data.length()) continue;
+      // Nothing went out for 2 s (the device stopped reading): the rest of the lines go back
+      // to the front of the queue and are sent after reconnecting, instead of being lost.
+      q.lock();
+      for (size_t k = outs.size(); k > i + 1; k--) tcpOut.push_front({d.name, outs[k - 1]});
+      q.unlock();
+      LOGW(Sys, "TCP %s: send stalled, reconnecting (%u line(s) kept)", d.name.c_str(), (unsigned)(outs.size() - i - 1));
+      d.c.stop();
+      break;
     }
+    if (!d.c.connected()) continue;   // next round: "disconnected", retry in 2 s
     // Receive lines (\r or \n terminated).
     while (d.c.available() > 0) {
       char ch = d.c.read();
@@ -234,6 +260,9 @@ struct MbWrite { String device, table; uint16_t address, value; };
 
 std::vector<MbDev> mbs;
 std::vector<MbPub> mbPub;      // (q)
+std::vector<TcpDev> nextTcps;  // (q) from load(), swapped in by the io thread
+std::vector<MbDev> nextMbs;    // (q)
+bool haveNext = false;         // (q)
 std::deque<MbWrite> mbWrites;  // (q)
 
 uint8_t fcFor(const String& table, bool write) {
@@ -348,10 +377,20 @@ void timed(const char* what, void (*job)()) {
 void run() {
   rtos::ThisThread::sleep_for(3s);  // let the network come up
   for (;;) {
-    dev.lock();
+    q.lock();
+    bool swap = haveNext;
+    std::vector<TcpDev> nt;
+    std::vector<MbDev> nm;
+    if (swap) { nt = std::move(nextTcps); nm = std::move(nextMbs); nextTcps.clear(); nextMbs.clear(); haveNext = false; }
+    q.unlock();
+    if (swap) {
+      for (auto& d : tcps) d.c.stop();
+      for (auto& d : mbs) d.c.stop();
+      tcps = std::move(nt);
+      mbs = std::move(nm);
+    }
     timed("TCP devices", tcpService);
     timed("Modbus", modbusService);
-    dev.unlock();
     timed("HTTP request", httpService);
     rtos::ThisThread::sleep_for(10ms);
   }
@@ -399,19 +438,17 @@ void load() {
     if (!found) LOGW(Sys, "Variable %s: unknown Modbus device '%s'", links[i].name.c_str(), links[i].device.c_str());
   }
 
-  dev.lock();
-  for (auto& d : tcps) d.c.stop();
-  for (auto& d : mbs) d.c.stop();
-  tcps = std::move(nt);
-  mbs = std::move(nm);
-  dev.unlock();
+  int tn = nt.size(), mn = nm.size();
   q.lock();
+  nextTcps = std::move(nt);
+  nextMbs = std::move(nm);
+  haveNext = true;
   tcpPub = std::move(ntp);
   mbPub = std::move(nmp);
   tcpOut.clear();
   mbWrites.clear();
   q.unlock();
-  LOGI(Sys, "%d TCP device(s), %d Modbus device(s)", (int)tcps.size(), (int)mbs.size());
+  LOGI(Sys, "%d TCP device(s), %d Modbus device(s)", tn, mn);
 }
 
 void statusJson(JsonObject o) {
@@ -450,9 +487,12 @@ bool send(const String& device, const String& text, String& msg) {
   int state = -1;
   String name = device;
   for (auto& p : tcpPub) if (p.name.equalsIgnoreCase(device)) { known = true; state = p.state; name = p.name; }
-  if (known && tcpOut.size() < 64) tcpOut.push_back({name, unescape(text)});
+  bool full = known && tcpOut.size() >= KD_TCP_QUEUE;
+  if (known && !full) tcpOut.push_back({name, unescape(text)});
+  if (full) tcpDropped++;
   q.unlock();
   if (!known) { msg = "unknown TCP device '" + device + "'"; return false; }
+  if (full) { msg = "TCP " + name + ": send queue full, line dropped"; return false; }
   msg = "TCP " + name + (state == 1 ? " <- " : " (not connected, queued) <- ") + text;
   return true;
 }

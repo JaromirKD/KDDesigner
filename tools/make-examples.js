@@ -38,7 +38,7 @@ function Show() {
     for (const pg of panel.pages) pg.panel = pg.panel || 1;
     return {
       name: p.name,
-      settings: { tzOffsetMin: 60, udpPort: 4000, sacnPriority: 100, monitor: { interval: 60, timeout: 1000, failures: 2 },
+      settings: { dateOrder: 'dmy', tzOffsetMin: 60, udpPort: 4000, sacnPriority: 100, monitor: { interval: 60, timeout: 1000, failures: 2 },
         time: { ntp: 'pool.ntp.org', ntpEnabled: true, dst: 'eu' }, location: { lat: 52.37, lon: 4.9 },
         outputs: { dmx: true, artnet: true, sacn: true, dmxFps: 40, artnetFps: 30, sacnFps: 40, artnetChangesOnly: true, sacnChangesOnly: false } },
       network: { dhcp: false, ip: p.ip || '192.168.1.50', mask: '255.255.255.0', gateway: p.gateway || '192.168.1.1' },

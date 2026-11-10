@@ -50,6 +50,7 @@ struct Settings {
 namespace Show {
 bool loadFile(const char* path, String& err);      // replaces the running project on success
 bool parse(const char* json, size_t len, String& err);
+bool liveTimeline(const char* json, size_t len, String& err);   // web UI live editing: one timeline, not saved
 const Settings& settings();
 JsonDocument& projectDoc();                        // raw project (used by triggers)
 
@@ -76,6 +77,8 @@ void releaseAll(uint32_t fadeMs);
 void setOverride(int uIndex, int ch, int value);   // value < 0 clears
 void clearOverrides();
 bool isOverride(int uIndex, int ch);               // for the DMX monitor
+// Flash fixtures white to find them: ids "3,5,8-12" (fixture numbers), or "off". Not saved.
+bool locate(const String& ids, uint32_t ms, String& msg);
 void setOutput(Output o, bool on);                 // runtime switch, not saved
 bool setFps(Output o, int fps, String& msg);       // runtime, not saved
 uint32_t engineHz();                               // engine rate: max(40, network fps), <= 60

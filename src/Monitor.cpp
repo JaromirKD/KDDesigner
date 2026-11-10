@@ -261,15 +261,17 @@ void flushHistory() {
   histLastWrite = t;
 }
 
-void historyJson(const String& name, uint32_t from, uint32_t to, String& out) {
-  out = "[";
+// Read in 8 KB pieces (Storage::Reader), names compared in place and the reply in SDRAM: a day
+// file of a busy KNX/Kiss-Box show has thousands of lines.
+void historyJson(const String& name, uint32_t from, uint32_t to, BigRam::Text& out) {
+  out.add('[');
   if (to > from + 7 * 86400) to = from + 7 * 86400;
-  char line[160];
+  char line[160], item[96];
   for (uint32_t day = from / 86400; day <= to / 86400; day++) {
-    FILE* f = Storage::mounted() ? fopen(dayPath(day).c_str(), "r") : nullptr;
-    if (!f) continue;
+    Storage::Reader r(dayPath(day).c_str());
+    if (!r.f) continue;
     bool past = false;
-    while (fgets(line, sizeof(line), f)) {
+    while (fgets(line, sizeof(line), r.f)) {
       // "epoch state kind name"; the name may contain spaces
       char* p = line;
       uint32_t e = strtoul(p, &p, 10);
@@ -277,17 +279,17 @@ void historyJson(const String& name, uint32_t from, uint32_t to, String& out) {
       char state[64], kind[16];
       int used = 0;
       if (sscanf(p, " %63s %15s %n", state, kind, &used) < 2 || !used) continue;
-      String n = String(p + used);
-      n.trim();
+      char* n = p + used;
+      size_t nl = strlen(n);
+      while (nl && (unsigned char)n[nl - 1] <= ' ') n[--nl] = 0;
       bool ctl = !strcmp(state, "boot") || !strcmp(state, "alive");
-      if (!ctl && !n.equalsIgnoreCase(name)) continue;
-      if (out.length() > 1) out += ',';
-      out += "[" + String(e) + ",\"" + state + "\"]";
+      if (!ctl && strcasecmp(n, name.c_str())) continue;
+      if (out.len > 1) out.add(',');
+      out.add(item, snprintf(item, sizeof(item), "[%lu,\"%s\"]", (unsigned long)e, state));
     }
-    fclose(f);
     if (past) break;
   }
-  out += "]";
+  out.add(']');
 }
 
 }  // namespace Monitor

@@ -31,6 +31,8 @@ uint32_t projectVersion = 0;
 uint8_t gmExempt[U][64];
 uint8_t wide[U][64];
 uint8_t curveOf[U][512];
+uint8_t locMask[U][64];
+uint32_t locStart = 0, locUntil = 0;
 }  // namespace ShowImpl
 
 using namespace ShowImpl;
@@ -417,6 +419,31 @@ void ShowImpl::stopAllPlaybacks() {
   for (auto& p : pbs) p.active = false;
 }
 
+// Live edit (Show::liveTimeline): a running copy of the timeline starts again where it is, as
+// "start part-way" does: cues before that point jump in without their fades, from the live
+// look (so nothing blinks), and trigger cues before it don't fire again. Paused stays paused,
+// a timeline holding at its end stays there (no second "ended"), its master level is kept.
+void ShowImpl::timelineReplaced(int idx) {
+  Playback* p = findPlayback(false, idx);
+  if (!p || p->releasing) return;
+  const Timeline& t = timelines[idx];
+  const uint32_t now = millis();
+  int32_t e = (int32_t)((p->paused ? p->pausedAt : now) - p->start);
+  uint32_t at = e > 0 ? (uint32_t)e : 0;
+  if (t.length && at >= t.length) at = t.loop ? at % t.length : t.length - 1;
+  const bool paused = p->paused, ended = p->ended;
+  const float master = p->master, mFrom = p->mFrom, mTo = p->mTo;
+  const uint32_t mStart = p->mStart, mLen = p->mLen, order = p->order;
+  resetPlayback(*p, false, idx, t.priority, now);
+  p->order = order;   // keeps its place among the other playbacks
+  p->master = master; p->mFrom = mFrom; p->mTo = mTo; p->mStart = mStart; p->mLen = mLen;
+  p->start -= at;
+  p->catchUp = at;
+  updateTimeline(*p, now);   // the new cues up to here, at once
+  if (ended) p->ended = true;
+  if (paused) { p->paused = true; p->pausedAt = now; }
+}
+
 namespace Show {
 
 KD_FAST void tick(uint32_t now) {
@@ -481,6 +508,16 @@ KD_FAST void tick(uint32_t now) {
       if (testBit(gmExempt[u], i) || (full && curveOf[u][i] == CurveLinear)) continue;
       out[u][i] = blackout ? 0 : applyCurve(curveOf[u][i], (uint8_t)(out[u][i] * gm));
     }
+  // Locate: the picked fixtures blink full white (0.5 s on, 0.25 s off) over everything,
+  // grand master and blackout included, to find them in the room; then they are let go.
+  if (locUntil) {
+    if ((int32_t)(now - locUntil) >= 0) { locUntil = 0; memset(locMask, 0, sizeof(locMask)); }
+    else {
+      const uint8_t v = (now - locStart) % 750 < 500 ? 255 : 0;
+      for (int u = 0; u < nu; u++)
+        for (int i = 0; i < 512; i++) if (testBit(locMask[u], i)) out[u][i] = v;
+    }
+  }
   partUs[kPartMix] += micros() - t1;
 }
 

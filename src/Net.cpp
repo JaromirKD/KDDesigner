@@ -77,6 +77,33 @@ uint8_t mac[6];
 IPAddress fixedIp() { return want.dhcp ? IPAddress(KD_FALLBACK_IP) : want.ip; }
 IPAddress fixedMask() { return want.dhcp ? IPAddress(KD_FALLBACK_MASK) : want.mask; }
 IPAddress fixedGw() { return want.dhcp ? IPAddress(KD_FALLBACK_GW) : want.gateway; }
+const IPAddress kNone(0, 0, 0, 0);
+// No DNS given: the gateway (as before DNS was a setting; most routers answer DNS).
+IPAddress fixedDns() { return want.dhcp || want.dns == kNone ? fixedGw() : want.dns; }
+
+uint32_t u32(IPAddress a) { return ((uint32_t)a[0] << 24) | (a[1] << 16) | (a[2] << 8) | a[3]; }
+// The same checks as netProblems() in the UI (Settings > Network), for a project edited by
+// hand: a fixed address that can't work would leave the controller unreachable.
+const char* fixedProblem(const NetConfig& c) {
+  uint32_t ip = u32(c.ip), m = u32(c.mask), gw = u32(c.gateway);
+  if (m == 0 || (~m & (~m + 1)) != 0) return "subnet mask";   // ones then zeros only
+  if (ip == 0 || (ip >> 24) == 0 || (ip >> 24) == 127 || (ip >> 24) >= 224) return "IP address";
+  if ((ip & ~m) == 0 || (ip & ~m) == ~m) return "IP address (network or broadcast address of its subnet)";
+  if (gw && ((gw & m) != (ip & m) || gw == ip)) return "gateway (not in the subnet)";
+  return nullptr;
+}
+
+// DNS servers of a fixed address. lwIP keeps a short list per interface and Mbed puts each
+// added server in front: the second one first, then the first, so the first is asked first
+// (Ethernet.begin adds the first one too; a repeat is harmless). After a live switch from a
+// fixed address to DHCP an old server can stay in the list until a restart: names still resolve.
+void setDns() {
+  if (want.dhcp) return;
+  char ifn[5] = {};
+  eth()->get_interface_name(ifn);
+  if (want.dns2 != kNone) eth()->add_dns_server(sockAddr(want.dns2), ifn);
+  eth()->add_dns_server(sockAddr(fixedDns()), ifn);
+}
 
 // Fixed (or fallback) address without waiting. Disconnect first: a connect() while the
 // DHCP one is still running is ignored, which is why the fallback never took before.
@@ -86,7 +113,7 @@ void useFixed() {
   e->set_dhcp(false);
   e->set_network(sockAddr(fixedIp()), sockAddr(fixedMask()), sockAddr(fixedGw()));
   e->set_blocking(false);
-  e->connect();
+  e->connect();   // the DNS servers set in begin() stay
 }
 
 // While on the fallback a DHCP DISCOVER is sent now and then from port 68, keeping the
@@ -145,6 +172,25 @@ void tryDhcp(uint32_t now) {
 // A DISCOVER every 30 s costs nothing (one small broadcast), so a router that comes back,
 // or boots slower than the controller after a power cut, is found within half a minute.
 void scheduleTry(uint32_t now) { nextTry = now + 30000; }
+
+// Another setting without a restart (network test). Sockets are bound to "any address", so
+// they keep working; open TCP connections (browsers, devices) drop and reconnect.
+void apply(const NetConfig& c, uint32_t now) {
+  want = c;
+  onFallback = dhcpTrying = false;
+  notUpSince = 0;
+  if (c.dhcp) tryDhcp(now);   // no lease in 10 s: the fallback address (maintain)
+  else { useFixed(); setDns(); }
+  scheduleTry(now);
+}
+
+// Network test: requested by the web thread, run by maintain() (main loop), under trialMtx.
+rtos::Mutex trialMtx;
+NetConfig trialOld, trialNew;
+bool tryAsked = false, trialOn = false, revertDue = false;
+uint32_t trialStart = 0;
+const char* trialResult = "";   // "kept" | "reverted" (the last test)
+String cfgText(const NetConfig& c) { return c.dhcp ? String("DHCP") : c.ip.toString(); }
 
 // beginMulticast is protected in MbedUDP; the sACN socket joins a group for DMX input.
 struct McastUDP : public EthernetUDP {
@@ -276,7 +322,14 @@ void sendPollReply(IPAddress to) {
 namespace Net {
 Counters counters = {};
 
-void begin(const NetConfig& cfg) {
+void begin(const NetConfig& given) {
+  NetConfig cfg = given;
+  const char* bad = cfg.dhcp ? nullptr : fixedProblem(cfg);
+  if (bad) {
+    LOGE(Net, "The fixed network setting has a wrong %s (%s / %s, gateway %s): using DHCP instead",
+         bad, cfg.ip.toString().c_str(), cfg.mask.toString().c_str(), cfg.gateway.toString().c_str());
+    cfg.dhcp = true;
+  }
   want = cfg;
   int ok = 0;
   if (cfg.dhcp) {
@@ -290,7 +343,8 @@ void begin(const NetConfig& cfg) {
   if (!ok) {
     Ethernet.disconnect();
     // A short wait: with no cable the address comes up by itself once the link does.
-    Ethernet.begin(nullptr, fip, fixedGw(), fixedGw(), fixedMask(), 3000);
+    Ethernet.begin(nullptr, fip, fixedDns(), fixedGw(), fixedMask(), 3000);
+    setDns();
   }
   if (cable == 0)
     LOGW(Net, "No Ethernet link: check the cable, the switch port and its link light. Address %s once the link is there%s",
@@ -321,7 +375,23 @@ void begin(const NetConfig& cfg) {
 }
 
 void maintain(uint32_t now) {
-  if (!isUp || now - lastPhy < 1000) return;
+  if (!isUp) return;
+  trialMtx.lock();
+  bool start = tryAsked, back = trialOn && now - trialStart > KD_NET_TRIAL_MS;
+  if (start) { tryAsked = false; trialOn = true; trialStart = now; trialResult = ""; }
+  if (back) { trialOn = false; revertDue = true; trialResult = "reverted"; }
+  NetConfig to = start ? trialNew : trialOld;
+  trialMtx.unlock();
+  if (start) {
+    LOGW(Net, "Network test: switching to %s now; back to %s in %lu s unless a browser confirms from the new address",
+         cfgText(to).c_str(), cfgText(trialOld).c_str(), (unsigned long)(KD_NET_TRIAL_MS / 1000));
+    apply(to, now);
+  } else if (back) {
+    LOGE(Net, "Network test not confirmed in %lu s: back to %s (the project gets that setting again)",
+         (unsigned long)(KD_NET_TRIAL_MS / 1000), cfgText(to).c_str());
+    apply(to, now);
+  }
+  if (now - lastPhy < 1000) return;
   lastPhy = now;
   if (cacheOn()) LOGI(Net, "Data cache switched on again (the Ethernet driver had switched it off)");
   askPhy();   // read now, used next second
@@ -379,6 +449,66 @@ void maintain(uint32_t now) {
 bool up() { return isUp; }
 IPAddress localIP() { return Ethernet.localIP(); }
 void macAddress(uint8_t out[6]) { memcpy(out, mac, 6); }
+
+void statusJson(JsonObject o) {
+  o["mode"] = dhcpTrying ? "dhcp-asking" : onFallback ? "fallback" : want.dhcp ? "dhcp" : "fixed";
+  if (cable >= 0) o["link"] = cable == 1;
+  bool has = isUp && hasAddress();
+  o["ip"] = has ? Ethernet.localIP().toString() : "";
+  o["mask"] = has ? Ethernet.subnetMask().toString() : "";
+  o["gateway"] = has ? Ethernet.gatewayIP().toString() : "";
+  JsonArray dns = o["dns"].to<JsonArray>();
+  for (int i = 0; has && i < 2; i++) {
+    IPAddress a = Ethernet.dnsIP(i);
+    if (a != kNone) dns.add(a.toString());
+  }
+  char m[18];
+  snprintf(m, sizeof(m), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  o["mac"] = m;
+  trialMtx.lock();
+  if (trialOn || tryAsked) {
+    JsonObject t = o["trial"].to<JsonObject>();
+    uint32_t gone = trialOn ? millis() - trialStart : 0;
+    t["left"] = (KD_NET_TRIAL_MS - min(gone, (uint32_t)KD_NET_TRIAL_MS)) / 1000;
+    t["to"] = cfgText(trialNew);
+    t["back"] = cfgText(trialOld);
+  }
+  if (*trialResult) o["trialResult"] = trialResult;
+  trialMtx.unlock();
+}
+
+bool requestTry(const NetConfig& cfg, NetConfig& old, String& why) {
+  const char* bad = cfg.dhcp ? nullptr : fixedProblem(cfg);
+  if (bad) { why = String("The setting has a wrong ") + bad; return false; }
+  trialMtx.lock();
+  bool busy = trialOn || tryAsked || revertDue;
+  if (!busy) {
+    trialOld = old = want;
+    trialNew = cfg;
+    tryAsked = true;
+  }
+  trialMtx.unlock();
+  if (busy) why = "A network test is already running";
+  return !busy;
+}
+
+bool confirm() {
+  trialMtx.lock();
+  // Not in the first moments: a request that left before the switch must not count.
+  bool ok = trialOn && millis() - trialStart > 1500;
+  if (ok) { trialOn = false; trialResult = "kept"; }
+  trialMtx.unlock();
+  if (ok) LOGI(Net, "Network test confirmed: keeping %s", cfgText(trialNew).c_str());
+  return ok;
+}
+
+bool takeRevert(NetConfig& old) {
+  trialMtx.lock();
+  bool due = revertDue;
+  if (due) { revertDue = false; old = trialOld; }
+  trialMtx.unlock();
+  return due;
+}
 
 void poll() {
   if (!isUp) return;

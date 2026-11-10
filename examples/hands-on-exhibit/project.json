@@ -1,6 +1,7 @@
 {
   "name": "Hands-on exhibit - 6 buttons",
   "settings": {
+    "dateOrder": "dmy",
     "tzOffsetMin": 60,
     "udpPort": 4000,
     "sacnPriority": 100,

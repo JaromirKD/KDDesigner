@@ -84,7 +84,24 @@ body.live.live-frame::after { content: ""; position: fixed; inset: 0; border: 2p
 .spacer { flex: 1; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); color: var(--muted); white-space: nowrap; }
-.chip.ok { color: var(--ok); } .chip.bad { color: var(--err); }
+.chip.ok { color: var(--ok); } .chip.bad { color: var(--err); } .chip.warn { color: var(--warn); }
+/* Save / load progress (progress() in app-core.js): a line along the header's bottom edge and
+   a small label under its right end. Doesn't block anything. */
+.top { position: relative; }
+.progress { position: absolute; left: 0; right: 0; bottom: -1px; z-index: 55; pointer-events: none; }
+.progress[hidden] { display: none; }
+.progress .pg-track { height: 3px; overflow: hidden; }
+.progress .pg-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.progress.indet .pg-fill { width: 30%; animation: pg-slide 1.1s ease-in-out infinite; }
+@keyframes pg-slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+.progress .pg-label { position: absolute; right: 14px; top: 8px; display: flex; gap: 8px; align-items: center; pointer-events: auto;
+  font-size: 12px; white-space: nowrap; max-width: calc(100% - 28px); background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 4px; padding: 3px 10px; box-shadow: 0 4px 16px var(--shadow); }
+.progress .pg-text { overflow: hidden; text-overflow: ellipsis; }
+.progress.err .pg-fill { width: 100%; background: var(--err); }
+.progress.err .pg-label { border-color: var(--err); color: var(--err); white-space: normal; }
+.progress .pg-x { display: none; background: none; border: 0; padding: 0 2px; cursor: pointer; color: var(--muted); font-size: 15px; line-height: 1; }
+.progress.err .pg-x { display: inline; }
 .gm { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .gm input { width: 110px; }
 #gmVal { width: 36px; color: var(--text); }
@@ -136,6 +153,17 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .list .item .id { color: var(--muted); width: 24px; }
 .form { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; align-items: center; max-width: 640px; }
 .form label { color: var(--muted); }
+/* Settings > Network: the setting and what is in use side by side (stacked when narrow) */
+.net-wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-start; }
+.net-set { flex: 1 1 340px; }
+.net-live { flex: 0 1 380px; min-width: 0; }
+.net-live .form { margin-top: 8px; gap: 4px 12px; grid-template-columns: 90px minmax(0, 1fr); }
+.net-live span { overflow-wrap: anywhere; }
+#netProblems { margin-top: 6px; }
+.net-ov { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.net-ov .card { max-width: 520px; width: 100%; }
+.net-ov h3 { margin-top: 0; }
+.net-ov .ok { color: var(--ok); }
 
 table { border-collapse: collapse; width: 100%; }
 th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
@@ -206,6 +234,15 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .blk .ramp polygon { fill: rgba(0, 0, 0, .38); }
 .blk .ramp polyline { fill: none; stroke: color-mix(in srgb, var(--bc) 60%, #fff); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .blk span { position: relative; padding: 0 5px; font-size: 11px; line-height: 34px; white-space: nowrap; color: #fff; text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
+/* timeline "Live editing" switch: green dot when on */
+.btn.tl-live { color: var(--muted); }
+.btn.tl-live.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 60%, var(--border)); background: color-mix(in srgb, var(--ok) 12%, var(--panel2)); }
+.tl-live-msg { font-size: 12px; color: var(--err); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* clip level: dark above the line, the line can be dragged up/down */
+.blk .lv-shade { position: absolute; left: 0; right: 0; top: 0; background: rgba(0, 0, 0, .42); pointer-events: none; }
+.blk .lv { position: absolute; left: 6px; right: 6px; height: 7px; margin-top: -3px; cursor: ns-resize; z-index: 1;
+  background: linear-gradient(transparent 2px, color-mix(in srgb, var(--bc) 35%, #fff) 2px 4px, transparent 4px); opacity: .75; }
+.blk:hover .lv, .blk.sel .lv { opacity: 1; }
 .blk .eg { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 1; }
 .blk .eg.l { left: 0; }
 .blk .eg.r { right: 0; }
@@ -254,13 +291,27 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .map-canvas.dense .mfx .lbl { font-size: 9px; }
 /* Scenes: fixtures that are not in the scene are faded */
 .sc-map .mfx { cursor: pointer; }
-.mfx.out .dot, .sc-chip.out .dot { border-style: dashed; opacity: .5; }
-.mfx.out .lbl { opacity: .55; }
+.mfx.out .dot, .sc-chip.out .dot { border-style: dashed; opacity: .3; filter: grayscale(1); }
+.mfx.out .lbl { opacity: .35; }
+.sc-chip.out { color: var(--muted); border-style: dashed; }
+/* ...and the ones in it get a green tick in the corner */
+.sc-chip { position: relative; }
+.sc-map .mfx .dot { position: relative; }
+.sc-map .mfx.in .dot::after, .sc-chip.in::after { content: ''; position: absolute; top: -5px; right: -5px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ok); border: 1.5px solid var(--deep); pointer-events: none; }
+.sc-chip.in::after { top: -2px; right: -2px; }
+.sc-chip.in { border-color: color-mix(in srgb, var(--ok) 55%, var(--border)); }
+.map-canvas.dense .mfx.in .dot::after { width: 6px; height: 6px; border-width: 1px; top: -4px; right: -4px; }
+.sc-count { font-size: 12px; }
+.sc-legend { font-size: 12px; margin-top: 4px; gap: 6px; }
+.sc-key { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--dot-edge); background: var(--dot-bg); position: relative; vertical-align: -2px; }
+.sc-key.in::after { content: ''; position: absolute; top: -4px; right: -4px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); border: 1px solid var(--deep); }
+.sc-key.out { border-style: dashed; opacity: .4; margin-left: 8px; }
 .mfx .lbl { margin-top: 2px; font-size: 10px; white-space: nowrap; color: var(--text); text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
 .mfx.sel .dot { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
 .mini-map .mfx { cursor: pointer; }
 .mini-map .mfx:not(.sel) { opacity: .55; }
-.map-canvas .band { position: absolute; border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); pointer-events: none; z-index: 2; }
+.map-canvas .band, .mini-map .band { position: absolute; border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); pointer-events: none; z-index: 2; }
 .map-selbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; padding: 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); }
 .map-fx .placed { width: 14px; color: var(--muted); }
 .map-fx .placed.on { color: var(--accent); }
@@ -301,7 +352,11 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 @keyframes trigRun { 50% { background-color: color-mix(in srgb, var(--accent) 28%, transparent); } }
 .run-left { font-size: 11px; color: var(--accent); margin-left: 4px; white-space: nowrap; }
 .fl-node.running rect:not(.fl-col) { stroke: var(--accent); stroke-width: 2; fill: color-mix(in srgb, var(--accent) 22%, var(--panel2)); }
-.fired-from { font-size: 11px; font-weight: 600; color: var(--accent); margin-left: 4px; white-space: nowrap; }
+.fired-from { font-size: 11px; font-weight: 600; color: var(--accent); margin-right: 4px; white-space: nowrap; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.fired-from.no { color: var(--muted); background: color-mix(in srgb, var(--muted) 16%, transparent); }
+/* fired, but a condition was false: grey with a red edge instead of the orange flash */
+.trig-list .item.fire-no { background-color: color-mix(in srgb, var(--muted) 28%, transparent); box-shadow: inset 0 0 0 2px var(--err); transition: none; }
+.skip-tag { font-size: 11px; font-weight: 600; color: var(--err); margin-left: 4px; white-space: nowrap; }
 
 /* trigger flow view (show flow) */
 .flow-toggle { font-size: 13px; font-weight: 400; margin-left: 14px; cursor: pointer; }
@@ -343,6 +398,8 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .fl-node.if.sel polygon { stroke: var(--accent); stroke-width: 2; }
 .fl-node.if:hover polygon { stroke: var(--text); }
 .fl-node.if.fire polygon { fill: color-mix(in srgb, var(--accent) 55%, var(--panel2)); stroke: var(--accent); transition: none; }
+.fl-node.if.fire-no polygon { fill: color-mix(in srgb, var(--err) 45%, var(--panel2)); stroke: var(--err); stroke-width: 2; transition: none; }
+.fl-node.fire-no rect:not(.fl-col) { fill: color-mix(in srgb, var(--muted) 30%, var(--panel2)); stroke: var(--err); transition: none; }
 .fl-br { font-size: 10.5px; font-weight: 600; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
 .fl-br.yes { fill: var(--ok); }
 .fl-br.no { fill: var(--err); }
@@ -392,6 +449,8 @@ h2.trig-head .btn { margin-left: 6px; }
 .hist-lbl { fill: var(--text); }
 .hist-lbl .fl-id, .hist-n { fill: var(--muted); font-size: 11px; }
 .hist-tick:hover { stroke: var(--text); stroke-width: 1; }
+.hist-tick.no { fill: none; stroke: var(--err); stroke-width: 1; }
+.hist-no { fill: var(--err); }
 .hist-grid { stroke: var(--border); stroke-dasharray: 2 3; }
 .hist-ax { fill: var(--muted); font-size: 11px; }
 .hist-now { stroke: var(--accent); stroke-opacity: .6; }
@@ -452,7 +511,7 @@ body.dragging-item, body.dragging-item * { cursor: grabbing !important; user-sel
 .tt-udp { --ttc: #4aa3ff; } .tt-osc { --ttc: #818cf8; } .tt-tcp { --ttc: #38bdf8; } .tt-http { --ttc: #a3e635; }
 .tt-input { --ttc: #ffb020; } .tt-timeline_end { --ttc: #b07cff; } .tt-mode { --ttc: #e879f9; } .tt-panel { --ttc: #3ad1e0; }
 .tt-dmx_change { --ttc: #ff9f43; } .tt-device { --ttc: #ff5c5c; } .tt-projector { --ttc: #ffb020; } .tt-variable { --ttc: #f472b6; } .tt-manual { --ttc: #d8dbe2; }
-.tt-if { --ttc: #ffd23f; }
+.tt-if { --ttc: #ffd23f; } .tt-calendar { --ttc: #34d399; }
 
 /* fixtures list */
 .fx-list .item { gap: 6px; }
@@ -596,6 +655,43 @@ input[type=range].cw-grad::-moz-range-track { background: transparent; }
 /* schedule */
 table.sched tr.skipped td { opacity: .5; }
 table.sched td:first-child { white-space: nowrap; }
+/* min-width 0 everywhere: long select texts and inputs must shrink with the card, not overflow it */
+.sched-top { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); margin-bottom: 14px; }
+.sched-top > .card, .sched-form > * { min-width: 0; }
+.sched-form { grid-template-columns: minmax(80px, 110px) minmax(0, 1fr); max-width: none; }
+.sched-form select, .sched-form > input { width: 100%; }
+.sched-card { margin-bottom: 14px; overflow-x: auto; }
+.cal-list { display: flex; flex-direction: column; gap: 6px; }
+.cal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.cal-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.cal-name { flex: 1 1 140px; max-width: 220px; }
+.cal-dates { display: flex; align-items: center; gap: 6px; }
+.cal-dates input { width: 100px; }
+.cal-days { display: flex; gap: 2px; }
+.cal-wd { border: 1px solid var(--border); background: var(--bg); color: var(--muted); border-radius: 4px; padding: 2px 0; width: 28px; font-size: 12px; cursor: pointer; }
+.cal-wd.on { background: color-mix(in srgb, var(--accent) 22%, var(--panel)); border-color: var(--accent); color: var(--text); }
+.cal-today { min-width: 90px; }
+.cal-nav { margin-bottom: 8px; }
+.cal-title { min-width: 130px; text-align: center; }
+.cal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; min-width: 520px; }
+.cal-head { font-size: 12px; color: var(--muted); text-align: center; padding: 2px 0; }
+.cal-day { border: 1px solid var(--border); border-radius: 4px; padding: 3px 4px; min-height: 84px; cursor: pointer; overflow: hidden; font-size: 11px;
+  background: color-mix(in srgb, var(--cal-tint, transparent) 10%, var(--panel)); }
+.cal-day:hover { border-color: var(--border2); }
+.cal-day.other { opacity: .45; }
+.cal-day.today .cal-num { background: var(--accent); color: var(--bg); border-radius: 3px; padding: 0 4px; }
+.cal-day.sel { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.cal-num { font-weight: 600; font-size: 12px; display: inline-block; margin-bottom: 2px; }
+.cal-tag { border-left: 3px solid var(--c); padding-left: 4px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-ev { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.cal-ev.skipped { text-decoration: line-through; opacity: .6; }
+.cal-count { display: none; float: right; font-size: 10px; color: var(--muted); }
+/* phone width: a compact month (tint, period colour bars, a count); the chosen day's list below has the details */
+.narrow .cal-month { min-width: 0; }
+.narrow .cal-day { min-height: 46px; padding: 2px 3px; }
+.narrow .cal-ev { display: none; }
+.narrow .cal-count { display: inline; }
+.narrow .cal-tag { font-size: 0; height: 4px; border-left: 0; padding: 0; margin-top: 2px; background: var(--c); border-radius: 2px; }
 
 /* mode groups on the dashboard */
 .mode-groups { display: flex; flex-direction: column; gap: 10px; }
@@ -739,6 +835,45 @@ tr.p-row td { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 .pmenu { position: fixed; z-index: 1000; display: flex; flex-direction: column; min-width: 160px; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px #0006; }
 .pmenu a { padding: 7px 10px; border-radius: 5px; color: var(--text); text-decoration: none; }
 .pmenu a:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+/* Right-click menu (openCtxMenu in app-main.js) */
+.ctx-menu { min-width: 190px; max-width: 320px; z-index: 2000; }
+.ctx-menu button { display: flex; align-items: center; gap: 16px; padding: 6px 10px; border: 0; border-radius: 5px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.ctx-menu button span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-menu button:hover:not(:disabled), .ctx-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 18%, transparent); outline: none; }
+.ctx-menu button:disabled { color: var(--muted); opacity: .55; cursor: default; }
+.ctx-menu button.danger { color: var(--err); }
+.ctx-menu kbd { font: 11px/1 inherit; color: var(--muted); }
+.ctx-menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 2px; }
+/* Trigger Test result */
+.trig-test { margin: 8px 0; padding: 8px 10px; }
+.tt-line { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; flex-wrap: wrap; }
+.tt-line code { white-space: pre-wrap; word-break: break-word; }
+.tt-line.bad code { color: var(--err); }
+.tt-what { min-width: 18px; text-align: right; }
+.tt-r { flex-basis: 100%; padding-left: 44px; font-size: 12px; word-break: break-word; }
+.tt-ok { color: var(--ok); } .tt-bad { color: var(--err); }
+/* Map snap grid (under the shapes and fixtures) */
+.map-grid { position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: linear-gradient(to right, color-mix(in srgb, var(--muted) 35%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--muted) 35%, transparent) 1px, transparent 1px);
+  background-size: calc(100% / var(--gc)) calc(100% / var(--gc)); }
+/* Where used (editors) and its window */
+.used-row { margin: 6px 0 2px; font-size: 13px; }
+details.used summary { cursor: pointer; color: var(--muted); }
+details.used ul, .used-list { margin: 4px 0 0; padding-left: 18px; }
+details.used li, .used-list li { margin: 2px 0; }
+.used-list { padding-left: 4px; list-style: none; }
+.backups a.btn { text-decoration: none; color: var(--text); }
+.used-list .muted, details.used .muted { word-break: break-word; }
+/* "?" keyboard shortcut list */
+#usedPop,
+#keysHelp { position: fixed; inset: 0; z-index: 2100; background: #0007; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.keys-help { width: min(520px, 100%); max-height: calc(90 * var(--vh)); overflow: auto; box-shadow: 0 10px 30px #0008; }
+.keys-help h3 { margin: 12px 0 4px; }
+.keys-help table { width: 100%; border-collapse: collapse; }
+.keys-help td { padding: 3px 6px; vertical-align: top; }
+.keys-help td:first-child { white-space: nowrap; width: 1%; }
+.keys-help kbd { font: 12px/1.4 ui-monospace, Consolas, monospace; padding: 1px 6px; border: 1px solid var(--border2); border-radius: 4px; background: var(--panel2); }
 .ptable .psel { width: 28px; text-align: center; color: var(--muted); cursor: pointer; user-select: none; }
 .ptable tr.p-row .psel { color: var(--accent); font-weight: 600; }
 details.ptheme { margin-bottom: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
@@ -883,6 +1018,24 @@ body.narrow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto au
   background: var(--accent); color: #111; font-size: 13px; font-weight: 600; cursor: grab; z-index: 3; touch-action: none; user-select: none; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
 .map-handle.size { cursor: nwse-resize; }
 .map-handle:active { cursor: grabbing; }
+/* floor-plan shapes and texts on a map (under the fixtures); text size is in % of the map width (cqw) */
+.map-canvas, .mini-map { container-type: inline-size; }
+.shape-layer { position: absolute; inset: 0; pointer-events: none; }
+.map-shapes { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.map-shapes.edit [data-shape] { pointer-events: all; cursor: move; }
+.map-text { position: absolute; transform: translate(-50%, -50%); white-space: pre; line-height: 1.1; pointer-events: none; text-shadow: 0 0 3px var(--deep); }
+.map-text[data-shape] { pointer-events: auto; cursor: move; }
+.map-text.sel { outline: 1px dashed var(--accent); outline-offset: 3px; }
+.shape-h { position: absolute; width: 11px; height: 11px; box-sizing: border-box; transform: translate(-50%, -50%); background: var(--accent); border: 1px solid var(--deep); border-radius: 2px;
+  pointer-events: auto; z-index: 3; touch-action: none; }
+.shape-h.nw, .shape-h.se { cursor: nwse-resize; } .shape-h.ne, .shape-h.sw { cursor: nesw-resize; }
+.shape-h.n, .shape-h.s { cursor: ns-resize; } .shape-h.e, .shape-h.w { cursor: ew-resize; }
+.shape-h[data-sh="a"], .shape-h[data-sh="b"] { border-radius: 50%; cursor: crosshair; }
+.shape-sw { gap: 3px; flex-wrap: nowrap; }
+.shape-sw .swatch { width: 16px; height: 16px; border-width: 1px; }
+.shape-sw .swatch.on { border-width: 2px; box-shadow: 0 0 0 1px var(--accent); }
+.map-canvas.shape-mode .mfx { pointer-events: none; opacity: .45; }
+.map-canvas.drawing, .map-canvas.drawing [data-shape] { cursor: crosshair; }
 /* the grip along the bottom edge of a map (fixture dots stay on top of it) */
 .map-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; cursor: ns-resize; touch-action: none; z-index: 0; }
 .map-resize::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 48px; height: 4px; margin-left: -24px; border-radius: 2px; background: var(--dot-edge); opacity: .6; transition: background .15s, opacity .15s; }

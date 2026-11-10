@@ -13,6 +13,14 @@ PlatformIO uses a library in this folder instead of the core's library with the 
   (`src/NetRx.cpp`): `sendTo()` (one datagram straight from a buffer, socket stays non-blocking),
   `receive()` (into the caller's buffer) and `onEvent()` (the socket's sigio). See the comments there. Everything else is unchanged; when moving to a new core
   version, copy its SocketWrapper here again and re-apply the fix (or drop it if Arduino fixed it).
+- `ArduinoJson/` - ArduinoJson 7.4.3 (`bblanchon/ArduinoJson`, taken out of `lib_deps` on
+  10 Nov 2026; `examples` left out). One change in `src/ArduinoJson/Memory/StringPool.hpp`
+  `get()` (and `strings_` made `mutable`): a string that is already stored moves to the front
+  of the list. ArduinoJson shares
+  equal strings by searching a list of all strings of the document, and puts new ones in front,
+  so the keys every object has ended up at the back: loading a 400 KB show did ~45 000 searches
+  through ~1 700 strings (1.8 s of the 2 s load on the board; with the change 0.6 s). To
+  update the library, copy the new version here and re-apply the loop (search "KD Designer").
 - `Arduino_USBHostMbed5/` - the USB stick driver, version 0.3.1 from the PlatformIO registry
   (`facchinm/Arduino_USBHostMbed5`, taken out of `lib_deps`; `.github`/`examples` left out).
   One change in `src/USBHostMSD/USBHostMSD.cpp` (9 Nov 2026): `program()` / `read()` send up to
