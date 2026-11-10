@@ -2059,6 +2059,8 @@
           "t": 0,
           "track": 3,
           "fade": 1000,
+          "len": 10000,
+          "out": 1000,
           "effect": 2,
           "params": {
             "speed": 0.5
@@ -2066,10 +2068,36 @@
           "dim": 100
         },
         {
+          "t": 10000,
+          "track": 3,
+          "fade": 1000,
+          "len": 10000,
+          "out": 1000,
+          "effect": 18,
+          "params": {
+            "speed": 0.6,
+            "color": "#00c7be"
+          },
+          "dim": 100
+        },
+        {
+          "t": 20000,
+          "track": 3,
+          "fade": 1000,
+          "len": 10000,
+          "out": 1000,
+          "effect": 23,
+          "params": {
+            "speed": 0.6,
+            "color": "#ff8a00"
+          },
+          "dim": 100
+        },
+        {
           "t": 0,
           "track": 4,
           "fade": 2000,
-          "effect": 23,
+          "effect": 24,
           "params": {},
           "dim": 100
         }
@@ -3813,6 +3841,20 @@
       ],
       "conditions": [],
       "enabled": false
+    },
+    {
+      "id": 71,
+      "name": "Weekend check every 20 s",
+      "type": "interval",
+      "seconds": 20,
+      "color": "grey",
+      "actions": [
+        "log It is the weekend"
+      ],
+      "conditions": [
+        "day is sat,sun"
+      ],
+      "notes": "Fires every 20 s. On weekdays its condition is false: the row flashes red instead of orange, the diamond in Show flow flashes red and the fire history says \"condition false\"."
     }
   ],
   "variables": [
@@ -4059,7 +4101,6 @@
           "y": 0.6
         }
       ],
-      "square": true,
       "shapes": [
         {
           "type": "rect",
@@ -4291,6 +4332,16 @@
           "x": 0.1,
           "y": 0.849
         }
+      ],
+      "shapes": [
+        {
+          "type": "text",
+          "x": 0.5,
+          "y": 0.04,
+          "text": "LED wall (wired as a snake)",
+          "size": 2,
+          "color": "#d0d8e2"
+        }
       ]
     },
     {
@@ -4348,117 +4399,146 @@
     {
       "id": 1,
       "name": "Rainbow",
-      "code": "// Colour wheel rolling over the fixtures\nparam speed = 0.2 [0, 2]       // turns of the colour wheel per second\nparam spread = 1 [0, 4]        // rainbows across the rig (the map's width): 0 = all the same colour\nparam sat = 1 [0, 1]           // saturation: 0 = white, 1 = full colour\nr, g, b = hsv(t * speed + x * spread, sat, 1)"
+      "code": "// Colour wheel rolling over the fixtures\nparam speed = 0.2 [0, 2]       // turns of the colour wheel per second\nparam spread = 1 [0, 4]        // rainbows across the rig (the map's width): 0 = all the same colour\nparam sat = 1 [0, 1]           // saturation: 0 = white, 1 = full colour\nr, g, b = hsv(t * speed + x * spread, sat, 1)",
+      "round": true
     },
     {
       "id": 2,
       "name": "Chase",
-      "code": "// One light running along the fixtures, in list order\nparam speed = 0.5 [0, 4]       // rounds per second: 1 = the light passes every fixture once a second\nparam width = 0.25 [0.02, 1]   // size of the light, part of the rig (0.25 = a quarter)\nparam color = #ffffff          // colour of the light\nparam back = #000000           // colour of the other fixtures\npos = fract(t * speed)\nd = abs(fract(u - pos + 0.5) - 0.5)\nk = smoothstep(max(width / 2, 1 / n), 0, d)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+      "code": "// One light running along the fixtures, in list order\nparam speed = 0.5 [0, 4]       // rounds per second: 1 = the light passes every fixture once a second\nparam width = 0.25 [0.02, 1]   // size of the light, part of the rig (0.25 = a quarter)\nparam color = #ffffff          // colour of the light\nparam back = #000000           // colour of the other fixtures\npos = fract(t * speed)\nd = abs(fract(u - pos + 0.5) - 0.5)\nk = smoothstep(max(width / 2, 1 / n), 0, d)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
+      "round": true
     },
     {
       "id": 3,
       "name": "Bounce (scanner)",
-      "code": "// A light going back and forth along the fixtures\nparam speed = 0.3 [0, 4]       // trips there and back per second\nparam width = 0.2 [0.02, 1]    // size of the light, part of the rig\nparam color = #ff0000          // colour of the light\np0 = n > 1 ? i / (n - 1) : 0.5\nd = abs(p0 - tri(t * speed))\nr, g, b = color\ndim = smoothstep(max(width / 2, 1 / n), 0, d)"
+      "code": "// A light going back and forth along the fixtures\nparam speed = 0.3 [0, 4]       // trips there and back per second\nparam width = 0.2 [0.02, 1]    // size of the light, part of the rig\nparam color = #ff0000          // colour of the light\np0 = n > 1 ? i / (n - 1) : 0.5\nd = abs(p0 - tri(t * speed))\nr, g, b = color\ndim = smoothstep(max(width / 2, 1 / n), 0, d)",
+      "round": true
     },
     {
       "id": 4,
       "name": "Theatre chase",
-      "code": "// Every few fixtures on, stepping along (marquee lights)\nparam rate = 4 [0.5, 20]       // steps per second\nparam every = 3 [2, 8]         // one fixture on in every ... fixtures\nparam color = #ffcc66          // colour of the fixtures that are on\nparam back = #000000           // colour of the others\non = mod(i - floor(t * rate), max(floor(every), 2)) < 1\nr = on ? color.r : back.r\ng = on ? color.g : back.g\nb = on ? color.b : back.b"
+      "code": "// Every few fixtures on, stepping along (marquee lights)\nparam rate = 4 [0.5, 20]       // steps per second\nparam every = 3 [2, 8]         // one fixture on in every ... fixtures\nparam color = #ffcc66          // colour of the fixtures that are on\nparam back = #000000           // colour of the others\non = mod(i - floor(t * rate), max(floor(every), 2)) < 1\nr = on ? color.r : back.r\ng = on ? color.g : back.g\nb = on ? color.b : back.b",
+      "round": true
     },
     {
       "id": 5,
       "name": "Two-colour fade",
-      "code": "// Fade back and forth between two colours, offset per fixture\nparam speed = 0.15 [0, 2]      // fades there and back per second\nparam offset = 0.5 [0, 1]      // shift along the rig: 0 = all together, 1 = a whole cycle spread out\nparam a = #ff2d92              // first colour\nparam b2 = #0a84ff             // second colour\nk = tri(t * speed + u * offset)\nr = mix(a.r, b2.r, k)\ng = mix(a.g, b2.g, k)\nb = mix(a.b, b2.b, k)"
+      "code": "// Fade back and forth between two colours, offset per fixture\nparam speed = 0.15 [0, 2]      // fades there and back per second\nparam offset = 0.5 [0, 1]      // shift along the rig: 0 = all together, 1 = a whole cycle spread out\nparam a = #ff2d92              // first colour\nparam b2 = #0a84ff             // second colour\nk = tri(t * speed + u * offset)\nr = mix(a.r, b2.r, k)\ng = mix(a.g, b2.g, k)\nb = mix(a.b, b2.b, k)",
+      "round": true
     },
     {
       "id": 6,
       "name": "Colour steps",
-      "code": "// Steps through three colours\nparam rate = 0.5 [0.05, 4]     // colour changes per second\nparam fade = 0.3 [0, 1]        // 0 = hard cut, 1 = fade all the way to the next colour\nparam offset = 0 [0, 1]        // shift along the rig: 0 = all fixtures the same colour\nparam c1 = #ff0000             // first colour\nparam c2 = #00ff00             // second colour\nparam c3 = #0000ff             // third colour\nph = mod(t * rate + u * offset * 3, 3)\nst = floor(ph)\nk = smoothstep(1 - fade, 1, fract(ph))\nr = mix(st < 1 ? c1.r : st < 2 ? c2.r : c3.r, st < 1 ? c2.r : st < 2 ? c3.r : c1.r, k)\ng = mix(st < 1 ? c1.g : st < 2 ? c2.g : c3.g, st < 1 ? c2.g : st < 2 ? c3.g : c1.g, k)\nb = mix(st < 1 ? c1.b : st < 2 ? c2.b : c3.b, st < 1 ? c2.b : st < 2 ? c3.b : c1.b, k)"
+      "code": "// Steps through three colours\nparam rate = 0.5 [0.05, 4]     // colour changes per second\nparam fade = 0.3 [0, 1]        // 0 = hard cut, 1 = fade all the way to the next colour\nparam offset = 0 [0, 1]        // shift along the rig: 0 = all fixtures the same colour\nparam c1 = #ff0000             // first colour\nparam c2 = #00ff00             // second colour\nparam c3 = #0000ff             // third colour\nph = mod(t * rate + u * offset * 3, 3)\nst = floor(ph)\nk = smoothstep(1 - fade, 1, fract(ph))\nr = mix(st < 1 ? c1.r : st < 2 ? c2.r : c3.r, st < 1 ? c2.r : st < 2 ? c3.r : c1.r, k)\ng = mix(st < 1 ? c1.g : st < 2 ? c2.g : c3.g, st < 1 ? c2.g : st < 2 ? c3.g : c1.g, k)\nb = mix(st < 1 ? c1.b : st < 2 ? c2.b : c3.b, st < 1 ? c2.b : st < 2 ? c3.b : c1.b, k)",
+      "round": true
     },
     {
       "id": 7,
       "name": "Wipe",
-      "code": "// Fills the rig with a colour from left to right, then empties it the same way\nparam speed = 0.25 [0.02, 2]   // complete fill + empty cycles per second\nparam soft = 0.1 [0, 0.5]      // soft edge, part of the rig (0 = hard edge)\nparam color = #0a84ff          // fill colour\nparam back = #000000           // colour before the fill\ne = fract(t * speed * 2) * (1 + soft) - soft\nfill = 1 - smoothstep(e, e + soft, x)\nk = fract(t * speed) < 0.5 ? fill : 1 - fill\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+      "code": "// Fills the rig with a colour from left to right, then empties it the same way\nparam speed = 0.25 [0.02, 2]   // complete fill + empty cycles per second\nparam soft = 0.1 [0, 0.5]      // soft edge, part of the rig (0 = hard edge)\nparam color = #0a84ff          // fill colour\nparam back = #000000           // colour before the fill\ne = fract(t * speed * 2) * (1 + soft) - soft\nfill = 1 - smoothstep(e, e + soft, x)\nk = fract(t * speed) < 0.5 ? fill : 1 - fill\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
+      "round": true
     },
     {
       "id": 8,
       "name": "Police",
-      "code": "// Red / blue alternating halves\nparam rate = 2 [0.5, 8]        // changes per second\nside = u < 0.5\nphase = sq(t * rate)\non = side ? phase : 1 - phase\nr = on\nb = 1 - on\ndim = pulse(t * rate * 4, 0.5) * 0.5 + 0.5"
+      "code": "// Red / blue alternating halves\nparam rate = 2 [0.5, 8]        // changes per second\nside = u < 0.5\nphase = sq(t * rate)\non = side ? phase : 1 - phase\nr = on\nb = 1 - on\ndim = pulse(t * rate * 4, 0.5) * 0.5 + 0.5",
+      "round": true
     },
     {
       "id": 9,
       "name": "Breathe",
-      "code": "// Slow fade up and down\nparam speed = 0.25 [0.02, 2]   // breaths per second\nparam low = 0.1 [0, 1]         // lowest level (0 = all the way off)\nparam color = #ffb347          // colour\nr, g, b = color\ndim = mix(low, 1, 0.5 - 0.5 * cos(t * speed * tau))"
+      "code": "// Slow fade up and down\nparam speed = 0.25 [0.02, 2]   // breaths per second\nparam low = 0.1 [0, 1]         // lowest level (0 = all the way off)\nparam color = #ffb347          // colour\nr, g, b = color\ndim = mix(low, 1, 0.5 - 0.5 * cos(t * speed * tau))",
+      "round": true
     },
     {
       "id": 10,
       "name": "Heartbeat",
-      "code": "// Double pulse, like a heartbeat\nparam bpm = 60 [20, 180]       // beats per minute\nparam low = 0.05 [0, 0.5]      // level between the beats\nparam color = #ff2040          // colour\nph = fract(t * bpm / 60)\nbeat = max(1 - abs(ph - 0.08) * 14, 0) + 0.7 * max(1 - abs(ph - 0.3) * 12, 0)\nr, g, b = color\ndim = mix(low, 1, min(beat, 1))"
+      "code": "// Double pulse, like a heartbeat\nparam bpm = 60 [20, 180]       // beats per minute\nparam low = 0.05 [0, 0.5]      // level between the beats\nparam color = #ff2040          // colour\nph = fract(t * bpm / 60)\nbeat = max(1 - abs(ph - 0.08) * 14, 0) + 0.7 * max(1 - abs(ph - 0.3) * 12, 0)\nr, g, b = color\ndim = mix(low, 1, min(beat, 1))",
+      "round": true
     },
     {
       "id": 11,
       "name": "Strobe",
-      "code": "// Flashes; rate in flashes per second\nparam rate = 8 [0.5, 25]       // flashes per second\nparam duty = 0.15 [0.02, 0.9]  // part of each flash that is on (0.5 = half on, half off)\nparam color = #ffffff          // colour of the flash\nr, g, b = color\ndim = pulse(t * rate, duty)"
+      "code": "// Flashes; rate in flashes per second\nparam rate = 8 [0.5, 25]       // flashes per second\nparam duty = 0.15 [0.02, 0.9]  // part of each flash that is on (0.5 = half on, half off)\nparam color = #ffffff          // colour of the flash\nr, g, b = color\ndim = pulse(t * rate, duty)",
+      "round": true
     },
     {
       "id": 12,
       "name": "Lightning",
-      "code": "// Random lightning flashes over the whole rig\nparam rate = 0.5 [0.05, 4]     // flashes per second, on average\nparam base = 0 [0, 0.3]        // level between the flashes\nparam color = #dfe8ff          // colour of the flash\ns = floor(t * 20)\nhit = rand(s * 0.0137) < rate / 20\nr, g, b = color\ndim = hit ? 0.4 + 0.6 * rand(s * 0.0291 + 0.5) : base"
+      "code": "// Random lightning flashes over the whole rig\nparam rate = 0.5 [0.05, 4]     // flashes per second, on average\nparam base = 0 [0, 0.3]        // level between the flashes\nparam color = #dfe8ff          // colour of the flash\ns = floor(t * 20)\nhit = rand(s * 0.0137) < rate / 20\nr, g, b = color\ndim = hit ? 0.4 + 0.6 * rand(s * 0.0291 + 0.5) : base",
+      "round": true
     },
     {
       "id": 13,
       "name": "Fire",
-      "code": "// Flickering flame, every fixture its own\nparam speed = 3 [0.5, 10]      // how fast the flames flicker\nf = noise(t * speed + i * 17.3) * 0.7 + noise(t * speed * 2.7 + i * 5.1) * 0.3\nr = 1\ng = 0.25 + f * 0.35\nb = 0\ndim = 0.35 + f * 0.65"
+      "code": "// Flickering flame, every fixture its own\nparam speed = 3 [0.5, 10]      // how fast the flames flicker\nf = noise(t * speed + i * 17.3) * 0.7 + noise(t * speed * 2.7 + i * 5.1) * 0.3\nr = 1\ng = 0.25 + f * 0.35\nb = 0\ndim = 0.35 + f * 0.65",
+      "round": true
     },
     {
       "id": 14,
       "name": "Candle",
-      "code": "// Warm, gentle flicker\nparam color = #ff9329          // colour of the flame\nf = noise(t * 2.1 + i * 3.7) * 0.6 + noise(t * 7.3 + i) * 0.4\nr, g, b = color\ndim = 0.6 + f * 0.4"
+      "code": "// Warm, gentle flicker\nparam color = #ff9329          // colour of the flame\nf = noise(t * 2.1 + i * 3.7) * 0.6 + noise(t * 7.3 + i) * 0.4\nr, g, b = color\ndim = 0.6 + f * 0.4",
+      "round": true
     },
     {
       "id": 15,
       "name": "Sparkle",
-      "code": "// Random short flashes on a coloured base\nparam rate = 6 [1, 30]         // chances to flash per second\nparam chance = 0.08 [0, 0.5]   // part of the fixtures that flash each time\nparam base = #1a2a6c           // background colour\nparam flash = #ffffff          // colour of the flash\nstep_t = floor(t * rate)\non = rand(step_t * 0.37 + i * 0.011) < chance\nr = on ? flash.r : base.r\ng = on ? flash.g : base.g\nb = on ? flash.b : base.b"
+      "code": "// Random short flashes on a coloured base\nparam rate = 6 [1, 30]         // chances to flash per second\nparam chance = 0.08 [0, 0.5]   // part of the fixtures that flash each time\nparam base = #1a2a6c           // background colour\nparam flash = #ffffff          // colour of the flash\nstep_t = floor(t * rate)\non = rand(step_t * 0.37 + i * 0.011) < chance\nr = on ? flash.r : base.r\ng = on ? flash.g : base.g\nb = on ? flash.b : base.b",
+      "round": true
     },
     {
       "id": 16,
       "name": "Twinkle",
-      "code": "// Every fixture slowly fades in and out on its own (starry sky)\nparam speed = 0.3 [0.05, 2]    // how fast the stars fade in and out\nparam amount = 0.45 [0, 1]     // how many stars are lit at a time\nparam color = #ffffff          // colour of the stars\nparam base = #000814           // background colour\nk = smoothstep(1 - amount, 1, noise(t * speed + i * 7.31))\nr = mix(base.r, color.r, k)\ng = mix(base.g, color.g, k)\nb = mix(base.b, color.b, k)"
+      "code": "// Every fixture slowly fades in and out on its own (starry sky)\nparam speed = 0.3 [0.05, 2]    // how fast the stars fade in and out\nparam amount = 0.45 [0, 1]     // how many stars are lit at a time\nparam color = #ffffff          // colour of the stars\nparam base = #000814           // background colour\nk = smoothstep(1 - amount, 1, noise(t * speed + i * 7.31))\nr = mix(base.r, color.r, k)\ng = mix(base.g, color.g, k)\nb = mix(base.b, color.b, k)",
+      "round": true
     },
     {
       "id": 17,
       "name": "Wave across the map",
-      "code": "// Brightness wave moving left to right over the map\nparam speed = 0.3 [0, 2]       // waves passing per second\nparam size = 1.5 [0.2, 6]      // waves across the map's width\nparam color = #00c7be          // colour\nr, g, b = color\ndim = 0.5 + 0.5 * sin((x * size - t * speed) * tau)"
+      "code": "// Brightness wave moving left to right over the map\nparam speed = 0.3 [0, 2]       // waves passing per second\nparam size = 1.5 [0.2, 6]      // waves across the map's width\nparam color = #00c7be          // colour\nr, g, b = color\ndim = 0.5 + 0.5 * sin((x * size - t * speed) * tau)",
+      "round": true
     },
     {
       "id": 18,
       "name": "XY ripple",
-      "code": "// Rings rippling out from a point on the map, like a stone in water\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.5 [0, 3]       // rings per second\nparam size = 3 [0.5, 10]       // rings from the centre to the edge\nparam color = #00c7be          // colour of the rings\nparam back = #000000           // colour between the rings\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nk = pow(0.5 + 0.5 * sin((d * size - t * speed) * tau), 3)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)"
+      "code": "// Rings rippling out from a point on the map, like a stone in water\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.5 [0, 3]       // rings per second\nparam size = 3 [0.5, 10]       // rings from the centre to the edge\nparam color = #00c7be          // colour of the rings\nparam back = #000000           // colour between the rings\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nk = pow(0.5 + 0.5 * sin((d * size - t * speed) * tau), 3)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
+      "round": true
     },
     {
       "id": 19,
       "name": "XY sweep",
-      "code": "// A bar of light sweeping over the map, in any direction\nparam angle = 0 [0, 360]       // direction in degrees: 0 = to the right, 90 = down, 180 = to the left\nparam speed = 0.3 [0, 2]       // sweeps per second\nparam width = 0.2 [0.02, 1]    // thickness of the bar, part of the map\nparam color = #ffffff          // colour of the bar\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a)\npos = fract(t * speed) * (1.42 + width) - 0.71 - width / 2\nr, g, b = color\ndim = smoothstep(width / 2, 0, abs(p - pos))"
+      "code": "// A bar of light sweeping over the map, in any direction\nparam angle = 0 [0, 360]       // direction in degrees: 0 = to the right, 90 = down, 180 = to the left\nparam speed = 0.3 [0, 2]       // sweeps per second\nparam width = 0.2 [0.02, 1]    // thickness of the bar, part of the map\nparam color = #ffffff          // colour of the bar\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a)\npos = fract(t * speed) * (1.42 + width) - 0.71 - width / 2\nr, g, b = color\ndim = smoothstep(width / 2, 0, abs(p - pos))",
+      "round": true
     },
     {
       "id": 20,
       "name": "XY radar",
-      "code": "// A beam turning around a point, with a fading tail\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.25 [-2, 2]     // turns per second (minus = the other way round)\nparam tail = 0.3 [0.02, 1]     // length of the tail, part of a turn\nparam color = #30d158          // colour of the beam\na = atan(y - cy, x - cx) / tau\nk = speed >= 0 ? fract(t * speed - a) : fract(a - t * speed)\nr, g, b = color\ndim = smoothstep(tail, 0, k)"
+      "code": "// A beam turning around a point, with a fading tail\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.25 [-2, 2]     // turns per second (minus = the other way round)\nparam tail = 0.3 [0.02, 1]     // length of the tail, part of a turn\nparam color = #30d158          // colour of the beam\na = atan(y - cy, x - cx) / tau\nk = speed >= 0 ? fract(t * speed - a) : fract(a - t * speed)\nr, g, b = color\ndim = smoothstep(tail, 0, k)",
+      "round": true
     },
     {
       "id": 21,
       "name": "XY plasma",
-      "code": "// Soft colour clouds drifting over the map\nparam speed = 0.3 [0, 2]       // how fast the clouds move\nparam scale = 3 [0.5, 10]      // bigger = more, smaller clouds\nparam sat = 1 [0, 1]           // saturation: 0 = white, 1 = full colour\nv = sin(x * scale * 3 + t * speed * 3) + sin((y * scale + t * speed * 2) * 2) + sin((x + y) * scale * 2 - t * speed * 4)\nr, g, b = hsv(v / 6 + t * speed * 0.2, sat, 1)"
+      "code": "// Soft colour clouds drifting over the map\nparam speed = 0.3 [0, 2]       // how fast the clouds move\nparam scale = 3 [0.5, 10]      // bigger = more, smaller clouds\nparam sat = 1 [0, 1]           // saturation: 0 = white, 1 = full colour\nv = sin(x * scale * 3 + t * speed * 3) + sin((y * scale + t * speed * 2) * 2) + sin((x + y) * scale * 2 - t * speed * 4)\nr, g, b = hsv(v / 6 + t * speed * 0.2, sat, 1)",
+      "round": true
     },
     {
       "id": 22,
       "name": "XY gradient",
-      "code": "// Two colours blended across the map at an angle, optionally moving\nparam angle = 0 [0, 360]       // direction of the blend in degrees: 0 = left to right, 90 = top to bottom\nparam speed = 0 [-1, 1]        // how fast the colours move (0 = still)\nparam c1 = #ff2d92             // colour at the start\nparam c2 = #0a84ff             // colour at the end\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a) + 0.5\nk = tri((p + t * speed) / 2)\nr = mix(c1.r, c2.r, k)\ng = mix(c1.g, c2.g, k)\nb = mix(c1.b, c2.b, k)"
+      "code": "// Two colours blended across the map at an angle, optionally moving\nparam angle = 0 [0, 360]       // direction of the blend in degrees: 0 = left to right, 90 = top to bottom\nparam speed = 0 [-1, 1]        // how fast the colours move (0 = still)\nparam c1 = #ff2d92             // colour at the start\nparam c2 = #0a84ff             // colour at the end\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a) + 0.5\nk = tri((p + t * speed) / 2)\nr = mix(c1.r, c2.r, k)\ng = mix(c1.g, c2.g, k)\nb = mix(c1.b, c2.b, k)",
+      "round": true
     },
     {
       "id": 23,
+      "name": "XY ripple (stretched)",
+      "code": "// Rings rippling out from a point on the map, like a stone in water\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.5 [0, 3]       // rings per second\nparam size = 3 [0.5, 10]       // rings from the centre to the edge\nparam color = #00c7be          // colour of the rings\nparam back = #000000           // colour between the rings\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nk = pow(0.5 + 0.5 * sin((d * size - t * speed) * tau), 3)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
+      "round": false
+    },
+    {
+      "id": 24,
       "name": "Vitrine shimmer (own)",
-      "code": "// Our own effect: a slow warm shimmer for the showcase\nparam speed = 0.3 [0, 2]       // shimmer waves per second\nparam color = #ffb070          // base colour\nparam depth = 0.4 [0, 1]       // how deep the shimmer dips\nk = 1 - depth * (0.5 + 0.5 * sin((u * 2 + t * speed) * tau))\nr, g, b = color\ndim = k * (0.8 + 0.2 * noise(t * 3 + i))"
+      "code": "// Our own effect: a slow warm shimmer for the showcase\nparam speed = 0.3 [0, 2]       // shimmer waves per second\nparam color = #ffb070          // base colour\nparam depth = 0.4 [0, 1]       // how deep the shimmer dips\nk = 1 - depth * (0.5 + 0.5 * sin((u * 2 + t * speed) * tau))\nr, g, b = color\ndim = k * (0.8 + 0.2 * noise(t * 3 + i))",
+      "round": true
     }
   ],
   "triggerColorNames": {

@@ -106,13 +106,27 @@ struct TlCtx {
   const Groups& grp;
   const BigRam::Vec<int>& fxIds;
   const BigRam::Vec<Fx::Program>& nfp;
-  const BigRam::Vec<float>& mapPos;   // x, y per fixture index (NAN = not on a map)
+  const BigRam::Vec<float>& mapPos;   // x, y, map aspect per fixture index (NAN = not on a map)
   const BigRam::Vec<int>& byId;       // fixture id -> index (-1 = none)
+  const BigRam::Vec<uint8_t>& fxRound;   // per effect (as fxIds): "round on wide maps"
   int fixIdx(int id) const { return id >= 0 && id < (int)byId.size() ? byId[id] : -1; }
-  const float* posOf(int fi) const { return isnan(mapPos[fi * 2]) ? nullptr : &mapPos[fi * 2]; }
+  // A fixture's effect x / y into out (nullptr = not on a map). Round: the long side of the
+  // map stays 0..1, the short side shrinks around 0.5, so circles stay round on a wide map
+  // (= effectXY in model.js).
+  const float* posOf(int fi, bool round, float* out) const {
+    const float* p = &mapPos[fi * 3];
+    if (isnan(p[0])) return nullptr;
+    float x = p[0], y = p[1], a = p[2];
+    if (round && a > 1) y = 0.5f + (y - 0.5f) / a;
+    else if (round && a > 0 && a < 1) x = 0.5f + (x - 0.5f) * a;
+    out[0] = x;
+    out[1] = y;
+    return out;
+  }
 };
 BigRam::Vec<int> keptById, keptFxIds;
 BigRam::Vec<float> keptPos;
+BigRam::Vec<uint8_t> keptFxRound;
 
 Groups readGroups(JsonArrayConst list) {
   Groups grp;
@@ -199,7 +213,9 @@ bool parseTimeline(JsonObjectConst o, const TlCtx& x, Timeline& t, BigRam::Vec<F
         Fx::setParam(q, s.c_str(), fc.slots.data());
       }
       fc.level = (c["dim"].isNull() ? 100 : clampInt(c["dim"] | 100, 0, 100)) / 100.0;
-      for (size_t k = 0; k < fx.size(); k++) fc.targets.push_back(effectTarget(nf[fx[k]], k, fx.size(), x.posOf(fx[k])));
+      const bool round = x.fxRound[fc.prog];
+      float pos[2];
+      for (size_t k = 0; k < fx.size(); k++) fc.targets.push_back(effectTarget(nf[fx[k]], k, fx.size(), x.posOf(fx[k], round, pos)));
       cue.fx = nfc.size();
       nfc.push_back(fc);
       pushCue(cue);
@@ -371,6 +387,11 @@ bool parse(const char* json, size_t len, String& err) {
   Log::crumb(Log::kCrumbLoad, "parse: effects");
   BigRam::Vec<Fx::Program> nfp;
   BigRam::Vec<int> fxIds;
+  BigRam::Vec<uint8_t> fxRound;
+  // "Round on wide maps" is per effect (`round`); older projects had it per map (`square`): an
+  // effect without the setting is round when any map had it (= effectRound in model.js).
+  bool anySquare = false;
+  for (JsonObjectConst m : d["maps"].as<JsonArrayConst>()) anySquare |= (m["square"] | false);
   size_t maxSlots = 16;
   for (JsonObjectConst o : d["effects"].as<JsonArrayConst>()) {
     Fx::Program prog;
@@ -379,22 +400,19 @@ bool parse(const char* json, size_t len, String& err) {
     maxSlots = std::max(maxSlots, (size_t)prog.slots);
     nfp.push_back(prog);
     fxIds.push_back(o["id"] | 0);
+    fxRound.push_back(o["round"].isNull() ? anySquare : (o["round"] | false));
   }
-  // Map position per fixture index (first map it is on) - the x / y inputs of effects. NAN = none.
-  BigRam::Vec<float> mapPos(nf.size() * 2, NAN);
-  // "Round effects" (square) on a map: the long side stays 0..1, the short side shrinks around
-  // 0.5, so circles stay round on a wide map (= effectXY in model.js).
+  // Map position per fixture index (first map it is on) and that map's shape - the x / y inputs
+  // of effects (TlCtx::posOf). NAN = none.
+  BigRam::Vec<float> mapPos(nf.size() * 3, NAN);
   for (JsonObjectConst m : d["maps"].as<JsonArrayConst>()) {
     float a = m["aspect"] | 1.6f;   // the web UI's default shape
-    bool sq = (m["square"] | false) && a > 0 && a != 1;
     for (JsonObjectConst it : m["items"].as<JsonArrayConst>()) {
       int fi = fixIdx(it["fixture"] | 0);
-      if (fi < 0 || !isnan(mapPos[fi * 2])) continue;
-      float x = it["x"] | 0.5f, y = it["y"] | 0.5f;
-      if (sq && a > 1) y = 0.5f + (y - 0.5f) / a;
-      else if (sq) x = 0.5f + (x - 0.5f) * a;
-      mapPos[fi * 2] = x;
-      mapPos[fi * 2 + 1] = y;
+      if (fi < 0 || !isnan(mapPos[fi * 3])) continue;
+      mapPos[fi * 3] = it["x"] | 0.5f;
+      mapPos[fi * 3 + 1] = it["y"] | 0.5f;
+      mapPos[fi * 3 + 2] = a;
     }
   }
   BigRam::Vec<FxCue> nfc;
@@ -403,7 +421,7 @@ bool parse(const char* json, size_t len, String& err) {
   BigRam::Vec<Timeline> nt;
   BigRam::Vec<Scene> ncs;
   Log::crumb(Log::kCrumbLoad, "parse: timelines");
-  const TlCtx ctx{nf, ns, grp, fxIds, nfp, mapPos, byId};
+  const TlCtx ctx{nf, ns, grp, fxIds, nfp, mapPos, byId, fxRound};
   for (JsonObjectConst o : d["timelines"].as<JsonArrayConst>()) {
     Timeline t;
     if (!parseTimeline(o, ctx, t, nfc, ncs, err)) return false;
@@ -448,6 +466,7 @@ bool parse(const char* json, size_t len, String& err) {
   keptById = std::move(byId);
   keptPos = std::move(mapPos);
   keptFxIds = std::move(fxIds);
+  keptFxRound = std::move(fxRound);
   cfg = s;
   // Trigger notes are documentation only: they stay in project.json on the stick, not in RAM.
   for (JsonObject o : d["triggers"].as<JsonArray>()) { o.remove("notes"); o.remove("level"); }   // + separator level (main/sub heading)
@@ -489,7 +508,7 @@ bool liveTimeline(const char* json, size_t len, String& err) {
   if (de) { err = String("JSON error: ") + de.c_str(); return false; }
   JsonObjectConst o = d.as<JsonObjectConst>();
   const Groups grp = readGroups(doc["groups"].as<JsonArrayConst>());   // still in the kept JSON
-  const TlCtx ctx{fixtures, scenes, grp, keptFxIds, fxProgs, keptPos, keptById};
+  const TlCtx ctx{fixtures, scenes, grp, keptFxIds, fxProgs, keptPos, keptById, keptFxRound};
   Timeline t;
   BigRam::Vec<FxCue> nfc;
   BigRam::Vec<Scene> ncs;

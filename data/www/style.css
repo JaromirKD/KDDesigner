@@ -309,6 +309,12 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .sc-key.out { border-style: dashed; opacity: .4; margin-left: 8px; }
 .mfx .lbl { margin-top: 2px; font-size: 10px; white-space: nowrap; color: var(--text); text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
 .mfx.sel .dot { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+/* Selected wins over "not in the scene": full strength, orange ring and name, so a fixture
+   you picked but haven't set yet is still clearly picked (only the dashed edge says "not in it"). */
+.mfx.out.sel .dot, .sc-chip.out.sel .dot { opacity: 1; filter: none; }
+.mfx.sel .lbl, .mfx.out.sel .lbl { opacity: 1; color: var(--accent); font-weight: 600; }
+.sc-map .mfx.sel .dot { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 25%, transparent); }
+.sc-chip.out.sel { color: var(--text); }
 .mini-map .mfx { cursor: pointer; }
 .mini-map .mfx:not(.sel) { opacity: .55; }
 .map-canvas .band, .mini-map .band { position: absolute; border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); pointer-events: none; z-index: 2; }

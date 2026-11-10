@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["tools/mock-server.js", "8080"],
       "port": 8080
+    },
+    {
+      "name": "mock-test",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/mock-server.js", "8091", "C:\\Users\\Jaromir\\AppData\\Local\\Temp\\claude\\0bfd6ac239d0683b\\a80bd5c0-a018-4329-8b64-b723103d1e24\\scratchpad\\demo"],
+      "port": 8091
     }
   ]
 }

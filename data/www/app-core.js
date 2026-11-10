@@ -192,7 +192,11 @@ function normalize(p) {
     'variables', 'tcp', 'modbus', 'calendar', 'maps', 'effects', 'deviceGroups', 'fixtureTypes', 'drivers']) p[k] = p[k] || [];
   p.deviceGroups.forEach((g) => (g.devices = g.devices || []));
   p.drivers.forEach(normDriver);   // app-drivers.js
-  p.maps.forEach((m) => { m.items = m.items || []; m.aspect = m.aspect || 1.6; m.shapes = m.shapes || []; });
+  // "Round effects" moved from the map (`square`) to each effect (`round`, Nov 2026): every
+  // effect without the setting gets what the maps said (KDModel.effectRound), then the map
+  // setting goes, so the show looks the same.
+  p.effects.forEach((x) => { if (x.round == null) x.round = KDModel.effectRound(p, x); });
+  p.maps.forEach((m) => { m.items = m.items || []; m.aspect = m.aspect || 1.6; m.shapes = m.shapes || []; delete m.square; });
   p.panel = p.panel || { pages: [] };
   p.panel.pages = p.panel.pages || [];
   p.panel.pages.forEach((pg) => (pg.controls = pg.controls || []));

@@ -712,6 +712,12 @@ function keepInside(its) {
   fit('x');
   fit('y');
 }
+// Columns and rows of a grid of n: as asked; one of them empty = worked out from the other,
+// both empty = square-ish. More fixtures than rows x columns: extra rows.
+function gridSize(n, opt = S.shapeOpt) {
+  const cols = Math.max(1, Math.min(n, opt.cols || (opt.rows ? Math.ceil(n / opt.rows) : Math.ceil(Math.sqrt(n)))));
+  return [cols, Math.max(Math.ceil(n / cols), Math.min(n, opt.rows || 0))];
+}
 // Puts the fixtures in a shape that fills the selection's area (at least a sensible size).
 // Fixtures keep their neighbours: they are taken in their current order along the shape.
 function shapeItems(its, shape, asp, opt = S.shapeOpt) {
@@ -724,23 +730,28 @@ function shapeItems(its, shape, asp, opt = S.shapeOpt) {
   // The order fixtures go into the shape: patch order, or by where they are now (cmp).
   const patch = [...its].sort((a, c) => { const fa = fixture(a.fixture), fc = fixture(c.fixture); return fa.universe - fc.universe || fa.address - fc.address; });
   const ord = (cmp) => (opt.order === 'patch' ? patch : [...its].sort(cmp));
-  // Columns and rows as asked; one of them empty = worked out from the other, both = square-ish.
-  // More fixtures than rows x columns: extra rows.
-  const cols = Math.max(1, Math.min(n, opt.cols || (opt.rows ? Math.ceil(n / opt.rows) : Math.ceil(Math.sqrt(n))))), rows = Math.max(Math.ceil(n / cols), Math.min(n, opt.rows || 0));
+  const [cols, rows] = gridSize(n, opt);
   // Grid cell k -> x, y (snake: every other row runs back, like zigzag-wired LED matrices).
   // Rows at least as far apart as the columns, so a long row becomes a square-ish grid.
   let W = Math.max(b.w, 0.25), H = rows > 1 ? Math.max(b.h, (W * (rows - 1)) / Math.max(1, cols - 1)) : 0;
-  const fit = Math.min(1, 0.92 / (H || 1), (0.92 * asp) / W);   // never bigger than the map
+  const fit = Math.min(1, 0.88 / (H || 1), (0.92 * asp) / W);   // never bigger than the map (room for the names below)
   W *= fit;
   H *= fit;
   const cell = (k, snake) => {
     const r = Math.floor(k / cols), c0 = k % cols, c = snake && r % 2 ? cols - 1 - c0 : c0;
     return [b.cx - W / 2 + (cols > 1 ? (W * c) / (cols - 1) : W / 2), b.cy - H / 2 + (rows > 1 ? (H * r) / (rows - 1) : 0)];
   };
-  // Reading order of the current positions: top row first, left to right.
+  // Reading order of the current positions: top row first, left to right. Rows are the
+  // fixtures at (nearly) the same height now, not slices of the new column count: going from
+  // 8 to 4 columns then keeps 1 2 3 4 / 5 6 7 8 instead of mixing two old rows.
   const reading = () => {
-    const sorted = [...its].sort((a, c) => a.y - c.y), out = [];
-    for (let r = 0; r < rows; r++) out.push(...sorted.slice(r * cols, (r + 1) * cols).sort((a, c) => a.x - c.x));
+    const sorted = [...its].sort((a, c) => a.y - c.y), out = [], tol = Math.max(0.01, (b.h / Math.max(1, n)) * 0.5);
+    let row = [];
+    sorted.forEach((it) => {
+      if (row.length && it.y - row[row.length - 1].y > tol) { out.push(...row.sort((a, c) => a.x - c.x)); row = []; }
+      row.push(it);
+    });
+    out.push(...row.sort((a, c) => a.x - c.x));
     return out;
   };
   const Lx = Math.min(L, 0.96 * asp), Ly = Math.min(L, 0.96);   // lines fit on the map
@@ -958,7 +969,6 @@ views.map = () => {
         ${S.mapClip?.items.length && !shapeMode ? `<button class="btn small" id="mapPaste" title="Put the copied fixtures on this map at their copied positions (Ctrl+V)">Paste ${S.mapClip.items.length} position${S.mapClip.items.length > 1 ? 's' : ''}</button>` : ''}
         <label class="muted"><input type="checkbox" data-p="${base}.labels" data-t="bool"${m.labels !== false ? ' checked' : ''} data-r> Names</label>
         <label class="muted"><input type="checkbox" id="mapLive"${S.mapLive !== false ? ' checked' : ''}> Live</label>
-        <label class="muted" title="Effects get x and y with the same scale both ways, so a circle effect is round on this map, not stretched. Off = x and y each run 0..1 across the map (older shows)."><input type="checkbox" data-p="${base}.square" data-t="bool"${m.square ? ' checked' : ''}> Round effects</label>
         <button class="btn small${shapeMode ? ' on' : ''}" id="mapShapeMode" title="Draw rectangles, ellipses, lines and text (a simple floor plan). While on, fixtures can't be moved.">✎ Floor plan${m.shapes.length ? ` (${m.shapes.length})` : ''}</button>
       </div>
       ${shapeMode ? `<div class="row map-tools"><div class="seg">${SHAPE_TOOLS.map(([v, n]) => `<button class="${(S.mapTool || 'select') === v ? 'on' : ''}" data-maptool="${v}">${n}</button>`).join('')}</div>
@@ -991,8 +1001,8 @@ views.map = () => {
           <select id="mapShapeOrder" title="Which fixture goes where in the shape">
             <option value="pos"${S.shapeOpt.order === 'pos' ? ' selected' : ''}>keep neighbours</option>
             <option value="patch"${S.shapeOpt.order === 'patch' ? ' selected' : ''}>in patch order (address)</option></select>
-          <label class="muted nowrap" title="Columns of a grid; empty = from the rows, or square">Columns <input type="number" id="mapShapeCols" min="1" max="512" value="${S.shapeOpt.cols || ''}" placeholder="auto" style="width:64px"></label>
-          <label class="muted nowrap" title="Rows of a grid; empty = from the columns, or square">Rows <input type="number" id="mapShapeRows" min="1" max="512" value="${S.shapeOpt.rows || ''}" placeholder="auto" style="width:64px"></label>
+          <label class="muted nowrap" title="Columns of a grid; empty = from the rows, or square">Columns <input type="number" id="mapShapeCols" min="1" max="512" value="${S.shapeOpt.cols || ''}" placeholder="auto ${gridSize(sits.length)[0]}" style="width:72px"></label>
+          <label class="muted nowrap" title="Rows of a grid; empty = from the columns, or square">Rows <input type="number" id="mapShapeRows" min="1" max="512" value="${S.shapeOpt.rows || ''}" placeholder="auto ${gridSize(sits.length)[1]}" style="width:72px"></label>
           <button class="btn small" data-rot="-15" title="Rotate 15° anticlockwise ([ key)">⟲</button><button class="btn small" data-rot="15" title="Rotate 15° clockwise (] key)">⟳</button>
           <button class="btn small" data-scale="0.9" title="Closer together (- key)">−</button><button class="btn small" data-scale="1.1" title="Further apart (+ key)">+</button>
           <span class="nowrap" title="Rotate the selection around its centre by this many degrees (minus = anticlockwise)"><input type="number" id="mapRotDeg" value="${S.mapRotDeg ?? 90}" step="1" style="width:58px">° <button class="btn small" id="mapRotGo">Rotate</button></span>
@@ -1213,12 +1223,24 @@ views.map.after = () => {
     render();
     $('#mapShape').value = shape;
   };
-  const redo = () => { const ls = S.lastShape; if (ls && ls.map === m.id && ls.key === selKey()) applyShape(ls.shape); };
-  if (S.lastShape?.key === selKey() && S.lastShape.map === m.id && $('#mapShape')) $('#mapShape').value = S.lastShape.shape;
+  const lastHere = () => { const ls = S.lastShape; return ls && ls.map === m.id && ls.key === selKey() ? ls : null; };
+  const redo = () => { const ls = lastHere(); if (ls) applyShape(ls.shape); };
+  if (lastHere() && $('#mapShape')) $('#mapShape').value = S.lastShape.shape;
   $('#mapShape')?.addEventListener('change', (e) => { if (e.target.value) applyShape(e.target.value); });
   $('#mapShapeOrder')?.addEventListener('change', (e) => { S.shapeOpt.order = e.target.value; redo(); });
-  $('#mapShapeCols')?.addEventListener('change', (e) => { S.shapeOpt.cols = Math.max(0, Math.min(512, +e.target.value || 0)); redo(); });
-  $('#mapShapeRows')?.addEventListener('change', (e) => { S.shapeOpt.rows = Math.max(0, Math.min(512, +e.target.value || 0)); redo(); });
+  // Columns / rows work while typing (not only after Enter), and typing one means "make a grid":
+  // it redoes the grid or snake just made, otherwise it makes a grid. The redraw replaces the
+  // field, so the cursor is put back in it.
+  const gridField = (id, key) => $(id)?.addEventListener('input', (e) => {
+    S.shapeOpt[key] = Math.max(0, Math.min(512, Math.round(+e.target.value) || 0));
+    const ls = lastHere();
+    applyShape(ls && (ls.shape === 'grid' || ls.shape === 'snake') ? ls.shape : 'grid');
+    const f = $(id);
+    // Value set after focus = cursor at the end (number fields have no setSelectionRange).
+    if (f) { f.value = ''; f.focus(); f.value = S.shapeOpt[key] || ''; }
+  });
+  gridField('#mapShapeCols', 'cols');
+  gridField('#mapShapeRows', 'rows');
   $$('[data-rot]').forEach((b) => b.addEventListener('click', () => transformSel(m, +b.dataset.rot)));
   $$('[data-scale]').forEach((b) => b.addEventListener('click', () => transformSel(m, 0, +b.dataset.scale)));
   // The frame's handles: drag to rotate or to spread out / pull together around the centre.

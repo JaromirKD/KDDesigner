@@ -58,7 +58,7 @@ function addItem(kind) {
     case 'fixture-rgbw': fx('RGBW', ['dim', 'r', 'g', 'b', 'w'], 'Generic / RGBW', '5 ch'); break;
     case 'fixture-dim': fx('Dimmer', ['dim'], 'Generic / Dimmer', '1 ch'); break;
     case 'fixture-16': fx('Winch', ['pos:16', 'speed', 'enable'], 'Generic / Motor / winch', '3 ch'); break;
-    case 'map': p.maps.push({ id: nextId(p.maps), name: 'Map ' + nextId(p.maps), aspect: 1.6, background: '', snap: true, labels: true, square: true, items: [], shapes: [] }); S.sel.map = p.maps.length - 1; S.mapSel = new Set(); break;
+    case 'map': p.maps.push({ id: nextId(p.maps), name: 'Map ' + nextId(p.maps), aspect: 1.6, background: '', snap: true, labels: true, items: [], shapes: [] }); S.sel.map = p.maps.length - 1; S.mapSel = new Set(); break;
     case 'modegroup': p.modes.push({ name: 'Group ' + (p.modes.length + 1), states: ['On', 'Off'], stateInfo: {} }); break;
     case 'device': p.devices.push({ name: 'device' + (p.devices.length + 1), ip: '192.168.1.20', port: 7000 }); break;
     case 'variable': {

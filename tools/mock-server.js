@@ -36,7 +36,7 @@ if (!fs.existsSync(PROJECT)) {
 }
 const FX = require(path.join(WWW, 'fx.js'));   // same effect compiler/VM as the web UI
 const Model = require(path.join(WWW, 'model.js'));   // same project rules and date maths as the UI
-const { slots, footprint, channelRoles, trackFixtureIds, mapPosition, EASE } = Model;
+const { slots, footprint, channelRoles, trackFixtureIds, mapPosition, effectRound, EASE } = Model;
 const CATS = ['SYS', 'USB', 'NET', 'DMX', 'ARTNET', 'SACN', 'SHOW', 'TRIG', 'WEB', 'CMD', 'PJLINK'];
 const LVLS = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
 
@@ -780,9 +780,9 @@ function effectProg(id) {
 function effectRun(t, c) {
   const prog = effectProg(c.effect);
   if (!prog) { log(2, 'SHOW', `Timeline ${t.id}: effect ${c.effect} missing or has errors`); return null; }
-  const fx = trackFixtures(t, c.track || 0);
+  const fx = trackFixtures(t, c.track || 0), round = effectRound(project, (project.effects || []).find((x) => x.id === c.effect));
   const targets = fx.map((f, k) => {
-    const ro = channelRoles(f), at = mapPosition(project, f.id);
+    const ro = channelRoles(f), at = mapPosition(project, f.id, round);
     const ch = (s) => (s ? { key: `${f.universe}.${f.address + s.offset}`, wide: s.wide } : null);
     return { d: ch(ro.dim), r: ch(ro.r), g: ch(ro.g), b: ch(ro.b), w: ch(ro.w),
       x: at ? at.x : k / fx.length, y: at ? at.y : 0.5 };

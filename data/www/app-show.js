@@ -27,11 +27,11 @@ function fxParamNote(q) {
 }
 // Fixtures for a preview: those on a map (with positions), a strip of n RGB cells, or an n x n grid.
 // x / y = what the effect gets; on a map, sx / sy = where the dot is drawn (they differ with
-// the map's "round effects", KDModel.effectXY).
-function fxPreviewFixtures(src) {
+// the effect's "round on wide maps", KDModel.effectXY).
+function fxPreviewFixtures(src, round) {
   if (Array.isArray(src)) return src;
   const p = P(), m = src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
-  if (m) return m.items.map((it) => ({ f: fixture(it.fixture), sx: it.x, sy: it.y, ...KDModel.effectXY(m, it.x, it.y) })).filter((o) => o.f);
+  if (m) return m.items.map((it) => ({ f: fixture(it.fixture), sx: it.x, sy: it.y, ...KDModel.effectXY(m, it.x, it.y, round) })).filter((o) => o.f);
   if (src?.startsWith('grid:')) {
     const g = +src.slice(5) || 10;
     return Array.from({ length: g * g }, (_, k) => ({ f: { channels: ['r', 'g', 'b'] }, x: (k % g) / (g - 1), y: Math.floor(k / g) / (g - 1) }));
@@ -55,8 +55,9 @@ function fxPreviewColor(prog, base, outs, i, n, x, y, t, level = 1) {
   const c = [o.r + w, o.g + w, o.b + w].map((q) => Math.round(Math.min(1, q) * d * 255));
   return { css: `rgb(${c.join(',')})`, level: Math.max(...c) / 255 };
 }
+// Only the dots' places (sx / sy) are used here, so the effect's "round" doesn't matter.
 function fxPreviewHtml(src) {
-  const p = P(), fx = fxPreviewFixtures(src), m = src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
+  const p = P(), fx = fxPreviewFixtures(src), m =src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
   if (m) return `<div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, 'calc(50 * var(--vh))')}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
     ${mapShapesHtml(m)}${fx.map((o, k) => `<div class="mfx" style="left:${o.sx * 100}%;top:${o.sy * 100}%" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div>`;
   if (src?.startsWith('grid:')) return `<div class="fx-prev grid" style="grid-template-columns:repeat(${Math.round(Math.sqrt(fx.length))},1fr)">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
@@ -72,16 +73,16 @@ function setFxOverlay(on) {
 // The overlay runs the effect at every spot of a coarse grid over the map (x, y of that spot),
 // as an RGB fixture at full level, so the pattern shows between and under the fixtures too.
 // i / n / u are those of the nearest fixture, so list-order effects show each fixture's area.
-function fxOverlayPainter(cv, prog, base, fx, m) {
+function fxOverlayPainter(cv, prog, base, fx, m, round) {
   const W = 64, H = Math.max(8, Math.min(96, Math.round((W * cv.clientHeight) / Math.max(1, cv.clientWidth))));
   cv.width = W;
   cv.height = H;
   const g = cv.getContext('2d'), img = g.createImageData(W, H), s = new Float64Array(base.length), n = Math.max(1, fx.length);
   const rgb = { r: true, g: true, b: true }, near = new Int32Array(W * H);
-  // Each spot's effect x / y (the map's "round effects" applies here too).
+  // Each spot's effect x / y (the effect's "round on wide maps" applies here too).
   const ex = new Float64Array(W * H), ey = new Float64Array(W * H);
   for (let k = 0; k < W * H; k++) {   // nearest fixture, once (not every frame)
-    const q = KDModel.effectXY(m, ((k % W) + 0.5) / W, (Math.floor(k / W) + 0.5) / H), x = (ex[k] = q.x), y = (ey[k] = q.y);
+    const q = KDModel.effectXY(m, ((k % W) + 0.5) / W, (Math.floor(k / W) + 0.5) / H, round), x = (ex[k] = q.x), y = (ey[k] = q.y);
     let best = 0, bd = Infinity;
     fx.forEach((o, j) => { const d = (o.x - x) ** 2 + (o.y - y) ** 2; if (d < bd) { bd = d; best = j; } });
     near[k] = best;
@@ -98,12 +99,12 @@ function fxOverlayPainter(cv, prog, base, fx, m) {
   };
 }
 // Animate a preview container; values: param overrides; level 0..1.
-function runFxPreview(box, prog, src, values = {}, level = 1) {
+function runFxPreview(box, prog, src, values = {}, level = 1, round = false) {
   if (!box || !prog || prog.error) return;
-  const fx = fxPreviewFixtures(src), base = KDFX.slotsFor(prog, values), cells = [...box.querySelectorAll('[data-pv]')], t0 = performance.now();
+  const fx = fxPreviewFixtures(src, round), base = KDFX.slotsFor(prog, values), cells = [...box.querySelectorAll('[data-pv]')], t0 = performance.now();
   const outs = fx.map((o) => fxOutputs(o.f));   // once, not every frame
   const glow = fx.length <= 40;   // the glow is costly to draw for hundreds of dots every frame
-  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, base, fx, typeof src === 'string' && src.startsWith('map:') ? P().maps[+src.slice(4)] : null);
+  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, base, fx, typeof src === 'string' && src.startsWith('map:') ? P().maps[+src.slice(4)] : null, round);
   pageAnimation('fxPreview', () => {
     const t = (performance.now() - t0) / 1000;
     if (paintOvl) paintOvl(t);
@@ -144,6 +145,7 @@ views.effects = () => {
       <div class="row" style="margin-top:8px"><b>Preview</b>
         <select id="fxSrc"><option value="strip:16"${src === 'strip:16' ? ' selected' : ''}>Strip of 16</option><option value="strip:8"${src === 'strip:8' ? ' selected' : ''}>Strip of 8</option><option value="grid:10"${src === 'grid:10' ? ' selected' : ''}>Grid 10 × 10 (for XY)</option>
           ${p.maps.map((m, i) => `<option value="map:${i}"${src === `map:${i}` ? ' selected' : ''}>Map: ${esc(m.name)}</option>`).join('')}</select>
+        <label class="muted" title="Saved with the effect, used wherever it plays. On: x and y have the same scale both ways, so a circle or ripple is round on a wide map, not stretched (the long side of the map runs 0…1). Off: x and y each run 0…1 across the map."><input type="checkbox" data-p="effects.${S.sel.effect}.round" data-t="bool"${e.round ? ' checked' : ''} data-r> Round on wide maps</label>
         ${src.startsWith('map:') ? `<label class="muted" title="Runs the effect over the whole map, not only where the fixtures are, so you can see the pattern between them"><input type="checkbox" id="fxOvl"${fxOverlayOn() ? ' checked' : ''}> show effect on the whole map</label>` : ''}
         <span class="muted">${used.length ? `Used in: ${used.map(esc).join(', ')}` : 'Not used on a timeline yet.'}</span></div>
       <div id="fxPrev">${fxPreviewHtml(src)}</div>
@@ -165,7 +167,7 @@ views.effects.after = () => {
     const v = ev.target.value;
     if (!v) return;
     const tpl = v === 'empty' ? { name: 'Effect', code: '// r, g, b and dim, per fixture, every frame\nparam color = #ffffff\nr, g, b = color\n' } : KDFX.TEMPLATES[+v];
-    p.effects.push({ id: nextId(p.effects), name: fxUniqueName(tpl.name), code: tpl.code });
+    p.effects.push({ id: nextId(p.effects), name: fxUniqueName(tpl.name), code: tpl.code, round: true });
     S.sel.effect = p.effects.length - 1;
     markDirty();
     render();
@@ -173,7 +175,7 @@ views.effects.after = () => {
   const e = p.effects[S.sel.effect];
   if (!e) return;
   $('#fxDup').addEventListener('click', () => {
-    p.effects.push({ id: nextId(p.effects), name: e.name + ' copy', code: e.code });
+    p.effects.push({ id: nextId(p.effects), name: e.name + ' copy', code: e.code, round: !!e.round });
     S.sel.effect = p.effects.length - 1;
     markDirty();
     render();
@@ -219,10 +221,10 @@ views.effects.after = () => {
       $$('[data-fxp]').forEach((i) => i.addEventListener('input', () => {
         S.fxValues.v[i.dataset.fxp] = i.type === 'color' ? i.value : +i.value;
         if (i.nextElementSibling?.classList.contains('fx-pv')) i.nextElementSibling.textContent = (+i.value).toFixed(2);
-        runFxPreview($('#fxPrev'), fxProg(e), S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v);
+        runFxPreview($('#fxPrev'), fxProg(e), S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round);
       }));
     }
-    runFxPreview($('#fxPrev'), prog, S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v);
+    runFxPreview($('#fxPrev'), prog, S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round);
   };
   ta.addEventListener('input', () => { e.code = ta.value; markDirty(); refresh(); });
   ta.addEventListener('scroll', () => (gutter.scrollTop = ta.scrollTop));
@@ -315,11 +317,14 @@ function sceneProgrammerHtml(sc) {
       ${set.length ? `<button class="btn small ghost" data-scrm="${esc(c.name)}" title="Take this channel out of the scene">✕</button>` : '<span></span>'}</div>`;
   }).join('');
   const one = sel.length === 1 ? sel[0] : null;
+  // Which fixtures are picked, by name (the first 8), so it's clear before any of them is set.
+  const names = sel.length > 1 ? `<div class="muted sc-selnames">Selected: ${sel.slice(0, 8).map((f) => esc(f.name)).join(', ')}${sel.length > 8 ? ` and ${sel.length - 8} more` : ''}</div>` : '';
   return `<div class="sc-prog">
-    <div class="row"><span class="fx-ic">${one ? fxIcon(one) : ''}</span><b>${one ? esc(one.name) : sel.length + ' fixtures'}</b><span class="muted">${one ? (nIn ? 'in this scene' : 'not in this scene') : `${nIn} in this scene`}</span><span class="spacer"></span>
+    <div class="row"><span class="fx-ic">${one ? fxIcon(one) : ''}</span><b>${one ? esc(one.name) : sel.length + ' fixtures selected'}</b><span class="muted">${one ? (nIn ? 'in this scene' : 'not in this scene yet - move a slider or press Full to add it') : `${nIn} of them in this scene`}</span><span class="spacer"></span>
       ${sel.some((f) => channelRoles(f).dim) ? '<button class="btn small" data-scdim="255">Full</button><button class="btn small" data-scdim="128">50%</button><button class="btn small" data-scdim="0">Off</button>' : ''}
       <button class="btn small" id="scAddAll" title="Put every channel of these fixtures in the scene (at their home values where not set)">All channels</button>
       <button class="btn small ghost" id="scRemove"${nIn ? '' : ' disabled'}>Remove from scene</button></div>
+    ${names}
     <div class="sc-body"><div class="sc-chs">${rows}</div>${side ? `<div class="sc-side">${side}</div>` : ''}</div>
     ${one ? `<details class="sc-fix"${S.scFixOpen ? ' open' : ''}><summary>Fixture settings · ${one.universe}.${one.address}–${one.address + footprint(one) - 1} · ${esc(fixtureType(one))}</summary>
       <div class="form" style="margin-top:8px"><label>Name</label><input data-p="fixtures.${p.fixtures.indexOf(one)}.name" value="${esc(one.name)}" data-r>${fixtureFieldsHtml(one)}</div>
@@ -641,10 +646,10 @@ function cueLabel(c, t) {
 const isPreset = (c) => c.effect == null && (c.dim != null || c.color != null);
 const cueKind = (c) => (c.trigger != null ? 'trigger' : c.effect != null ? 'effect' : isPreset(c) ? 'preset' : 'scene');
 // Fixtures of a track with their map positions, for effect previews (as the controller runs them).
-function trackPreviewFixtures(tr) {
-  const ids = trackFxIds(tr);
+function trackPreviewFixtures(tr, e) {
+  const ids = trackFxIds(tr), round = KDModel.effectRound(P(), e);
   return ids.map((id, k) => {
-    const it = KDModel.mapPosition(P(), id);
+    const it = KDModel.mapPosition(P(), id, round);
     return { f: fixture(id), x: it ? it.x : k / ids.length, y: it ? it.y : 0.5 };
   });
 }
@@ -728,7 +733,7 @@ function paintClip(t, c, el, end) {
   const tr = t.tracks[c.track || 0], g = cv.getContext('2d');
   const W = Math.max(1, Math.min(4000, el.clientWidth)), H = Math.max(1, el.clientHeight);   // very long clips: stretched a little
   if (c.effect != null) {
-    const e = P().effects.find((x) => x.id === c.effect), prog = e && fxProg(e), fx = tr ? trackPreviewFixtures(tr) : [];
+    const e = P().effects.find((x) => x.id === c.effect), prog = e && fxProg(e), fx = tr ? trackPreviewFixtures(tr, e) : [];
     if (!prog || prog.error || !fx.length) return;
     const rows = Math.min(fx.length, THUMB_ROWS, Math.floor(H / 2));
     const pick = Array.from({ length: rows }, (_, r) => Math.floor((r * fx.length) / rows));
@@ -1270,7 +1275,7 @@ views.timelines.after = () => {
     if (!c || c.effect == null) return;
     const e = p.effects.find((x) => x.id === c.effect), tr = t.tracks[c.track || 0];
     if (!e || !tr) return;
-    runFxPreview($('#cueFxPrev'), fxProg(e), trackPreviewFixtures(tr), c.params || {}, (c.dim ?? 100) / 100);
+    runFxPreview($('#cueFxPrev'), fxProg(e), trackPreviewFixtures(tr, e), c.params || {}, (c.dim ?? 100) / 100);
   }
   startCuePreview();
   $$('[data-cuehold]').forEach((el) => el.addEventListener('change', () => {

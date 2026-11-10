@@ -53,10 +53,8 @@ const grid = pixels.map((f, k) => { const row = Math.floor(k / 8), col = row % 2
 const circle = pars.map((f, k) => { const a = (k / 8) * Math.PI * 2 - Math.PI / 2; return [f, 0.5 + 0.38 * Math.cos(a), 0.5 + 0.38 * Math.sin(a)]; });
 const map = (id, name, aspect, items) => ({ id, name, aspect, background: '', snap: true, labels: true, items: items.map(([fixture, x, y]) => ({ fixture, x: +x.toFixed(4), y: +y.toFixed(4) })) });
 const maps = [map(1, 'Stage plan', 1.5, stage), map(2, 'Pixel grid 8 x 4', 2, grid), map(3, 'Circle', 1, circle)];
-// The stage plan: a floor plan drawn with shapes and texts (no background image), and
-// "Round effects" so circle effects are round on its 3:2 shape.
+// The stage plan: a floor plan drawn with shapes and texts (no background image).
 Object.assign(maps[0], {
-  square: true,
   shapes: [
     { type: 'rect', x: 0.15, y: 0.12, w: 0.7, h: 0.5, color: '#8aa0b8', width: 2, fill: '#8aa0b8', alpha: 0.12 },
     { type: 'line', x: 0.15, y: 0.62, w: 0.7, h: 0, color: '#d0a050', width: 3 },
@@ -67,6 +65,8 @@ Object.assign(maps[0], {
     { type: 'text', x: 0.5, y: 0.76, text: 'FOH desk', size: 2, color: '#d0d8e2' },
   ],
 });
+// The pixel grid (2:1) gets a text label too: a floor plan can be only text.
+maps[1].shapes = [{ type: 'text', x: 0.5, y: 0.04, text: 'LED wall (wired as a snake)', size: 2, color: '#d0d8e2' }];
 
 // ---------- scenes ----------
 const L = (ids, ch, v) => ids.map((fixture) => ({ fixture, ch, v }));
@@ -83,8 +83,11 @@ const scenes = [
 ];
 
 // ---------- effects: every base effect + one of our own ----------
-const effects = FX.TEMPLATES.map((t, k) => ({ id: k + 1, name: t.name, code: t.code }));
+// "Round on wide maps" (round) is on, as for new effects; one copy of XY ripple has it off, to
+// compare on the 2:1 pixel grid (Inloop, Pixels track: round rings, then stretched ovals).
+const effects = FX.TEMPLATES.map((t, k) => ({ id: k + 1, name: t.name, code: t.code, round: true }));
 const fxId = (name) => effects.find((e) => e.name === name).id;
+effects.push({ id: effects.length + 1, name: 'XY ripple (stretched)', code: effects[fxId('XY ripple') - 1].code, round: false });
 effects.push({ id: effects.length + 1, name: 'Vitrine shimmer (own)', code:
 `// Our own effect: a slow warm shimmer for the showcase
 param speed = 0.3 [0, 2]       // shimmer waves per second
@@ -92,7 +95,8 @@ param color = #ffb070          // base colour
 param depth = 0.4 [0, 1]       // how deep the shimmer dips
 k = 1 - depth * (0.5 + 0.5 * sin((u * 2 + t * speed) * tau))
 r, g, b = color
-dim = k * (0.8 + 0.2 * noise(t * 3 + i))` });
+dim = k * (0.8 + 0.2 * noise(t * 3 + i))`, round: true });
+const OWN_FX = effects.length;
 
 // ---------- timelines ----------
 const timelines = [
@@ -104,8 +108,11 @@ const timelines = [
       { t: 0, track: 1, fade: 2000, effect: fxId('Breathe'), params: { speed: 0.1, color: '#ff9040' }, dim: 100 },
       { t: 0, track: 2, fade: 2000, len: 15000, out: 2000, effect: fxId('XY plasma'), params: {}, dim: 80 },
       { t: 15000, track: 2, fade: 2000, len: 15000, out: 2000, effect: fxId('Wave across the map'), params: {}, dim: 80 },
-      { t: 0, track: 3, fade: 1000, effect: fxId('Chase'), params: { speed: 0.5 }, dim: 100 },
-      { t: 0, track: 4, fade: 2000, effect: effects.length, params: {}, dim: 100 },
+      { t: 0, track: 3, fade: 1000, len: 10000, out: 1000, effect: fxId('Chase'), params: { speed: 0.5 }, dim: 100 },
+      // The same ripple twice: round on the wide grid, then with "Round on wide maps" off.
+      { t: 10000, track: 3, fade: 1000, len: 10000, out: 1000, effect: fxId('XY ripple'), params: { speed: 0.6, color: '#00c7be' }, dim: 100 },
+      { t: 20000, track: 3, fade: 1000, len: 10000, out: 1000, effect: fxId('XY ripple (stretched)'), params: { speed: 0.6, color: '#ff8a00' }, dim: 100 },
+      { t: 0, track: 4, fade: 2000, effect: OWN_FX, params: {}, dim: 100 },
     ] },
   { id: 2, name: 'Main show', length: 60000, loop: false, priority: 0, group: 'A',
     tracks: [{ name: 'Scenes', fixtures: [], groups: [] }, { name: 'Walls', fixtures: [], groups: [2] }, { name: 'Movers', fixtures: [], groups: [3] },
@@ -235,6 +242,8 @@ trig('Museum closed', 'mode', { group: 'Museum', mode: 'Closed' }, ['knx gw writ
 sec('== EXAMPLES', 'grey', 'Disabled triggers and comment lines.');
 trig('Disabled example', 'manual', {}, ['# a line starting with # is a comment and is skipped', 'log This trigger is switched off'], [], { enabled: false });
 trig('Every 10 s heartbeat (disabled)', 'interval', { seconds: 10 }, ['send udp mediaserver alive'], [], { enabled: false });
+trig('Weekend check every 20 s', 'interval', { seconds: 20 }, ['log It is the weekend'], ['day is sat,sun'],
+  { notes: 'Fires every 20 s. On weekdays its condition is false: the row flashes red instead of orange, the diamond in Show flow flashes red and the fire history says "condition false".' });
 
 let n = 0;
 for (const t of triggers) if (t.type !== 'comment') t.id = ++n;

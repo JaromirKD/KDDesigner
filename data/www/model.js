@@ -31,17 +31,23 @@
     return [...ids].filter((id) => p.fixtures.some((f) => f.id === id));
   }
 
-  // A map position (0..1 of width / height) as effect x / y. With the map's "round effects"
-  // (square) the long side stays 0..1 and the short side becomes a smaller range around 0.5,
-  // so a circle effect is round on a wide map. = the mapPos loop in ShowParse.cpp.
-  function effectXY(m, x, y) {
+  // A map position (0..1 of width / height) as effect x / y. With the effect's "round"
+  // option the long side of the map stays 0..1 and the short side becomes a smaller range
+  // around 0.5, so a circle effect is round on a wide map. = effectPos in ShowParse.cpp.
+  function effectXY(m, x, y, round) {
     const a = +m?.aspect || 1.6;   // the UI's default shape (normalize)
-    if (!m?.square || a === 1) return { x, y };
+    if (!round || a === 1) return { x, y };
     return a > 1 ? { x, y: 0.5 + (y - 0.5) / a } : { x: 0.5 + (x - 0.5) * a, y };
   }
+  // Does an effect use round x / y? Its own `round`; older projects had it per map (`square`):
+  // an effect without the setting is round when any map had it (normalize() writes it into the
+  // effects once). = effectRound in ShowParse.cpp.
+  function effectRound(p, e) {
+    return e?.round != null ? !!e.round : (p.maps || []).some((m) => m.square);
+  }
   // Where a fixture is for effects (x / y): the first map it is on, or null.
-  function mapPosition(p, id) {
-    for (const m of p.maps || []) { const it = m.items.find((x) => x.fixture === id); if (it) return effectXY(m, it.x, it.y); }
+  function mapPosition(p, id, round) {
+    for (const m of p.maps || []) { const it = m.items.find((x) => x.fixture === id); if (it) return effectXY(m, it.x, it.y, round); }
     return null;
   }
 
@@ -130,7 +136,7 @@
     return out;
   }
 
-  const api = { slots, footprint, channelRoles, trackFixtureIds, mapPosition, effectXY, EASE, days, inPeriod, periodOn, dateShow, dateStore, sunUtc, netProblems };
+  const api = { slots, footprint, channelRoles, trackFixtureIds, mapPosition, effectXY, effectRound, EASE, days, inPeriod, periodOn, dateShow, dateStore, sunUtc, netProblems };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KDModel = api;
 })(typeof window !== 'undefined' ? window : globalThis);
