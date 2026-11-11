@@ -58,8 +58,8 @@ function fxPreviewColor(prog, base, outs, i, n, x, y, t, level = 1) {
 // Only the dots' places (sx / sy) are used here, so the effect's "round" doesn't matter.
 function fxPreviewHtml(src) {
   const p = P(), fx = fxPreviewFixtures(src), m =src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
-  if (m) return `<div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, 'calc(50 * var(--vh))')}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
-    ${mapShapesHtml(m)}${fx.map((o, k) => `<div class="mfx" style="left:${o.sx * 100}%;top:${o.sy * 100}%" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div>`;
+  if (m) return `<div class="map-wrap"><div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, 'calc(50 * var(--vh))')}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
+    ${mapShapesHtml(m)}${fx.map((o, k) => `<div class="mfx" style="left:${o.sx * 100}%;top:${o.sy * 100}%" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div></div>`;
   if (src?.startsWith('grid:')) return `<div class="fx-prev grid" style="grid-template-columns:repeat(${Math.round(Math.sqrt(fx.length))},1fr)">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
   return `<div class="fx-prev strip">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
 }
@@ -147,6 +147,7 @@ views.effects = () => {
           ${p.maps.map((m, i) => `<option value="map:${i}"${src === `map:${i}` ? ' selected' : ''}>Map: ${esc(m.name)}</option>`).join('')}</select>
         <label class="muted" title="Saved with the effect, used wherever it plays. On: x and y have the same scale both ways, so a circle or ripple is round on a wide map, not stretched (the long side of the map runs 0…1). Off: x and y each run 0…1 across the map."><input type="checkbox" data-p="effects.${S.sel.effect}.round" data-t="bool"${e.round ? ' checked' : ''} data-r> Round on wide maps</label>
         ${src.startsWith('map:') ? `<label class="muted" title="Runs the effect over the whole map, not only where the fixtures are, so you can see the pattern between them"><input type="checkbox" id="fxOvl"${fxOverlayOn() ? ' checked' : ''}> show effect on the whole map</label>` : ''}
+        ${src.startsWith('map:') && p.maps[+src.slice(4)] ? mapZoomHtml(`fx:${p.maps[+src.slice(4)].id}`) : ''}
         <span class="muted">${used.length ? `Used in: ${used.map(esc).join(', ')}` : 'Not used on a timeline yet.'}</span></div>
       <div id="fxPrev">${fxPreviewHtml(src)}</div>
       <div id="fxParams" class="fx-params"></div>
@@ -240,7 +241,10 @@ views.effects.after = () => {
   $('#fxSrc').addEventListener('change', (ev) => { S.fxSrc = ev.target.value; render(); });
   $('#fxOvl')?.addEventListener('change', (ev) => { setFxOverlay(ev.target.checked); render(); });
   const pm = /^map:(\d+)$/.exec($('#fxSrc').value), prevMap = pm && p.maps[+pm[1]];
-  if (prevMap) attachMapResize($('#fxPrev .map-canvas'), prevMap.aspect);
+  if (prevMap) {
+    attachMapResize($('#fxPrev .map-canvas'), prevMap.aspect);
+    attachMapZoom($('#fxPrev .map-canvas'), `fx:${prevMap.id}`, $('#fxSrc').closest('.row'));
+  }
   $('.fx-ref').addEventListener('toggle', (ev) => (S.fxRef = ev.target.open));
   refresh();
 };
@@ -347,7 +351,11 @@ views.scenes = () => {
     // "Only in this scene" hides the others (they can't be picked then, so it's off by default).
     const shown = (f) => !S.scOnly || inScene.has(f.id);
     const mark = (f) => (inScene.has(f.id) ? ' in' : ' out') + (S.scSel.has(f.id) ? ' sel' : '');
-    const chip = (f) => `<button class="sc-chip${mark(f)}" data-scfx="${f.id}" title="${esc(f.name)} · ${f.universe}.${f.address}${inScene.has(f.id) ? ' · in this scene' : ' · not in this scene'}"><span class="dot">${fxIcon(f)}</span>${esc(f.name)}</button>`;
+    // Above 200 chips the dots (the scene's colour) have no icon: an inline SVG each made 476 KB
+    // of HTML for 1360 fixtures.
+    let icons = true;
+    const chip = (f) => `<button class="sc-chip${mark(f)}" data-scfx="${f.id}" title="${esc(f.name)} · ${f.universe}.${f.address}${inScene.has(f.id) ? ' · in this scene' : ' · not in this scene'}"><span class="dot">${icons ? fxIcon(f) : ''}</span>${esc(f.name)}</button>`;
+    const chips = (list) => { icons = list.length <= 200; return list.map(chip).join(''); };
     const pick = `<select id="scMap" title="Where to pick fixtures">${p.maps.map((x, i) => `<option value="${i}"${x === m ? ' selected' : ''}>Map: ${esc(x.name)}</option>`).join('')}<option value="-1"${m ? '' : ' selected'}>List of all fixtures</option></select>`;
     if (m) {
       const placed = new Set(m.items.map((it) => it.fixture)), rest = p.fixtures.filter((f) => !placed.has(f.id) && shown(f));
@@ -355,8 +363,8 @@ views.scenes = () => {
       look = `<div class="map-wrap"><div class="map-canvas sc-map${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="scCanvas" style="${mapSizeStyle('kd.mapH.scenes', m.aspect, 'calc(60 * var(--vh))')}">
         ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}${mapShapesHtml(m)}
         ${m.items.map((it) => { const f = fixture(it.fixture); return f && shown(f) ? mapDotHtml(f, it, mark(f), m.labels !== false, 'data-scfx') : ''; }).join('')}<div class="band" hidden></div>${mapResizeHtml('kd.mapH.scenes')}</div></div>
-        ${rest.length ? `<div class="sc-chips"><span class="muted">Not on this map:</span>${rest.map(chip).join('')}</div>` : ''}`;
-    } else look = `<div class="sc-chips sc-all">${p.fixtures.filter(shown).map(chip).join('') || `<span class="muted">${p.fixtures.length ? 'No fixtures in this scene yet.' : 'No fixtures yet - add them on the Fixtures page.'}</span>`}</div>`;
+        ${rest.length ? `<div class="sc-chips"><span class="muted">Not on this map:</span>${chips(rest)}</div>` : ''}`;
+    } else look = `<div class="sc-chips sc-all">${chips(p.fixtures.filter(shown)) || `<span class="muted">${p.fixtures.length ? 'No fixtures in this scene yet.' : 'No fixtures yet - add them on the Fixtures page.'}</span>`}</div>`;
     // Groups: one click selects a whole group (Shift/Ctrl+click adds it to the selection).
     const groups = p.groups.length ? `<div class="sc-groups"><span class="muted">Groups:</span>${p.groups.map((g) => {
       const on = g.fixtures.length && g.fixtures.every((id) => S.scSel.has(id)), n = g.fixtures.filter((id) => inScene.has(id)).length;
@@ -599,7 +607,7 @@ views.timelines = () => {
         Ctrl+wheel zooms. Each track has its own fixtures and fades on its own; a track without fixtures plays scenes on the whole rig.<br>
         Keys: Ctrl+C / X / V copy, cut, paste at the cursor · Ctrl+D duplicate · Ctrl+E split at the cursor · Ctrl+A select all · Del delete · ←/→ previous/next cue · ↑/↓ other track · Shift+←/→ move 0.1 s (Ctrl 1 s) · 1–9, 0 colour · [ ] hue · + − intensity · Enter colour wheel · Space play from the cursor / pause / carry on · Esc deselect</p>
       ${S.trackEdit != null && t.tracks[S.trackEdit] ? trackFixturesHtml(t, S.trackEdit) : ''}
-      ${cueEditorHtml(t)}
+      <div id="cueEdBox">${cueEditorHtml(t)}</div>
       <h3>All cues</h3>
       <table class="cue-list"><tr><th class="narrow">Time (s)</th><th>Track</th><th>What</th><th class="narrow">Length (s)</th><th class="narrow">Fade (s)</th><th></th></tr>
       ${t.cues.map((c, i) => [c, i]).sort((a, b) => a[0].t - b[0].t).map(([c, i]) => `<tr data-cuerow="${i}" class="${i === S.sel.cue ? 'sel' : ''}${c.trigger != null ? ' trig-cue' : ''}">
@@ -736,11 +744,32 @@ const THUMB_ROWS = 24;   // fixtures drawn in a clip preview at most (evenly pic
 // Preview inside an effect or scene clip, on its canvas at the clip's real size on screen
 // (so zooming shows more detail instead of stretching): time runs left to right (the
 // effect as it plays from the clip's start), the track's fixtures top to bottom.
+// Painted clip pictures, reused across page draws: painting an effect clip runs the effect
+// per 2 screen pixels (~6 ms per clip on a big show), and render() repaints every clip. The
+// key holds everything the picture depends on; S.editSeq changes on every project edit, so
+// after an edit each clip paints once and clicking around costs nothing.
+const tlThumbs = new Map();
+function keepThumb(key, cv) {
+  if (tlThumbs.size > 120) tlThumbs.clear();   // plenty for a few timelines; a drag makes many keys
+  const copy = document.createElement('canvas');
+  copy.width = cv.width;
+  copy.height = cv.height;
+  copy.getContext('2d').drawImage(cv, 0, 0);
+  tlThumbs.set(key, copy);
+}
 function paintClip(t, c, el, end) {
   const cv = el.querySelector('canvas.thumb');
   if (!cv) return;
   const tr = t.tracks[c.track || 0], g = cv.getContext('2d');
   const W = Math.max(1, Math.min(4000, el.clientWidth)), H = Math.max(1, el.clientHeight);   // very long clips: stretched a little
+  const key = `${S.editSeq || 0}|${W}x${H}|${c.track || 0}|${end - c.t}|${JSON.stringify(c)}`;
+  const hit = tlThumbs.get(key);
+  if (hit) {
+    cv.width = W;
+    cv.height = H;
+    g.drawImage(hit, 0, 0);
+    return;
+  }
   if (c.effect != null) {
     const e = P().effects.find((x) => x.id === c.effect), prog = e && fxProg(e), fx = tr ? trackPreviewFixtures(tr, e) : [];
     if (!prog || prog.error || !fx.length) return;
@@ -758,6 +787,7 @@ function paintClip(t, c, el, end) {
         g.fillRect(x, y0, step, y1 - y0);
       });
     }
+    keepThumb(key, cv);
     return;
   }
   // Scene: each fixture's colour in it (the track's fixtures, or all on a whole-rig track).
@@ -774,6 +804,7 @@ function paintClip(t, c, el, end) {
     g.fillStyle = looks[Math.floor((r * looks.length) / rows)].color;
     g.fillRect(0, y0, W, y1 - y0);
   }
+  keepThumb(key, cv);
 }
 // The track lanes: a ruler, a lane for trigger cues, then one lane per track with a clip per cue.
 function tlGridHtml(t) {
@@ -956,6 +987,7 @@ views.timelines.after = () => {
   const laneEl = (c) => lanes.find((l) => l.dataset.lane === (isLight(c) ? String(c.track || 0) : 'trig'));
   const pctOf = (ms) => (ms / len) * 100 + '%';
   const trackCues = (r, not) => t.cues.filter((x) => isLight(x) && (x.track || 0) === r && !not.has(x));
+  let selectUi = () => render();   // set further down, once the editor wiring exists
   const markSel = () => $$('[data-cue]', grid).forEach((b) => b.classList.toggle('sel', sel.has(t.cues[+b.dataset.cue])));
   const newKind = (r) => (trackFxIds(t.tracks[r]).length ? 'preset' : 'scene');
   const info = (msg) => { $('#tlInfo').textContent = msg; };   // live numbers while dragging
@@ -1043,7 +1075,7 @@ views.timelines.after = () => {
         // A plain click selects just this one; Shift/Ctrl+click on a selected one deselects it.
         if (add && wasSel) sel.delete(c);
         else if (!add) { sel.clear(); sel.add(c); }
-        // A second click (it re-renders in between, so no dblclick event) on a holding
+        // A second click soon after (counted here, as the lane handler does) on a holding
         // clip adds a cue at that spot: there is no empty space on its track to click.
         const now = Date.now(), last = S.lastBlkClick;
         S.lastBlkClick = { c, at: now };
@@ -1055,7 +1087,7 @@ views.timelines.after = () => {
         S.tlCursor = snap(msAt(ev.clientX), ev);
         S.tlCursorLane = isLight(c) ? c.track || 0 : 'trig';
         tlSelect(t, [...sel], sel.has(c) ? c : null);
-        return render();
+        return selectUi();
       }
       let land = group;
       if (mode === 'move' && (ev.ctrlKey || ev.metaKey)) {
@@ -1103,7 +1135,7 @@ views.timelines.after = () => {
     const up = (ev) => {
       lane.removeEventListener('pointermove', move);
       box.hidden = true;
-      if (moved) { tlSelect(t, [...sel]); return render(); }
+      if (moved) { tlSelect(t, [...sel]); return selectUi(); }
       const at = snap(msAt(ev.clientX), ev), now = Date.now(), last = S.lastLaneClick;
       S.lastLaneClick = { lane: lane.dataset.lane, at: now, x: ev.clientX };
       if (last && last.lane === lane.dataset.lane && now - last.at < 450 && Math.abs(last.x - ev.clientX) < 8) {
@@ -1115,7 +1147,7 @@ views.timelines.after = () => {
       S.tlCursor = at;
       S.tlCursorLane = lane.dataset.lane === 'trig' ? 'trig' : +lane.dataset.lane;
       if (!keep.size) tlSelect(t, []);
-      render();
+      selectUi();
     };
     lane.addEventListener('pointermove', move);
     lane.addEventListener('pointerup', up, { once: true });
@@ -1220,9 +1252,11 @@ views.timelines.after = () => {
     markDirty();
     render();
   }));
-  // Cue editor.
-  const c = t.cues[S.sel.cue];
-  $$('[data-cuekind]').forEach((b) => b.addEventListener('click', () => {
+  // Cue editor (wired again on its own when a click only changes the selection: selectUi).
+  const wireCueEditor = () => {
+  const box = $('#cueEdBox'), c = t.cues[S.sel.cue];
+  if (!box || !c) return;
+  $$('[data-cuekind]', box).forEach((b) => b.addEventListener('click', () => {
     const k = b.dataset.cuekind;
     if (k === 'effect' && !p.effects.length) return toast('Make an effect first (Effects page)', true);
     for (const f of ['trigger', 'dim', 'color', 'scene', 'effect', 'params']) delete c[f];
@@ -1238,7 +1272,7 @@ views.timelines.after = () => {
     render();
   }));
   // Colour wheels: the preset colour, and colour parameters of an effect.
-  $$('.cw').forEach((el) => {
+  $$('.cw', box).forEach((el) => {
     const id = el.dataset.cw;
     const get = () => (id === 'cue' ? c.color : (c.params?.[id.slice(4)] ?? fxProg(p.effects.find((e) => e.id === c.effect)).params.find((q) => q.name === id.slice(4))?.def));
     attachColorWheel(el, get(), (hex, done) => {
@@ -1253,7 +1287,7 @@ views.timelines.after = () => {
     });
     if (S.cwFocus === id) { el.focus(); S.cwFocus = null; }
   });
-  $$('[data-fxparam]').forEach((i) => i.addEventListener('input', () => {
+  $$('[data-fxparam]', box).forEach((i) => i.addEventListener('input', () => {
     c.params = c.params || {};
     c.params[i.dataset.fxparam] = +i.value;
     i.nextElementSibling.textContent = (+i.value).toFixed(2);
@@ -1262,16 +1296,16 @@ views.timelines.after = () => {
     const blk = grid.querySelector(`.blk[data-cue="${S.sel.cue}"]`);
     if (blk) paintClip(t, c, blk, cueEnd(t, c, len));
   }));
-  $$('[data-fxparam]').forEach((i) => i.addEventListener('change', () => render()));
+  $$('[data-fxparam]', box).forEach((i) => i.addEventListener('change', () => render()));
   // Level / intensity slider: the clip follows while dragging (this runs before the binding on #main).
-  $$(`.cue-ed [data-p$=".dim"]`).forEach((i) => i.addEventListener('input', () => {
+  $$(`.cue-ed [data-p$=".dim"]`, box).forEach((i) => i.addEventListener('input', () => {
     if (i.value === '') return;
     c.dim = Math.max(0, Math.min(100, +i.value));
     const blk = grid.querySelector(`.blk[data-cue="${S.sel.cue}"]`);
     if (blk) refreshBlk(blk, c);
     if (c.effect != null) startCuePreview();
   }));
-  $$('[data-fxreset]').forEach((b) => b.addEventListener('click', () => { delete c.params[b.dataset.fxreset]; markDirty(); render(); }));
+  $$('[data-fxreset]', box).forEach((b) => b.addEventListener('click', () => { delete c.params[b.dataset.fxreset]; markDirty(); render(); }));
   // Live preview of an effect cue on the track's fixtures.
   function startCuePreview() {
     if (!c || c.effect == null) return;
@@ -1280,7 +1314,7 @@ views.timelines.after = () => {
     runFxPreview($('#cueFxPrev'), fxProg(e), trackPreviewFixtures(tr, e), c.params || {}, (c.dim ?? 100) / 100);
   }
   startCuePreview();
-  $$('[data-cuehold]').forEach((el) => el.addEventListener('change', () => {
+  $$('[data-cuehold]', box).forEach((el) => el.addEventListener('change', () => {
     if (el.checked) { delete c.len; delete c.out; }
     else { c.len = Math.max(100, Math.min(cueEnd(t, c, c.t + 4000), c.t + 60000) - c.t); }
     markDirty();
@@ -1294,7 +1328,33 @@ views.timelines.after = () => {
     markDirty();
     render();
   }));
-  $$('[data-cuerow]').forEach((row) => row.addEventListener('click', (e) => { if (e.target.closest('button,input')) return; S.sel.cue = +row.dataset.cuerow; render(); }));
+  };
+  wireCueEditor();
+  // A click that only changes the selection or the cursor: the clips' marks, the cursor line,
+  // the current track, the cue list and the editor change in place, nothing else is rebuilt
+  // (a full render() redrew the whole page on every click; like trigSelectUi).
+  selectUi = () => {
+    if (S.view !== 'timelines' || !grid.isConnected) return render();
+    const play = $('[data-tlplay]');
+    if (!!play !== !!S.tlCursor) return render();   // the "play from" button comes or goes
+    if (play) play.textContent = `▶ from ${(S.tlCursor / 1000).toFixed(1)} s`;
+    // tlSelect made a new set: carry it into the one this page's handlers hold.
+    const now = tlSelection(t);
+    if (now !== sel) { sel.clear(); for (const x of now) sel.add(x); S.tlSel = sel; }
+    markSel();
+    const curs = $$('.tl-cur', grid);
+    if (S.tlCursor == null) curs.forEach((x) => x.parentNode.removeChild(x));
+    else if (!curs.length) lanes.forEach((l) => l.insertAdjacentHTML('afterbegin', `<div class="tl-cur" style="left:${pctOf(S.tlCursor)}"></div>`));
+    else curs.forEach((x) => (x.style.left = pctOf(S.tlCursor)));
+    const lane = S.tlCursorLane == null ? null : String(S.tlCursorLane);
+    $$('[data-trackhead]', grid).forEach((x) => x.classList.toggle('cur', x.dataset.trackhead === lane));
+    lanes.forEach((l) => l.classList.toggle('curlane', l.dataset.lane === lane));
+    info([S.tlCursor != null ? `cursor ${(S.tlCursor / 1000).toFixed(2)} s` : '', sel.size > 1 ? `${sel.size} selected` : ''].filter(Boolean).join(' · '));
+    $$('[data-cuerow]').forEach((row) => row.classList.toggle('sel', +row.dataset.cuerow === S.sel.cue));
+    const box = $('#cueEdBox');
+    if (box) { stopPageLoop('fxPreview'); box.innerHTML = cueEditorHtml(t); wireCueEditor(); }
+  };
+  $$('[data-cuerow]').forEach((row) => row.addEventListener('click', (e) => { if (e.target.closest('button,input')) return; tlSelect(t, [t.cues[+row.dataset.cuerow]]); selectUi(); }));
   // Playhead: interpolate between 1 s status updates.
   const heads = $$('.head', grid);
   pageAnimation('playhead', () => {

@@ -10,7 +10,9 @@ updates/
 data/show/project.bak
 data/show/backups/
 data/show/logs/
+examples/*/logs/
 examples/*/backups/
+examples/*/project.bak
 
 # Another project with its own git repository (Sourcetree)
 inspiration/PharosGuiCreator/

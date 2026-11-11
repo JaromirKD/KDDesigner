@@ -155,7 +155,14 @@ void setup() {
   else LOGW(Sys, "No SDRAM on this Portenta: big projects may not load");
   Storage::begin(5000);
   Update::begin();          // logs whether a firmware update was just installed
-  NetSafe::bootCheck();     // an unconfirmed network test / network-reset.txt: fix project.json first
+  // A save writes project.tmp in full, then moves project.json to the backups and renames the
+  // tmp. No project.json but a project.tmp = the power went between those two steps: the tmp
+  // is the complete new version (without this the board started empty).
+  if (Storage::mounted() && !Storage::exists(KD_PROJECT_PATH) && Storage::exists(KD_PROJECT_TMP)) {
+    bool ok = rename(KD_PROJECT_TMP, KD_PROJECT_PATH) == 0;
+    LOGW(Show, "A save was cut off: %s project.tmp", ok ? "using" : "could not rename");
+  }
+  NetSafe::bootCheck();    // an unconfirmed network test / network-reset.txt: fix project.json first
 
   String err;
   if (Storage::mounted() && Storage::exists(KD_PROJECT_PATH)) {
@@ -225,6 +232,10 @@ void loop() {
     nextTick += 1000 / Show::engineHz();
     if ((int32_t)(now - nextTick) > 200) nextTick = now;  // don't try to catch up after a stall
     uint32_t tt = micros();
+    // Read once more: a trigger that just ran in Triggers::poll started its fade or release at
+    // its own, later millis(). With the older `now` the frame saw a start time in its future,
+    // "now - start" wrapped and the fade was over at once.
+    now = millis();
     CRUMB("Show::tick");
     Show::tick(now);
     CRUMB("Show::sendOutputs");

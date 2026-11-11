@@ -27,6 +27,7 @@ rtos::Mutex mtx;
 bool dirty = false;
 uint32_t dirtySince = 0;
 const char kPath[] = KD_USB_ROOT "/show/vars.json";
+const char kTmp[] = KD_USB_ROOT "/show/vars.tmp";   // written first, then renamed (power cut safe)
 
 Var* find(const String& name) {
   for (auto& v : vars) if (v.name.equalsIgnoreCase(name)) return &v;
@@ -100,7 +101,10 @@ void load() {
   // Restore persistent values from the last run (first load only matters, later ones keep live values).
   String saved;
   JsonDocument s;
-  if (Storage::readFile(kPath, saved, 8192) && !deserializeJson(s, saved)) {
+  // No vars.json but a vars.tmp: the power went between removing the old file and renaming
+  // the new one, so the tmp is complete. (With both there, vars.json wins: the tmp may be half.)
+  bool got = Storage::readFile(kPath, saved, 8192) || Storage::readFile(kTmp, saved, 8192);
+  if (got && !deserializeJson(s, saved)) {
     for (auto& v : nv) {
       if (!v.persist || s[v.name].isNull()) continue;
       String raw = s[v.name].as<String>(), val;
@@ -151,7 +155,9 @@ bool set(const String& name, const String& value, String& msg, bool fromDevice) 
   ModbusLink l = v->link;
   if (changed) {
     if (changes.size() < 64) changes.push_back({v->name, val, old});
-    if (v->persist) { dirty = true; dirtySince = millis(); }
+    // The 2 s wait starts at the first change only: a value that changes all the time is
+    // still written every 2 s (restarting the wait at each change never wrote it).
+    if (v->persist && !dirty) { dirty = true; dirtySince = millis(); }
   }
   String n = v->name;
   mtx.unlock();
@@ -233,7 +239,11 @@ void flush() {
   mtx.unlock();
   String s;
   serializeJson(d, s);
-  Storage::writeFile(kPath, s.c_str(), s.length());
+  // tmp file + rename, like project.json: a power cut mid-write used to lose every kept value.
+  // FAT's rename doesn't replace an existing file, hence the remove.
+  if (!Storage::writeFile(kTmp, s.c_str(), s.length())) return;
+  remove(kPath);
+  rename(kTmp, kPath);
 }
 
 void statusJson(JsonObject o) {

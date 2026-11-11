@@ -5,9 +5,102 @@ Done 11 Nov 2026 (0.3.0, in the mock - see TEST-CHECKLIST.md part 3 to tick them
 -colour themes: Colours page with built-in themes and your own, shown in every colour wheel and on the keys 1-9, 0, swatches on the Effects page, "theme colours across the clips" on the timeline
 -selecting a trigger no longer makes the interface jerk (only the editor pane is rebuilt)
 -the launcher runs on a Mac too: double-click "KD Designer (Mac).command" (dialogs, Bin, USB scan and Finder all work; tested open/check/backup/rename/delete and the USB volume scan on a Mac)
+-timeline clip pictures are cached (page draw on the stress show 69 -> 11 ms; an edit repaints once, ~32 ms)
+-the Settings raw-JSON box is behind a closed fold, built when opened (page draw 185 -> 1.5 ms on the stress show)
+
+Done 11 Nov 2026 evening, without the board (firmware builds, both envs; UI tested in the mock):
+-zoom on the Effects page's map preview, like the other maps
+-clicking a timeline clip / empty track space / a cue-list row no longer redraws the page: only
+ the selection marks, cursor, current track, cue list and cue editor change (stress show 12 -> 2 ms)
+-Scenes "list of all fixtures" / "not on this map" with more than 200 fixtures: dots without
+ icons (stress show 476 -> 231 KB of HTML; the dots still show the scene's colours)
+-firmware: kept variables are written at most every 2 s also while they keep changing (a fast
+ counter was never written), and as vars.tmp + rename (a power cut lost them all)
+-firmware: a power cut in the middle of a save left no project.json (it was already in the
+ backups) and the board started EMPTY; now start-up uses the complete project.tmp
+-firmware: /api/dmx copies the 512 values under the engine lock and builds the text after it
 
 To do:
 -put 0.3.0 on the controller (Settings > Update, from 0.2.0 the file must stay under 768 KB: the Machine Control one is ~720 KB) and run TEST-CHECKLIST.md part 3 on the board
 -themes in the effect language (e.g. theme(i) = the i-th colour of a theme) would need the firmware (Fx.cpp): decide if it is worth it
--zoom on the effect preview map (Effects page) like the other maps
 -save the map zoom per map in the show instead of per browser?
+
+Optimizations to pick from (found 11 Nov 2026; web UI numbers measured in the mock with the
+stress show: 1360 fixtures, 8 universes, 108 triggers - tools/stress/make-stress.js):
+
+Web UI:
+-(timeline clip pictures and the Settings raw-JSON box: done 11 Nov, see the Done list)
+-(timeline clip click and Scenes chips: done 11 Nov evening, see above)
+-next: Patch (22 ms) and Monitoring (23 ms) are the next slowest big-show pages
+
+Controller:
+-project loading: a hash index in ArduinoJson's StringPool (lib/ArduinoJson, NEXT-STEPS 5d).
+ Measured on a PC: parsing the 390 KB stress show does ~1.4 million string compares; the json
+ step is 0.6 s of the save
+-a TCP/Modbus device that is off blocks the I/O thread ~18 s per retry (lwIP's connect ignores
+ the socket timeout), so PLC polls and HTTP requests wait that long each retry. Real fix: a
+ non-blocking connect in the rebuilt libmbed.a, or a thread per device
+-network update upload runs at ~53 KB/s (TCP window is 4 x 536 bytes): a 1.8 MB update takes
+ ~50 s and the engine tick dips to 17-20 ms meanwhile. Raise lwip.tcp-wnd / tcp-mss in the
+ rebuilt libmbed.a (rebuild in WSL, tools/core/README.md)
+-the web UI opens in 1.3 s because the stick reads ~300 KB/s: keep the gzipped UI files
+ (~250 KB) in SDRAM after the first read - later opens near-instant, less stick wear
+-the M4 core is idle: if the engine tick (7 ms per frame at 1360 pixels, budget 25) gets tight
+ with more universes, the effects (Fx VM) could run on the M4. Big job, only when needed
+-small: thread stacks hold ~80 KB of heap and every browser connection costs a 4 KB reader
+ thread - measure osThreadGetStackSpace and trim when heap gets short, not before
+
+Controller, found by reading the firmware on 11 Nov 2026 (not seen or measured on the board
+yet; most important first):
+
+Likely bugs:
+-(fixed in the code 11 Nov, builds; not on the board yet) a fade could end at once instead of
+ fading: a trigger (UDP/OSC, schedule, input, sleep) that started a scene fade or a timeline
+ release in the same main-loop round as an engine frame gave it a start time a millisecond
+ later than the time the frame worked with, "now - start" wrapped to 49 days and the fade
+ counted as finished. Same pattern as the timeline loop bug of 6 Nov. Now the main loop reads
+ the time again just before Show::tick, and the fades, releases, masters and effect time in
+ Show.cpp count a start in the future as 0 (KD_SINCE). To check on the board: fire a
+ "scene … fade 3" from UDP a few hundred times and look for one that snaps
+-(kept variables every 2 s + tmp/rename, project.tmp at start-up: fixed in the code 11 Nov
+ evening, builds; not on the board yet. To check: a counter variable kept after restart,
+ pull the power, it comes back; delete project.json on the stick by hand with a project.tmp
+ next to it, it starts with the tmp)
+
+Smoother lights:
+-device history and kept variables are written to the stick from the main loop (Monitor::
+ flushHistory, Globals::flush), each write a few ms in which no engine frame is made. A show
+ with many KNX / Kiss-Box readings writes on nearly every round. Move both to the log's writer
+ thread and write history at most once a second (the log was moved for the same reason: 40 ->
+ 17 fps)
+-(the DMX monitor's /api/dmx: fixed 11 Nov evening. The fire history (/api/trighistory) still
+ builds its text under the lock, but with snprintf into reserved space: cheap, left as it is)
+
+Web / touch panel:
+-there is one web thread: while it does something slow (Monitoring's log search, an image
+ upload, the 50 s update) every other request waits, touch-panel presses included. A second
+ worker thread, or panel presses and commands on their own
+
+Finding problems, safety:
+-after a crash only "where the main loop was" is known. Store the fault address and the thread's
+ name in the memory that survives a restart (next to the log ring) and log them at start-up
+-free space on the stick is never checked or shown (logs up to 40 MB, 400 days of history,
+ backups, images). Show it on Settings and warn in the log when it gets low; a full stick
+ now only shows up as a failed save
+-no password anywhere: anyone on the network can save a project, send commands or install
+ firmware. An optional editor password (touch panel stays open), at least for save and update
+-without a clock (no internet for NTP, power was off) time and sun triggers silently don't run
+ until a browser sets the clock. Say so on the dashboard and in the log when the show has
+ time triggers; check whether the Machine Control's own battery-backed clock chip can be read
+ at start (the firmware doesn't use it now)
+-only the main loop is watched by the watchdog. If the web or I/O thread hangs the lights go
+ on but nothing says so: let those threads tick a counter the main loop checks, and log it
+
+Nice to have:
+-a name on the network (kd-designer.local, mDNS) next to finding it by Art-Net poll
+-Art-Net sync / sACN sync packets, only if a pixel wall over several universes shows tearing
+
+Already fine, checked 11 Nov: DMX out is interrupt-driven (40 fps), project receive 0.1 s,
+trigger list problems/icons are cheap even at 108 triggers, the fixture library (259 KB) is
+only fetched when opened.
+

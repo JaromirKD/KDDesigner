@@ -249,6 +249,21 @@ From `todo.txt` of 10 Nov, all in the web UI (tested in the mock):
   the keys 1-9, 0 give its colours; the Effects page's colour parameters have the swatches too.
 - Smaller: `tools/fxtest/test.js` runs with the system compiler on a Mac / Linux (WSL on Windows);
   the stale `mock-test` entry in `.claude/launch.json` is gone.
+- **Same day, after measuring with the stress show in the mock**: the launcher also runs on a
+  Mac (`KD Designer (Mac).command`, platform forks in launcher.js); timeline clip pictures are
+  cached (`tlThumbs` in app-show.js, keyed on `S.editSeq` which markDirty/undo/winApply bump:
+  page draw 69 -> 11 ms on the stress show, an edit repaints once); the Settings raw-JSON box
+  is a closed `<details>` built when opened (draw 185 -> 1.5 ms). More candidates with
+  measurements are in todo.txt under "Optimizations to pick from".
+
+- **Same evening, without the board**: zoom on the Effects map preview (`attachMapZoom` takes
+  the buttons' pane); a timeline click changes the selection in place (`selectUi` /
+  `wireCueEditor` in `views.timelines.after`, 12 -> 2 ms on the stress show); Scenes chips
+  without icons above 200. Firmware (builds, not on the board): kept variables written at most
+  every 2 s (the wait restarted at every change) as `vars.tmp` + rename; at start-up a
+  `project.tmp` without a `project.json` (power cut mid-save: the old file was already in the
+  backups, so the board started empty) is renamed and used; `/api/dmx` builds its text outside
+  `g_engine`.
 
 To check on the board: the 0.3.0 update installs (0.2.0 accepts up to 768 KB: the Machine Control
 file is ~720 KB) and a show saved with colour themes loads (the key is dropped like `maps`).

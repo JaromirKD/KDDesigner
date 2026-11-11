@@ -689,7 +689,7 @@ function attachMapResize(canvas, aspect) {
     bar.addEventListener('pointercancel', up, { once: true });
   });
 }
-// ---- Zoom on a map (Map page, Scenes, a track's map) -------------------------------------
+// ---- Zoom on a map (Map page, Scenes, a track's map, the Effects preview) -------------------------------------
 // Ctrl+wheel around the mouse, or the − / + / Fit buttons; zoomed in, the map scrolls inside
 // its box (drag with the middle mouse button, or the scrollbars). Positions are % of the map,
 // so a zoomed map is just a wider one. S.mapZoom[key] = the factor (1 = fits the page), per
@@ -700,10 +700,11 @@ const mapZoomHtml = (key) => {
   const z = S.mapZoom[key] || 1;
   return `<span class="seg map-zoom" title="Zoom the map: Ctrl+wheel over it, or these buttons. Zoomed in, drag with the middle mouse button (or use the scrollbars) to move around."><button data-mapzoom="out" title="Zoom out">−</button><button data-mapzoom="in" title="Zoom in">+</button><button data-mapzoom="fit" class="${z === 1 ? 'on' : ''}" title="Fit the whole map to the page">Fit</button></span><span class="muted mono map-zoom-pct">${z === 1 ? '' : `${Math.round(z * 100)}%`}</span>`;
 };
-function attachMapZoom(canvas, key) {
-  const wrap = canvas.parentElement;
+// pane = where the − / + / Fit buttons are (default: around the map's box).
+function attachMapZoom(canvas, key, pane) {
+  const wrap = canvas?.parentElement;
   if (!wrap?.classList.contains('map-wrap')) return;
-  const pane = wrap.parentElement;
+  pane = pane || wrap.parentElement;
   let z = S.mapZoom[key] || 1;
   // The width style the page gave the map (the size bar changes it): what "fit" goes back to.
   if (canvas.dataset.fitWidth == null) canvas.dataset.fitWidth = canvas.style.width;

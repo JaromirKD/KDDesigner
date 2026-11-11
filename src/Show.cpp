@@ -92,6 +92,12 @@ KD_FAST uint8_t applyCurve(uint8_t c, uint8_t v) {
   }
 }
 
+// Milliseconds since `start`, 0 when it is still ahead of `now` (set by another thread or a
+// trigger at a later millis() than this frame's): unsigned, that wrapped to 49 days and a fade
+// or release was over at once. A macro: the per-frame functions are built with other options
+// than the rest, and GCC doesn't inline a helper across those.
+#define KD_SINCE(now, start) ((int32_t)((now) - (start)) > 0 ? (uint32_t)((now) - (start)) : 0u)
+
 KD_FAST float ease(Path p, float k) {
   switch (p) {
     case Path::Accelerated: return k * k;
@@ -199,7 +205,7 @@ KD_FAST void runEffect(Playback& p, int track, uint32_t now) {
   memcpy(s, fc.slots.data(), sizeof(double) * prog.slots);
   const int n = fc.targets.size();
   const int live = p.tf[track].fading ? -1 : track;
-  s[Fx::T] = (now - p.tf[track].fxStart) / 1000.0;
+  s[Fx::T] = KD_SINCE(now, p.tf[track].fxStart) / 1000.0;
   s[Fx::N] = n;
   Fx::runFrame(prog, s);
   double outs[Fx::DIM - Fx::R + 1];
@@ -254,7 +260,7 @@ KD_FAST void updateFade(Playback& p, uint32_t now) {
     auto& f = p.tf[t];
     e[t] = -1;   // not fading: leave its channels alone (an effect at full writes them itself)
     if (!f.fading) continue;
-    float k = f.len ? (float)(now - f.start) / f.len : 1.0f;
+    float k = f.len ? (float)KD_SINCE(now, f.start) / f.len : 1.0f;
     if (k >= 1) { k = 1; f.fading = false; }
     e[t] = ease(f.path, k);
     any = true;
@@ -301,7 +307,7 @@ void updateRelease(Playback& p, uint32_t now) {
   for (int t = 0; t < KD_MAX_TRACKS; t++) {
     auto& f = p.tf[t];
     if (!f.rel) continue;
-    float k = f.rLen ? (float)(now - f.rStart) / f.rLen : 1.0f;
+    float k = f.rLen ? (float)KD_SINCE(now, f.rStart) / f.rLen : 1.0f;
     if (k >= 1) endRelease(p, t);
     else f.op = 1 - k;
   }
@@ -309,7 +315,7 @@ void updateRelease(Playback& p, uint32_t now) {
 
 void updateMaster(Playback& p, uint32_t now) {
   if (!p.mLen && p.master == p.mTo) return;
-  float k = p.mLen ? (float)(now - p.mStart) / p.mLen : 1.0f;
+  float k = p.mLen ? (float)KD_SINCE(now, p.mStart) / p.mLen : 1.0f;
   if (k >= 1) { k = 1; p.mLen = 0; }
   p.master = p.mFrom + (p.mTo - p.mFrom) * k;
   if (p.releasing && k >= 1) { p.active = false; State::changed(); }   // faded out: gone from the dashboard now

@@ -423,6 +423,7 @@ function toast(msg, err) {
 }
 function markDirty() {
   S.dirty = true;
+  S.editSeq = (S.editSeq || 0) + 1;   // caches keyed on it (timeline clip pictures) repaint
   updateHeader();
   // A copy for undo once the edits pause, so a slider drag or typing a name is one step.
   clearTimeout(undo.timer);
@@ -467,6 +468,7 @@ function undoStep(d) {
   if (to < 0 || to >= undo.stack.length) return toast(d < 0 ? 'Nothing to undo' : 'Nothing to redo');
   undo.at = to;
   S.project = normalize(JSON.parse(undo.stack[to]));
+  S.editSeq = (S.editSeq || 0) + 1;
   S.dirty = to !== undo.saved;
   clampSel();
   updateHeader();
@@ -518,6 +520,7 @@ function winApply(m) {
   win.joining = false;
   if (m.json === undo.stack[undo.at]) { S.dirty = m.dirty; updateHeader(); return; }
   S.project = normalize(JSON.parse(m.json));
+  S.editSeq = (S.editSeq || 0) + 1;
   S.dirty = m.dirty;
   // The first copy (this window just opened) replaces what it loaded; later ones are undo steps.
   if (first) { undoReset(!m.dirty); undo.stack[0] = m.json; }

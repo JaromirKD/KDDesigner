@@ -603,20 +603,31 @@ void handle(EthernetClient& c) {
   } else if (p == "/api/dmx") {
     // ?o=1 (DMX monitor): {"v":[512 values],"o":[overridden channel numbers]}; without it the plain array.
     const bool withOvr = queryParam(req.query, "o") == "1";
-    String out = withOvr ? "{\"v\":[" : "[";
+    // Copy the numbers under the engine lock, build the text after it (growing a String ~1000
+    // times under the lock held up the engine frame).
+    uint8_t vals[512], ovr[64] = {0};
+    const int un = queryParam(req.query, "u").toInt();
     g_engine.lock();
-    int u = Show::universeIndex(queryParam(req.query, "u").toInt());
+    int u = Show::universeIndex(un);
     if (u >= 0) {
-      const uint8_t* d = Show::output(u);
-      for (int i = 0; i < 512; i++) { if (i) out += ','; out += d[i]; }
+      memcpy(vals, Show::output(u), 512);
+      if (withOvr)
+        for (int i = 0; i < 512; i++) if (Show::isOverride(u, i)) ovr[i >> 3] |= 1 << (i & 7);
+    }
+    g_engine.unlock();
+    String out;
+    out.reserve(withOvr ? 2400 : 2100);
+    out = withOvr ? "{\"v\":[" : "[";
+    if (u >= 0) {
+      char num[6];
+      for (int i = 0; i < 512; i++) { snprintf(num, sizeof(num), i ? ",%u" : "%u", vals[i]); out += num; }
       if (withOvr) {
         out += "],\"o\":[";
         bool first = true;
         for (int i = 0; i < 512; i++)
-          if (Show::isOverride(u, i)) { if (!first) out += ','; out += i + 1; first = false; }
+          if (ovr[i >> 3] & (1 << (i & 7))) { snprintf(num, sizeof(num), first ? "%d" : ",%d", i + 1); out += num; first = false; }
       }
     }
-    g_engine.unlock();
     out += withOvr ? "]}" : "]";
     sendText(c, u >= 0 ? 200 : 404, "application/json", out);
   } else if (p == "/api/time" && req.method == "POST") {

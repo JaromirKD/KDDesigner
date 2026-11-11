@@ -2005,12 +2005,19 @@ views.settings = () => {
   <p class="muted">Installs new firmware and a new web UI over the network, no USB cable or storage device swap needed. The project, images and logs are kept.
     A firmware update restarts the controller: no light output for about half a minute.</p>
   <h3>Raw project JSON</h3>
+  <details id="rawBox"${S.rawOpen ? ' open' : ''}><summary>The whole show as text - built when opened (a big rig is several 100 KB)</summary>
   <textarea class="json" id="raw" spellcheck="false"></textarea>
-  <div class="row" style="margin-top:6px"><button class="btn" id="applyRaw">Apply JSON</button><span class="muted">Applies to the editor; press Save to send it to the controller.</span></div>`;
+  <div class="row" style="margin-top:6px"><button class="btn" id="applyRaw">Apply JSON</button><span class="muted">Applies to the editor; press Save to send it to the controller.</span></div></details>`;
 };
 views.settings.after = () => {
-  // Set as a value, not escaped into the HTML: with a big rig the JSON is several 100 KB.
-  $('#raw').value = JSON.stringify(P(), null, 2);
+  // The JSON goes in as a value, not escaped into the HTML, and only once the box is open:
+  // building it on every page draw took 185 ms with a 390 KB show.
+  const rawBox = $('#rawBox');
+  if (rawBox.open) $('#raw').value = JSON.stringify(P(), null, 2);
+  rawBox.addEventListener('toggle', () => {
+    S.rawOpen = rawBox.open;
+    if (rawBox.open) $('#raw').value = JSON.stringify(P(), null, 2);
+  });
   $('#syncClock').addEventListener('click', setClockFromPc);
   $('#updFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) installUpdate(f); });
   pagePoll('updInfo', () => { if (!S.updating) $('#updInfo').innerHTML = updInfoHtml(); $('#netLive').innerHTML = netLiveHtml(); }, 2000);
