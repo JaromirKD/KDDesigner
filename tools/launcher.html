@@ -89,7 +89,7 @@
   <h1>KD <span>Designer</span></h1>
   <button class="primary" id="bNew" title="Ctrl+N">+ New show</button>
   <button id="bBrowse" title="A show's project.json anywhere, or a .kdshow file (Ctrl+O)">Open…</button>
-  <button id="bFolder" title="Open the shows folder in Explorer">Shows folder</button>
+  <button id="bFolder" title="Open the shows folder">Shows folder</button>
   <span class="grow"></span>
   <span class="muted small" id="host"></span>
 </header>
@@ -219,10 +219,10 @@ function showRow(s) {
       ${s.missing ? '' : b('backup', 'Backup', 'Saves a .kdshow (project + map images) in the Backups folder')}
       ${s.missing ? '' : b('duplicate', s.example ? 'Copy to my shows' : 'Duplicate', 'A copy in the shows folder')}
       ${s.missing || s.example ? '' : b('rename', 'Rename', 'Renames the show folder')}
-      ${s.missing ? '' : b('reveal', 'Show in Explorer', s.path)}
+      ${s.missing ? '' : b('reveal', S.state?.mac ? 'Show in Finder' : 'Show in Explorer', s.path)}
       ${b('pin', s.pinned ? 'Unpin' : 'Pin', 'Pinned shows stay at the top')}
       ${!s.inShows && !s.example ? b('forget', 'Remove from list', 'Only from this list; the folder stays') : ''}
-      ${s.missing || s.example ? '' : b('delete', 'Delete', 'Moves the show folder to the Recycle Bin', 'danger')}
+      ${s.missing || s.example ? '' : b('delete', 'Delete', S.state?.mac ? 'Moves the show folder to the Bin' : 'Moves the show folder to the Recycle Bin', 'danger')}
     </div>
     ${stopped ? `<pre class="out">The show stopped by itself:\n${esc(stopped.join('\n'))}</pre>` : ''}
     ${out ? `<pre class="out">${esc(out)}</pre>` : ''}`;
@@ -392,7 +392,7 @@ async function newShow() {
   if (j?.port && w) { w.location = mockUrl(j.port); S.sel = k(j.path); draw(); } else if (w) w.close();
 }
 async function browse() {
-  // The Windows dialog opens on top; the tab is only opened once a show was picked.
+  // The file dialog opens on top; the tab is only opened once a show was picked.
   const j = await act('browse', {}, 'browse');
   if (j?.port) { S.sel = k(j.path); draw(); window.open(mockUrl(j.port), '_blank') || toast(`Opened on ${mockUrl(j.port)} - allow pop-ups for this page to open it in a tab`); }
 }
@@ -431,7 +431,7 @@ $('#shows').addEventListener('click', async (e) => {
   if (a === 'pin') return act('pin', { path: s.path, pinned: !s.pinned });
   if (a === 'forget') return act('forget', { path: s.path });
   if (a === 'delete') {
-    if (!confirm(`Delete "${s.name}"?\n\n${s.path}\n\nThe folder goes to the Recycle Bin.`)) return;
+    if (!confirm(`Delete "${s.name}"?\n\n${s.path}\n\nThe folder goes to the ${S.state?.mac ? 'Bin' : 'Recycle Bin'}.`)) return;
     const j = await act('delete', { path: s.path }, busy);
     if (j) S.sel = '';
   }
@@ -476,7 +476,7 @@ $('#usb').addEventListener('click', async (e) => {
     const j = await act('stickPut', { drive, path: s.path }, 'sput:' + drive);
     if (j?.backup) toast('Old show saved: ' + j.backup);
   }
-  if (a === 'www' && confirm(`Copy this PC's web UI to ${drive}\\www?\n\nThe storage device's current www folder is replaced.`)) await act('stickWww', { drive }, 'swww:' + drive);
+  if (a === 'www' && confirm(`Copy this PC's web UI to ${drive.startsWith('/') ? drive + '/www' : drive + '\\www'}?\n\nThe storage device's current www folder is replaced.`)) await act('stickWww', { drive }, 'swww:' + drive);
   pollUsb();
 });
 document.addEventListener('click', (e) => {

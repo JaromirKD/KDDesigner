@@ -126,7 +126,7 @@ body.live.live-frame::after { content: ""; position: fixed; inset: 0; border: 2p
 .badge { background: var(--err); color: #fff; border-radius: 8px; font-size: 11px; padding: 0 6px; }
 .badge:empty { display: none; }
 
-main { overflow: auto; padding: 18px 22px; }
+main { overflow: auto; padding: 18px 22px; overflow-anchor: none; }   /* render() restores the scroll itself; the browser's anchoring on top moved the page */
 .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -273,6 +273,10 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 /* map (floor plan with fixtures) */
 .map-tools { margin: 8px 0; gap: 8px; }
 .map-wrap { max-width: 100%; }
+.map-wrap.zoomed { overflow: auto; }   /* zoomed in (attachMapZoom): the map scrolls inside its box */
+.map-wrap.zoomed .map-resize { display: none; }   /* the size bar works at "fit" */
+.map-wrap.zoomed .mini-map { max-width: none; }
+.map-zoom-pct:empty { display: none; }
 .map-canvas, .mini-map { position: relative; width: 100%; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; user-select: none; touch-action: none;
   background-color: var(--deep); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
   background-size: 2.5% 4%, 2.5% 4%; }
@@ -338,7 +342,7 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .cmd, .cmd-like { font-family: var(--mono); width: 100%; }
 
 /* trigger list */
-.trig-list { max-height: calc(var(--main-h, 100 * var(--vh)) - 200px); overflow-y: auto; }
+.trig-list { max-height: calc(var(--main-h, 100 * var(--vh)) - 200px); overflow-y: auto; overflow-anchor: none; }
 .list .item.sep { font-weight: 600; font-size: 12px; letter-spacing: .04em; color: var(--muted); background: var(--bg); padding: 10px 12px 4px; border-bottom: 2px solid var(--tc, var(--border)); }
 /* main section = big heading; sub section = smaller, indented with its triggers */
 .list .item.sep.main { font-size: 13.5px; font-weight: 700; padding: 12px 12px 4px; border-bottom-width: 3px; }
@@ -568,6 +572,22 @@ body.dragging-item, body.dragging-item * { cursor: grabbing !important; user-sel
 .cw-lbl { display: flex; flex-direction: column; font-size: 11px; }
 .cw-pal { display: flex; flex-wrap: wrap; gap: 4px; }
 .cw-pal .swatch { width: 18px; height: 18px; }
+.cw-pal .cw-theme { font-size: 11px; padding: 1px 4px; height: 20px; max-width: 120px; }
+.fx-pal { margin-left: 6px; }
+/* Colours page (app-colors.js): themes in the list, the bar and the swatches of one theme */
+.theme-strip { display: inline-flex; gap: 1px; margin-left: auto; flex: none; }
+.theme-strip i { width: 8px; height: 14px; border-radius: 2px; }
+.theme-strip b { font-size: 10px; color: var(--muted); align-self: center; }
+.theme-bar { display: flex; height: 34px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); margin: 10px 0; }
+.theme-bar i { flex: 1; }
+.theme-sws { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.theme-sw { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px; border-radius: 6px; border: 1px solid transparent; font-size: 11px; cursor: pointer; }
+.theme-sw:hover { background: var(--panel2); }
+.theme-sw.on { border-color: var(--accent); background: var(--panel2); }
+.theme-swc { width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--border); }
+.theme-swb { display: flex; gap: 0; }
+.theme-swb .btn { padding: 0 4px; min-width: 0; font-size: 10px; }
+.tag.ok { color: var(--ok); }
 .cw-mode button { padding: 2px 7px; font-size: 11px; }
 .cw-mix { gap: 6px; font-size: 12px; padding: 0 2px; cursor: pointer; }
 /* R G B / H S V sliders: the track is a gradient of the colour along it (set in attachColorWheel) */

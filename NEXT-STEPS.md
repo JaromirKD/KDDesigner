@@ -6,6 +6,7 @@ effects, UDP triggers and the network update work (see HARDWARE-TEST-PLAN.md for
 and fixed). **9 Nov**: stress test and two rounds of speed-ups (README "Capacity (measured)"),
 installed as **0.2.0** by network update. Machine Control build: RAM ~28 %, flash ~86 %.
 `backup-before-tidy.zip` in the project folder is the state before the first tidy-up.
+**11 Nov 2026**: **0.3.0** built (not yet on the board), see section 7.
 
 ## 1. Git - done 2 Nov 2026
 
@@ -224,3 +225,33 @@ Still open:
   **Watchdog** (added 1 Nov 2026): after a normal boot "Last start" should say `power on`; a project save with a big rig must not trip it (15 s); a network update must still install (the bootloader runs after a system reset, which stops the watchdog). Test a hang once, e.g. a temporary `while (1) {}` in a command, and check the board comes back with `watchdog`.
 - ~~Network update on hardware~~ - works: 0.1.0 -> 0.1.1 on 6 Nov, 0.1.1 -> 0.2.0 on 9 Nov 2026 (HARDWARE-TEST-PLAN). Original notes: (`src/Update.cpp`, written from Arduino's Portenta OTA library without having run): bootloader version shown on Settings; QSPI partition 2 created/mounted on first boot; a `.kdupdate` with a raised `KD_VERSION` installs and the log says "installed" after the restart. Check whether the bootloader deletes `UPDATE.BIN` itself (then the "installed / NOT installed" check can't run and needs another way). Also watch the engine during the upload: the HTTP thread writes ~1.4 MB to QSPI and the stick.
 - Ideas mentioned along the way: more effect templates using `y`, e.g. ripple and radar (see the conversation of 31 Oct).
+
+## 7. 0.3.0 - 11 Nov 2026 (built on a Mac with PlatformIO in a venv; not yet on the board)
+
+From `todo.txt` of 10 Nov, all in the web UI (tested in the mock):
+- **Trigger list jumped on every click**: selecting a trigger rebuilt the whole page (`render()`),
+  which reset the list's scroll and flashed everything. Now `trigSelectUi()` changes the rows'
+  highlight and the editor pane only (3 ms instead of 10, and nothing moves). The browser's scroll
+  anchoring on `main` is off too (`overflow-anchor: none`): with the splitter and the autocomplete
+  wrappers inserted after the scroll was restored it moved the page by itself.
+- **Timeline**: right-click menus on empty track space (add a colour / scene / effect clip there,
+  paste there, play from there, cursor, split, select the track's clips), on a track's name
+  (fixtures, rename, select its clips, add a clip at the cursor, move up / down, add a track below,
+  duplicate with its clips, delete) and on the ruler (play from here, pause, cursor, end the
+  timeline here, zoom). The clip menu got "Split at the cursor" and "Theme colours across the
+  clips". **+ Cue** became **+ Colour / + Scene / + Effect** (`data-add="cue:<kind>"`, `addClipAt`).
+- **Map zoom** (Map, Scenes, a track's map): Ctrl+wheel, − / + / Fit, middle-button drag;
+  `attachMapZoom` in app-rig.js. The map is just made wider inside a scrolling box, so nothing
+  else changed.
+- **Colour themes** (new `app-colors.js`, Colours page, nav after Effects): 14 built-in themes and
+  the show's own in `colorThemes` (the firmware drops them after loading, `ShowParse.cpp`). Every
+  colour wheel shows the chosen theme (drop-down in the wheel, `kd.cwTheme` in localStorage) and
+  the keys 1-9, 0 give its colours; the Effects page's colour parameters have the swatches too.
+- Smaller: `tools/fxtest/test.js` runs with the system compiler on a Mac / Linux (WSL on Windows);
+  the stale `mock-test` entry in `.claude/launch.json` is gone.
+
+To check on the board: the 0.3.0 update installs (0.2.0 accepts up to 768 KB: the Machine Control
+file is ~720 KB) and a show saved with colour themes loads (the key is dropped like `maps`).
+Not done: the StringPool hash index of 5d (loading is 0.6 s; measured on a PC that a 390 KB
+stress show does ~1.4 million string compares while parsing, so that index is the first thing
+to try if a bigger show ever loads slowly).

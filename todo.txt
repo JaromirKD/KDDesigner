@@ -1,7 +1,13 @@
--add right click controls to timeline
--add a button in timelines for adding a effect/color/etc.
+Done 11 Nov 2026 (0.3.0, in the mock - see TEST-CHECKLIST.md part 3 to tick them off):
+-right click controls in timelines: empty space on a track, the track's name and the time ruler (+ split and theme colours in the clip menu)
+-timelines: + Colour / + Scene / + Effect buttons instead of + Cue
+-zooming in and out on all maps (Map page, Scenes, timeline track map): Ctrl+wheel, - / + / Fit, middle-button drag
+-colour themes: Colours page with built-in themes and your own, shown in every colour wheel and on the keys 1-9, 0, swatches on the Effects page, "theme colours across the clips" on the timeline
+-selecting a trigger no longer makes the interface jerk (only the editor pane is rebuilt)
+-the launcher runs on a Mac too: double-click "KD Designer (Mac).command" (dialogs, Bin, USB scan and Finder all work; tested open/check/backup/rename/delete and the USB volume scan on a Mac)
 
--in all maps add zooming and shrinking in on the map
--for all colors that we can set for fixtures and effects etc. can we add a theme tab? with different themes for colors that we then can resuse in all our effects etc. add a bunch of themes and make it so we can include our own themes
-
--every time i select a trigger the interface jerks
+To do:
+-put 0.3.0 on the controller (Settings > Update, from 0.2.0 the file must stay under 768 KB: the Machine Control one is ~720 KB) and run TEST-CHECKLIST.md part 3 on the board
+-themes in the effect language (e.g. theme(i) = the i-th colour of a theme) would need the firmware (Fx.cpp): decide if it is worth it
+-zoom on the effect preview map (Effects page) like the other maps
+-save the map zoom per map in the show instead of per browser?

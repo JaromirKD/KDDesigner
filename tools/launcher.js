@@ -1,8 +1,9 @@
 'use strict';
 // KD Designer launcher: a home page on this PC (http://localhost:8079) that lists the shows,
 // starts a mock per show, and finds controllers on USB and on the network.
-// No dependencies: Node for the work, Windows PowerShell for dialogs, USB devices and the
-// Recycle Bin. Started by "KD Designer (PC).cmd"; closing that window stops every mock it started.
+// No dependencies: Node for the work, plus Windows PowerShell or macOS AppleScript for the
+// dialogs, USB devices and the bin. Started by "KD Designer (PC).cmd" on Windows or
+// "KD Designer (Mac).command" on a Mac; closing that window stops every mock it started.
 //   node tools/launcher.js [show folder to open]
 const http = require('http');
 const fs = require('fs');
@@ -12,14 +13,19 @@ const net = require('net');
 const dgram = require('dgram');
 const { spawn, execFile } = require('child_process');
 
+// Windows or Mac: only the dialogs, the bin, USB and "reveal" differ; the rest is one code path.
+const WIN = process.platform === 'win32', MAC = process.platform === 'darwin';
+
 const REPO = path.join(__dirname, '..');
 // KD_SHOWS / KD_LAUNCHER_CONF / KD_LAUNCHER_PORT: other places, for tests.
 const SHOWS = process.env.KD_SHOWS || path.join(os.homedir(), 'Documents', 'KD Shows');   // same folder the old menu used
 const BACKUPS = path.join(SHOWS, 'Backups');
-const CONF = process.env.KD_LAUNCHER_CONF || path.join(process.env.APPDATA || os.homedir(), 'KD Designer', 'launcher.json');
+// Settings: %APPDATA%\KD Designer on Windows, ~/Library/Application Support/KD Designer on a Mac.
+const CONF = process.env.KD_LAUNCHER_CONF || path.join(WIN ? process.env.APPDATA || os.homedir()
+  : MAC ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'), 'KD Designer', 'launcher.json');
 const FIRST_PORT = +process.env.KD_LAUNCHER_PORT || 8079;
 const EXAMPLES = [
-  { path: path.join(REPO, 'data', 'show'), label: 'Sample project', note: 'data\\show in the project folder' },
+  { path: path.join(REPO, 'data', 'show'), label: 'Sample project', note: 'data/show in the project folder' },
   { path: path.join(REPO, 'examples', 'feature-demo'), label: 'Feature demo', note: 'every feature once - best copied first' },
   // Museum starting points, written by tools/make-examples.js.
   { path: path.join(REPO, 'examples', 'museum-gallery'), label: 'Museum gallery', note: 'opening hours, cleaning, night light, staff panel' },
@@ -195,7 +201,9 @@ function stopMock(dir) {
   return true;
 }
 
-// ---- Windows helpers (PowerShell 5 is always there) --------------------------
+const stickRoot = (drive) => (WIN ? drive + '\\' : drive);
+
+// ---- Dialogs, bin, reveal: PowerShell on Windows, AppleScript (osascript) on a Mac ----
 function ps(script, env = {}, timeout = 20000) {
   return new Promise((ok, fail) => {
     execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding=[Text.Encoding]::UTF8;' + script],
@@ -203,20 +211,44 @@ function ps(script, env = {}, timeout = 20000) {
       (err, out, errOut) => (err && !out ? fail(new Error(String(errOut || err.message).trim().split('\n')[0])) : ok(String(out).trim())));
   });
 }
+// AppleScript on a Mac. Values go in as environment variables (AppleScript's "system
+// attribute"), so nothing has to be quoted. A closed dialog answers '' like the Windows ones.
+function osa(script, env = {}, timeout = 20000) {
+  return new Promise((ok, fail) => {
+    execFile('osascript', ['-e', script], { env: { ...process.env, ...env }, timeout, maxBuffer: 4 << 20 },
+      (err, out, errOut) => {
+        if (!err) return ok(String(out).trim());
+        if (/canceled/i.test(String(errOut))) return ok('');
+        fail(new Error(String(errOut || err.message).trim().split('\n')[0]));
+      });
+  });
+}
+const onlyWinMac = () => Promise.reject(new Error('Only built for Windows and macOS'));
 // The dialogs get a top-most owner so they don't open behind the browser.
 const DIALOG = 'Add-Type -AssemblyName System.Windows.Forms; $o = New-Object System.Windows.Forms.Form -Property @{TopMost=$true};';
 function pickFile(title, filter, start) {
+  if (MAC) return osa('POSIX path of (choose file with prompt (system attribute "KD_T") default location (POSIX file (system attribute "KD_S") as alias))', { KD_T: title, KD_S: start }, 600000);
+  if (!WIN) return onlyWinMac();
   return ps(DIALOG + '$d = New-Object System.Windows.Forms.OpenFileDialog -Property @{Title=$env:KD_T; Filter=$env:KD_F; InitialDirectory=$env:KD_S};'
     + 'if ($d.ShowDialog($o) -eq "OK") { $d.FileName }', { KD_T: title, KD_F: filter, KD_S: start }, 600000);
 }
 function pickFolder(title, start) {
+  if (MAC) return osa('POSIX path of (choose folder with prompt (system attribute "KD_T") default location (POSIX file (system attribute "KD_S") as alias))', { KD_T: title, KD_S: start }, 600000);
+  if (!WIN) return onlyWinMac();
   return ps(DIALOG + '$d = New-Object System.Windows.Forms.FolderBrowserDialog -Property @{Description=$env:KD_T; SelectedPath=$env:KD_S};'
     + 'if ($d.ShowDialog($o) -eq "OK") { $d.SelectedPath }', { KD_T: title, KD_S: start }, 600000);
 }
-const toRecycleBin = (dir) => ps('Add-Type -AssemblyName Microsoft.VisualBasic;'
-  + '[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($env:KD_P, "OnlyErrorDialogs", "SendToRecycleBin")', { KD_P: dir });
-const reveal = (p) => spawn('explorer.exe', fs.statSync(p).isDirectory() ? [p] : ['/select,', p], { detached: true, stdio: 'ignore' }).unref();
-const openUrl = (u) => { if (!NO_BROWSER) spawn('explorer.exe', [u], { detached: true, stdio: 'ignore' }).unref(); };
+const toRecycleBin = (dir) => (MAC
+  ? osa('tell application "Finder" to delete (POSIX file (system attribute "KD_P") as alias)', { KD_P: dir })
+  : !WIN ? onlyWinMac()
+  : ps('Add-Type -AssemblyName Microsoft.VisualBasic;'
+    + '[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($env:KD_P, "OnlyErrorDialogs", "SendToRecycleBin")', { KD_P: dir }));
+const spawnQuiet = (cmd, args) => spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+// Show in Explorer / Finder (a file is selected, a folder opened), and the default browser.
+const reveal = (p) => (WIN ? spawnQuiet('explorer.exe', fs.statSync(p).isDirectory() ? [p] : ['/select,', p])
+  : MAC ? spawnQuiet('open', fs.statSync(p).isDirectory() ? [p] : ['-R', p])
+  : spawnQuiet('xdg-open', [fs.statSync(p).isDirectory() ? p : path.dirname(p)]));
+const openUrl = (u) => { if (!NO_BROWSER) spawnQuiet(WIN ? 'explorer.exe' : MAC ? 'open' : 'xdg-open', [u]); };
 
 // ---- USB: Arduino boards and KD sticks -----------------------------------------
 // Arduino's USB vendor ids; the Portenta H7 is PID 025B running and 035B in the bootloader
@@ -225,7 +257,14 @@ const PORTENTA = { '025B': 'Portenta H7', '035B': 'Portenta H7 (bootloader)' };
 let usbCache = { at: 0, data: null }, usbBusy = null;
 function scanUsb() {
   if (usbBusy) return usbBusy;
-  usbBusy = ps('$ErrorActionPreference="SilentlyContinue";'
+  usbBusy = (WIN ? scanUsbWin() : MAC ? scanUsbMac() : Promise.resolve({ boards: [], drives: [] }))
+    .then((data) => { usbCache = { at: Date.now(), data }; return data; })
+    .catch((e) => ({ boards: [], drives: [], error: e.message }))
+    .finally(() => { usbBusy = null; });
+  return usbBusy;
+}
+function scanUsbWin() {
+  return ps('$ErrorActionPreference="SilentlyContinue";'
     + `$b = @(Get-CimInstance Win32_PnPEntity -Filter "PNPDeviceID LIKE 'USB\\\\VID_2341%' OR PNPDeviceID LIKE 'USB\\\\VID_2A03%'" | Select-Object Name,PNPDeviceID,Status);`
     // Removable drives plus drives on a USB disk: many sticks and all USB SSDs say "fixed".
     + '$u = @(Get-Disk | Where-Object BusType -eq "USB" | Get-Partition | Where-Object DriveLetter | ForEach-Object { "$($_.DriveLetter):" });'
@@ -252,10 +291,50 @@ function scanUsb() {
       return { drive: d.DeviceID, label: d.VolumeName || '', size: +d.Size || 0, free: +d.FreeSpace || 0,
         kd: has('www\\index.html') || !!show, www: has('www\\index.html'), show };
     });
-    usbCache = { at: Date.now(), data: { boards: [...byDev.values()], drives } };
-    return usbCache.data;
-  }).catch((e) => ({ boards: [], drives: [], error: e.message })).finally(() => { usbBusy = null; });
-  return usbBusy;
+    return { boards: [...byDev.values()], drives };
+  });
+}
+// Mac: boards from system_profiler (Arduino vendor ids), their serial ports from
+// /dev/cu.usbmodem*, and "drives" = whatever is mounted under /Volumes besides the Mac's own
+// disk (that includes network shares and disk images: good enough to spot a KD stick).
+function scanUsbMac() {
+  return new Promise((ok, fail) => execFile('system_profiler', ['SPUSBDataType', '-json'], { timeout: 15000, maxBuffer: 16 << 20 },
+    (err, out) => (err ? fail(err) : ok(String(out))))).then((out) => {
+    let cuPorts = [];
+    try { cuPorts = fs.readdirSync('/dev').filter((n) => /^cu\.usbmodem/i.test(n)).map((n) => '/dev/' + n); } catch { /* no /dev */ }
+    const boards = [];
+    const walk = (items) => {
+      for (const it of items || []) {
+        const vid = /0x(2341|2a03)/i.exec(String(it.vendor_id || ''));
+        if (vid) {
+          const pm = /0x([0-9a-f]{4})/i.exec(String(it.product_id || ''));
+          const pid = pm ? pm[1].toUpperCase() : '';
+          const serial = String(it.serial_num || '').trim().toLowerCase();
+          const ports = serial ? cuPorts.filter((x) => x.toLowerCase().includes(serial)) : [];
+          boards.push({ id: `${vid[1].toUpperCase()}:${pid}`, pid, name: PORTENTA[pid] || it._name || 'Arduino', ports, ok: true });
+        }
+        walk(it._items);
+      }
+    };
+    walk((JSON.parse(out || '{}') || {}).SPUSBDataType);
+    // One board whose port didn't match by serial number: the modem ports are its.
+    if (boards.length === 1 && !boards[0].ports.length) boards[0].ports = cuPorts;
+    const rootDev = fs.statSync('/').dev;
+    const drives = [];
+    for (const name of (fs.existsSync('/Volumes') ? fs.readdirSync('/Volumes') : [])) {
+      const root = path.join('/Volumes', name);
+      let st;
+      try { st = fs.statSync(root); } catch { continue; }
+      if (!st.isDirectory() || st.dev === rootDev) continue;   // the Mac's own disk
+      let size = 0, free = 0;
+      try { const f = fs.statfsSync(root); size = f.bsize * f.blocks; free = f.bsize * f.bavail; } catch { /* fine without */ }
+      const has = (x) => fs.existsSync(path.join(root, x));
+      const show = has(path.join('show', 'project.json')) ? showInfo(path.join(root, 'show')) : null;
+      drives.push({ drive: root, label: name, size, free,
+        kd: has(path.join('www', 'index.html')) || !!show, www: has(path.join('www', 'index.html')), show });
+    }
+    return { boards, drives };
+  });
 }
 
 // ---- network: Art-Net poll finds controllers (they answer as "KD Designer") ----
@@ -429,7 +508,7 @@ const actions = {
     if (mocks.has(key(p))) throw new Error('Close the show first');
     await toRecycleBin(p);
     forgetPath(p);
-    return { reply: 'Moved to the Recycle Bin' };
+    return { reply: WIN ? 'Moved to the Recycle Bin' : 'Moved to the Bin' };
   },
   async forget({ path: p }) { forgetPath(p); return {}; },
   async pin({ path: p, pinned }) {
@@ -468,15 +547,16 @@ const actions = {
       (err, out, errOut) => ok({ text: (String(out) + String(errOut)).trim(), problems: !!err })));
   },
   // USB storage device: copy its show to the PC, put a PC show on it, or give it this PC's web UI.
+  // (stickRoot: path.join('E:', 'show') would be drive-relative on Windows, so the slash is added.)
   async stickGet({ drive }) {
-    const src = needShow(path.join(drive + '\\', 'show'));
+    const src = needShow(path.join(stickRoot(drive), 'show'));
     const dir = freeFolder((showInfo(src)?.project || 'Storage show') + ' (storage device)');
     copyShow(src, dir);
     return { path: dir };
   },
   async stickPut({ drive, path: p }) {
     p = needShow(p);
-    const dst = path.join(drive + '\\', 'show');
+    const dst = path.join(stickRoot(drive), 'show');
     let bak = '';
     if (fs.existsSync(path.join(dst, 'project.json'))) {
       const old = readKdshow(dst);
@@ -490,10 +570,10 @@ const actions = {
     return { reply: `Show copied to ${drive}`, backup: bak };
   },
   async stickWww({ drive }) {
-    const dst = path.join(drive + '\\', 'www');
+    const dst = path.join(stickRoot(drive), 'www');
     fs.rmSync(dst, { recursive: true, force: true });
     fs.cpSync(path.join(REPO, 'data', 'www'), dst, { recursive: true });
-    return { reply: `Web UI copied to ${drive}\\www` };
+    return { reply: `Web UI copied to ${dst}` };
   },
   // Controllers on the network
   async ctlAdd({ ip }) {
@@ -530,7 +610,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/hello') return json(res, 200, { kd: 'launcher' });
     if (p === '/api/state') {
-      return json(res, 200, { shows: listShows(), showsDir: SHOWS, backups: BACKUPS, node: process.version, host: os.hostname(),
+      return json(res, 200, { shows: listShows(), showsDir: SHOWS, backups: BACKUPS, node: process.version, host: os.hostname(), mac: MAC,
         stopped: Object.fromEntries([...lastExit].map(([k, v]) => [k, v])), updates: updateFiles() });
     }
     if (p === '/api/usb') return json(res, 200, Date.now() - usbCache.at < 2000 && usbCache.data ? usbCache.data : await scanUsb());

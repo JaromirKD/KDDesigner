@@ -1,6 +1,6 @@
 // Checks the firmware's effect engine (src/Fx.cpp) against the browser's (data/www/fx.js):
 //   node tools/fxtest/test.js
-// Builds Fx.cpp with the PC's own compiler in WSL (Ubuntu: g++), runs every effect template
+// Builds Fx.cpp with the PC's own compiler (Windows: WSL's g++; Mac / Linux: g++), runs every effect template
 // plus some awkward programs, and compares each fixture's r g b w dim. Fx.cpp itself also
 // checks its fast path against a plain interpreter of the same bytecode (must match exactly).
 // Differences against fx.js below 1e-9 are the maths libraries (glibc vs the browser).
@@ -40,12 +40,14 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fxtest-'));
 for (const f of ['src/Fx.cpp', 'src/Fx.h', 'tools/fxtest/fxtest.cpp', 'tools/fxtest/shim/Arduino.h', 'tools/fxtest/shim/BigRam.h'])
   fs.copyFileSync(path.join(ROOT, f), path.join(tmp, path.basename(f)));
 fs.writeFileSync(path.join(tmp, 'programs.txt'), programs.map((p) => p.replace(/\\/g, '\\\\').replace(/\n/g, '\\n')).join('\n') + '\n');
+// Windows: WSL's g++ (no native compiler); Mac / Linux: the system's own g++ (clang++ on a Mac).
+const build = 'g++ -std=c++14 -O2 -Wall -Wno-unused-function -I. -o fxtest fxtest.cpp Fx.cpp && ./fxtest < programs.txt';
 const wslPath = '/mnt/' + tmp[0].toLowerCase() + tmp.slice(2).replace(/\\/g, '/');
 let out;
 try {
-  out = execFileSync('wsl', ['-d', 'Ubuntu-22.04', '--', 'bash', '-c',
-    `cd '${wslPath}' && g++ -std=c++14 -O2 -Wall -Wno-unused-function -I. -o fxtest fxtest.cpp Fx.cpp && ./fxtest < programs.txt`],
-  { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 64 << 20 });
+  out = process.platform === 'win32'
+    ? execFileSync('wsl', ['-d', 'Ubuntu-22.04', '--', 'bash', '-c', `cd '${wslPath}' && ${build}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 64 << 20 })
+    : execFileSync('bash', ['-c', build], { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 64 << 20 });
 } catch (e) {
   console.error('FAILED: build or run (see above), or the fast path differs from the plain interpreter');
   process.exit(1);

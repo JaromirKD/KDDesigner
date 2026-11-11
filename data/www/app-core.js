@@ -189,7 +189,7 @@ function emptyProject() {
 function normalize(p) {
   const e = emptyProject();
   for (const k of ['universes', 'fixtures', 'groups', 'scenes', 'timelines', 'triggers', 'projectors', 'pcs', 'devices', 'modes',
-    'variables', 'tcp', 'modbus', 'calendar', 'maps', 'effects', 'deviceGroups', 'fixtureTypes', 'drivers']) p[k] = p[k] || [];
+    'variables', 'tcp', 'modbus', 'calendar', 'maps', 'effects', 'deviceGroups', 'fixtureTypes', 'drivers', 'colorThemes']) p[k] = p[k] || [];
   p.deviceGroups.forEach((g) => (g.devices = g.devices || []));
   p.drivers.forEach(normDriver);   // app-drivers.js
   // "Round effects" moved from the map (`square`) to each effect (`round`, Nov 2026): every
@@ -887,6 +887,13 @@ function pagePoll(name, fn, ms) {
   pageLoops.set(name, () => clearInterval(id));
   fn();
 }
+// Autocomplete on the command / condition fields under root: the whole page in render(), or a
+// pane that was rebuilt on its own (the trigger editor). Boxes of fields that are gone go too.
+function attachACs(root) {
+  acs = acs.filter((a) => a.input.isConnected || (a.destroy(), false));
+  $$('input.cmd', root).forEach((el) => acs.push(attachAC(el, { onEnter: el.id === 'consoleIn' ? runConsole : null })));
+  $$('input.cond', root).forEach((el) => acs.push(attachAC(el, { grammar: COND_GRAMMAR })));
+}
 function render() {
   acs.forEach((a) => a.destroy());
   acs = [];
@@ -904,8 +911,7 @@ function render() {
   $$('.split', main).forEach((el, i) => addSplitter(el, `kd.split.${S.view}.${i}`));
   main.scrollTop = scroll;
   const capped = main.scrollTop;
-  $$('input.cmd', main).forEach((el) => acs.push(attachAC(el, { onEnter: el.id === 'consoleIn' ? runConsole : null })));
-  $$('input.cond', main).forEach((el) => acs.push(attachAC(el, { grammar: COND_GRAMMAR })));
+  attachACs(main);
   views[S.view].after?.();
   // Again if after() added height the first restore was capped by; not when after() scrolled on
   // purpose (revealing an item).

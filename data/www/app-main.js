@@ -117,7 +117,7 @@ function addItem(kind) {
       break;
     }
     case 'timeline': p.timelines.push({ id: nextId(p.timelines), name: 'Timeline ' + nextId(p.timelines), length: 10000, loop: false, priority: 0, tracks: [{ name: 'Scenes', fixtures: [], groups: [] }], cues: [] }); S.sel.timeline = p.timelines.length - 1; S.sel.cue = -1; break;
-    case 'cue': case 'trigcue': {
+    case 'cue': case 'cue:preset': case 'cue:scene': case 'cue:effect': case 'trigcue': {
       // At the cursor, on the cursor's track (else the selected cue's track, else the first).
       // Without a cursor: a 4 s clip right after the last one on that track; a trigger cue
       // 1 s after the last trigger cue.
@@ -130,8 +130,9 @@ function addItem(kind) {
       // Up to the next clip on the track, at most 4 s.
       const nx = Math.min(Infinity, ...same.filter((c) => c.t > at).map((c) => c.t));
       const len = Math.max(100, Math.min(4000, nx - at));
-      if (S.tlCursor != null) S.tlCursor = at + len;   // so the next + Cue lands after this one
-      return addCue(t, { t: at, track, len }, trackFxIds(t.tracks[track]).length ? 'preset' : 'scene');
+      if (S.tlCursor != null) S.tlCursor = at + len;   // so the next + Colour / Scene lands after this one
+      // The kind asked for; plain "cue" (older callers): a colour on a track with fixtures, else a scene.
+      return addCue(t, { t: at, track, len }, kind.split(':')[1] || (trackFxIds(t.tracks[track]).length ? 'preset' : 'scene'));
     }
     case 'track': {
       const t = p.timelines[S.sel.timeline];
@@ -152,6 +153,14 @@ function addItem(kind) {
       break;
     }
     case 'action': p.triggers[S.sel.trigger].actions.push(''); break;
+    case 'colorTheme': {
+      // Starts as the theme the wheels show now (app-colors.js).
+      const all = allThemes(p);
+      p.colorThemes.push({ id: nextId(p.colorThemes), name: uniqueName(all, 'My theme'), colors: [...cwTheme().colors] });
+      S.sel.theme = all.length;
+      S.themeSwatch = 0;
+      break;
+    }
   }
   markDirty();
   render();
@@ -411,7 +420,7 @@ const CTX_MENUS = [
   ['[data-sel^="trigger:"]', (el) => {
     const p = P(), i = +el.dataset.sel.split(':')[1], t = p.triggers[i];
     if (!t) return null;
-    if (!S.trigSel.has(t)) { selectTriggers([i]); S.revealSel = false; render(); }
+    if (!S.trigSel.has(t)) { selectTriggers([i]); S.revealSel = false; trigSelectUi(); }
     const sel = selectedTrigIdx().map((j) => p.triggers[j]), n = sel.length, real = sel.filter((x) => x.type !== 'comment');
     const on = real.some((x) => x.enabled !== false);
     const rename = () => { const f = $(`[data-p="triggers.${p.triggers.indexOf(t)}.name"]`); f?.focus(); f?.select(); };
@@ -446,10 +455,16 @@ const CTX_MENUS = [
       { label: 'Copy', key: 'Ctrl+C', run: () => pageKey('c', true) },
       { label: 'Cut', key: 'Ctrl+X', run: () => pageKey('x', true) },
       { label: 'Paste at cursor', key: 'Ctrl+V', off: !S.tlClip?.length, run: () => pageKey('v', true) },
+      kind !== 'trigger' && { label: 'Split at the cursor', key: 'Ctrl+E', off: !(S.tlCursor > c.t && S.tlCursor < cueEnd(t, c, Infinity)), run: () => pageKey('e', true) },
+      n > 1 && { label: `Theme colours across the ${n} clips`, run: () => themeAcrossCues(t, [...tlSelection(t)]) },
       null,
       { label: n > 1 ? `Delete ${n} cues` : 'Delete', key: 'Del', danger: true, run: () => pageKey('Delete') },
     ];
   }],
+  // The timeline's empty space, track names and ruler (app-show.js).
+  ['[data-ruler]', (el, e) => (S.view === 'timelines' ? tlRulerMenu(el, e) : null)],
+  ['.tl-lane', (el, e) => (S.view === 'timelines' ? tlLaneMenu(el, e) : null)],
+  ['[data-trackhead]', (el) => (S.view === 'timelines' ? tlHeadMenu(el) : null)],
   ['[data-shape]', (el) => {
     const m = S.view === 'map' && P().maps[S.sel.map];
     if (!m) return null;
@@ -497,6 +512,7 @@ const CTX_MENUS = [
       { label: n > 1 ? `Delete ${n} fixtures` : 'Delete', key: 'Del', danger: true, run: () => pageKey('Delete') },
     ];
   }],
+  ['[data-sel^="theme:"]', (el) => themeMenu(el)],   // app-colors.js
   ['[data-sel^="scene:"], [data-sel^="timeline:"], [data-sel^="effect:"], [data-sel^="map:"], [data-sel^="page:"]', (el) => {
     const [k, si] = el.dataset.sel.split(':'), i = +si, path = `${listPath[k]}.${i}`, x = getPath(P(), path);
     if (!x) return null;

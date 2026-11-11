@@ -677,7 +677,7 @@ function attachMapResize(canvas, aspect) {
     const z = uiZoom(), y0 = e.clientY, h0 = canvas.getBoundingClientRect().height / z;
     let h = h0;
     bar.classList.add('drag');
-    const move = (ev) => { h = Math.max(120, Math.min(3000, h0 + (ev.clientY - y0) / z)); canvas.style.width = `min(100%, ${h * aspect}px)`; };
+    const move = (ev) => { h = Math.max(120, Math.min(3000, h0 + (ev.clientY - y0) / z)); canvas.style.width = canvas.dataset.fitWidth = `min(100%, ${h * aspect}px)`; };
     const up = () => {
       bar.removeEventListener('pointermove', move);
       bar.classList.remove('drag');
@@ -688,6 +688,76 @@ function attachMapResize(canvas, aspect) {
     bar.addEventListener('pointerup', up, { once: true });
     bar.addEventListener('pointercancel', up, { once: true });
   });
+}
+// ---- Zoom on a map (Map page, Scenes, a track's map) -------------------------------------
+// Ctrl+wheel around the mouse, or the − / + / Fit buttons; zoomed in, the map scrolls inside
+// its box (drag with the middle mouse button, or the scrollbars). Positions are % of the map,
+// so a zoomed map is just a wider one. S.mapZoom[key] = the factor (1 = fits the page), per
+// page and map; S.mapScroll[key] = where it was scrolled to. Not saved: a browser preference.
+S.mapZoom = {};
+S.mapScroll = {};
+const mapZoomHtml = (key) => {
+  const z = S.mapZoom[key] || 1;
+  return `<span class="seg map-zoom" title="Zoom the map: Ctrl+wheel over it, or these buttons. Zoomed in, drag with the middle mouse button (or use the scrollbars) to move around."><button data-mapzoom="out" title="Zoom out">−</button><button data-mapzoom="in" title="Zoom in">+</button><button data-mapzoom="fit" class="${z === 1 ? 'on' : ''}" title="Fit the whole map to the page">Fit</button></span><span class="muted mono map-zoom-pct">${z === 1 ? '' : `${Math.round(z * 100)}%`}</span>`;
+};
+function attachMapZoom(canvas, key) {
+  const wrap = canvas.parentElement;
+  if (!wrap?.classList.contains('map-wrap')) return;
+  const pane = wrap.parentElement;
+  let z = S.mapZoom[key] || 1;
+  // The width style the page gave the map (the size bar changes it): what "fit" goes back to.
+  if (canvas.dataset.fitWidth == null) canvas.dataset.fitWidth = canvas.style.width;
+  const apply = () => {
+    canvas.style.width = canvas.dataset.fitWidth;
+    wrap.style.height = '';
+    wrap.classList.remove('zoomed');
+    if (z === 1) return;
+    const w0 = canvas.offsetWidth, h0 = canvas.offsetHeight;   // the size at "fit"
+    canvas.style.width = `${Math.round(w0 * z)}px`;
+    if (z > 1) wrap.style.height = `${h0}px`;   // the box keeps its size, the map scrolls inside it
+    wrap.classList.add('zoomed');
+  };
+  const paintButtons = () => {
+    $$('[data-mapzoom="fit"]', pane).forEach((b) => b.classList.toggle('on', z === 1));
+    $$('.map-zoom-pct', pane).forEach((el) => (el.textContent = z === 1 ? '' : `${Math.round(z * 100)}%`));
+  };
+  // Zoom to nz, keeping the point under the mouse (cx, cy) where it is; without one, the middle.
+  const zoomTo = (nz, cx, cy) => {
+    nz = Math.max(0.25, Math.min(8, Math.round(nz * 100) / 100));
+    if (Math.abs(nz - 1) < 0.06) nz = 1;
+    const r = canvas.getBoundingClientRect(), wr = wrap.getBoundingClientRect(), uz = uiZoom();
+    const fx = cx != null ? (cx - r.left) / r.width : 0.5, fy = cy != null ? (cy - r.top) / r.height : 0.5;
+    const ox = cx != null ? (cx - wr.left) / uz : wr.width / uz / 2, oy = cy != null ? (cy - wr.top) / uz : wr.height / uz / 2;
+    z = S.mapZoom[key] = nz;
+    apply();
+    wrap.scrollLeft = fx * canvas.offsetWidth - ox;
+    wrap.scrollTop = fy * canvas.offsetHeight - oy;
+    paintButtons();
+  };
+  apply();
+  if (S.mapScroll[key]) [wrap.scrollLeft, wrap.scrollTop] = S.mapScroll[key];
+  wrap.addEventListener('scroll', () => (S.mapScroll[key] = [wrap.scrollLeft, wrap.scrollTop]));
+  $$('[data-mapzoom]', pane).forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.mapzoom;
+    zoomTo(k === 'fit' ? 1 : k === 'in' ? z * 1.5 : z / 1.5);
+  }));
+  wrap.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    zoomTo(z * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY);
+  }, { passive: false });
+  // Middle mouse button: drag the map around (the browser's own autoscroll is kept off).
+  wrap.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
+  wrap.addEventListener('pointerdown', (e) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    wrap.setPointerCapture(e.pointerId);
+    const x0 = e.clientX, y0 = e.clientY, sl = wrap.scrollLeft, st = wrap.scrollTop, uz = uiZoom();
+    const move = (ev) => { wrap.scrollLeft = sl - (ev.clientX - x0) / uz; wrap.scrollTop = st - (ev.clientY - y0) / uz; };
+    wrap.addEventListener('pointermove', move);
+    wrap.addEventListener('pointerup', () => wrap.removeEventListener('pointermove', move), { once: true });
+  }, true);
 }
 // ---- Shapes and rotation of selected fixtures on a map --------------------------------
 // Positions are 0..1 of the map's width and height; the maths works in "square" units
@@ -969,6 +1039,7 @@ views.map = () => {
         ${S.mapClip?.items.length && !shapeMode ? `<button class="btn small" id="mapPaste" title="Put the copied fixtures on this map at their copied positions (Ctrl+V)">Paste ${S.mapClip.items.length} position${S.mapClip.items.length > 1 ? 's' : ''}</button>` : ''}
         <label class="muted"><input type="checkbox" data-p="${base}.labels" data-t="bool"${m.labels !== false ? ' checked' : ''} data-r> Names</label>
         <label class="muted"><input type="checkbox" id="mapLive"${S.mapLive !== false ? ' checked' : ''}> Live</label>
+        ${mapZoomHtml(`map:${m.id}`)}
         <button class="btn small${shapeMode ? ' on' : ''}" id="mapShapeMode" title="Draw rectangles, ellipses, lines and text (a simple floor plan). While on, fixtures can't be moved.">✎ Floor plan${m.shapes.length ? ` (${m.shapes.length})` : ''}</button>
       </div>
       ${shapeMode ? `<div class="row map-tools"><div class="seg">${SHAPE_TOOLS.map(([v, n]) => `<button class="${(S.mapTool || 'select') === v ? 'on' : ''}" data-maptool="${v}">${n}</button>`).join('')}</div>
@@ -1025,6 +1096,7 @@ views.map.after = () => {
   if (!m) return;
   const canvas = $('#mapCanvas');
   attachMapResize(canvas, m.aspect);
+  attachMapZoom(canvas, `map:${m.id}`);
   const snap = (v) => (m.snap !== false ? snapTo(m, v) : v);
   $('#mapGridN')?.addEventListener('change', (e) => { m.grid = +e.target.value; markDirty(); render(); });
   $('#mapPaste')?.addEventListener('click', () => mapPaste(m));
@@ -1505,7 +1577,7 @@ function colorWheelHtml(id, hex) {
       <label class="muted cw-lbl">Brightness <input type="range" class="cw-v" min="0" max="100" value="${Math.round(rgbToHsv(r, g, b)[2] * 100)}"></label>
       ${cwSliders('cw-rgb', [['R', 255, 'Red 0-255'], ['G', 255, 'Green 0-255'], ['B', 255, 'Blue 0-255']])}
       ${cwSliders('cw-hsv', [['H', 360, 'Hue 0-360°'], ['S', 100, 'Saturation 0-100 %'], ['V', 100, 'Value (brightness) 0-100 %']])}
-      <div class="cw-pal">${PALETTE.map((c, k) => `<button class="swatch" data-pal="${c}" style="background:${c}" title="${c} (key ${(k + 1) % 10})"></button>`).join('')}</div>
+      <div class="cw-pal">${cwPalHtml()}</div>
     </div></div>`;
 }
 let wheelImg = null;
@@ -1583,7 +1655,14 @@ function attachColorWheel(el, hex, onChange) {
       w.querySelectorAll('[data-cwmode]').forEach((x) => x.classList.toggle('on', x.dataset.cwmode === b.dataset.cwmode));
     }
   }));
-  el.querySelectorAll('[data-pal]').forEach((b) => b.addEventListener('click', () => setHex(b.dataset.pal, true)));
+  // Swatches: one listener on the row, so a theme change can rebuild them.
+  const pal = el.querySelector('.cw-pal');
+  pal.addEventListener('click', (e) => { const b = e.target.closest('[data-pal]'); if (b) setHex(b.dataset.pal, true); });
+  pal.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('cw-theme')) return;
+    setCwTheme(e.target.value);
+    for (const w of $$('.cw .cw-pal')) w.innerHTML = cwPalHtml();   // every wheel on the page follows
+  });
   let keyTimer = 0;
   el.addEventListener('keydown', (e) => {
     if (e.target !== el) return;
@@ -1593,7 +1672,7 @@ function attachColorWheel(el, hex, onChange) {
     else if (k === 'ArrowUp' || k === 'ArrowDown') s = Math.max(0, Math.min(1, s + (k === 'ArrowUp' ? 1 : -1) * (big ? 0.1 : 0.02)));
     else if (k === 'PageUp' || k === 'PageDown') v = Math.max(0, Math.min(1, v + (k === 'PageUp' ? 0.05 : -0.05)));
     else if (k === 'Home') { h = 0; s = 0; v = 1; }
-    else if (/^[0-9]$/.test(k)) { setHex(PALETTE[(+k + 9) % 10], true); e.preventDefault(); e.stopPropagation(); return; }
+    else if (/^[0-9]$/.test(k)) { setHex(themeColors()[(+k + 9) % 10], true); e.preventDefault(); e.stopPropagation(); return; }
     else return;
     e.preventDefault();
     e.stopPropagation();

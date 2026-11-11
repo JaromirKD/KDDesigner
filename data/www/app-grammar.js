@@ -882,7 +882,7 @@ function attachAC(input, { onEnter, grammar = GRAMMAR } = {}) {
     accept(+o.dataset.i);
   });
   check();
-  const api = { update, hide, destroy: () => { box.remove(); hl.destroy(); } };
+  const api = { input, update, hide, destroy: () => { box.remove(); hl.destroy(); } };
   input._ac = api;
   return api;
 }

@@ -112,6 +112,76 @@ function trigHitLines(x, words) {
 views.triggers = () => {
   const p = P();
   const ti = S.sel.trigger, t = p.triggers[ti];
+  const f = S.trigFilter || '';
+  // Colour filter: show only triggers with one of the picked colours ('' = no colour).
+  const cf = S.trigColors || (S.trigColors = new Set());
+  // One tab per colour that a trigger uses or that has a name (palette order, then custom
+  // colours); the tab shows its name above the colour.
+  const colKey = (x) => (trigColor(x.color) ? x.color : '');
+  const colCount = {}, inUse = new Set(p.triggers.map(colKey));   // separators count as "in use", not in the numbers
+  for (const x of p.triggers) if (x.type !== 'comment') colCount[colKey(x)] = (colCount[colKey(x)] || 0) + 1;
+  const named = Object.keys(p.triggerColorNames || {}).map((k) => (k === 'none' ? '' : k)).filter((k) => k === '' || trigColor(k));
+  const usedCols = [...Object.keys(TRIGGER_COLORS), ...inUse, ...named].filter((c, i, a) => a.indexOf(c) === i && (inUse.has(c) || named.includes(c)));
+  for (const c of cf) if (!usedCols.includes(c)) cf.delete(c);
+  const filtering = f || cf.size;
+  const words = trigSearchWords();
+  const shown = new Set(trigVisibleIdx());
+  const nReal = p.triggers.filter((x) => x.type !== 'comment').length;
+  const nShown = p.triggers.filter((x, i) => x.type !== 'comment' && shown.has(i)).length;
+  const multi = p.triggers.some((x) => S.trigSel.has(x));
+  const isSel = (x, i) => (multi ? S.trigSel.has(x) : i === ti);
+  const selT = t && t.type !== 'comment' ? t : null;
+  const links = selT ? triggerLinks(selT) : null;
+  // A sub separator (level 2) and the triggers under it are indented, up to the next main one.
+  const inSub = [];
+  { let sub = false; p.triggers.forEach((x, i) => { if (x.type === 'comment') sub = x.level === 2; inSub[i] = sub; }); }
+  const listItem = (x, i) => {
+    const col = trigColor(x.color);
+    if (!shown.has(i)) return '';
+    // Drag to reorder: also inside a colour tab (it lands next to the row it is dropped on, the
+    // hidden rows stay where they are), not while searching, where the order is ambiguous.
+    const drag = f ? '' : ` data-drag="${i}"`;
+    const grip = f ? '' : '<span class="act-grip trig-grip" title="Drag to move (the whole selection when this one is selected)">⠿</span>';
+    const sel = isSel(x, i) ? ' sel' : '';
+    const note = x.notes?.trim() ? `<span class="note-mark" title="${esc(x.notes.trim())}">✎</span>` : '';
+    if (x.type === 'comment')
+      return `<div class="item sep ${x.level === 2 ? 'sub' : 'main'}${sel}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col};color:${col}` : ''}">${grip}<span class="tname" style="flex:1">${markWords(x.name || '—', words)}</span>${note}</div>`;
+    // Connections of the selected trigger: → it sets this one off, ← this one sets it off.
+    const lo = links?.out.find((l) => l.t === x), li = links?.in.find((l) => l.t === x);
+    const linkCls = lo || li ? ` linked${lo ? ' link-out' : ''}${li ? ' link-in' : ''}` : '';
+    const linkTag = trigLinkMarks(selT, lo, li);
+    const probs = triggerProblems(x);
+    const bang = probs.length ? `<span class="trig-err" title="${esc(probs.join('\n'))}">!</span>` : '';
+    const from = `<span class="trig-io">${trigIoHtml(x)}</span>`;
+    return `<div class="item${sel}${inSub[i] ? ' in-sub' : ''}${x.enabled === false ? ' disabled' : ''}${col ? ' tinted' : ''}${linkCls}${probs.length ? ' has-err' : ''}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col}` : ''}">
+      ${grip}<span class="id">${x.id}</span>${bang}<span class="tname" style="flex:1;min-width:0">${markWords(x.name, words)}${words.length ? trigHitLines(x, words) : ''}</span>${note}${from}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.onlyIn?.group ? `<span class="tag" title="Only active when ${esc(x.onlyIn.group)} is ${esc((x.onlyIn.states || []).join(' or '))}">◇ ${esc((x.onlyIn.states || []).join('/'))}</span>` : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
+  };
+  return `<h2 class="trig-head">Triggers <label class="muted flow-toggle" title="Triggers in the list (and the flow diagram) light up when they fire on the controller, one after the other as they really run"><input type="checkbox" id="trigLive"${trigLiveOn() ? ' checked' : ''}> light up when fired</label>
+    <label class="muted flow-toggle" title="A diagram of which triggers and timelines set off which triggers"><input type="checkbox" id="trigFlow"${trigFlowOn() ? ' checked' : ''}> show flow</label>
+    <label class="muted flow-toggle" title="When each trigger fired, on a time line (the controller keeps the last 512 fires)"><input type="checkbox" id="trigHist"${trigHistOn() ? ' checked' : ''}> show history</label>
+    <span class="spacer"></span><button class="btn small${S.trigTool === 'templates' ? ' on' : ''}" data-trigtool="templates" title="Ready-made triggers to add">Templates…</button>
+    <button class="btn small${S.trigTool === 'replace' ? ' on' : ''}" data-trigtool="replace" title="Find and replace in actions, conditions, names and notes (Ctrl+H)">Find &amp; replace…</button></h2>
+    ${trigToolHtml()}${trigHistOn() ? trigHistHtml() : ''}${trigFlowOn() ? trigFlowHtml(selT) : ''}<div class="split trig-split">
+    <div><div class="row nowrap trig-search"><input id="trigFilter" type="search" placeholder="Search triggers: name, command, IP, port… (Ctrl+F)" value="${esc(f)}" style="flex:1"
+        title="Shows the triggers that contain all the words, anywhere: name, notes, conditions, actions, steps or settings. Enter opens the first one, Esc clears.">
+      ${filtering ? `<span class="muted" style="white-space:nowrap">${nShown} of ${nReal}</span>` : ''}${f ? '<button class="btn small ghost" id="trigFilterClear" title="Clear the search (Esc)">✕</button>' : ''}</div>
+    ${usedCols.length > 1 || named.length ? `<div class="trig-tabs" title="Click a tab to show only its triggers, Ctrl+click to add more tabs. Double-click a tab to give it a name.">
+      <button class="trig-tab all${cf.size ? '' : ' on'}" data-colfilter-clear><span class="tab-name">All</span><span class="tab-n">${nReal}</span></button>
+      ${usedCols.map((c) => `<button class="trig-tab${cf.has(c) ? ' on' : ''}${trigColorName(c) ? '' : ' unnamed'}${c ? '' : ' nocol'}" data-colfilter="${esc(c)}" style="${c ? `--tc:${trigColor(c)}` : ''}"
+        title="${esc(trigColorLabel(c))}: ${colCount[c] || 0} trigger${colCount[c] === 1 ? '' : 's'}. Double-click to ${trigColorName(c) ? 'rename' : 'name'}."><span class="tab-name">${esc(trigColorLabel(c))}</span><span class="tab-n">${colCount[c] || 0}</span></button>`).join('')}</div>` : ''}
+    <div class="list trig-list">${p.triggers.map(listItem).join('')}${filtering && !nShown ? '<p class="muted" style="margin:8px">No trigger matches.</p>' : ''}</div>
+    <div class="row" style="margin-top:8px"><button class="btn small" data-add="trigger">+ Trigger</button><button class="btn small" data-add="separator">+ Separator</button><button class="btn small" data-trigtool="templates">+ From template</button>
+      ${t ? `<button class="btn small ghost" data-move="-1" title="Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} up (Alt+↑)">▲</button><button class="btn small ghost" data-move="1" title="Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} down (Alt+↓)">▼</button>` : ''}</div>
+    <p class="muted keys"><span class="io-grp in" style="vertical-align:middle">${devIcon('device')}</span> what sets it off → <span class="io-grp out" style="vertical-align:middle">${devIcon('device')}</span> devices it controls · ▶ fire now</p>
+    <p class="muted keys">Ctrl/Shift+click to select several · drag or Alt+↑↓ to move · Ctrl+C / X / V copy, cut & paste · Ctrl+D duplicate · Del delete · ↑↓ select · Ctrl+A all</p></div>
+    <div>${trigEditorHtml(p, ti, t, multi, links)}</div></div>`;
+};
+// The right-hand pane: the editor of the selected trigger, or the multi-edit form when several
+// are selected. Built on its own when the selection changes (trigSelectUi): the list stays.
+// → the selected trigger sets this row's trigger off, ← this one sets the selected one off.
+const trigLinkMarks = (selT, lo, li) => (lo ? `<span class="link-mark out" title="${esc(selT.name)} → ${esc(lo.why)}">→</span>` : '') +
+  (li ? `<span class="link-mark in" title="${esc(li.why)} → ${esc(selT.name)}">←</span>` : '');
+function trigEditorHtml(p, ti, t, multi, links) {
   const base = `triggers.${ti}`;
   let params = '';
   if (t) {
@@ -244,72 +314,10 @@ views.triggers = () => {
       case 'timeline_end': params = `<label>Timeline</label><select data-p="${base}.timeline" data-t="num">${opts(p.timelines, t.timeline)}</select>`; break;
     }
   }
-  const f = S.trigFilter || '';
-  // Colour filter: show only triggers with one of the picked colours ('' = no colour).
-  const cf = S.trigColors || (S.trigColors = new Set());
-  // One tab per colour that a trigger uses or that has a name (palette order, then custom
-  // colours); the tab shows its name above the colour.
-  const colKey = (x) => (trigColor(x.color) ? x.color : '');
-  const colCount = {}, inUse = new Set(p.triggers.map(colKey));   // separators count as "in use", not in the numbers
-  for (const x of p.triggers) if (x.type !== 'comment') colCount[colKey(x)] = (colCount[colKey(x)] || 0) + 1;
-  const named = Object.keys(p.triggerColorNames || {}).map((k) => (k === 'none' ? '' : k)).filter((k) => k === '' || trigColor(k));
-  const usedCols = [...Object.keys(TRIGGER_COLORS), ...inUse, ...named].filter((c, i, a) => a.indexOf(c) === i && (inUse.has(c) || named.includes(c)));
-  for (const c of cf) if (!usedCols.includes(c)) cf.delete(c);
-  const filtering = f || cf.size;
-  const words = trigSearchWords();
-  const shown = new Set(trigVisibleIdx());
-  const nReal = p.triggers.filter((x) => x.type !== 'comment').length;
-  const nShown = p.triggers.filter((x, i) => x.type !== 'comment' && shown.has(i)).length;
-  const multi = p.triggers.some((x) => S.trigSel.has(x));
-  const isSel = (x, i) => (multi ? S.trigSel.has(x) : i === ti);
-  const selT = t && t.type !== 'comment' ? t : null;
-  const links = selT ? triggerLinks(selT) : null;
-  // A sub separator (level 2) and the triggers under it are indented, up to the next main one.
-  const inSub = [];
-  { let sub = false; p.triggers.forEach((x, i) => { if (x.type === 'comment') sub = x.level === 2; inSub[i] = sub; }); }
-  const listItem = (x, i) => {
-    const col = trigColor(x.color);
-    if (!shown.has(i)) return '';
-    // Drag to reorder: also inside a colour tab (it lands next to the row it is dropped on, the
-    // hidden rows stay where they are), not while searching, where the order is ambiguous.
-    const drag = f ? '' : ` data-drag="${i}"`;
-    const grip = f ? '' : '<span class="act-grip trig-grip" title="Drag to move (the whole selection when this one is selected)">⠿</span>';
-    const sel = isSel(x, i) ? ' sel' : '';
-    const note = x.notes?.trim() ? `<span class="note-mark" title="${esc(x.notes.trim())}">✎</span>` : '';
-    if (x.type === 'comment')
-      return `<div class="item sep ${x.level === 2 ? 'sub' : 'main'}${sel}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col};color:${col}` : ''}">${grip}<span class="tname" style="flex:1">${markWords(x.name || '—', words)}</span>${note}</div>`;
-    // Connections of the selected trigger: → it sets this one off, ← this one sets it off.
-    const lo = links?.out.find((l) => l.t === x), li = links?.in.find((l) => l.t === x);
-    const linkCls = lo || li ? ` linked${lo ? ' link-out' : ''}${li ? ' link-in' : ''}` : '';
-    const linkTag = (lo ? `<span class="link-mark out" title="${esc(selT.name)} → ${esc(lo.why)}">→</span>` : '') +
-      (li ? `<span class="link-mark in" title="${esc(li.why)} → ${esc(selT.name)}">←</span>` : '');
-    const probs = triggerProblems(x);
-    const bang = probs.length ? `<span class="trig-err" title="${esc(probs.join('\n'))}">!</span>` : '';
-    const from = `<span class="trig-io">${trigIoHtml(x)}</span>`;
-    return `<div class="item${sel}${inSub[i] ? ' in-sub' : ''}${x.enabled === false ? ' disabled' : ''}${col ? ' tinted' : ''}${linkCls}${probs.length ? ' has-err' : ''}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col}` : ''}">
-      ${grip}<span class="id">${x.id}</span>${bang}<span class="tname" style="flex:1;min-width:0">${markWords(x.name, words)}${words.length ? trigHitLines(x, words) : ''}</span>${note}${from}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.onlyIn?.group ? `<span class="tag" title="Only active when ${esc(x.onlyIn.group)} is ${esc((x.onlyIn.states || []).join(' or '))}">◇ ${esc((x.onlyIn.states || []).join('/'))}</span>` : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
-  };
   const custom = t && t.color && !TRIGGER_COLORS[t.color] ? t.color : '';
   const vars = t && TRIGGER_VARS[t.type];
-  return `<h2 class="trig-head">Triggers <label class="muted flow-toggle" title="Triggers in the list (and the flow diagram) light up when they fire on the controller, one after the other as they really run"><input type="checkbox" id="trigLive"${trigLiveOn() ? ' checked' : ''}> light up when fired</label>
-    <label class="muted flow-toggle" title="A diagram of which triggers and timelines set off which triggers"><input type="checkbox" id="trigFlow"${trigFlowOn() ? ' checked' : ''}> show flow</label>
-    <label class="muted flow-toggle" title="When each trigger fired, on a time line (the controller keeps the last 512 fires)"><input type="checkbox" id="trigHist"${trigHistOn() ? ' checked' : ''}> show history</label>
-    <span class="spacer"></span><button class="btn small${S.trigTool === 'templates' ? ' on' : ''}" data-trigtool="templates" title="Ready-made triggers to add">Templates…</button>
-    <button class="btn small${S.trigTool === 'replace' ? ' on' : ''}" data-trigtool="replace" title="Find and replace in actions, conditions, names and notes (Ctrl+H)">Find &amp; replace…</button></h2>
-    ${trigToolHtml()}${trigHistOn() ? trigHistHtml() : ''}${trigFlowOn() ? trigFlowHtml(selT) : ''}<div class="split trig-split">
-    <div><div class="row nowrap trig-search"><input id="trigFilter" type="search" placeholder="Search triggers: name, command, IP, port… (Ctrl+F)" value="${esc(f)}" style="flex:1"
-        title="Shows the triggers that contain all the words, anywhere: name, notes, conditions, actions, steps or settings. Enter opens the first one, Esc clears.">
-      ${filtering ? `<span class="muted" style="white-space:nowrap">${nShown} of ${nReal}</span>` : ''}${f ? '<button class="btn small ghost" id="trigFilterClear" title="Clear the search (Esc)">✕</button>' : ''}</div>
-    ${usedCols.length > 1 || named.length ? `<div class="trig-tabs" title="Click a tab to show only its triggers, Ctrl+click to add more tabs. Double-click a tab to give it a name.">
-      <button class="trig-tab all${cf.size ? '' : ' on'}" data-colfilter-clear><span class="tab-name">All</span><span class="tab-n">${nReal}</span></button>
-      ${usedCols.map((c) => `<button class="trig-tab${cf.has(c) ? ' on' : ''}${trigColorName(c) ? '' : ' unnamed'}${c ? '' : ' nocol'}" data-colfilter="${esc(c)}" style="${c ? `--tc:${trigColor(c)}` : ''}"
-        title="${esc(trigColorLabel(c))}: ${colCount[c] || 0} trigger${colCount[c] === 1 ? '' : 's'}. Double-click to ${trigColorName(c) ? 'rename' : 'name'}."><span class="tab-name">${esc(trigColorLabel(c))}</span><span class="tab-n">${colCount[c] || 0}</span></button>`).join('')}</div>` : ''}
-    <div class="list trig-list">${p.triggers.map(listItem).join('')}${filtering && !nShown ? '<p class="muted" style="margin:8px">No trigger matches.</p>' : ''}</div>
-    <div class="row" style="margin-top:8px"><button class="btn small" data-add="trigger">+ Trigger</button><button class="btn small" data-add="separator">+ Separator</button><button class="btn small" data-trigtool="templates">+ From template</button>
-      ${t ? `<button class="btn small ghost" data-move="-1" title="Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} up (Alt+↑)">▲</button><button class="btn small ghost" data-move="1" title="Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} down (Alt+↓)">▼</button>` : ''}</div>
-    <p class="muted keys"><span class="io-grp in" style="vertical-align:middle">${devIcon('device')}</span> what sets it off → <span class="io-grp out" style="vertical-align:middle">${devIcon('device')}</span> devices it controls · ▶ fire now</p>
-    <p class="muted keys">Ctrl/Shift+click to select several · drag or Alt+↑↓ to move · Ctrl+C / X / V copy, cut & paste · Ctrl+D duplicate · Del delete · ↑↓ select · Ctrl+A all</p></div>
-    <div>${multi && S.trigSel.size > 1 ? multiEditHtml(p.triggers.filter((x) => S.trigSel.has(x))) : t ? `
+  const selT = links ? t : null;
+  return multi && S.trigSel.size > 1 ? multiEditHtml(p.triggers.filter((x) => S.trigSel.has(x))) : t ? `
       <div class="row nowrap">${t.type === 'comment' ? '' : `<label class="muted" title="The trigger's number = its place in the list. Type a number to move it there.">#</label>
         <input type="number" id="trigNum" min="1" value="${t.id}" style="width:70px;font-size:16px" title="Type a number to move this trigger there">`}
         <input data-p="${base}.name" value="${esc(t.name)}" style="font-size:16px;flex:1" placeholder="${t.type === 'comment' ? '== SECTION NAME' : ''}" class="${dupName(t) ? 'invalid' : ''}" data-r>
@@ -354,8 +362,8 @@ views.triggers = () => {
         <button class="btn small" data-test="${base}.actions.${i}">Test</button>
         <button class="btn small ghost" data-del="${base}.actions.${i}">✕</button></div>`).join('')}</div>
       <button class="btn small" data-add="action">+ Action</button>`}`
-    : '<span class="muted">Select or create a trigger.</span>'}</div></div>`;
-};
+    : '<span class="muted">Select or create a trigger.</span>';
+}
 // Type a name into a colour tab (Enter or leaving the box keeps it, Esc cancels, empty = no name).
 function renameColorTab(c) {
   const b = $$('.trig-tab[data-colfilter]').find((x) => x.dataset.colfilter === c);
@@ -413,19 +421,10 @@ function trigTestHtml(t) {
     ${notRun > 0 ? `<p class="muted" style="margin:4px 0">${notRun} line${notRun > 1 ? 's' : ''} below run later; watch the log for them.</p>` : ''}</div>`;
 }
 views.triggers.after = () => {
-  $('#trigTest')?.addEventListener('click', () => trigTest(P().triggers[S.sel.trigger]));
-  $('#trigTestAgain')?.addEventListener('click', () => trigTest(P().triggers[S.sel.trigger]));
-  $('#trigTestX')?.addEventListener('click', () => { S.trigTest = null; render(); });
-  // Keep the list's own scroll position across re-renders; bring a newly
-  // added/selected trigger into view.
+  // Keep the list's own scroll position across re-renders.
   const list = $('.trig-list');
   list.scrollTop = S.trigScroll || 0;
   list.addEventListener('scroll', () => (S.trigScroll = list.scrollTop));
-  if (S.revealSel) {
-    S.revealSel = false;
-    $('.trig-list .item.sel')?.scrollIntoView({ block: 'nearest' });
-    S.trigScroll = list.scrollTop;
-  }
   initTriggerDrag(list);
   $('#trigFlow').addEventListener('change', (e) => { setTrigFlow(e.target.checked); render(); });
   $('#trigLive').addEventListener('change', (e) => { setTrigLive(e.target.checked); render(); });
@@ -433,7 +432,6 @@ views.triggers.after = () => {
   trigToolAfter();
   updateTrigRunning();
   trigFlowAfter();
-  if ($('#trigActs')) initActionDrag($('#trigActs'), P().triggers[S.sel.trigger]);
   $('#trigFilter').addEventListener('input', (e) => {
     S.trigFilter = e.target.value;
     const pos = e.target.selectionStart;
@@ -455,7 +453,7 @@ views.triggers.after = () => {
       const first = trigVisibleIdx().find((i) => P().triggers[i].type !== 'comment');
       if (first == null) return;
       selectTriggers([first]);
-      render();
+      trigSelectUi();
     }
   });
   $('#trigFilterClear')?.addEventListener('click', () => { S.trigFilter = ''; render(); });
@@ -467,7 +465,6 @@ views.triggers.after = () => {
     if (/\.color$/.test(e.target.dataset?.p || '') && keepColorHeads()) { selectTriggers([P().triggers.indexOf(S.trigEditing)]); renumberTriggers(); markDirty(); render(); return; }
     refreshTrigProblems(); refreshTrigFlow(); refreshTrigIcons();
   }));
-  S.trigEditing = P().triggers[S.sel.trigger];
   let flowTimer = 0;
   editor?.addEventListener('input', (e) => {
     if (!e.target.matches('.cmd, .cond')) return;
@@ -491,6 +488,15 @@ views.triggers.after = () => {
     });
   });
   $('[data-colfilter-clear]')?.addEventListener('click', () => { if (!S.trigColors.size) return; S.trigColors.clear(); render(); });
+  trigEditorAfter();
+  trigRevealSel(list);
+};
+// Wires the editor pane: after render(), and after trigSelectUi() rebuilt only the pane.
+function trigEditorAfter() {
+  $('#trigTest')?.addEventListener('click', () => trigTest(P().triggers[S.sel.trigger]));
+  $('#trigTestAgain')?.addEventListener('click', () => trigTest(P().triggers[S.sel.trigger]));
+  $('#trigTestX')?.addEventListener('click', () => { S.trigTest = null; render(); });
+  if ($('#trigActs')) initActionDrag($('#trigActs'), P().triggers[S.sel.trigger]);
   const tabName = $('#trigTabName');
   tabName?.addEventListener('change', () => { setTrigColorName(P().triggers[S.sel.trigger].color, tabName.value); render(); });
   tabName?.addEventListener('keydown', (e) => { if (e.key === 'Enter') tabName.blur(); });
@@ -560,7 +566,45 @@ views.triggers.after = () => {
   }));
   wireOnlyIn();
   multiEditAfter();
-};
+  S.trigEditing = P().triggers[S.sel.trigger];
+}
+// Brings a newly selected / added trigger into view (S.revealSel), once.
+function trigRevealSel(list) {
+  if (!S.revealSel) return;
+  S.revealSel = false;
+  $('.item.sel', list)?.scrollIntoView({ block: 'nearest' });
+  S.trigScroll = list.scrollTop;
+}
+// Selecting a trigger (click, arrow keys, right-click, Enter in the search box): the rows'
+// highlight, the connection marks and the editor pane change; the list itself stays, with
+// its scroll position, search box and drag wiring. A full render() rebuilt the whole page
+// on every click, which made the list jump and the page flash.
+function trigSelectUi() {
+  const list = $('.trig-list'), pane = $('.trig-split > div:last-child');
+  if (S.view !== 'triggers' || !list || !pane) return render();
+  const p = P(), ti = S.sel.trigger, t = p.triggers[ti];
+  const multi = p.triggers.some((x) => S.trigSel.has(x));
+  const selT = t && t.type !== 'comment' ? t : null, links = selT ? triggerLinks(selT) : null;
+  for (const row of $$('.item[data-sel]', list)) {
+    const i = +row.dataset.sel.slice(8), x = p.triggers[i];
+    if (!x) continue;
+    row.classList.toggle('sel', multi ? S.trigSel.has(x) : i === ti);
+    if (x.type === 'comment') continue;
+    const lo = links?.out.find((l) => l.t === x), li = links?.in.find((l) => l.t === x);
+    row.classList.toggle('linked', !!(lo || li));
+    row.classList.toggle('link-out', !!lo);
+    row.classList.toggle('link-in', !!li);
+    $$('.link-mark', row).forEach((m) => m.remove());
+    const marks = trigLinkMarks(selT, lo, li);
+    if (marks) row.querySelector('.trig-io')?.insertAdjacentHTML('afterend', marks);
+  }
+  for (const b of $$('[data-move]')) b.title = b.title.replace(/Move (the selected triggers|it) /, `Move ${multi && S.trigSel.size > 1 ? 'the selected triggers' : 'it'} `);
+  pane.innerHTML = trigEditorHtml(p, ti, t, multi, links);
+  attachACs(pane);
+  trigEditorAfter();
+  trigRevealSel(list);
+  if ($('.trig-flow-wrap')) refreshTrigFlow();
+}
 
 // UDP / OSC "latest" (Triggers.cpp fireNetwork): a fader's flood of values runs at most 40 times
 // a second with the newest one, and the last value always arrives.
@@ -686,7 +730,7 @@ function multiEditAfter() {
     for (const x of trigs) if (x.onlyIn) x.onlyIn.states = [...states];
     done();
   }));
-  $$('[data-me-one]', box).forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); selectTriggers([+a.dataset.meOne]); render(); }));
+  $$('[data-me-one]', box).forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); selectTriggers([+a.dataset.meOne]); trigSelectUi(); }));
 }
 
 // Moves the triggers at idxs (any selection, also with gaps) so they sit together in front
@@ -908,7 +952,7 @@ function clickTrigger(i, e) {
     selectTriggers([i]);
     S.revealSel = false;
   }
-  render();
+  trigSelectUi();
 }
 // Names must be unique for "fire trigger <name>": "Start" -> "Start (2)".
 const dupName = (t) => t.type !== 'comment' && t.name && P().triggers.some((x) => x !== t && x.type !== 'comment' && (x.name || '').toLowerCase() === t.name.toLowerCase());
@@ -2079,7 +2123,7 @@ views.triggers.keys = (e) => {
     const vis = trigVisibleIdx();
     selectTriggers(vis, vis.includes(S.sel.trigger) ? S.sel.trigger : vis[0]);
     S.revealSel = false;
-    render();
+    trigSelectUi();
   } else if (mod && (k === 'c' || k === 'x')) {
     // Keep an internal copy too; the copy/cut event below also puts it on the system clipboard.
     S.trigClip = JSON.parse(JSON.stringify(selectedTrigIdx().map((i) => p.triggers[i])));
@@ -2108,8 +2152,9 @@ views.triggers.keys = (e) => {
     const vis = trigVisibleIdx().filter((j) => !(S.trigFilter && p.triggers[j].type === 'comment')), at = vis.indexOf(S.sel.trigger);
     if (!vis.length) return;
     const i = vis[at < 0 ? 0 : Math.max(0, Math.min(vis.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))];
-    if (e.shiftKey) { S.trigSel.add(p.triggers[i]); S.sel.trigger = i; S.revealSel = true; render(); }
-    else { selectTriggers([i]); render(); }
+    if (e.shiftKey) { S.trigSel.add(p.triggers[i]); S.sel.trigger = i; S.revealSel = true; }
+    else selectTriggers([i]);
+    trigSelectUi();
   }
 };
 // System clipboard as well (so triggers can be pasted into another tab/project).

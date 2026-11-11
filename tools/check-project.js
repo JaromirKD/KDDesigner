@@ -31,7 +31,7 @@ ctx.window = ctx;
 ctx.globalThis = ctx;
 vm.createContext(ctx);
 // Same files and order as index.html, without app-main.js (that one boots the page).
-const files = ['fx.js', 'model.js', 'fixture-lib.js', 'panel-ui.js', 'app-core.js', 'app-grammar.js', 'app-rig.js', 'app-library.js',
+const files = ['fx.js', 'model.js', 'fixture-lib.js', 'panel-ui.js', 'app-core.js', 'app-grammar.js', 'app-rig.js', 'app-colors.js', 'app-library.js',
   'app-show.js', 'app-triggers.js', 'app-trigger-tools.js', 'app-system.js', 'app-drivers.js'];
 // The scripts share one scope through top-level const/let, so they run as one script.
 vm.runInContext(files.map((f) => fs.readFileSync(path.join(WWW, f), 'utf8')).join('\n;\n'), ctx, { filename: 'ui.js' });

@@ -88,3 +88,24 @@ Upload by USB first (`python -m platformio run -e machine_control -t upload --up
 - [ ] **34** Locate on real fixtures.
 - [ ] **J2** The projector that wants lower case: with the option on it switches on/off and its state is read.
 - [ ] Long run: leave the stress show running overnight (`Overnight stress test.cmd`), check the report in `tools/stress/soak-results/`.
+
+---
+
+## Part 3 - 0.3.0 (11 Nov 2026)
+
+In the mock:
+- [ ] **T1** Triggers: scroll the list down, click a trigger: the list stays where it is, nothing jumps or flashes. ↑/↓, Ctrl+click (multi-edit), right-click and Enter in the search box: the same.
+- [ ] **T2** Triggers: with a trigger selected, edit an action, change the type, tick Enabled: the editor still updates as before (these still rebuild the page).
+- [ ] **T3** Timelines: right-click empty space on a track → Add colour / scene / effect clip at that time; paste there; play from there; split there. Right-click a track name → rename, move up/down, add a track below, duplicate with its clips, delete. Right-click the ruler → play from here, end the timeline here, zoom.
+- [ ] **T4** Timelines: **+ Colour**, **+ Scene**, **+ Effect** add that kind of clip at the cursor on the current track (+ Effect is greyed out without effects).
+- [ ] **T5** Map: Ctrl+wheel zooms around the mouse; − / + / Fit; zoomed in, the middle mouse button drags the map; fixtures can still be dragged and box-selected. Same on the Scenes map and a timeline track's map. Fit shows the size bar again.
+- [ ] **T6** Colours page: pick a built-in theme → **Use in the colour wheels**: every wheel (scene programmer, cue editor, effect parameter, DMX monitor) shows its swatches, keys 1-9, 0 give its colours, the drop-down in a wheel switches it. **Copy to my themes**, change a colour, move it, remove it, add one, rename, delete. Save, reload: own themes still there.
+- [ ] **T7** Timelines: select 3 colour clips, right-click → Theme colours across the clips: they get the theme's first 3 colours.
+- [ ] **T8** Effects page: a colour parameter has the theme's swatches next to it; clicking one changes the preview.
+
+On the board:
+- [ ] **T9** Install `updates/KD-Designer-0.3.0-machine_control.kdupdate` from 0.2.0 (it must be under 768 KB; it is ~720 KB): Settings shows 0.3.0.
+- [ ] **T10** Save a show with own colour themes: it loads (the log says "Project saved"), the themes are still in the editor after a reload.
+
+On a Mac:
+- [ ] **T11** Double-click "KD Designer (Mac).command" (first time: right-click → Open): the launcher page opens, shows in Documents/KD Shows, duplicate the feature demo, Open / Check / Backup / Rename / Delete (goes to the Bin), Open… shows a file dialog, a USB stick appears under Storage devices.

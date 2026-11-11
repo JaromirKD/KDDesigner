@@ -216,12 +216,17 @@ views.effects.after = () => {
     if (s2 !== sig) {
       sig = s2;
       $('#fxParams').innerHTML = prog.params.length ? `<b>Parameters</b> <span class="muted">(try values here, not saved; set defaults in the code, or per cue on the timeline. A comment after a param line is its note)</span>` + prog.params.map((q) => (q.type === 'color'
-        ? `<div class="row nowrap"><span class="fx-pn">${esc(q.name)}</span><input type="color" data-fxp="${esc(q.name)}" value="${esc(S.fxValues.v[q.name] || q.def)}"></div>`
+        ? `<div class="row nowrap"><span class="fx-pn">${esc(q.name)}</span><input type="color" data-fxp="${esc(q.name)}" value="${esc(S.fxValues.v[q.name] || q.def)}"><span class="cw-pal fx-pal" title="Colours of the theme chosen in the colour wheels (Colours page)">${cwTheme().colors.map((c) => `<button type="button" class="swatch" data-fxpal="${c}" style="background:${c}" title="${c}"></button>`).join('')}</span></div>`
         : `<div class="row nowrap"><span class="fx-pn">${esc(q.name)}</span><input type="range" data-fxp="${esc(q.name)}" min="${q.min}" max="${q.max}" step="${(q.max - q.min) / 200}" value="${S.fxValues.v[q.name] ?? q.def}" style="flex:1"><span class="mono fx-pv">${(+(S.fxValues.v[q.name] ?? q.def)).toFixed(2)}</span></div>`) + fxParamNote(q)).join('') : '';
       $$('[data-fxp]').forEach((i) => i.addEventListener('input', () => {
         S.fxValues.v[i.dataset.fxp] = i.type === 'color' ? i.value : +i.value;
         if (i.nextElementSibling?.classList.contains('fx-pv')) i.nextElementSibling.textContent = (+i.value).toFixed(2);
         runFxPreview($('#fxPrev'), fxProg(e), S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round);
+      }));
+      $$('[data-fxpal]').forEach((b) => b.addEventListener('click', () => {
+        const i = b.closest('.row').querySelector('[data-fxp]');
+        i.value = b.dataset.fxpal;
+        i.dispatchEvent(new Event('input'));
       }));
     }
     runFxPreview($('#fxPrev'), prog, S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round);
@@ -360,7 +365,8 @@ views.scenes = () => {
     look = `<div class="row map-tools">${pick}
         <span class="sc-count" id="scCount">${sceneCountHtml(sc, inScene)}</span>
         <label class="row muted" title="Hide the fixtures that are not in this scene"><input type="checkbox" id="scOnly"${S.scOnly ? ' checked' : ''}> Only fixtures in this scene</label>
-        <button class="btn small ghost" id="scSelIn"${inScene.size ? '' : ' disabled'} title="Select every fixture that is in this scene">Select those in scene</button></div>
+        <button class="btn small ghost" id="scSelIn"${inScene.size ? '' : ' disabled'} title="Select every fixture that is in this scene">Select those in scene</button>
+        ${m ? mapZoomHtml(`scene:${m.id}`) : ''}</div>
       <div class="row muted sc-legend"><span class="sc-key in"></span>in the scene <span class="sc-key out"></span>not in the scene · click to select · drag an area · Esc clears · Ctrl+A all</div>${groups}${look}`;
   }
   return `<h2>Scenes</h2><div class="split">
@@ -442,6 +448,7 @@ function wireSceneLook(sc) {
   // Libraries types give the home values and icons.
   if (!LIB.list && p.fixtures.some((f) => f.type && !findType(f.type))) loadLibrary(() => S.view === 'scenes' && render());
   paintSceneLook(sc);
+  if ($('#scCanvas')) attachMapZoom($('#scCanvas'), `scene:${m.id}`);
   $('#scMap').addEventListener('change', (e) => { S.scMap = +e.target.value; render(); });
   $('#scOnly').addEventListener('change', (e) => { S.scOnly = e.target.checked; render(); });
   $('#scSelIn').addEventListener('click', () => { S.scSel = sceneFixtures(sc); render(); });
@@ -582,11 +589,13 @@ views.timelines = () => {
       ${tlGridHtml(t)}
       <div class="row" style="margin-top:8px">
         <button class="btn small" data-add="track"${t.tracks.length >= 16 ? ' disabled' : ''}>+ Track</button>
-        <button class="btn small" data-add="cue">+ Cue</button>
+        <button class="btn small" data-add="cue:preset" title="A solid colour clip on the current track, at the cursor">+ Colour</button>
+        <button class="btn small" data-add="cue:scene" title="A scene clip on the current track, at the cursor">+ Scene</button>
+        <button class="btn small" data-add="cue:effect"${p.effects.length ? '' : ' disabled'} title="${p.effects.length ? 'An effect clip on the current track, at the cursor' : 'Make an effect first (Effects page)'}">+ Effect</button>
         <button class="btn small" data-add="trigcue">+ Trigger cue</button></div>
       <p class="muted keys">Clips work like Ableton: double-click an empty spot to add one, drag to move (Ctrl+drag copies, Alt = no snap), drag the edges for start and length,
         the little squares at the top for fade in / out. Empty space on a track is empty: its fixtures show what is underneath. Click empty space to put the cursor, drag there to select several.
-        Space plays from the cursor; click the time ruler while playing to jump there. Click a track's name to make it the current track: + Cue adds there (at the cursor).
+        Space plays from the cursor; click the time ruler while playing to jump there. Click a track's name to make it the current track: + Colour / Scene / Effect add there (at the cursor). Right-click empty space, a clip, a track name or the ruler for a menu.
         Ctrl+wheel zooms. Each track has its own fixtures and fades on its own; a track without fixtures plays scenes on the whole rig.<br>
         Keys: Ctrl+C / X / V copy, cut, paste at the cursor · Ctrl+D duplicate · Ctrl+E split at the cursor · Ctrl+A select all · Del delete · ←/→ previous/next cue · ↑/↓ other track · Shift+←/→ move 0.1 s (Ctrl 1 s) · 1–9, 0 colour · [ ] hue · + − intensity · Enter colour wheel · Space play from the cursor / pause / carry on · Esc deselect</p>
       ${S.trackEdit != null && t.tracks[S.trackEdit] ? trackFixturesHtml(t, S.trackEdit) : ''}
@@ -861,9 +870,9 @@ function trackFixturesHtml(t, r) {
       const viaGroup = !tr.fixtures.includes(f.id) && on.has(f.id);
       return `<label class="chk${viaGroup ? ' muted' : ''}" title="${viaGroup ? 'In the track through a group' : ''}"><input type="checkbox" data-trackfx="${f.id}"${on.has(f.id) ? ' checked' : ''}${viaGroup ? ' disabled' : ''}>${esc(f.name)}</label>`;
     }).join('')}</div>
-    ${p.maps.length > 1 ? `<div class="row"><span class="muted" style="min-width:70px">Map</span><div class="seg">${p.maps.map((x, i) => `<button class="${i === mi ? 'on' : ''}" data-trackmap="${i}">${esc(x.name)} <small>(${x.items.filter((it) => on.has(it.fixture)).length}/${x.items.length})</small></button>`).join('')}</div></div>` : ''}
-    ${m ? (onMap.length ? `<div class="mini-map${onMap.length > 40 ? ' dense' : ''}" id="trackMap" style="aspect-ratio:${m.aspect}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${mapShapesHtml(m)}
-      ${onMap.map((it) => { const f = fixture(it.fixture); return `<div class="mfx${on.has(f.id) ? ' sel' : ''}" data-trackfx-map="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)}"><span class="dot">${fxIcon(f)}</span>${m.labels !== false ? `<span class="lbl">${esc(f.name)}</span>` : ''}</div>`; }).join('')}<div class="band" hidden></div></div>
+    ${m ? `<div class="row"><span class="muted" style="min-width:70px">Map</span>${p.maps.length > 1 ? `<div class="seg">${p.maps.map((x, i) => `<button class="${i === mi ? 'on' : ''}" data-trackmap="${i}">${esc(x.name)} <small>(${x.items.filter((it) => on.has(it.fixture)).length}/${x.items.length})</small></button>`).join('')}</div>` : `<span>${esc(m.name)}</span>`}${onMap.length ? mapZoomHtml(`track:${m.id}`) : ''}</div>` : ''}
+    ${m ? (onMap.length ? `<div class="map-wrap"><div class="mini-map${onMap.length > 40 ? ' dense' : ''}" id="trackMap" style="aspect-ratio:${m.aspect}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${mapShapesHtml(m)}
+      ${onMap.map((it) => { const f = fixture(it.fixture); return `<div class="mfx${on.has(f.id) ? ' sel' : ''}" data-trackfx-map="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)}"><span class="dot">${fxIcon(f)}</span>${m.labels !== false ? `<span class="lbl">${esc(f.name)}</span>` : ''}</div>`; }).join('')}<div class="band" hidden></div></div></div>
       <p class="muted keys">Map '${esc(m.name)}': click a fixture to add or remove it · drag on the map to choose an area (only those) · Shift/Ctrl+drag adds an area · Alt+drag removes one</p>`
       : `<p class="muted keys">Map '${esc(m.name)}' has no fixtures on it yet - place them on the Map page.</p>`) : ''}
     <input type="hidden" data-base="${base}"></div>`;
@@ -1100,10 +1109,8 @@ views.timelines.after = () => {
       if (last && last.lane === lane.dataset.lane && now - last.at < 450 && Math.abs(last.x - ev.clientX) < 8) {
         S.lastLaneClick = null;
         if (lane.dataset.lane === 'trig') return addCue(t, { t: at }, 'trigger');
-        // New clip up to the next one on the track, at most 4 s.
         const r = +lane.dataset.lane;
-        const nx = Math.min(Infinity, ...trackCues(r, new Set()).filter((x) => x.t > at).map((x) => x.t));
-        return addCue(t, { t: at, track: r, len: Math.max(100, Math.min(4000, nx - at)) }, newKind(r));
+        return addClipAt(t, r, at, newKind(r));
       }
       S.tlCursor = at;
       S.tlCursorLane = lane.dataset.lane === 'trig' ? 'trig' : +lane.dataset.lane;
@@ -1134,13 +1141,7 @@ views.timelines.after = () => {
     }, { once: true });
   });
   // Zoom: Ctrl+wheel around the mouse, or the buttons (around the middle).
-  const zoomTo = (z, clientX) => {
-    const r = sc.getBoundingClientRect(), uz = uiZoom(), x = clientX ?? r.left + (TL_HEAD + (r.width / uz - TL_HEAD) / 2) * uz;
-    const ms = msAt(x);
-    S.tlZoom = Math.max(0.5, Math.min(800, z));
-    S.tlScroll = Math.max(0, (ms / 1000) * S.tlZoom - ((x - r.left) / uz - TL_HEAD));
-    render();
-  };
+  const zoomTo = tlZoomTo;
   sc.addEventListener('wheel', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
@@ -1200,6 +1201,7 @@ views.timelines.after = () => {
   const tmap = $('#trackMap');
   if (tmap && tr) {
     const m = P().maps[Math.min(S.trackMap ?? S.sel.map ?? 0, P().maps.length - 1)];
+    attachMapZoom(tmap, `track:${m.id}`);
     const onMap = new Set(m.items.map((it) => it.fixture)), before = JSON.stringify(tr.fixtures);
     const viaGroup = () => new Set(trackFxIds({ ...tr, fixtures: [] }));
     const paint = () => { const on = new Set(trackFxIds(tr)); $$('[data-trackfx-map]', tmap).forEach((n) => n.classList.toggle('sel', on.has(+n.dataset.trackfxMap))); };
@@ -1418,7 +1420,7 @@ views.timelines.keys = async (e) => {
     const colParam = kind === 'effect' ? fxProg(p.effects.find((f) => f.id === x.effect) || { code: '' }).params?.find((q) => q.type === 'color') : null;
     const getCol = () => (kind === 'preset' ? x.color : colParam ? (x.params?.[colParam.name] ?? colParam.def) : null);
     const setCol = (hex) => { if (kind === 'preset') x.color = S.tlLastColor = hex; else if (colParam) { x.params = x.params || {}; x.params[colParam.name] = hex; } };
-    if (/^[0-9]$/.test(k) && (kind === 'preset' || colParam)) { setCol(PALETTE[(+k + 9) % 10]); any = true; }
+    if (/^[0-9]$/.test(k) && (kind === 'preset' || colParam)) { setCol(themeColors()[(+k + 9) % 10]); any = true; }
     else if ((k === '[' || k === ']') && getCol()) {
       const [h, s, v] = rgbToHsv(...hexToRgb(getCol()));
       setCol(hsvToHex((h + (k === '[' ? -15 : 15) + 360) % 360, s, v));
@@ -1495,10 +1497,134 @@ function addCue(t, at, kind) {
     c.fade = 1000;
     // A new colour clip is a solid colour bar: the last colour picked (white at first).
     if (kind === 'preset') { c.dim = 100; c.color = S.tlLastColor || '#ffffff'; }
-    else c.scene = p.scenes[0]?.id || 1;
+    else if (kind === 'effect') {
+      if (!p.effects.length) return toast('Make an effect first (Effects page)', true);
+      c.effect = p.effects[0].id;
+      c.params = {};
+    } else c.scene = p.scenes[0]?.id || 1;
   }
   t.cues.push(c);
   S.sel.cue = t.cues.length - 1;
   markDirty();
   render();
+}
+// A new clip on track r at `at`: up to the next clip on the track, at most 4 s.
+function addClipAt(t, r, at, kind) {
+  const nx = Math.min(Infinity, ...t.cues.filter((x) => isLight(x) && (x.track || 0) === r && x.t > at).map((x) => x.t));
+  addCue(t, { t: at, track: r, len: Math.max(100, Math.min(4000, nx - at)) }, kind);
+}
+// The time under the mouse on the open timeline's grid, snapped like a click (Alt = no snap,
+// raw = not snapped at all).
+function tlMsAtX(clientX, e, raw = false) {
+  const grid = $('#tlGrid'), ruler = grid && $('[data-ruler]', grid);
+  if (!ruler) return null;
+  const r = ruler.getBoundingClientRect(), ms = Math.max(0, ((clientX - r.left) / r.width) * +grid.dataset.len);
+  if (raw) return ms;
+  const step = (e?.altKey ? 0 : tlSnapMs(+grid.dataset.pxs)) || 10;
+  return Math.round(ms / step) * step;
+}
+// Zoom (pixels per second) around clientX, or around the middle of the view.
+function tlZoomTo(z, clientX) {
+  const sc = $('#tlScroll');
+  if (!sc) return;
+  const r = sc.getBoundingClientRect(), uz = uiZoom(), x = clientX ?? r.left + (TL_HEAD + (r.width / uz - TL_HEAD) / 2) * uz;
+  const ms = tlMsAtX(x, null, true);
+  S.tlZoom = Math.max(0.5, Math.min(800, z));
+  S.tlScroll = Math.max(0, (ms / 1000) * S.tlZoom - ((x - r.left) / uz - TL_HEAD));
+  render();
+}
+// Swaps track r with its neighbour (d = -1 up, 1 down); the clips go with it.
+function moveTrack(t, r, d) {
+  const o = r + d;
+  if (!t.tracks[o]) return;
+  [t.tracks[r], t.tracks[o]] = [t.tracks[o], t.tracks[r]];
+  for (const c of t.cues) if (isLight(c)) { if ((c.track || 0) === r) c.track = o; else if ((c.track || 0) === o) c.track = r; }
+  if (S.trackEdit === r) S.trackEdit = o; else if (S.trackEdit === o) S.trackEdit = r;
+  if (S.tlCursorLane === r) S.tlCursorLane = o; else if (S.tlCursorLane === o) S.tlCursorLane = r;
+  markDirty();
+  render();
+}
+// A new track at index `at` (the ones below move down), with the given clips (track = at).
+function insertTrack(t, at, track, cues = []) {
+  if (t.tracks.length >= 16) return toast('Max 16 tracks per timeline', true);
+  for (const c of t.cues) if (isLight(c) && (c.track || 0) >= at) c.track = (c.track || 0) + 1;
+  t.tracks.splice(at, 0, track);
+  for (const c of cues) t.cues.push({ ...c, track: at });
+  S.trackEdit = null;
+  S.tlCursorLane = at;
+  markDirty();
+  render();
+}
+// ---- Right-click menus on the timeline (CTX_MENUS in app-main.js) ----
+// Empty space on a track (or the trigger lane): add a clip there, paste, play, cursor, split.
+function tlLaneMenu(lane, e) {
+  const p = P(), t = p.timelines[S.sel.timeline], at = tlMsAtX(e.clientX, e);
+  if (!t || at == null) return null;
+  const trig = lane.dataset.lane === 'trig', r = trig ? null : +lane.dataset.lane;
+  const sec = `${(at / 1000).toFixed(2)} s`;
+  const here = () => { S.tlCursor = at; S.tlCursorLane = trig ? 'trig' : r; };
+  const onLane = t.cues.filter((c) => (trig ? !isLight(c) : isLight(c) && (c.track || 0) === r));
+  return [
+    !trig && { label: `Add colour clip at ${sec}`, run: () => addClipAt(t, r, at, 'preset') },
+    !trig && { label: `Add scene clip at ${sec}`, run: () => addClipAt(t, r, at, 'scene') },
+    !trig && { label: `✦ Add effect clip at ${sec}`, off: !p.effects.length, run: () => addClipAt(t, r, at, 'effect') },
+    trig && { label: `◆ Add trigger cue at ${sec}`, run: () => addCue(t, { t: at }, 'trigger') },
+    { label: `Paste at ${sec}`, key: 'Ctrl+V', off: !S.tlClip?.length, run: () => { here(); pageKey('v', true); } },
+    null,
+    { label: `▶ Play from ${sec}`, run: () => { here(); tlPlayFrom(t, at); render(); } },
+    { label: 'Put the cursor here', run: () => { here(); tlSelect(t, []); render(); } },
+    !trig && { label: `Split the clips at ${sec}`, key: 'Ctrl+E', off: !onLane.some((c) => c.t < at && cueEnd(t, c, Infinity) > at), run: () => { here(); tlSelect(t, []); pageKey('e', true); } },
+    null,
+    { label: trig ? 'Select all trigger cues' : 'Select all clips on this track', off: !onLane.length, run: () => { tlSelect(t, onLane); render(); } },
+    { label: 'Select all', key: 'Ctrl+A', run: () => pageKey('a', true) },
+  ];
+}
+// A track's name cell: fixtures, rename, select its clips, move, add, duplicate, delete.
+function tlHeadMenu(head) {
+  const p = P(), t = p.timelines[S.sel.timeline];
+  if (!t) return null;
+  if (head.dataset.trackhead === 'trig') {
+    const cues = t.cues.filter((c) => !isLight(c));
+    return [
+      { label: '◆ Add trigger cue at the cursor', run: () => addItem('trigcue') },
+      { label: 'Select all trigger cues', off: !cues.length, run: () => { tlSelect(t, cues); render(); } },
+    ];
+  }
+  const r = +head.dataset.trackhead, tr = t.tracks[r];
+  if (!tr) return null;
+  const clips = t.cues.filter((c) => isLight(c) && (c.track || 0) === r), full = t.tracks.length >= 16;
+  return [
+    { label: trackFxIds(tr).length ? 'Choose its fixtures…' : 'Choose fixtures…', run: () => { S.trackEdit = r; render(); } },
+    { label: 'Rename', run: () => { const f = $(`[data-p="timelines.${S.sel.timeline}.tracks.${r}.name"]`); f?.focus(); f?.select(); } },
+    { label: 'Select all its clips', off: !clips.length, run: () => { tlSelect(t, clips); render(); } },
+    null,
+    { label: 'Add colour clip at the cursor', run: () => { S.tlCursorLane = r; addItem('cue:preset'); } },
+    { label: 'Add scene clip at the cursor', run: () => { S.tlCursorLane = r; addItem('cue:scene'); } },
+    { label: '✦ Add effect clip at the cursor', off: !p.effects.length, run: () => { S.tlCursorLane = r; addItem('cue:effect'); } },
+    null,
+    { label: 'Move track up', off: r === 0, run: () => moveTrack(t, r, -1) },
+    { label: 'Move track down', off: r === t.tracks.length - 1, run: () => moveTrack(t, r, 1) },
+    { label: 'Add a track below', off: full, run: () => insertTrack(t, r + 1, { name: `Track ${t.tracks.length + 1}`, fixtures: [], groups: [] }) },
+    { label: clips.length ? 'Duplicate track with its clips' : 'Duplicate track', off: full,
+      run: () => insertTrack(t, r + 1, { name: `${tr.name} copy`, fixtures: [...tr.fixtures], groups: [...tr.groups] }, clips.map((c) => structuredClone(c))) },
+    null,
+    { label: 'Delete track', danger: true, off: t.tracks.length <= 1, run: () => $(`[data-trackdel="${r}"]`)?.click() },
+  ];
+}
+// The time ruler: play from here, cursor, the end of the timeline, zoom.
+function tlRulerMenu(ruler, e) {
+  const t = P().timelines[S.sel.timeline], at = tlMsAtX(e.clientX, e);
+  if (!t || at == null) return null;
+  const sec = `${(at / 1000).toFixed(2)} s`, pb = tlPlayback(t), pxs = +$('#tlGrid').dataset.pxs;
+  return [
+    { label: `▶ Play from ${sec}`, run: () => { S.tlCursor = at; tlPlayFrom(t, at); render(); } },
+    pb && !pb.paused && !pb.ended && { label: 'Pause', key: 'Space', run: () => tlPause(t, true) },
+    pb?.paused && { label: 'Carry on', key: 'Shift+Space', run: () => tlPause(t, false) },
+    { label: 'Put the cursor here', run: () => { S.tlCursor = at; render(); } },
+    { label: `End the timeline at ${sec}`, off: at < 100, run: () => { t.length = at; markDirty(); render(); } },
+    null,
+    { label: 'Zoom in here', run: () => tlZoomTo(pxs * 1.5, e.clientX) },
+    { label: 'Zoom out', run: () => tlZoomTo(pxs / 1.5, e.clientX) },
+    { label: 'Fit the whole timeline', off: !S.tlZoom, run: () => { S.tlZoom = null; S.tlScroll = 0; render(); } },
+  ];
 }
