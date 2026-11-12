@@ -1,3 +1,96 @@
+Tomorrow, 13 Nov 2026: the Portenta (Machine Control) is back, plus a Pharos LPC 1
+(most useful first; details of each test are in the file named behind it)
+
+Bring along / have ready:
+-24 V supply, USB-C data cable, the KD stick, a small switch, network cables
+-the LPC 1 with its supply, and Designer 2 on the laptop to put a test project on it
+-a DMX fixture + the RS485-to-XLR cable; a DMX tester or logic analyser if there is one
+-a push button and a lamp/relay for the 24 V I/O
+-driven from the Windows machine (COM3, as before). Pull the latest commit there first: the
+ files below were made on the Mac on 12 Nov and must be committed and pushed from it
+
+Prepared 12 Nov (tools/lpc/make-lpc-shows.js writes both shows; give it the real addresses:
+ node tools/lpc/make-lpc-shows.js --pc <PC address> --lpc <LPC address> --lpcport <port>):
+-tools/lpc/compare/project.json: the KD side of the comparison show (step 4). 170 RGB pixels on
+ universe 1, Art-Net to the PC. UDP on port 4000: GO, OFF, FADEUP, FADEDOWN, PING <n>, STOP,
+ FX1 / FX2 / FX3 (1, 2, 3 effects), HOUR. Also runs with stress.js "art", "echo" and "udpin"
+-tools/lpc/device-test/project.json: the LPC as show device "lpc" (step 3). Every pharos command
+ is a trigger to fire; the pars go green when LPC timeline 1 runs, blue when it stops, red when
+ the LPC is offline; triggers for UDP "LPC …", OSC /lpc/…, Art-Net universe 0 and sACN universe 1 in.
+ The LPC project needs timelines 1-2, scenes 1-2, group 1, trigger 1 and a text slot "Title"
+-put a show on the board: node tools/stress/stress.js <ip> load tools/lpc/compare/project.json
+-the big test update (step 1) is a build, the updates folder is not in git:
+ python -m platformio run -e machine_control_bigtest
+ gives updates/KD-Designer-0.3.0-bigtest-machine_control.kdupdate (firmware 1.1 MB, 400 KB of
+ it test data across the old 768 KB limit). After installing, the log must say
+ "Big test build: 390 KB of test data in flash at …, all bytes correct". Settings still shows
+ 0.3.0; install the normal 0.3.0 update again afterwards
+-not made yet: a PC tool that measures fade steps and GO-to-output time the same way for both
+ controllers (stress.js only talks to the KD's own API). To write tomorrow with both on the desk
+
+1. Start (15 min)
+-save the board's own project first (GET /api/project), put it back at the end
+-install 0.3.0 as a network update from 0.2.0 (TEST-CHECKLIST T9: ~720 KB, limit 768 KB).
+ If that fails: USB upload
+-save a show with colour themes: loads, themes still there after reload (T10)
+-then the test update bigger than 768 KB (checklist 37c, see "Prepared" above): proves the
+ second half of the flash works
+
+2. The fixes of 11 Nov that were never on the board (30 min)
+-fade that snapped: fire "scene … fade 3" from UDP a few hundred times, none may snap
+-kept variables: a counter that keeps changing, pull the power, it comes back
+-power cut in a save: project.tmp without project.json on the stick, it starts with the tmp
+-DMX monitor open during a busy show: frame rate stays at 40
+
+3. Pharos LPC 1 as a show device (the driver was only tested against the mock's fake Pharos)
+ On the LPC: a small project with 2-3 timelines, 2 scenes, a group and a few triggers;
+ web API on; same network as the KD.
+-does it answer on plain http? (README says: check first) With and without user/password
+ (token login, token refresh after 5 min idle)
+-Devices > Pharos: model, firmware, project name, temperature, uptime, reset reason
+-the lists: Timelines / Scenes / Groups / Triggers match what is in Designer 2
+-every command once: timeline start / release / toggle / pause / resume / rate / position,
+ scene start / release, group master, trigger, release all, text, override intensity and
+ colour, clear overrides, output off/on, beacon, api get system
+-Live updates (WebSocket): start a timeline on the LPC itself, the KD shows it at once;
+ pull the LPC's cable and put it back: reconnects
+-a variable on a timeline's state + a Variable change trigger on the KD
+-power the LPC off and on: offline/online triggers, "Restarts" counts it, Monitoring history
+ bars for its timelines
+-LPC off for a while: the KD's other devices keep being polled, lights stay at 40 fps
+-the other way round: the LPC sends UDP / OSC to a KD trigger, and Art-Net / sACN from the
+ LPC into the KD's DMX input triggers (first real sender: until now only the PC tool)
+-fix what differs from the real API on the spot, update the README line "not tested against
+ real devices" for Pharos
+
+4. LPC 1 next to the KD: same show, measured from outside (PHAROS-COMPARISON-PLAN.md)
+-build the small test show on the LPC (1 universe): Off, Full, 10 s fade, rainbow over 170
+ pixels, GO / OFF / PING triggers. The KD side is ready (tools/lpc/compare)
+-without extra gear: network output (frames/s, gaps), fade steps, trigger latency,
+ PING/PONG round trip, message load, boot time, power-cut restart
+-only with a logic analyser / DMX tester: break, MAB and jitter on the DMX cable
+ (also still open for the KD alone: HARDWARE-TEST-PLAN step 6)
+-the 1 hour timeline accuracy test can run over lunch
+
+5. Still open from the hardware plan, if there is time
+-7a: Machine Control I/O by hand (button on an input: click / hold / double; lamp on an
+ output; measure the 0-10 V output)
+-8: watchdog: a test build that hangs on purpose, it must come back with "Last start: watchdog"
+-network test (checklist 24a-c, 23): fixed address OK, wrong address goes back after 2 min,
+ power cut during the test, network-reset.txt on the stick; cable out shows link down
+-NTP with the router on; switches from the fallback address to DHCP by itself
+-on real fixtures: Locate (34), live editing a running timeline (7), round effect on a wide map (5)
+-more than one DMX fixture on the port
+
+6. Last thing: leave it running overnight
+-stress show + soak test ("Overnight stress test.cmd"), report in soak-results/. The laptop must
+ stay awake: on mains, and screen off pauses it (Modern Standby), so keep the screen on
+-next morning: no restarts, free memory not creeping down, no Art-Net gaps
+
+Measure while the board is there (decides which optimisations below are worth doing):
+-how long the main loop is held by history / kept-variable writes with many readings
+-thread stack room (lwip_tcpip, USBevt) after the day's tests
+
 Done 11 Nov 2026 (0.3.0, in the mock - see TEST-CHECKLIST.md part 3 to tick them off):
 -right click controls in timelines: empty space on a track, the track's name and the time ruler (+ split and theme colours in the clip menu)
 -timelines: + Colour / + Scene / + Effect buttons instead of + Cue

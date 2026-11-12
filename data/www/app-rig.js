@@ -596,12 +596,74 @@ function paintDot(dot, look, glow = true) {
   dot.classList.toggle('lit', !!look && look.level > 0.35 && 0.3 * r + 0.59 * g + 0.11 * b > 110);
 }
 // ---- Floor-plan shapes on a map (web UI only: the firmware drops maps after loading) -----
-// m.shapes = [{type: 'rect'|'ellipse'|'line'|'text', x, y, w, h, color, fill, alpha, width, text, size}],
+// m.shapes = [{type: 'rect'|'ellipse'|'line'|'poly'|'text', x, y, w, h, color, fill, alpha, width, text, size}],
 // x/y/w/h 0..1 of the map's width/height. rect/ellipse: x/y = top-left corner, w/h >= 0;
 // line: from x/y to x+w / y+h (w/h may be negative); text: x/y = its centre, size = % of the
-// map's width (so it grows with the map). Drawn under the fixtures on every map view.
-const SHAPE_TOOLS = [['select', '↖ Select'], ['rect', '▭ Rectangle'], ['ellipse', '◯ Ellipse'], ['line', '╱ Line'], ['text', 'T Text']];
-const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Ellipse', line: 'Line', text: 'Text' };
+// map's width (so it grows with the map); poly (your own shape): x/y/w/h = the box around it,
+// pts = [[u, v], …] 0..1 inside that box (so moving and resizing work as for a rectangle),
+// closed = last point joins the first (and it can be filled). rot = degrees clockwise round the
+// box's centre (rect, ellipse, poly, text; a line just has its ends moved), turned in real
+// proportions so 45° looks like 45° on a wide map. Drawn under the fixtures on every map view.
+const SHAPE_TOOLS = [['select', '↖ Select'], ['rect', '▭ Rectangle'], ['ellipse', '◯ Ellipse'], ['line', '╱ Line'], ['poly', '✏ Draw'], ['text', 'T Text']];
+const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Ellipse', line: 'Line', poly: 'Own shape', text: 'Text' };
+// A poly's points on the map (0..1 of its width/height), and back: the box and the points in it.
+const polyAbs = (s) => (s.pts || []).map(([u, v]) => [s.x + u * s.w, s.y + v * s.h]);
+function polyFromAbs(abs) {
+  const xs = abs.map((p) => p[0]), ys = abs.map((p) => p[1]);
+  const x = Math.min(...xs), y = Math.min(...ys), w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+  return { x, y, w, h, pts: abs.map(([a, b]) => [w ? (a - x) / w : 0, h ? (b - y) / h : 0]) };
+}
+// Turns point p round c by deg (clockwise on screen) in real proportions (a = the map's aspect).
+function rotPt([x, y], [cx, cy], deg, a) {
+  const r = (deg * Math.PI) / 180, X = (x - cx) * a, Y = y - cy;
+  return [cx + (X * Math.cos(r) - Y * Math.sin(r)) / a, cy + X * Math.sin(r) + Y * Math.cos(r)];
+}
+const shapeCenter = (s) => [s.x + s.w / 2, s.y + s.h / 2];
+// A poly's points where they are on screen (turned), and back: points on screen -> box + pts for
+// the angle rot (the points are turned back, boxed, and the box's centre turned forward again).
+const polyWorld = (s, a) => (s.rot ? polyAbs(s).map((p) => rotPt(p, shapeCenter(s), s.rot, a)) : polyAbs(s));
+function polyFromWorld(W, rot, a) {
+  if (!rot) return polyFromAbs(W);
+  const b = polyFromAbs(W.map((p) => rotPt(p, [0, 0], -rot, a)));
+  const [cx, cy] = rotPt(shapeCenter(b), [0, 0], rot, a);
+  return { ...b, x: cx - b.w / 2, y: cy - b.h / 2 };
+}
+// Turns a shape by deg: a line's ends move round its middle, everything else gets rot (-180..180).
+function shapeRotate(s, deg, a) {
+  if (s.type === 'line') {
+    const c = [s.x + s.w / 2, s.y + s.h / 2], p = rotPt([s.x, s.y], c, deg, a), q = rotPt([s.x + s.w, s.y + s.h], c, deg, a);
+    return Object.assign(s, { x: p[0], y: p[1], w: q[0] - p[0], h: q[1] - p[1] });
+  }
+  let r = (((((s.rot || 0) + deg) % 360) + 540) % 360) - 180;
+  r = Math.round(r * 10) / 10;
+  if (r) s.rot = r; else delete s.rot;
+  return s;
+}
+// SVG transform for a turned shape: into real proportions, turn, back (viewBox is 100 x 100).
+const rotAttr = (s, a) => {
+  if (!s.rot) return '';
+  const cx = +((s.x + s.w / 2) * 100).toFixed(3), cy = +((s.y + s.h / 2) * 100).toFixed(3);
+  return ` transform="translate(${cx} ${cy}) scale(${+(1 / a).toFixed(6)} 1) rotate(${s.rot}) scale(${a} 1) translate(${-cx} ${-cy})"`;
+};
+// Fewer points for a freehand line (Ramer-Douglas-Peucker; tol in map heights, x in real proportions).
+function simplifyPts(pts, tol, asp) {
+  if (pts.length < 3) return pts;
+  const keep = new Array(pts.length).fill(false);
+  keep[0] = keep[pts.length - 1] = true;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    const ax = pts[a][0] * asp, ay = pts[a][1], bx = pts[b][0] * asp, by = pts[b][1], L = Math.hypot(bx - ax, by - ay);
+    let far = -1, fd = tol;
+    for (let k = a + 1; k < b; k++) {
+      const px = pts[k][0] * asp, py = pts[k][1];
+      const d = L ? Math.abs((bx - ax) * (ay - py) - (ax - px) * (by - ay)) / L : Math.hypot(px - ax, py - ay);
+      if (d > fd) { fd = d; far = k; }
+    }
+    if (far > 0) { keep[far] = true; stack.push([a, far], [far, b]); }
+  }
+  return pts.filter((p, k) => keep[k]);
+}
 const SHAPE_COLOR = '#8aa0b8';
 // Fill patterns (shape.pattern; none = solid). Drawn in a 10 x 10 cell that is square on screen
 // (2 % of the map's width, so it scales with the map); c = the fill colour.
@@ -622,41 +684,60 @@ let shapeUid = 0;   // pattern ids: unique in the page, also with two map views
 // edit = the Map page's floor-plan mode: shapes can be clicked, the selected one has handles.
 const mapShapesHtml = (m, edit = false) => (m.shapes?.length || edit ? `<div class="shape-layer">${mapShapesInner(m, edit)}</div>` : '');
 function mapShapesInner(m, edit) {
-  const sh = m.shapes || [];
-  if (!sh.length) return '';
+  const sh = m.shapes || [], draft = edit && S.mapDraft?.map === m.id ? S.mapDraft : null;
+  if (!sh.length && !draft) return '';
   const pc = (v) => +(v * 100).toFixed(3), defs = [];
   const svg = sh.map((s, k) => {
     if (s.type === 'text') return '';
-    const d = edit ? ` data-shape="${k}"` : '';
+    const d = (edit ? ` data-shape="${k}"` : '') + (s.type !== 'line' ? rotAttr(s, m.aspect || 1) : '');
     const st = `stroke="${esc(s.color || SHAPE_COLOR)}" stroke-width="${s.width ?? 2}" vector-effect="non-scaling-stroke"`;
     if (s.type === 'line') return `<g${d}><line x1="${pc(s.x)}" y1="${pc(s.y)}" x2="${pc(s.x + s.w)}" y2="${pc(s.y + s.h)}" ${st} stroke-linecap="round"/>
       ${edit ? `<line class="hit" x1="${pc(s.x)}" y1="${pc(s.y)}" x2="${pc(s.x + s.w)}" y2="${pc(s.y + s.h)}" stroke="transparent" stroke-width="12" vector-effect="non-scaling-stroke"/>` : ''}</g>`;
+    if (s.type === 'poly' && !s.closed) {
+      const pts = polyAbs(s).map(([x, y]) => `${pc(x)},${pc(y)}`).join(' ');
+      return `<g${d}><polyline points="${pts}" ${st} fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        ${edit ? `<polyline class="hit" points="${pts}" stroke="transparent" stroke-width="12" fill="none" vector-effect="non-scaling-stroke"/>` : ''}</g>`;
+    }
     let fill = 'fill="none"';
     if (s.fill && SHAPE_PATTERNS[s.pattern]) {
       const id = `shp${++shapeUid}`;
       defs.push(`<pattern id="${id}" patternUnits="userSpaceOnUse" width="2" height="${+(2 * (m.aspect || 1)).toFixed(3)}" viewBox="0 0 10 10" preserveAspectRatio="none">${SHAPE_PATTERNS[s.pattern][1](esc(s.fill))}</pattern>`);
       fill = `fill="url(#${id})" fill-opacity="${s.alpha ?? 0.35}"`;
     } else if (s.fill) fill = `fill="${esc(s.fill)}" fill-opacity="${s.alpha ?? 0.35}"`;
+    if (s.type === 'poly') return `<polygon${d} points="${polyAbs(s).map(([x, y]) => `${pc(x)},${pc(y)}`).join(' ')}" ${st} ${fill} stroke-linejoin="round"/>`;
     return s.type === 'ellipse'
       ? `<ellipse${d} cx="${pc(s.x + s.w / 2)}" cy="${pc(s.y + s.h / 2)}" rx="${pc(s.w / 2)}" ry="${pc(s.h / 2)}" ${st} ${fill}/>`
       : `<rect${d} x="${pc(s.x)}" y="${pc(s.y)}" width="${pc(s.w)}" height="${pc(s.h)}" ${st} ${fill}/>`;
   }).join('');
-  const texts = sh.map((s, k) => (s.type === 'text' ? `<div class="map-text${edit && S.mapShapeSel === k ? ' sel' : ''}"${edit ? ` data-shape="${k}"` : ''} style="left:${pc(s.x)}%;top:${pc(s.y)}%;font-size:calc(${s.size || 3} * 1cqw);color:${esc(s.color || '#d0d8e2')}">${esc(s.text || '')}</div>` : '')).join('');
-  return `<svg class="map-shapes${edit ? ' edit' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none">${defs.length ? `<defs>${defs.join('')}</defs>` : ''}${svg}</svg>${texts}${edit ? shapeHandlesHtml(sh[S.mapShapeSel]) : ''}`;
+  const texts = sh.map((s, k) => (s.type === 'text' ? `<div class="map-text${edit && S.mapShapeSel === k ? ' sel' : ''}"${edit ? ` data-shape="${k}"` : ''} style="left:${pc(s.x)}%;top:${pc(s.y)}%;font-size:calc(${s.size || 3} * 1cqw);${s.rot ? `transform:translate(-50%,-50%) rotate(${s.rot}deg);` : ''}color:${esc(s.color || '#d0d8e2')}">${esc(s.text || '')}</div>` : '')).join('');
+  // The shape being drawn (✏ Draw): its points so far, a dashed line to the mouse, the first point to close it.
+  let dr = '';
+  if (draft?.pts.length) {
+    const all = draft.hover && !draft.free ? [...draft.pts, draft.hover] : draft.pts;
+    dr = `<polyline class="draft" points="${all.map(([x, y]) => `${pc(x)},${pc(y)}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>`;
+  }
+  const first = draft?.pts.length && !draft.free ? `<div class="shape-h draft-start${draft.pts.length >= 3 ? ' can' : ''}" title="Click to close the shape" style="left:${pc(draft.pts[0][0])}%;top:${pc(draft.pts[0][1])}%"></div>` : '';
+  return `<svg class="map-shapes${edit ? ' edit' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none">${defs.length ? `<defs>${defs.join('')}</defs>` : ''}${svg}${dr}</svg>${texts}${edit ? shapeHandlesHtml(sh[S.mapShapeSel]) : ''}${first}`;
 }
 // The selected shape's frame and handles: 8 for a rectangle/ellipse (corners change width and
-// height together, the sides only one of them), the two ends of a line, none for text.
+// height together, the sides only one of them) and the ⟳ handle above it, the two ends of a
+// line, none for text. The frame is one box turned with the shape (CSS turns in screen pixels,
+// so in real proportions like the shape), its handles placed in % of that box.
 function shapeHandlesHtml(s) {
   if (!s) return '';
   const pc = (v) => +(v * 100).toFixed(3);
   if (s.type === 'line') return ['a', 'b'].map((h) => `<div class="shape-h" data-sh="${h}" style="left:${pc(h === 'a' ? s.x : s.x + s.w)}%;top:${pc(h === 'a' ? s.y : s.y + s.h)}%"></div>`).join('');
   if (s.type === 'text') return '';
-  const xs = { w: s.x, '': s.x + s.w / 2, e: s.x + s.w }, ys = { n: s.y, '': s.y + s.h / 2, s: s.y + s.h };
-  return `<div class="map-selbox" style="left:${pc(s.x)}%;top:${pc(s.y)}%;width:${pc(s.w)}%;height:${pc(s.h)}%;border-radius:0"></div>`
+  // Own shape: one round handle per point too (drag it; double-click removes it).
+  const pts = s.type === 'poly' ? (s.pts || []).map(([u, v], k) => `<div class="shape-h pt" data-sh="p${k}" title="Drag to move this point, double-click to remove it" style="left:${pc(u)}%;top:${pc(v)}%"></div>`).join('') : '';
+  const pos = { w: 0, '': 50, e: 100 }, posY = { n: 0, '': 50, s: 100 };
+  return `<div class="shape-box" style="left:${pc(s.x + s.w / 2)}%;top:${pc(s.y + s.h / 2)}%;width:${pc(s.w)}%;height:${pc(s.h)}%${s.rot ? `;transform:translate(-50%,-50%) rotate(${s.rot}deg)` : ''}">
+    <div class="map-selbox" style="inset:0;border-radius:0"></div>
+    <div class="shape-rot-arm"></div><div class="shape-h rot" data-sh="rot" title="Drag to turn (Shift = 15° steps); [ ] keys turn 15°">⟳</div>`
     + ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h) => {
       const v = h.match(/[ns]/)?.[0] || '', u = h.match(/[ew]/)?.[0] || '';
-      return `<div class="shape-h ${h}" data-sh="${h}" style="left:${pc(xs[u])}%;top:${pc(ys[v])}%"></div>`;
-    }).join('');
+      return `<div class="shape-h ${h}" data-sh="${h}" style="left:${pos[u]}%;top:${posY[v]}%"></div>`;
+    }).join('') + pts + '</div>';
 }
 // Map size: drag the bar under a map to make it taller or shorter. The width follows from the
 // map's shape (never wider than the page); stored per page in this browser, like the pane widths.
@@ -1059,21 +1140,24 @@ views.map = () => {
         <button class="btn small${shapeMode ? ' on' : ''}" id="mapShapeMode" title="Draw rectangles, ellipses, lines and text (a simple floor plan). While on, fixtures can't be moved.">✎ Floor plan${m.shapes.length ? ` (${m.shapes.length})` : ''}</button>
       </div>
       ${shapeMode ? `<div class="row map-tools"><div class="seg">${SHAPE_TOOLS.map(([v, n]) => `<button class="${(S.mapTool || 'select') === v ? 'on' : ''}" data-maptool="${v}">${n}</button>`).join('')}</div>
-        <span class="muted">${(S.mapTool || 'select') === 'select' ? 'Click a shape to select it, drag to move, drag the handles to resize.' : S.mapTool === 'text' ? 'Click on the map to place a text.' : 'Drag on the map to draw.'}</span></div>` : ''}
+        <span class="muted">${(S.mapTool || 'select') === 'select' ? 'Click a shape to select it, drag to move, drag the handles to resize.' : S.mapTool === 'text' ? 'Click on the map to place a text.' : S.mapTool === 'poly' ? 'Click point by point (Shift = 45° steps); click the first point to close the shape, double-click or Enter to end it open. Or hold the mouse down and draw freehand. Backspace takes the last point back, Esc cancels.' : 'Drag on the map to draw.'}</span></div>` : ''}
       <div class="map-wrap"><div class="map-canvas${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}${shapeMode ? ' shape-mode' : ''}${shapeMode && (S.mapTool || 'select') !== 'select' ? ' drawing' : ''}" id="mapCanvas" style="${mapSizeStyle('kd.mapH.map', m.aspect)}">
         ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}
         ${mapGridHtml(m)}${mapShapesHtml(m, shapeMode)}
         ${items}${shapeMode ? '' : selFrame}<div class="band" id="mapBand" hidden></div>${mapResizeHtml('kd.mapH.map')}</div></div>
-      ${shapeMode ? `<p class="muted keys">Click a shape to select · drag to move · handles resize (corners: width and height, Shift = keep proportions; sides: one of them) · arrows nudge (Shift = more) · PgUp/PgDn one step forward/back (Shift = to the front/back) · Del removes · Ctrl+D duplicates · Esc deselects</p>
+      ${shapeMode ? `<p class="muted keys">Click a shape to select · drag to move · handles resize (corners: width and height, Shift = keep proportions; sides: one of them) · own shape: drag a round point, double-click a point to remove it, double-click its outline to add one · ⟳ handle or [ ] turns (Shift = 15° steps / 1°) · arrows nudge (Shift = more) · PgUp/PgDn one step forward/back (Shift = to the front/back) · Del removes · Ctrl+D duplicates · Esc deselects</p>
       ${shape ? `<div class="map-selbar"><b>${SHAPE_NAMES[shape.type]}</b>
         ${shape.type === 'text' ? `<input id="shText" value="${esc(shape.text || '')}" placeholder="Text" style="width:180px">
           <label class="muted nowrap">Size <input type="number" id="shSize" min="0.5" max="30" step="0.5" value="${shape.size || 3}" style="width:64px"></label>` : ''}
         <label class="muted nowrap" title="${shape.type === 'text' ? 'Text colour' : 'Line colour'}">${shape.type === 'text' ? 'Colour' : 'Line'} <input type="color" id="shColor" value="${esc(shape.color || (shape.type === 'text' ? '#d0d8e2' : SHAPE_COLOR))}"></label>${shapeSwatches('color', shape.color || (shape.type === 'text' ? '#d0d8e2' : SHAPE_COLOR))}
         ${shape.type !== 'text' ? `<label class="muted nowrap">Width <input type="number" id="shWidth" min="0" max="20" step="0.5" value="${shape.width ?? 2}" style="width:56px"></label>` : ''}
-        ${shape.type === 'rect' || shape.type === 'ellipse' ? `<label class="muted nowrap"><input type="checkbox" id="shFillOn"${shape.fill ? ' checked' : ''}> Fill</label>
+        ${shape.type === 'poly' ? `<label class="muted nowrap" title="Join the last point to the first (a closed shape can be filled)"><input type="checkbox" id="shClosed"${shape.closed ? ' checked' : ''}> Closed</label>` : ''}
+        ${shape.type === 'rect' || shape.type === 'ellipse' || (shape.type === 'poly' && shape.closed) ? `<label class="muted nowrap"><input type="checkbox" id="shFillOn"${shape.fill ? ' checked' : ''}> Fill</label>
           ${shape.fill ? `<input type="color" id="shFill" value="${esc(shape.fill)}" title="Fill colour">${shapeSwatches('fill', shape.fill)}
             <select id="shPattern" title="Fill pattern"><option value="">Solid</option>${Object.entries(SHAPE_PATTERNS).map(([v, [n]]) => `<option value="${v}"${shape.pattern === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
             <input type="range" id="shAlpha" min="0.05" max="1" step="0.05" value="${shape.alpha ?? 0.35}" title="How solid the fill is" style="width:90px">` : ''}` : ''}
+        ${shape.type !== 'line' ? `<label class="muted nowrap" title="Turned clockwise round its centre, in degrees ([ ] keys: 15°, Shift = 1°)">⟳ <input type="number" id="shRot" min="-180" max="180" step="1" value="${shape.rot || 0}" style="width:60px">°</label>` : ''}
+        <button class="btn small" data-shrot="-90" title="Turn 90° anticlockwise">⟲ 90°</button><button class="btn small" data-shrot="90" title="Turn 90° clockwise">⟳ 90°</button>
         <span class="seg" title="Order of overlapping shapes (texts are always on top)">
           <button id="shBack" title="To the back, under all other shapes (Shift+PgDn)">⤓ Back</button><button data-shstep="-1" title="One step back (PgDn)">↓</button><button data-shstep="1" title="One step forward (PgUp)">↑</button><button id="shFront" title="To the front, over all other shapes (Shift+PgUp)">⤒ Front</button></span>
         <button class="btn small" id="shDup" title="Ctrl+D">Duplicate</button>
@@ -1160,8 +1244,8 @@ views.map.after = () => {
   // (In floor-plan mode the map edits shapes instead; fixtures can't be clicked then.)
   const bandBegin = S.mapShapes ? null : bandSelect(canvas, m.items, () => S.mapSel, (s) => (S.mapSel = s), paintSel, render);
   if (S.mapShapes) wireMapShapes(canvas, m, snap);
-  $('#mapShapeMode').addEventListener('click', () => { S.mapShapes = !S.mapShapes; S.mapTool = 'select'; render(); });
-  $$('[data-maptool]').forEach((b) => b.addEventListener('click', () => { S.mapTool = b.dataset.maptool; S.mapShapeSel = null; render(); }));
+  $('#mapShapeMode').addEventListener('click', () => { S.mapShapes = !S.mapShapes; S.mapTool = 'select'; S.mapDraft = null; render(); });
+  $$('[data-maptool]').forEach((b) => b.addEventListener('click', () => { S.mapTool = b.dataset.maptool; S.mapShapeSel = null; S.mapDraft = null; render(); }));
   // The fixture list: click selects, Ctrl+click adds/removes one, Shift+click selects the range
   // from the last click. The selection (S.mapSel, also fixtures not on this map) is the same
   // as on the map. Dragging a selected row drops all selected fixtures onto the map at once.
@@ -1457,8 +1541,86 @@ function wireMapShapes(canvas, m, snap) {
     return p0;
   };
   // Stored with 4 decimals (no 0.6000000000000001 in project.json).
-  const tidy = (s) => { for (const k of ['x', 'y', 'w', 'h']) if (s?.[k] != null) s[k] = Math.round(s[k] * 1e4) / 1e4; };
+  const r4 = (v) => Math.round(v * 1e4) / 1e4;
+  const tidy = (s) => { for (const k of ['x', 'y', 'w', 'h']) if (s?.[k] != null) s[k] = r4(s[k]); if (s?.pts) s.pts = s.pts.map(([u, v]) => [r4(u), r4(v)]); };
   const done = (moved) => { if (moved) { tidy(m.shapes[S.mapShapeSel]); markDirty(); } render(); };
+  // Our own double-click: the page is rebuilt after each click, so the browser's dblclick gets lost.
+  // key = what was clicked; true on the second press within 350 ms and a few pixels.
+  const dbl = (e, key) => {
+    const l = S.mapLastDown, now = Date.now();
+    S.mapLastDown = { key, t: now, x: e.clientX, y: e.clientY };
+    if (l && l.key === key && now - l.t < 350 && Math.hypot(e.clientX - l.x, e.clientY - l.y) < 6) { S.mapLastDown = null; return true; }
+    return false;
+  };
+  // ✏ Draw: S.mapDraft = { map, pts: [[x, y], …] (on the map), hover, free } until it is finished.
+  // Click adds a point; holding the mouse down and moving draws freehand (all points, thinned out
+  // when let go). Click on the first point closes it; a double-click or Enter ends it open.
+  const finishDraft = (closed) => {
+    const d = S.mapDraft;
+    S.mapDraft = null;
+    const pts = d?.pts || [];
+    if (pts.length < (closed ? 3 : 2)) return render();
+    const n = { type: 'poly', ...polyFromAbs(pts), closed: !!closed, color: SHAPE_COLOR, width: 2 };
+    if (Math.hypot(n.w * m.aspect, n.h) < 0.01) return render();   // a tiny scribble
+    tidy(n);
+    m.shapes.push(n);
+    S.mapShapeSel = m.shapes.length - 1;
+    S.mapTool = 'select';
+    markDirty();
+    render();
+  };
+  S.mapFinishDraft = finishDraft;   // for the Enter key (views.map.keys)
+  const drawPoly = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const r = canvas.getBoundingClientRect(), p = at(e);
+    let d = S.mapDraft?.map === m.id ? S.mapDraft : null;
+    if (d) {
+      const [fx, fy] = d.pts[0], last = d.pts[d.pts.length - 1];
+      // Near the first point (in screen pixels): close it.
+      if (d.pts.length >= 3 && Math.hypot((p.x - fx) * r.width, (p.y - fy) * r.height) < 9) return finishDraft(true);
+      if (dbl(e, 'draft')) return finishDraft(false);
+      let q = [snap(p.x), snap(p.y)];
+      if (e.shiftKey) { const [dx, dy] = lineSnap(q[0] - last[0], q[1] - last[1]); q = [last[0] + dx, last[1] + dy]; }
+      if (Math.hypot((q[0] - last[0]) * r.width, (q[1] - last[1]) * r.height) >= 3) d.pts.push(q);
+      d.hover = null;
+      return redraw();
+    }
+    // The first point: a click starts point-by-point drawing, a drag draws freehand.
+    dbl(e, 'draft');
+    d = S.mapDraft = { map: m.id, pts: [[snap(p.x), snap(p.y)]], hover: null, free: false };
+    const raw = [[p.x, p.y]];
+    canvas.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const pt = at(ev);
+      if (!d.free && Math.hypot((pt.x - p.x) * r.width, (pt.y - p.y) * r.height) < 5) return;
+      d.free = true;
+      raw.push([pt.x, pt.y]);
+      d.pts = raw;
+      redraw();
+    };
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', () => {
+      canvas.removeEventListener('pointermove', move);
+      if (!d.free) return redraw();
+      // Freehand: thin out the points; ending near the start closes the shape.
+      const [sx, sy] = raw[0], [ex, ey] = raw[raw.length - 1];
+      const close = raw.length > 3 && Math.hypot((ex - sx) * r.width, (ey - sy) * r.height) < 14;
+      d.pts = simplifyPts(raw, 0.003, m.aspect);
+      if (close && d.pts.length > 3) d.pts.pop();
+      finishDraft(close && d.pts.length >= 3);
+    }, { once: true });
+  };
+  // While drawing point by point: a dashed line follows the mouse (Shift = 45° steps).
+  canvas.addEventListener('pointermove', (e) => {
+    const d = S.mapDraft;
+    if (!d || d.free || d.map !== m.id || (S.mapTool || 'select') !== 'poly') return;
+    const p = at(e), last = d.pts[d.pts.length - 1];
+    let q = [snap(p.x), snap(p.y)];
+    if (e.shiftKey) { const [dx, dy] = lineSnap(q[0] - last[0], q[1] - last[1]); q = [last[0] + dx, last[1] + dy]; }
+    d.hover = q;
+    redraw();
+  });
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || e.target.closest('.map-resize')) return;
     const tool = S.mapTool || 'select', hd = e.target.closest('[data-sh]'), hit = e.target.closest('[data-shape]');
@@ -1466,6 +1628,27 @@ function wireMapShapes(canvas, m, snap) {
     if (hd && s) {
       // Resize: corners move two sides (Shift = keep proportions), sides one; line ends.
       const o = { ...s }, h = hd.dataset.sh;
+      if (h[0] === 'p') {
+        // A point of an own shape: drag moves it, a double-click removes it (2 stay open, 3 closed).
+        // Worked on where the points are on screen, so a turned shape keeps its angle.
+        const k = +h.slice(1), W = polyWorld(o, m.aspect);
+        if (dbl(e, 'pt' + S.mapShapeSel + ':' + k)) {
+          e.preventDefault();
+          if (W.length > (s.closed ? 3 : 2)) { W.splice(k, 1); Object.assign(s, polyFromWorld(W, s.rot, m.aspect)); tidy(s); markDirty(); }
+          return render();
+        }
+        return drag(e, (p0, pt) => { W[k] = [snap(pt.x), snap(pt.y)]; Object.assign(s, polyFromWorld(W, s.rot, m.aspect)); }, done);
+      }
+      const c0 = shapeCenter(o), ang = (p) => (Math.atan2(p.y - c0[1], (p.x - c0[0]) * m.aspect) * 180) / Math.PI;
+      if (h === 'rot') {
+        // ⟳ handle: turn round the centre by how far the mouse went round it (Shift = 15° steps).
+        return drag(e, (p0, pt, ev) => {
+          let r = (o.rot || 0) + ang(pt) - ang(p0);
+          if (ev.shiftKey) r = Math.round(r / 15) * 15;
+          s.rot = 0;
+          shapeRotate(s, r, m.aspect);
+        }, done);
+      }
       return drag(e, (p0, pt, ev) => {
         if (s.type === 'line') {
           const ex = o.x + o.w, ey = o.y + o.h, fx = h === 'a' ? ex : o.x, fy = h === 'a' ? ey : o.y;   // the end that stays
@@ -1475,20 +1658,26 @@ function wireMapShapes(canvas, m, snap) {
           else Object.assign(s, { w: dx, h: dy });
           return;
         }
+        // A turned shape: the mouse is turned back round the old centre and the box worked out
+        // there (no snapping: the grid doesn't line up with it), then its new centre turned forward.
+        const q = o.rot ? rotPt([pt.x, pt.y], c0, -o.rot, m.aspect) : [snap(pt.x), snap(pt.y)];
         let L = o.x, R = o.x + o.w, T = o.y, B = o.y + o.h;
-        if (h.includes('w')) L = snap(pt.x);
-        if (h.includes('e')) R = snap(pt.x);
-        if (h.includes('n')) T = snap(pt.y);
-        if (h.includes('s')) B = snap(pt.y);
+        if (h.includes('w')) L = q[0];
+        if (h.includes('e')) R = q[0];
+        if (h.includes('n')) T = q[1];
+        if (h.includes('s')) B = q[1];
         if (ev.shiftKey && h.length === 2 && o.w && o.h) {
           const ax = h.includes('w') ? R : L, ay = h.includes('n') ? B : T;   // the corner that stays
           const k = Math.max(Math.abs((h.includes('w') ? L : R) - ax) / o.w, Math.abs((h.includes('n') ? T : B) - ay) / o.h);
           if (h.includes('w')) L = ax - o.w * k; else R = ax + o.w * k;
           if (h.includes('n')) T = ay - o.h * k; else B = ay + o.h * k;
         }
-        Object.assign(s, { x: Math.min(L, R), y: Math.min(T, B), w: Math.max(0.002, Math.abs(R - L)), h: Math.max(0.002, Math.abs(B - T)) });
+        const w = Math.max(0.002, Math.abs(R - L)), hh = Math.max(0.002, Math.abs(B - T));
+        const [cx, cy] = o.rot ? rotPt([(L + R) / 2, (T + B) / 2], c0, o.rot, m.aspect) : [Math.min(L, R) + w / 2, Math.min(T, B) + hh / 2];
+        Object.assign(s, { x: cx - w / 2, y: cy - hh / 2, w, h: hh });
       }, done);
     }
+    if (tool === 'poly') return drawPoly(e);
     if (tool !== 'select') {
       // Draw a new shape (text: placed where clicked).
       const p0 = at(e);
@@ -1517,6 +1706,23 @@ function wireMapShapes(canvas, m, snap) {
       // Select, and drag to move it.
       const k = +hit.dataset.shape, sh = m.shapes[k], o = { ...sh };
       S.mapShapeSel = k;
+      if (sh.type === 'poly' && dbl(e, 'sh' + k)) {
+        // Double-click on an own shape's outline: a new point on the nearest side.
+        e.preventDefault();
+        const abs = polyWorld(sh, m.aspect), p = at(e), n = abs.length, sides = sh.closed ? n : n - 1;
+        let best = 0, bd = Infinity;
+        for (let j = 0; j < sides; j++) {
+          const [ax, ay] = abs[j], [bx, by] = abs[(j + 1) % n], dx = (bx - ax) * m.aspect, dy = by - ay;
+          const t = Math.max(0, Math.min(1, ((p.x - ax) * m.aspect * dx + (p.y - ay) * dy) / (dx * dx + dy * dy || 1)));
+          const d = Math.hypot((ax + (bx - ax) * t - p.x) * m.aspect, ay + (by - ay) * t - p.y);
+          if (d < bd) { bd = d; best = j; }
+        }
+        abs.splice(best + 1, 0, [snap(p.x), snap(p.y)]);
+        Object.assign(sh, polyFromWorld(abs, sh.rot, m.aspect));
+        tidy(sh);
+        markDirty();
+        return render();
+      }
       redraw();
       return drag(e, (p0, pt) => {
         let x = snap(o.x + pt.x - p0.x), y = snap(o.y + pt.y - p0.y);
@@ -1537,6 +1743,9 @@ function wireMapShapes(canvas, m, snap) {
   $('#shSize')?.addEventListener('change', (e) => set('size', Math.max(0.5, Math.min(30, +e.target.value || 3))));
   $('#shColor').addEventListener('input', (e) => set('color', e.target.value));
   $('#shWidth')?.addEventListener('change', (e) => set('width', Math.max(0, Math.min(20, +e.target.value || 0))));
+  $('#shRot')?.addEventListener('change', (e) => { s.rot = 0; shapeRotate(s, +e.target.value || 0, m.aspect); tidy(s); markDirty(); render(); });
+  $$('[data-shrot]').forEach((b) => b.addEventListener('click', () => { shapeRotate(s, +b.dataset.shrot, m.aspect); tidy(s); markDirty(); render(); }));
+  $('#shClosed')?.addEventListener('change', (e) => set('closed', e.target.checked, true));
   $('#shFillOn')?.addEventListener('change', (e) => set('fill', e.target.checked ? s.color || SHAPE_COLOR : '', true));
   $('#shFill')?.addEventListener('input', (e) => set('fill', e.target.value));
   $('#shAlpha')?.addEventListener('input', (e) => set('alpha', +e.target.value));
@@ -1552,6 +1761,7 @@ function shapeDuplicate(m) {
   const s = m.shapes[S.mapShapeSel];
   if (!s) return;
   const c = { ...s, x: Math.min(0.98, s.x + 0.025), y: Math.min(0.98, s.y + 0.025) };
+  if (s.pts) c.pts = s.pts.map((p) => [...p]);
   m.shapes.push(c);
   S.mapShapeSel = m.shapes.length - 1;
   markDirty();
@@ -1584,10 +1794,26 @@ views.map.keys = (e) => {
     // Floor-plan mode: the keys work on the selected shape.
     const s = m.shapes[S.mapShapeSel], st = e.shiftKey ? 0.025 : 0.005;
     const d = { ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st] }[e.key];
+    const dr = S.mapDraft?.map === m.id ? S.mapDraft : null;
+    if (dr) {
+      // Drawing an own shape: Enter ends it (open), Backspace takes the last point back, Esc cancels.
+      if (e.key === 'Enter') { e.preventDefault(); S.mapFinishDraft?.(false); }
+      else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); dr.pts.pop(); if (!dr.pts.length) S.mapDraft = null; render(); }
+      else if (e.key === 'Escape') { S.mapDraft = null; render(); }
+      return;
+    }
     if (e.key === 'Escape') { S.mapTool = 'select'; S.mapShapeSel = null; render(); }
     if (!s) return;
     if (d) { e.preventDefault(); s.x = Math.round((s.x + d[0]) * 1e4) / 1e4; s.y = Math.round((s.y + d[1]) * 1e4) / 1e4; markDirty(); render(); }
     else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); shapeDelete(m); }
+    else if (e.key === '[' || e.key === ']' || e.key === '{' || e.key === '}') {
+      // Turn 15° (Shift = 1°; Shift+[ arrives as { on most keyboards).
+      e.preventDefault();
+      shapeRotate(s, (e.key === '[' || e.key === '{' ? -1 : 1) * (e.shiftKey ? 1 : 15), m.aspect);
+      for (const k of ['x', 'y', 'w', 'h']) s[k] = Math.round(s[k] * 1e4) / 1e4;
+      markDirty();
+      render();
+    }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); shapeDuplicate(m); }
     else if (e.key === 'PageUp' || e.key === 'PageDown') { e.preventDefault(); shapeOrder(m, (e.key === 'PageUp' ? 1 : -1) * (e.shiftKey ? Infinity : 1)); }
     return;

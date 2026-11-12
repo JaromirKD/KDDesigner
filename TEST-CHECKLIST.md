@@ -71,7 +71,7 @@ Upload by USB first (`python -m platformio run -e machine_control -t upload --up
 
 - [ ] **37a** After the USB upload: boots, web UI opens, Settings shows the new version.
 - [ ] **37b** Install a network update (`updates/*.kdupdate`, Settings > Update): installs, log says "installed".
-- [ ] **37c** A test update bigger than 768 KB installs too (checks the bootloader writes the second half of the flash). Ask Claude to make one.
+- [ ] **37c** A test update bigger than 768 KB installs too (checks the bootloader writes the second half of the flash). Make it with `python -m platformio run -e machine_control_bigtest` and install `updates/KD-Designer-0.3.0-bigtest-machine_control.kdupdate` on a board that already runs 0.3.0: the log says "Big test build: … all bytes correct". Install the normal update again afterwards.
 - [ ] **38** Save your own show: note the "Project saved (…)" log line (time per step). Expect ~1 s to "Saved" and the stick write after. Status bar: "writing to the stick…" then gone.
 - [ ] **38** Save twice quickly: second save waits / works, no restart (Last start stays `power on`).
 - [ ] **32** Settings → Backups lists the saves on the stick; restore one.

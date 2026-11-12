@@ -86,7 +86,11 @@ else:
 
     def _after_build(source, target, env):
         root = env.subst("$PROJECT_DIR")
-        board = "machine_control" if env.subst("$PIOENV") == "machine_control" else "portenta"
-        make(root, ini_version(root), board, str(target[0]))
+        pioenv = env.subst("$PIOENV")
+        board = "machine_control" if pioenv.startswith("machine_control") else "portenta"
+        # The padded test build (env machine_control_bigtest) gets its own name, so it never
+        # replaces the real update file.
+        version = ini_version(root) + ("-bigtest" if pioenv.endswith("_bigtest") else "")
+        make(root, version, board, str(target[0]))
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", _after_build)  # noqa: F821

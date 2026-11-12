@@ -61,6 +61,10 @@ Object.assign(maps[0], {
     // The orchestra pit over the stage floor: hatched, in front of the stage rectangle.
     { type: 'rect', x: 0.35, y: 0.52, w: 0.3, h: 0.1, color: '#d0a050', width: 1, fill: '#d0a050', pattern: 'hatch', alpha: 0.6 },
     { type: 'ellipse', x: 0.42, y: 0.7, w: 0.16, h: 0.12, color: '#8aa0b8', width: 1.5, fill: '#8aa0b8', pattern: 'checker', alpha: 0.2 },
+    // A turned shape (rot = degrees round its centre): a side-stage truss at an angle.
+    { type: 'rect', x: 0.03, y: 0.3, w: 0.1, h: 0.025, rot: -30, color: '#d0a050', width: 1.5, fill: '#d0a050', pattern: 'cross', alpha: 0.5 },
+    // An own shape (✏ Draw): the thrust in front of the stage, points inside its box.
+    { type: 'poly', x: 0.4, y: 0.62, w: 0.2, h: 0.06, pts: [[0, 0], [1, 0], [0.75, 1], [0.25, 1]], closed: true, color: '#8aa0b8', width: 1.5, fill: '#8aa0b8', alpha: 0.2 },
     { type: 'text', x: 0.5, y: 0.37, text: 'STAGE', size: 4, color: '#d0d8e2' },
     { type: 'text', x: 0.5, y: 0.76, text: 'FOH desk', size: 2, color: '#d0d8e2' },
   ],

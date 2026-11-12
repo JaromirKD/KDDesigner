@@ -1,0 +1,1283 @@
+{
+ "name": "LPC device test",
+ "settings": {
+  "dateOrder": "dmy",
+  "tzOffsetMin": 60,
+  "udpPort": 4000,
+  "sacnPriority": 100,
+  "monitor": {
+   "interval": 10,
+   "timeout": 1000,
+   "failures": 2
+  },
+  "time": {
+   "ntp": "pool.ntp.org",
+   "ntpEnabled": true,
+   "dst": "eu"
+  },
+  "outputs": {
+   "dmx": true,
+   "artnet": true,
+   "sacn": false,
+   "dmxFps": 40,
+   "artnetFps": 40,
+   "sacnFps": 40,
+   "artnetChangesOnly": false,
+   "sacnChangesOnly": false
+  }
+ },
+ "network": {
+  "dhcp": true
+ },
+ "universes": [
+  {
+   "id": 1,
+   "name": "Pars",
+   "dmxPort": 1,
+   "artnet": 10,
+   "artnetDest": "172.16.1.238",
+   "sacn": 10,
+   "useDmx": true,
+   "useArtnet": true,
+   "useSacn": false
+  }
+ ],
+ "fixtures": [
+  {
+   "id": 1,
+   "name": "Par 1",
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "universe": 1,
+   "address": 1
+  },
+  {
+   "id": 2,
+   "name": "Par 2",
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "universe": 1,
+   "address": 4
+  },
+  {
+   "id": 3,
+   "name": "Par 3",
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "universe": 1,
+   "address": 7
+  },
+  {
+   "id": 4,
+   "name": "Par 4",
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "universe": 1,
+   "address": 10
+  },
+  {
+   "id": 5,
+   "name": "Par 5",
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "universe": 1,
+   "address": 13
+  },
+  {
+   "id": 6,
+   "name": "Par 6",
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "universe": 1,
+   "address": 16
+  },
+  {
+   "id": 7,
+   "name": "Par 7",
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "universe": 1,
+   "address": 19
+  },
+  {
+   "id": 8,
+   "name": "Par 8",
+   "channels": [
+    "r",
+    "g",
+    "b"
+   ],
+   "universe": 1,
+   "address": 22
+  }
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "name": "All pars",
+   "fixtures": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ]
+  }
+ ],
+ "scenes": [
+  {
+   "id": 1,
+   "name": "Off",
+   "levels": [
+    {
+     "fixture": 1,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 1,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 1,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "b",
+     "v": 0
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Red",
+   "levels": [
+    {
+     "fixture": 1,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 1,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 1,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 2,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 4,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 7,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "r",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "b",
+     "v": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Green",
+   "levels": [
+    {
+     "fixture": 1,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 1,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 1,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 2,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 4,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 7,
+     "ch": "b",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "g",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "b",
+     "v": 0
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Blue",
+   "levels": [
+    {
+     "fixture": 1,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 1,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 1,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 2,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 2,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 3,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 3,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 4,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 4,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 5,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 5,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 6,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 6,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 7,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 7,
+     "ch": "b",
+     "v": 255
+    },
+    {
+     "fixture": 8,
+     "ch": "r",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "g",
+     "v": 0
+    },
+    {
+     "fixture": 8,
+     "ch": "b",
+     "v": 255
+    }
+   ]
+  }
+ ],
+ "effects": [
+  {
+   "id": 1,
+   "name": "Rainbow",
+   "code": "param speed = 0.5 [0, 2]\nr, g, b = hsv(t * speed + u, 1, 1)"
+  }
+ ],
+ "timelines": [
+  {
+   "id": 1,
+   "name": "Rainbow",
+   "length": 60000,
+   "loop": true,
+   "priority": 0,
+   "tracks": [
+    {
+     "name": "Pars",
+     "fixtures": [],
+     "groups": [
+      1
+     ]
+    }
+   ],
+   "cues": [
+    {
+     "t": 0,
+     "track": 0,
+     "fade": 1000,
+     "effect": 1,
+     "params": {},
+     "dim": 100
+    }
+   ]
+  }
+ ],
+ "devices": [
+  {
+   "name": "pc",
+   "ip": "172.16.1.238",
+   "port": 9001
+  },
+  {
+   "name": "lpcnet",
+   "ip": "172.16.1.50",
+   "port": 5000
+  }
+ ],
+ "variables": [
+  {
+   "name": "lpc_tl1",
+   "type": "text",
+   "initial": ""
+  },
+  {
+   "name": "lpc_tl2",
+   "type": "text",
+   "initial": ""
+  },
+  {
+   "name": "lpc_sc1",
+   "type": "text",
+   "initial": ""
+  },
+  {
+   "name": "lpc_grp1",
+   "type": "number",
+   "initial": 0
+  },
+  {
+   "name": "from_lpc",
+   "type": "number",
+   "initial": 0
+  }
+ ],
+ "drivers": [
+  {
+   "id": 1,
+   "type": "pharos",
+   "name": "lpc",
+   "ip": "172.16.1.50",
+   "port": 80,
+   "user": "",
+   "password": "",
+   "live": true,
+   "vars": {
+    "tl1": "lpc_tl1",
+    "tl2": "lpc_tl2",
+    "sc1": "lpc_sc1",
+    "grp1": "lpc_grp1"
+   }
+  }
+ ],
+ "triggers": [
+  {
+   "id": 10001,
+   "name": "== KD -> LPC: every command once",
+   "type": "comment",
+   "color": "purple",
+   "actions": [],
+   "conditions": [],
+   "notes": "Fire them one by one (▶ on the row) and look at the LPC: its web page, Designer 2's network view or its lights. Timelines 1-2, scenes 1-2, group 1 and trigger 1 must exist in the LPC's project."
+  },
+  {
+   "id": 1,
+   "name": "Timeline 1 start",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 start"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 2,
+   "name": "Timeline 1 start, fade 3",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 start fade 3"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 3,
+   "name": "Timeline 1 pause",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 pause"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 4,
+   "name": "Timeline 1 resume",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 resume"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 5,
+   "name": "Timeline 1 rate 0.5",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 rate 0.5"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 6,
+   "name": "Timeline 1 rate 1",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 rate 1"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 7,
+   "name": "Timeline 1 position 50 %",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 position 50"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 8,
+   "name": "Timeline 1 toggle",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 toggle"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 9,
+   "name": "Timeline 1 release, fade 2",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 release fade 2"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10,
+   "name": "Timeline 2 start",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 2 start"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 11,
+   "name": "Scene 1 start",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc scene 1 start"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 12,
+   "name": "Scene 1 toggle",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc scene 1 toggle"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 13,
+   "name": "Scene 1 release, fade 2",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc scene 1 release fade 2"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 14,
+   "name": "Scene 2 start, fade 3",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc scene 2 start fade 3"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 15,
+   "name": "Group 1 master 50 %, fade 2",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc group 1 master 50 fade 2"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 16,
+   "name": "Group 1 master 100 %",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc group 1 master 100"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 17,
+   "name": "LPC trigger 1",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc trigger 1"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 18,
+   "name": "Text slot \"Title\"",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc text Title Hello from KD"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 19,
+   "name": "Override group 1 intensity 30 %",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc override group 1 intensity 30"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 20,
+   "name": "Override fixture 1 orange, fade 2",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc override fixture 1 color #ff8800 fade 2"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 21,
+   "name": "Clear overrides",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc clear overrides"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 22,
+   "name": "Art-Net output off",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc output art-net off"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 23,
+   "name": "Art-Net output on",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc output art-net on"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 24,
+   "name": "Beacon on",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc beacon on"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 25,
+   "name": "Beacon off",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc beacon off"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 26,
+   "name": "API: get system",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc api get system"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 27,
+   "name": "API: start timeline 1 with raw JSON",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc api post timeline {\"action\":\"start\",\"num\":1}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 28,
+   "name": "Release all, fade 2",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc release all fade 2"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 29,
+   "name": "Four commands at once",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "pharos lpc timeline 1 start",
+    "pharos lpc timeline 2 start",
+    "pharos lpc group 1 master 80",
+    "pharos lpc scene 1 start"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 30,
+   "name": "Ten commands a second for 5 s",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "repeat 50 times every 0.1 pharos lpc group 1 master {=i*2}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 31,
+   "name": "UDP to the LPC",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "send udp lpcnet 5000 KD GO"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 32,
+   "name": "OSC to the LPC",
+   "type": "manual",
+   "color": "purple",
+   "actions": [
+    "send osc lpcnet 5000 /kd/go 1"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10002,
+   "name": "== LPC -> KD: what the KD sees",
+   "type": "comment",
+   "color": "cyan",
+   "actions": [],
+   "conditions": [],
+   "notes": "The pars turn green / blue / red, so it shows without the log too. Start and release things on the LPC itself (its web page or Designer 2)."
+  },
+  {
+   "id": 33,
+   "name": "LPC timeline 1 changed",
+   "type": "variable",
+   "variable": "lpc_tl1",
+   "color": "cyan",
+   "actions": [
+    "log LPC timeline 1 is now {value} (was {old})",
+    "if var lpc_tl1 = running then scene Green fade 1 else scene Blue fade 1"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 34,
+   "name": "LPC timeline 2 changed",
+   "type": "variable",
+   "variable": "lpc_tl2",
+   "color": "cyan",
+   "actions": [
+    "log LPC timeline 2 is now {value} (was {old})"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 35,
+   "name": "LPC scene 1 changed",
+   "type": "variable",
+   "variable": "lpc_sc1",
+   "color": "cyan",
+   "actions": [
+    "log LPC scene 1 is now {value} (was {old})"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 36,
+   "name": "LPC group 1 level changed",
+   "type": "variable",
+   "variable": "lpc_grp1",
+   "color": "cyan",
+   "actions": [
+    "log LPC group 1 is now {value} %"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 37,
+   "name": "LPC offline",
+   "type": "device",
+   "device": "lpc",
+   "state": "offline",
+   "color": "cyan",
+   "actions": [
+    "log LPC is offline",
+    "scene Red"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 38,
+   "name": "LPC back online",
+   "type": "device",
+   "device": "lpc",
+   "state": "online",
+   "color": "cyan",
+   "actions": [
+    "log LPC is back online",
+    "scene Blue fade 2"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10003,
+   "name": "== LPC -> KD: triggers the LPC sets off",
+   "type": "comment",
+   "color": "orange",
+   "actions": [],
+   "conditions": [],
+   "notes": "On the LPC: a trigger with a UDP or OSC action to the KD's address, and Art-Net / sACN output to the KD."
+  },
+  {
+   "id": 39,
+   "name": "UDP \"LPC <text>\" (port 4000)",
+   "type": "udp",
+   "match": "LPC*",
+   "color": "orange",
+   "actions": [
+    "log UDP from the LPC ({sender_ip}): {1}",
+    "var from_lpc ++",
+    "reply KD got {1}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 40,
+   "name": "OSC /lpc/* (port 8000)",
+   "type": "osc",
+   "address": "/lpc/*",
+   "port": 8000,
+   "color": "orange",
+   "actions": [
+    "log OSC from the LPC: {address} {1}",
+    "var from_lpc ++"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 41,
+   "name": "Art-Net universe 0, channel 1 above 50 %",
+   "type": "dmx_in",
+   "protocol": "artnet",
+   "universe": 0,
+   "channels": "1",
+   "when": "above",
+   "level": 128,
+   "color": "orange",
+   "actions": [
+    "log Art-Net in: channel 1 above 50 %",
+    "scene Green"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 42,
+   "name": "Art-Net universe 0, channel 2 = grand master",
+   "type": "dmx_in",
+   "protocol": "artnet",
+   "universe": 0,
+   "channels": "2",
+   "when": "change",
+   "color": "orange",
+   "actions": [
+    "grandmaster {=round(value/2.55)}"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 43,
+   "name": "sACN universe 1, channel 1 above 50 %",
+   "type": "dmx_in",
+   "protocol": "sacn",
+   "universe": 1,
+   "channels": "1",
+   "when": "above",
+   "level": 128,
+   "color": "orange",
+   "actions": [
+    "log sACN in: channel 1 above 50 %",
+    "scene Blue"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 10004,
+   "name": "== KD lights",
+   "type": "comment",
+   "color": "green",
+   "actions": [],
+   "conditions": []
+  },
+  {
+   "id": 44,
+   "name": "Startup",
+   "type": "startup",
+   "color": "green",
+   "actions": [
+    "scene Blue",
+    "grandmaster 100"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 45,
+   "name": "Rainbow on the pars",
+   "type": "manual",
+   "color": "green",
+   "actions": [
+    "start timeline Rainbow"
+   ],
+   "conditions": []
+  },
+  {
+   "id": 46,
+   "name": "Release all",
+   "type": "manual",
+   "color": "green",
+   "actions": [
+    "release all fade 1"
+   ],
+   "conditions": []
+  }
+ ]
+}

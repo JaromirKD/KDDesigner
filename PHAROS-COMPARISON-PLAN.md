@@ -46,6 +46,11 @@ come from captures on the PC and the DMX line, never from either controller's ow
 | S8 | Startup: start the S4 effect | T9 |
 | S9 | Optional: a contact input -> snap to "Full" (if both units have inputs wired) | T4b |
 
+The KD side is written by `node tools/lpc/make-lpc-shows.js --pc <PC address>` into
+`tools/lpc/compare/project.json`. Its triggers listen on UDP port 4000: `GO`, `OFF`, `FADEUP`,
+`FADEDOWN`, `PING <n>` (answers `PONG <n>`), `STOP`, `FX1` / `FX2` / `FX3` (1, 2 or 3 effects for T8)
+and `HOUR` (S5). Use the same words on the LPC.
+
 ## 4. The tests
 
 | # | Test | How | Measure |

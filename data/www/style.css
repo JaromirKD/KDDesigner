@@ -1092,6 +1092,14 @@ body.narrow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto au
 .shape-h.nw, .shape-h.se { cursor: nwse-resize; } .shape-h.ne, .shape-h.sw { cursor: nesw-resize; }
 .shape-h.n, .shape-h.s { cursor: ns-resize; } .shape-h.e, .shape-h.w { cursor: ew-resize; }
 .shape-h[data-sh="a"], .shape-h[data-sh="b"] { border-radius: 50%; cursor: crosshair; }
+/* the selected shape's frame: turned with the shape; handles are placed in % of it */
+.shape-box { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
+.shape-rot-arm { position: absolute; left: 50%; bottom: 100%; height: 18px; border-left: 1px dashed var(--accent); pointer-events: none; }
+.shape-h.rot { top: -24px; left: 50%; width: 16px; height: 16px; border-radius: 50%; font-size: 11px; line-height: 14px; text-align: center; color: var(--deep); cursor: grab; }
+/* own shape (✏ Draw): its points are round and white, so they stand apart from the box handles */
+.shape-h.pt { width: 9px; height: 9px; border-radius: 50%; background: var(--text, #fff); border: 2px solid var(--accent); cursor: move; z-index: 4; }
+.shape-h.draft-start { width: 9px; height: 9px; border-radius: 50%; opacity: .6; pointer-events: none; }
+.shape-h.draft-start.can { width: 13px; height: 13px; opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
 .shape-sw { gap: 3px; flex-wrap: nowrap; }
 .shape-sw .swatch { width: 16px; height: 16px; border-width: 1px; }
 .shape-sw .swatch.on { border-width: 2px; box-shadow: 0 0 0 1px var(--accent); }

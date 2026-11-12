@@ -204,6 +204,10 @@ void setup() {
   // Started last: mounting the stick and preparing the QSPI flash can take a while.
   mbed::Watchdog::get_instance().start(KD_WATCHDOG_MS);
   LOGI(Sys, "Ready - %lu KB of %lu KB memory free", (unsigned long)(g_stats.heapFree / 1024), (unsigned long)(g_stats.heapSize / 1024));
+#ifdef KD_TEST_PAD
+  extern void testPadCheck();   // TestPad.cpp: the over-768 KB test build checks its padding
+  testPadCheck();
+#endif
 }
 
 void loop() {
