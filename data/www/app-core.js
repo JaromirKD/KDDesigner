@@ -75,7 +75,7 @@ const pmcFind = (tok) => pmcKeys().find((k) => k === String(tok).toLowerCase() |
 const PHAROS_PROTOCOLS = ['dmx', 'art-net', 'sacn', 'pathport', 'kinet', 'rio-dmx', 'edn', 'edn-spi'];
 const TRIGGER_TYPES = [
   ['startup', 'Startup'], ['time', 'Time of day / sunrise / sunset'], ['interval', 'Interval'], ['udp', 'UDP message'], ['osc', 'OSC message'],
-  ['input', 'Input (pin / Machine Control)'], ['timeline_end', 'Timeline end'], ['mode', 'Mode change'], ['panel', 'Panel button'],
+  ['input', 'Input (pin / Machine Control)'], ['timeline', 'Timeline (start / end / release / pause)'], ['mode', 'Mode change'], ['panel', 'Panel button'],
   ['dmx_change', 'DMX channel change'], ['device', 'Device online/offline'], ['projector', 'Projector alarm (errors, lamp hours)'], ['variable', 'Variable change'],
   ['tcp', 'TCP message received'], ['http', 'HTTP response'], ['dmx_in', 'DMX input (Art-Net / sACN in)'], ['calendar', 'Calendar change (a period starts / ends)'],
   ['manual', 'Manual / nested list'], ['comment', '— Separator —'],
@@ -89,7 +89,11 @@ const TRIGGER_VARS = {
   variable: ['variable', 'value', 'old'], tcp: ['device', 'message', '1 (text after a prefix*)'], http: ['url', 'method', 'status', 'body'],
   dmx_change: ['channel', 'index', 'value', '+ your table names'], input: ['input', 'value'], dmx_in: ['channel', 'index', 'value', 'old'],
   calendar: ['calendar', 'state (active / inactive)'],
+  timeline: ['timeline (its number)', 'event (start, end, release, pause, resume)', 'reason (start / restart; stop / group / release all / end)'],
 };
+// What a timeline trigger (`on`) reacts to; none = release. = kTlOn in Triggers.cpp.
+const TIMELINE_ON = [['release', 'is released (stop, its group, release all, at its end)'], ['end', 'reaches its end (not looping)'], ['start', 'starts (or restarts)'], ['pause', 'is paused'], ['resume', 'is resumed']];
+const tlOn = (t) => (t.type === 'timeline_end' ? 'end' : t.on || 'release');
 const TRIGGER_COLORS = {
   '': 'none', red: '#ff5c5c', orange: '#ff9f43', amber: '#ffb020', yellow: '#ffd23f', lime: '#a3e635', green: '#3ecf8e',
   teal: '#2dd4bf', cyan: '#3ad1e0', blue: '#4aa3ff', indigo: '#818cf8', purple: '#b07cff', magenta: '#e879f9',
@@ -249,6 +253,8 @@ function normalize(p) {
     t.tracks.forEach((tr) => { tr.fixtures = tr.fixtures || []; tr.groups = tr.groups || []; });
   });
   p.triggers.forEach((t) => (t.actions = t.actions || []));
+  // "Timeline end" became a Timeline trigger that picks what it reacts to (Nov 2026).
+  for (const t of p.triggers) if (t.type === 'timeline_end') { t.type = 'timeline'; t.on = 'end'; }
   // Sequence triggers were removed (Nov 2026): an old one becomes a sub separator with what it
   // did in its notes, so nothing is lost and nothing runs (the firmware skips separators).
   normalize.sequences = 0;
@@ -806,6 +812,7 @@ function onStatus(st) {
   }
   updateHeader();
   if (S.view === 'dashboard') renderPlaybacks();
+  if (S.view === 'live') liveStatus();
   if (S.view === 'modes') renderModes();
   if (S.view === 'devices') renderProjectorStates();
   if (S.view === 'monitor') renderMonitor();
@@ -833,6 +840,7 @@ function addLog(m) {
   if (m.l >= 2 && S.view !== 'log') { S.logUnseen++; updateHeader(); }
   if (S.view === 'log' && !S.logPaused && logVisible(m)) appendLogRow(m);
   if (S.view === 'dashboard' && m.l >= 2) renderRecent();
+  if (S.view === 'live') liveLog(m);
   if (m.c === 'TRIG') onTrigLog(m);   // flow view on the Triggers page
 }
 function logVisible(m) {

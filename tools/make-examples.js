@@ -220,7 +220,7 @@ dim = low + (1 - low) * k * (0.7 + 0.3 * noise(t * 0.8 + i))`);
     'panel "Start show" text RUNNING', 'panel lbl_status text Show is running'], ['mode Room is Idle', 'timeline Show stopped'], { whileRunning: 'ignore' });
   s.trig('Show: start media', 'manual', {}, ['send osc mediaserver /cue/show/start', 'send osc qlab /cue/show/go'], [],
     { notes: 'Fired by the ◆ cue at 5 s on the Show timeline, after the room has gone dark.' });
-  s.trig('Show finished', 'timeline_end', { timeline: show }, ['mode Room Idle', 'fire trigger "Start inloop"', 'log Show {shows_today} of today finished']);
+  s.trig('Show finished', 'timeline', { timeline: show, on: 'end' }, ['mode Room Idle', 'fire trigger "Start inloop"', 'log Show {shows_today} of today finished']);
   s.trig('Stop show', 'manual', {}, ['stop timeline Show fade 3', 'send osc mediaserver /stop', 'send osc qlab /cue/show/stop', 'mode Room Idle', 'fire trigger "Start inloop" after 3']);
   s.trig('Start button (Kiss-Box 1.2)', 'variable', { variable: 'start_button', value: 'on' }, ['fire trigger "Start show"'], [],
     { cooldown: 10, onlyIn: { group: 'Room', states: ['Idle'] }, notes: 'The big button at the entrance. Ignored while a show runs.' });
@@ -430,7 +430,7 @@ dim = k * (0.85 + 0.15 * noise(t * 4 + i * 7))`);
     s.trig(`Button ${lang} (in${k})`, 'input', { io: `in${k}`, edge: 'rising' }, [`fire trigger "Story ${code}"`], [], { cooldown: 2, onlyIn: { group: 'Diorama', states: ['Rest'] } });
     s.trig(`Story ${code}`, 'manual', {}, ['mode Diorama Playing', `start timeline "Story ${code}"`, `brightsign audio play Audio story_${code.toLowerCase()}.mp3`,
       'io all off', `io out${k} on`, `var plays_${code.toLowerCase()} ++`], ['mode Diorama is Rest'], { whileRunning: 'ignore' });
-    s.trig(`Story ${code} finished`, 'timeline_end', { timeline: tls[code] }, ['fire trigger "Back to rest"']);
+    s.trig(`Story ${code} finished`, 'timeline', { timeline: tls[code], on: 'end' }, ['fire trigger "Back to rest"']);
   });
   s.trig('Invite: blink the buttons', 'interval', { seconds: 30 }, ['repeat 3 times every 0.4 io out{=i-1} off', 'sleep 1', 'io out0 on', 'io out1 on', 'io out2 on'],
     ['mode Diorama is Rest', 'time between 10:00 17:00']);

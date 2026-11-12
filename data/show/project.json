@@ -3437,6 +3437,8 @@
    "name": "Inloop",
    "length": 10000,
    "loop": false,
+   "end": "release",
+   "endFade": 2000,
    "priority": 0,
    "group": "A",
    "cues": [
@@ -3479,6 +3481,8 @@
    "name": "Puppet show",
    "length": 30000,
    "loop": false,
+   "end": "release",
+   "endFade": 2000,
    "priority": 0,
    "group": "A",
    "cues": [
@@ -3556,6 +3560,8 @@
    "name": "Emergency",
    "length": 0,
    "loop": false,
+   "end": "release",
+   "endFade": 2000,
    "priority": 10,
    "cues": [
     {

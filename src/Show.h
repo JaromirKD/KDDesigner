@@ -26,6 +26,8 @@ enum class Path : uint8_t { Linear, Accelerated, Braked, Damped, Overshoot };
 struct Cue { uint32_t t; uint32_t fade; int scene; int own; int fx; uint8_t track; Path path; String trigger; bool release = false; uint32_t from = 0; };
 struct Timeline {
   int id; String name; uint32_t length; bool loop; int priority;
+  bool holdEnd = true;              // not looping: hold the last look at the end ("end": "hold", the
+  uint32_t endFade = 0;             // default for older projects) or release with endFade ms ("release")
   String group;                      // starting a timeline releases others in the same group
   BigRam::Vec<Cue> cues;
 };
@@ -90,7 +92,12 @@ void setBlackout(bool on);
 enum Part { kPartFx, kPartFade, kPartMix, kPartOut, kParts };
 void takeTiming(uint32_t out[kParts]);
 
-bool takeEndedTimeline(int& timelineId);           // timeline-end events for triggers
+// Timeline events for "timeline" triggers, queued by the engine and handled in the main loop.
+// reason: start | restart (start), stop | group | release all (release); empty otherwise.
+enum class TlEvent : uint8_t { Start, End, Release, Pause, Resume };
+struct TimelineEvent { int timeline; TlEvent kind; const char* reason; };
+int timelineEventCount();                          // queued now (the main loop takes only these)
+bool takeTimelineEvent(TimelineEvent& ev);
 bool takeTimelineCue(int& timelineId, String& trigger);  // trigger cues that were reached
 void statusJson(JsonObject obj);
 }  // namespace Show

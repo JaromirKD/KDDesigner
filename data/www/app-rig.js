@@ -790,17 +790,23 @@ function gridSize(n, opt = S.shapeOpt) {
   return [cols, Math.max(Math.ceil(n / cols), Math.min(n, opt.rows || 0))];
 }
 // Puts the fixtures in a shape that fills the selection's area (at least a sensible size).
-// Fixtures keep their neighbours: they are taken in their current order along the shape.
-function shapeItems(its, shape, asp, opt = S.shapeOpt) {
+// Fixtures keep their neighbours: they are taken in their current order along the shape -
+// or, with seq (fixture ids, the order the last shape used), in that order: reading a zigzag
+// or a snake back from positions mixes it up (a zigzag read as rows = 1 3 5 7 2 4 6 8).
+// Returns the fixture ids in the order they went into the shape.
+function shapeItems(its, shape, asp, opt = S.shapeOpt, seq = null) {
   // Circle radius: never so big that the circle doesn't fit on the map (it would get squashed).
   const n = its.length, b = selBox(its, asp), L = Math.max(b.w, b.h, 0.3), R = Math.min(Math.max(b.w, b.h, 0.25) / 2, 0.46, 0.46 * asp);
-  const put = (it, x, y) => { it.x = x / asp; it.y = y; };
+  const used = [];
+  const put = (it, x, y) => { used.push(it.fixture); it.x = x / asp; it.y = y; };
   const t = (k) => (n > 1 ? k / (n - 1) : 0.5);
   const around = (it) => Math.atan2(it.y - b.cy, it.x * asp - b.cx);
   const fromTop = (it) => (around(it) + Math.PI * 2.5) % (Math.PI * 2);   // clockwise from 12 o'clock
   // The order fixtures go into the shape: patch order, or by where they are now (cmp).
   const patch = [...its].sort((a, c) => { const fa = fixture(a.fixture), fc = fixture(c.fixture); return fa.universe - fc.universe || fa.address - fc.address; });
-  const ord = (cmp) => (opt.order === 'patch' ? patch : [...its].sort(cmp));
+  const at = seq && seq.length === n ? new Map(seq.map((id, k) => [id, k])) : null;
+  const kept = at && its.every((it) => at.has(it.fixture)) ? [...its].sort((a, c) => at.get(a.fixture) - at.get(c.fixture)) : null;
+  const ord = (cmp) => (opt.order === 'patch' ? patch : kept || [...its].sort(cmp));
   const [cols, rows] = gridSize(n, opt);
   // Grid cell k -> x, y (snake: every other row runs back, like zigzag-wired LED matrices).
   // Rows at least as far apart as the columns, so a long row becomes a square-ish grid.
@@ -839,16 +845,24 @@ function shapeItems(its, shape, asp, opt = S.shapeOpt) {
   } else if (shape === 'rect') {
     // Evenly round the outline, clockwise from the top-left corner (like an LED strip round a showcase).
     const RW = Math.min(Math.max(b.w, 0.25), 0.92 * asp), RH = Math.min(Math.max(b.h, 0.15), 0.92), per = 2 * (RW + RH);
-    const at = (d) => (d < RW ? [d, 0] : d < RW + RH ? [RW, d - RW] : d < 2 * RW + RH ? [RW - (d - RW - RH), RH] : [0, RH - (d - 2 * RW - RH)]);
+    const edge = (d) => (d < RW ? [d, 0] : d < RW + RH ? [RW, d - RW] : d < 2 * RW + RH ? [RW - (d - RW - RH), RH] : [0, RH - (d - 2 * RW - RH)]);
     const fromCorner = (it) => (around(it) + Math.PI * 2 + Math.atan2(RH, RW)) % (Math.PI * 2);
-    ord((a, c) => fromCorner(a) - fromCorner(c)).forEach((it, k) => { const [x, y] = at((per * k) / n); put(it, b.cx - RW / 2 + x, b.cy - RH / 2 + y); });
+    ord((a, c) => fromCorner(a) - fromCorner(c)).forEach((it, k) => { const [x, y] = edge((per * k) / n); put(it, b.cx - RW / 2 + x, b.cy - RH / 2 + y); });
   } else if (shape === 'zigzag') {
     const ZH = Math.max(b.h, 0.08);
     ord((a, c) => a.x - c.x).forEach((it, k) => put(it, b.cx - Lx / 2 + Lx * t(k), b.cy + (k % 2 ? ZH / 2 : -ZH / 2)));
   } else if (shape === 'grid' || shape === 'snake') {
-    (opt.order === 'patch' ? patch : reading()).forEach((it, k) => put(it, ...cell(k, shape === 'snake')));
+    (opt.order === 'patch' ? patch : kept || reading()).forEach((it, k) => put(it, ...cell(k, shape === 'snake')));
   }
   keepInside(its);
+  return used;
+}
+// The last shape's fixture order (S.lastShape.seq) is reused while the fixtures are where a
+// shape, rotation or scaling put them; moved by hand, the order comes from the positions again.
+const shapePos = (its) => its.map((it) => `${it.fixture}:${(+it.x).toFixed(4)},${(+it.y).toFixed(4)}`).join(' ');
+function shapeMoved(m) {
+  const ls = S.lastShape;
+  if (ls && ls.map === m.id) ls.pos = shapePos(m.items.filter((it) => S.mapSel.has(it.fixture)));
 }
 // Rotates (ang in radians) and/or scales positions around a centre (square units), from orig.
 // scale = one factor, or [sx, sy] to stretch width and height separately (before turning).
@@ -868,6 +882,7 @@ function transformSel(m, deg, scale = 1) {
   const b = selBox(its, m.aspect);
   turnItems(its, its.map((it) => ({ x: it.x, y: it.y })), { x: b.cx, y: b.cy }, (deg * Math.PI) / 180, m.aspect, scale);
   keepInside(its);
+  shapeMoved(m);
   markDirty();
   render();
 }
@@ -1021,7 +1036,7 @@ views.map = () => {
         ${p.fixtures.some((f) => !placed.has(f.id)) ? '<button class="btn small ghost" id="mapPlaceAll" title="Put all fixtures that are not on this map in a row at the bottom">Place the rest</button>' : ''}</div>
       <p class="muted keys">New fixtures get the next free address on universe ${p.universes[0]?.id || 1}; change it below or on the Patch page.</p>
       <h3>Groups</h3>
-      <p class="muted" style="margin:0 0 6px">Click to select a group on the map.</p>
+      <p class="muted" style="margin:0 0 6px">Click to select a group on the map, or drag it onto the map to place it there.</p>
       <div class="list">${p.groups.map((g) => {
         const on = g.fixtures.filter((id) => placed.has(id)), all = on.length && on.length === S.mapSel.size && on.every((id) => S.mapSel.has(id));
         return `<div class="item${all ? ' sel' : ''}" data-mapgrp="${g.id}" title="${on.length} of ${g.fixtures.length} on this map"><span class="id">${g.id}</span><span style="flex:1">${esc(g.name)}</span>
@@ -1211,6 +1226,52 @@ views.map.after = () => {
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up, { once: true });
   }));
+  // A group dropped on the map: the fixtures not on it yet go in a block where it is let go
+  // (the ones already on it stay put); a group that is all on the map moves there whole,
+  // keeping its shape (its centre lands on the drop point).
+  const groupDrop = (g, pt) => {
+    const gi = new Set(g.fixtures), mine = ids.filter((id) => gi.has(id));   // fixture-list order
+    const missing = mine.filter((id) => !itemOf(id));
+    if (missing.length) {
+      dropAt(pt, missing);
+      S.mapSel = new Set(mine);
+      return;
+    }
+    const its = mine.map(itemOf), b = selBox(its, m.aspect);
+    const dx = pt.x - b.cx / m.aspect, dy = pt.y - b.cy;
+    for (const it of its) { it.x += dx; it.y += dy; }
+    keepInside(its);
+    S.mapSel = new Set(mine);
+    markDirty();
+  };
+  $$('[data-mapgrp]').forEach((row) => row.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const g = p.groups.find((x) => x.id === +row.dataset.mapgrp);
+    const n = g.fixtures.filter((id) => fixture(id)).length;
+    let ghost = null;
+    const move = (ev) => {
+      if (!ghost && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 4) return;
+      if (!ghost) {
+        ghost = document.createElement('div');
+        ghost.className = 'map-ghost';
+        ghost.textContent = `${g.name} (${n})`;
+        document.body.appendChild(ghost);
+      }
+      ghost.style.left = ev.clientX / uiZoom() + 'px';
+      ghost.style.top = ev.clientY / uiZoom() + 'px';
+    };
+    const up = (ev) => {
+      document.removeEventListener('pointermove', move);
+      if (!ghost) return clickGroup(g);
+      ghost.remove();
+      const r = canvas.getBoundingClientRect();
+      if (n && ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) groupDrop(g, at(ev));
+      render();
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up, { once: true });
+  }));
   $('#mapAddFx').addEventListener('click', () => {
     S.view = 'fixtures';
     S.fxPanel = 'add';
@@ -1263,13 +1324,14 @@ views.map.after = () => {
     markDirty();
     render();
   });
-  $$('[data-mapgrp]').forEach((el) => el.addEventListener('click', () => {
-    const g = p.groups.find((x) => x.id === +el.dataset.mapgrp);
+  // Groups: click selects the group's fixtures on the map; dragging the row onto the map
+  // (handled with the fixture list below, groupDrop) puts the group there.
+  const clickGroup = (g) => {
     const on = g.fixtures.filter((id) => itemOf(id));
-    if (!on.length) return toast(`None of '${g.name}' is on this map - drag them on from the list`, true);
+    if (!on.length) return toast(`None of '${g.name}' is on this map - drag the group onto the map`, true);
     S.mapSel = new Set(on);
     render();
-  }));
+  };
   $('#mapAddGroup')?.addEventListener('change', (e) => {
     const g = p.groups.find((x) => x.id === +e.target.value);
     if (!g) return;
@@ -1290,8 +1352,9 @@ views.map.after = () => {
   // A shape is applied at once; changing the order or columns afterwards redoes it.
   const selKey = () => [...S.mapSel].sort((a, c) => a - c).join();
   const applyShape = (shape) => {
-    shapeItems(m.items.filter((it) => S.mapSel.has(it.fixture)), shape, m.aspect);
-    S.lastShape = { shape, key: selKey(), map: m.id };
+    const its = m.items.filter((it) => S.mapSel.has(it.fixture)), ls = lastHere();
+    const seq = shapeItems(its, shape, m.aspect, S.shapeOpt, ls && ls.pos === shapePos(its) ? ls.seq : null);
+    S.lastShape = { shape, key: selKey(), map: m.id, seq, pos: shapePos(its) };
     markDirty();
     render();
     $('#mapShape').value = shape;
@@ -1339,7 +1402,7 @@ views.map.after = () => {
       }
     };
     el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', () => { el.removeEventListener('pointermove', move); if (moved) markDirty(); render(); }, { once: true });
+    el.addEventListener('pointerup', () => { el.removeEventListener('pointermove', move); if (moved) { shapeMoved(m); markDirty(); } render(); }, { once: true });
   });
   handleDrag($('#mapRot'), (its, orig, c, p0, pt, ev) => {
     let a = Math.atan2(pt.y - c.y, pt.x - c.x) - Math.atan2(p0.y - c.y, p0.x - c.x);

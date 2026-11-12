@@ -116,7 +116,7 @@ function addItem(kind) {
       p.scenes[S.sel.scene].levels.push(f ? { fixture: f.id, ch: (f.channels || [])[0], v: 255 } : { u: p.universes[0]?.id || 1, ch: 1, v: 255 });
       break;
     }
-    case 'timeline': p.timelines.push({ id: nextId(p.timelines), name: 'Timeline ' + nextId(p.timelines), length: 10000, loop: false, priority: 0, tracks: [{ name: 'Scenes', fixtures: [], groups: [] }], cues: [] }); S.sel.timeline = p.timelines.length - 1; S.sel.cue = -1; break;
+    case 'timeline': p.timelines.push({ id: nextId(p.timelines), name: 'Timeline ' + nextId(p.timelines), length: 10000, loop: false, end: 'release', endFade: 2000, priority: 0, tracks: [{ name: 'Scenes', fixtures: [], groups: [] }], cues: [] }); S.sel.timeline = p.timelines.length - 1; S.sel.cue = -1; break;
     case 'cue': case 'cue:preset': case 'cue:scene': case 'cue:effect': case 'trigcue': {
       // At the cursor, on the cursor's track (else the selected cue's track, else the first).
       // Without a cursor: a 4 s clip right after the last one on that track; a trigger cue
@@ -236,10 +236,10 @@ function whereUsed(listName, x) {
     scan(t.actions, GRAMMAR, 'action', where, attr);
     scan(t.conditions, COND_GRAMMAR, 'condition', where, attr);
     // What sets the trigger off.
-    const src = { variables: t.type === 'variable' && t.variable, timelines: t.type === 'timeline_end' && t.timeline,
+    const src = { variables: t.type === 'variable' && t.variable, timelines: t.type === 'timeline' && t.timeline,
       devices: t.type === 'device' && t.device, pcs: t.type === 'device' && t.device, tcp: (t.type === 'tcp' || t.type === 'device') && t.device,
       projectors: (t.type === 'projector' && t.projector) || (t.type === 'device' && t.device), modbus: t.type === 'device' && t.device, drivers: t.type === 'device' && t.device }[listName];
-    if (src != null && src !== false && src !== '' && hit(src) !== null) out.push({ where, what: `sets it off (${t.type === 'timeline_end' ? 'timeline ends' : t.type})`, attr });
+    if (src != null && src !== false && src !== '' && hit(src) !== null) out.push({ where, what: `sets it off (${t.type === 'timeline' ? `timeline ${TL_WHY[tlOn(t)]}` : t.type})`, attr });
     if (listName === 'devices' && (t.type === 'udp' || t.type === 'osc') && x.ip && t.fromIp === x.ip) out.push({ where, what: `only messages from ${x.ip}`, attr });
   }
   for (const g of p.modes || []) {

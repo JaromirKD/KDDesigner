@@ -1291,8 +1291,9 @@
     {
       "id": 7,
       "name": "Show finished",
-      "type": "timeline_end",
+      "type": "timeline",
       "timeline": 1,
+      "on": "end",
       "color": "purple",
       "actions": [
         "mode Room Idle",

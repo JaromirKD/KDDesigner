@@ -75,7 +75,7 @@ uint8_t ovr[U][512], ovrMask[U][64];
 float gm = 1;
 bool blackout = false;
 uint32_t orderCounter = 0;
-std::vector<int> endedQueue;
+std::vector<Show::TimelineEvent> tlEvents;   // started / ended / released / paused / resumed
 struct CueEvent { int timeline; String trigger; };
 std::vector<CueEvent> cueQueue;
 
@@ -338,6 +338,8 @@ bool trackStartsAtZero(const Timeline& t, uint8_t track) {
   return false;
 }
 
+void releasePlayback(Playback& p, uint32_t fadeMs, const char* reason = "stop");   // (below)
+
 void updateTimeline(Playback& p, uint32_t now) {
   const Timeline& t = timelines[p.ref];
   // Signed: a timeline started (millis()) after this tick's `now` was read must count as 0,
@@ -388,14 +390,21 @@ void updateTimeline(Playback& p, uint32_t now) {
       LOGD(Show, "Timeline %d '%s' looped", t.id, t.name.c_str());
     } else {
       p.ended = true;
-      endedQueue.push_back(t.id);
+      tlEvents.push_back({t.id, Show::TlEvent::End, ""});
       State::changed();
-      LOGI(Show, "Timeline %d '%s' reached end (holding)", t.id, t.name.c_str());
+      if (t.holdEnd) LOGI(Show, "Timeline %d '%s' reached end (holding)", t.id, t.name.c_str());
+      else {
+        LOGI(Show, "Timeline %d '%s' reached end (release, fade %.1fs)", t.id, t.name.c_str(), t.endFade / 1000.0f);
+        releasePlayback(p, t.endFade, "end");
+      }
     }
   }
 }
 
-void releasePlayback(Playback& p, uint32_t fadeMs) {
+// reason: why a timeline lets go, for its "released" triggers (scenes have none).
+void releasePlayback(Playback& p, uint32_t fadeMs, const char* reason) {
+  // Once per release: a second stop during the fade-out doesn't count again.
+  if (!p.isScene && !p.releasing) tlEvents.push_back({timelines[p.ref].id, Show::TlEvent::Release, reason});
   p.releasing = true;
   fadeMasterTo(p, 0, fadeMs, millis());
   if (!fadeMs) p.active = false;
@@ -423,6 +432,7 @@ bool due(Pace& p, int u, uint32_t now, uint8_t fps, bool changesOnly) {
 
 void ShowImpl::stopAllPlaybacks() {
   for (auto& p : pbs) p.active = false;
+  tlEvents.clear();   // a (re)load lets go of everything without "released" triggers
 }
 
 // Live edit (Show::liveTimeline): a running copy of the timeline starts again where it is, as
@@ -592,15 +602,16 @@ bool startTimeline(int idx, String& msg, uint32_t atMs) {
     uint32_t fade = t.cues.empty() ? 0 : t.cues[0].fade;
     for (auto& p : pbs)
       if (p.active && !p.isScene && p.ref != idx && !p.releasing && timelines[p.ref].group == t.group) {
-        releasePlayback(p, fade);
+        releasePlayback(p, fade, "group");
         LOGI(Show, "Timeline %d '%s' released by group %s", timelines[p.ref].id, timelines[p.ref].name.c_str(), t.group.c_str());
       }
   }
   Playback* p = takePlayback(false, idx, msg);
   if (!p) return false;
-  bool restart = p->active;
+  bool restart = p->active && !p->releasing;   // one fading out after a release starts anew
   // Keep cur values on restart so the first cue fades from the current look.
   resetPlayback(*p, false, idx, t.priority, millis());
+  tlEvents.push_back({t.id, Show::TlEvent::Start, restart ? "restart" : "start"});
   if (t.length && atMs >= t.length) atMs = t.length - 1;
   p->start -= atMs;
   p->catchUp = atMs;
@@ -624,8 +635,9 @@ bool pauseTimeline(int idx, bool pause, String& msg) {
   if (!p) return false;
   const Timeline& t = timelines[idx];
   uint32_t now = millis();
-  if (pause && !p->paused) { p->paused = true; p->pausedAt = now; }
+  if (pause && !p->paused) { p->paused = true; p->pausedAt = now; tlEvents.push_back({t.id, Show::TlEvent::Pause, ""}); }
   else if (!pause && p->paused) {
+    tlEvents.push_back({t.id, Show::TlEvent::Resume, ""});
     p->paused = false;
     p->start += now - p->pausedAt;
     for (auto& f : p->tf) f.fxStart += now - p->pausedAt;   // effects carry on where they were
@@ -665,7 +677,7 @@ bool releaseScene(int idx, uint32_t fadeMs, String& msg) {
 }
 
 void releaseAll(uint32_t fadeMs) {
-  for (auto& p : pbs) if (p.active) releasePlayback(p, fadeMs);
+  for (auto& p : pbs) if (p.active) releasePlayback(p, fadeMs, "release all");
   LOGI(Show, "Release all (fade %.1fs)", fadeMs / 1000.0f);
 }
 
@@ -687,10 +699,11 @@ void setOutput(Output o, bool on) {
 void setGrandMaster(float level) { gm = constrain(level, 0.0f, 1.0f); LOGI(Show, "Grand master %d%%", (int)(gm * 100)); }
 void setBlackout(bool on) { blackout = on; LOGW(Show, "Blackout %s", on ? "ON" : "off"); }
 
-bool takeEndedTimeline(int& id) {
-  if (endedQueue.empty()) return false;
-  id = endedQueue.front();
-  endedQueue.erase(endedQueue.begin());
+int timelineEventCount() { return tlEvents.size(); }
+bool takeTimelineEvent(TimelineEvent& ev) {
+  if (tlEvents.empty()) return false;
+  ev = tlEvents.front();
+  tlEvents.erase(tlEvents.begin());
   return true;
 }
 

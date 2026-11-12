@@ -99,16 +99,21 @@ function fxOverlayPainter(cv, prog, base, fx, m, round) {
   };
 }
 // Animate a preview container; values: param overrides; level 0..1.
-function runFxPreview(box, prog, src, values = {}, level = 1, round = false) {
+// ovlMap: the map under an overlay when src is a fixture list (the timeline cue preview).
+function runFxPreview(box, prog, src, values = {}, level = 1, round = false, ovlMap = null) {
   if (!box || !prog || prog.error) return;
-  const fx = fxPreviewFixtures(src, round), base = KDFX.slotsFor(prog, values), cells = [...box.querySelectorAll('[data-pv]')], t0 = performance.now();
+  const fx = fxPreviewFixtures(src, round), base = KDFX.slotsFor(prog, values), t0 = performance.now();
+  // Cells by their data-pv number (= the fixture's i): a preview may leave fixtures out.
+  const cells = [];
+  box.querySelectorAll('[data-pv]').forEach((el) => (cells[+el.dataset.pv] = el));
   const outs = fx.map((o) => fxOutputs(o.f));   // once, not every frame
   const glow = fx.length <= 40;   // the glow is costly to draw for hundreds of dots every frame
-  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, base, fx, typeof src === 'string' && src.startsWith('map:') ? P().maps[+src.slice(4)] : null, round);
+  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, base, fx, typeof src === 'string' && src.startsWith('map:') ? P().maps[+src.slice(4)] : ovlMap, round);
   pageAnimation('fxPreview', () => {
     const t = (performance.now() - t0) / 1000;
     if (paintOvl) paintOvl(t);
     fx.forEach((o, k) => {
+      if (!cells[k]) return;
       const c = fxPreviewColor(prog, base, outs[k], k, fx.length, o.x, o.y, t, level);
       cells[k].style.background = c.css;
       if (glow) cells[k].style.boxShadow = c.level > 0.05 ? `0 0 ${3 + c.level * 10}px ${c.css}` : 'none';
@@ -589,12 +594,16 @@ views.timelines = () => {
       <div class="used-row">${usedHtml('timelines', t)}</div>
       <div class="row" style="margin-top:10px">
         <label class="muted">Length (s)</label><input type="number" min="0" step="0.1" style="width:90px" data-p="timelines.${ti}.length" data-t="sec" value="${(t.length || 0) / 1000}" data-r>
-        <label class="muted"><input type="checkbox" data-p="timelines.${ti}.loop" data-t="bool"${t.loop ? ' checked' : ''}> Loop</label>
+        <label class="muted"><input type="checkbox" data-p="timelines.${ti}.loop" data-t="bool"${t.loop ? ' checked' : ''} data-r> Loop</label>
+        ${t.loop ? '' : `<label class="muted" title="What happens when the timeline reaches its end. Release: it lets go (fades out), like Stop. Hold: it keeps its last look until it is stopped.">At the end</label>
+        <select data-p="timelines.${ti}.end" data-r><option value="release"${t.end === 'release' ? ' selected' : ''}>release</option><option value="hold"${t.end === 'release' ? '' : ' selected'}>hold last look</option></select>
+        ${t.end === 'release' ? `<label class="muted">fade (s)</label><input type="number" min="0" step="0.1" style="width:70px" data-p="timelines.${ti}.endFade" data-t="sec" value="${(t.endFade || 0) / 1000}">` : ''}`}
         <label class="muted">Priority</label><input type="number" style="width:70px" data-p="timelines.${ti}.priority" data-t="num" value="${t.priority || 0}">
         <label class="muted" title="Starting a timeline releases the other timelines in the same group">Group</label>
         <select data-p="timelines.${ti}.group">${TL_GROUPS.map((g) => `<option value="${g}"${(t.group || '') === g ? ' selected' : ''}>${g || 'none'}</option>`).join('')}</select>
       </div>
       ${tlGridHtml(t)}
+      ${S.trackEdit != null && t.tracks[S.trackEdit] ? trackFixturesHtml(t, S.trackEdit) : ''}
       <div class="row" style="margin-top:8px">
         <button class="btn small" data-add="track"${t.tracks.length >= 16 ? ' disabled' : ''}>+ Track</button>
         <button class="btn small" data-add="cue:preset" title="A solid colour clip on the current track, at the cursor">+ Colour</button>
@@ -606,7 +615,6 @@ views.timelines = () => {
         Space plays from the cursor; click the time ruler while playing to jump there. Click a track's name to make it the current track: + Colour / Scene / Effect add there (at the cursor). Right-click empty space, a clip, a track name or the ruler for a menu.
         Ctrl+wheel zooms. Each track has its own fixtures and fades on its own; a track without fixtures plays scenes on the whole rig.<br>
         Keys: Ctrl+C / X / V copy, cut, paste at the cursor · Ctrl+D duplicate · Ctrl+E split at the cursor · Ctrl+A select all · Del delete · ←/→ previous/next cue · ↑/↓ other track · Shift+←/→ move 0.1 s (Ctrl 1 s) · 1–9, 0 colour · [ ] hue · + − intensity · Enter colour wheel · Space play from the cursor / pause / carry on · Esc deselect</p>
-      ${S.trackEdit != null && t.tracks[S.trackEdit] ? trackFixturesHtml(t, S.trackEdit) : ''}
       <div id="cueEdBox">${cueEditorHtml(t)}</div>
       <h3>All cues</h3>
       <table class="cue-list"><tr><th class="narrow">Time (s)</th><th>Track</th><th>What</th><th class="narrow">Length (s)</th><th class="narrow">Fade (s)</th><th></th></tr>
@@ -670,6 +678,40 @@ function trackPreviewFixtures(tr, e) {
     return { f: fixture(id), x: it ? it.x : k / ids.length, y: it ? it.y : 0.5 };
   });
 }
+// The map an effect cue's preview shows: the one picked for this track (S.cuePrevMap, per
+// timeline and track, not saved), else the one with the most of the track's fixtures.
+// 'strip' = no map, the track's fixtures in a row.
+const cuePrevKey = (tl, track) => `${tl.id}:${track || 0}`;
+function cuePreviewMap(ids, key) {
+  const pick = (S.cuePrevMap || {})[key];
+  if (pick === 'strip') return null;
+  const want = new Set(ids), chosen = pick != null && P().maps.find((m) => m.id === pick);
+  if (chosen) return chosen;
+  let best = null, bn = 0;
+  for (const m of P().maps) { const n = m.items.filter((it) => want.has(it.fixture)).length; if (n > bn) { bn = n; best = m; } }
+  return best;
+}
+// Effect cue preview, like the Effects page: the whole map with every fixture on it; the
+// track's fixtures play the effect (data-pv = their i in the track), the others are greyed.
+// Track fixtures not on that map get a strip under it. The drop-down picks another map
+// (those with track fixtures on them) or the strip.
+function cuePreviewHtml(tr, key) {
+  const ids = trackFxIds(tr), m = cuePreviewMap(ids, key), idx = new Map(ids.map((id, k) => [id, k]));
+  const want = new Set(ids), maps = P().maps.map((x) => [x, x.items.filter((it) => want.has(it.fixture)).length]).filter(([, n]) => n);
+  const picker = maps.length ? `<select data-cueprevmap title="Which map the preview shows (only here, not saved)">${maps.map(([x, n]) => `<option value="${x.id}"${m === x ? ' selected' : ''}>${esc(x.name)} (${n})</option>`).join('')}<option value="strip"${m ? '' : ' selected'}>Strip (track order)</option></select>` : '';
+  if (!m) return `<div class="row cue-prev-head"><b>Preview</b>${picker}</div><div class="fx-prev strip">${ids.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
+  const items = m.items.filter((it) => fixture(it.fixture)), onMap = new Set(items.map((it) => it.fixture));
+  const rest = ids.filter((id) => !onMap.has(id)), zkey = `cue:${m.id}`;
+  // Effects use each fixture's place on the first map it is on (as the controller does):
+  // on another map, the pattern over the map can differ from what those fixtures play.
+  const elsewhere = ids.filter((id) => onMap.has(id) && P().maps.find((x) => x.items.some((it) => it.fixture === id)) !== m).length;
+  return `<div class="row cue-prev-head"><b>Preview</b>${picker}
+      <label class="muted" title="Runs the effect over the whole map, not only where the fixtures are, so you can see the pattern between them"><input type="checkbox" data-cueovl${fxOverlayOn() ? ' checked' : ''}> whole map</label>${mapZoomHtml(zkey)}</div>
+    <div class="map-wrap"><div class="fx-prev map-canvas${items.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.cue', m.aspect, 'calc(40 * var(--vh))')}" data-aspect="${m.aspect}" data-zoomkey="${zkey}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
+    ${mapShapesHtml(m)}${items.map((it) => { const f = fixture(it.fixture), k = idx.get(it.fixture); return `<div class="mfx${k == null ? ' out' : ''}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)}${k == null ? ' (not in this track)' : ''}"><span class="dot"${k == null ? '' : ` data-pv="${k}"`}></span></div>`; }).join('')}${mapResizeHtml('kd.mapH.cue')}</div></div>
+    ${elsewhere && fxOverlayOn() ? `<div class="muted" style="margin-top:6px">${elsewhere} of these fixture(s) take their place for effects from an earlier map, so the pattern over this map may not match them.</div>` : ''}
+    ${rest.length ? `<div class="muted" style="margin-top:6px">Not on this map: ${rest.length} fixture(s)</div><div class="fx-prev strip">${rest.map((id) => `<span data-pv="${idx.get(id)}" title="${esc(fixture(id).name)}"></span>`).join('')}</div>` : ''}`;
+}
 // Fixture ids of a track (its fixtures + its groups' fixtures), like Show::parse.
 const trackFxIds = (tr) => KDModel.trackFixtureIds(P(), tr);
 // ---- Timeline editing (Ableton-style clips) ----
@@ -723,7 +765,8 @@ function rampSvg(path, out) {
 // Level of a clip in % (effect level or preset intensity), null when it has none (scene, colour only).
 const cueLevel = (c) => (c.effect != null ? c.dim ?? 100 : isPreset(c) ? c.dim ?? null : null);
 function blkInner(t, c, end) {
-  const span = Math.max(1, end - c.t), fin = Math.min(c.fade || 0, span), fout = c.len ? Math.min(c.out || 0, span) : 0, lv = cueLevel(c);
+  const nx = xfadeNext(t, c), xout = nx ? c.t + c.len - nx.t : 0;
+  const span = Math.max(1, end - c.t), fin = Math.min(c.fade || 0, span), fout = c.len ? Math.min(xout || c.out || 0, span) : 0, lv = cueLevel(c);
   // The level as a line across the clip (dark above it), like a fader: drag it up or down.
   return `${c.effect != null || (c.scene != null && !isPreset(c)) ? '<canvas class="thumb"></canvas>' : ''}
     ${lv != null ? `<div class="lv-shade" style="height:${100 - lv}%"></div><i class="lv" data-h="level" style="top:${100 - lv}%" title="Level ${lv}% - drag up or down"></i>` : ''}
@@ -731,7 +774,7 @@ function blkInner(t, c, end) {
     ${fout ? `<div class="ramp out" style="width:${(fout / span) * 100}%">${rampSvg('linear', true)}</div>` : ''}
     <span>${esc(cueLabel(c, t))}${c.len ? '' : ' →'}</span>
     <i class="fh" data-h="fade" style="left:${(fin / span) * 100}%" title="Drag: fade in"></i>
-    ${c.len ? `<i class="fh out" data-h="out" style="right:${(fout / span) * 100}%" title="Drag: fade out"></i>` : ''}
+    ${c.len && !nx ? `<i class="fh out" data-h="out" style="right:${(fout / span) * 100}%" title="Drag: fade out"></i>` : ''}
     <i class="eg l" data-h="left" title="Drag: change the start"></i><i class="eg r" data-h="right" title="Drag: change the length"></i>`;
 }
 // Look of a colour clip as one solid colour: its colour at its intensity (no colour: warm white).
@@ -808,6 +851,7 @@ function paintClip(t, c, el, end) {
 }
 // The track lanes: a ruler, a lane for trigger cues, then one lane per track with a clip per cue.
 function tlGridHtml(t) {
+  syncXfades(t);   // a typed time or length may have changed an overlap
   const L = tlLayout(t), len = L.len, sel = tlSelection(t);
   const rstep = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((s) => s * L.pxs >= 64) || 1200;
   let ruler = '';
@@ -821,13 +865,14 @@ function tlGridHtml(t) {
   }).join('');
   const lanes = t.tracks.map((tr, r) => {
     const fx = trackFxIds(tr);
-    const blocks = t.cues.map((c, i) => [c, i]).filter(([c]) => isLight(c) && (c.track || 0) === r).map(([c, i]) => {
-      const end = cueEnd(t, c, len);
+    // In start order, so a clip that crossfades in is drawn over the one it fades from.
+    const blocks = t.cues.map((c, i) => [c, i]).filter(([c]) => isLight(c) && (c.track || 0) === r).sort((a, b) => a[0].t - b[0].t).map(([c, i]) => {
+      const end = cueEnd(t, c, len), xa = xfadePrev(t, c);
       const preset = isPreset(c), effect = c.effect != null;
       const bad = (preset || effect) && !fx.length || (effect && !P().effects.some((e) => e.id === c.effect && !fxProg(e).error));
       const col = preset ? (c.color || '#ffffff') : effect ? '#bf5af2' : 'var(--blue)';
       const a = preset && c.dim != null ? 0.25 + (c.dim / 100) * 0.6 : 0.6;
-      return `<div class="blk${sel.has(c) ? ' sel' : ''}${bad ? ' bad' : ''}${effect ? ' fx' : ''}${preset ? ' solid' : ''}${c.len ? '' : ' hold'}" data-cue="${i}" style="left:${pct(c.t)}%;width:${pct(end - c.t)}%;--bc:${col};--ba:${a}${preset ? `;--solid:${presetCss(c)}` : ''}" title="${(c.t / 1000).toFixed(2)} s · ${c.len ? `length ${(c.len / 1000).toFixed(2)} s` : 'holds until the next cue'} · fade ${((c.fade || 0) / 1000).toFixed(1)} s${c.out ? ` / out ${(c.out / 1000).toFixed(1)} s` : ''} · ${esc(cueLabel(c, t))}${bad ? ' - this track has no fixtures' : ''}">${blkInner(t, c, end)}</div>`;
+      return `<div class="blk${sel.has(c) ? ' sel' : ''}${bad ? ' bad' : ''}${effect ? ' fx' : ''}${preset ? ' solid' : ''}${c.len ? '' : ' hold'}${xa ? ' xf' : ''}" data-cue="${i}" style="left:${pct(c.t)}%;width:${pct(end - c.t)}%;--bc:${col};--ba:${a}${preset ? `;--solid:${presetCss(c)}` : ''}${xa ? `;--xf:${(((c.fade || 0) / Math.max(1, end - c.t)) * 100).toFixed(2)}%` : ''}" title="${(c.t / 1000).toFixed(2)} s · ${c.len ? `length ${(c.len / 1000).toFixed(2)} s` : 'holds until the next cue'} · ${xa ? `crossfade ${((c.fade || 0) / 1000).toFixed(1)} s from ${esc(cueLabel(xa, t))}` : `fade ${((c.fade || 0) / 1000).toFixed(1)} s`}${c.out ? ` / out ${(c.out / 1000).toFixed(1)} s` : ''} · ${esc(cueLabel(c, t))}${bad ? ' - this track has no fixtures' : ''}">${blkInner(t, c, end)}</div>`;
     }).join('');
     return `<div class="tl-row"><div class="tl-h${S.trackEdit === r ? ' on' : ''}${S.tlCursorLane === r ? ' cur' : ''}" data-trackhead="${r}">
         <input data-p="timelines.${S.sel.timeline}.tracks.${r}.name" value="${esc(tr.name)}" title="Track name">
@@ -846,8 +891,10 @@ function tlGridHtml(t) {
     <div class="tl-row"><div class="tl-h muted${S.tlCursorLane === 'trig' ? ' cur' : ''}" data-trackhead="trig">◆ Triggers</div><div class="tl-lane trig${S.tlCursorLane === 'trig' ? ' curlane' : ''}" data-lane="trig">${after}${cur}${trig}<div class="head"></div></div></div>
     ${lanes}<div class="tl-box" hidden></div></div></div>`;
 }
-// Ableton's rule when clips land on each other: the clip underneath is cut back, split
-// around the new one, or (fully covered) removed. Holding clips only lose their start.
+// When clips land on each other: a clip that overlaps only the end (or only the start) of
+// another on its track crossfades with it over the overlap (see xfadePrev). Otherwise
+// Ableton's rule: the clip underneath is cut back, split around the new one, or (fully
+// covered) removed. Holding clips only lose their start.
 function resolveOverlaps(t, moved) {
   const drop = new Set(), add = [];
   for (const m of moved) {
@@ -857,19 +904,50 @@ function resolveOverlaps(t, moved) {
       if (o === m || moved.has(o) || drop.has(o) || !isLight(o) || (o.track || 0) !== (m.track || 0)) continue;
       const oe = o.len ? o.t + o.len : null;
       if (o.t >= s && o.t < e) {
-        if (oe == null) o.t = e;
+        if (o.t > s && (oe == null || oe > e)) m.out = 0;   // m's end over o's start: crossfade
+        else if (oe == null) o.t = e;
         else if (oe > e) { o.len = oe - e; o.t = e; }
         else drop.add(o);
       } else if (o.t < s && oe != null && oe > s) {
-        if (oe > e) add.push({ ...structuredClone(o), t: e, len: oe - e, fade: 0 });
-        o.len = s - o.t;
-        o.out = 0;
+        if (oe > e) { add.push({ ...structuredClone(o), t: e, len: oe - e, fade: 0 }); o.len = s - o.t; o.out = 0; }
+        else o.out = 0;   // m's start over o's end: crossfade
       }
     }
   }
   t.cues = t.cues.filter((c) => !drop.has(c)).concat(add);
+  syncXfades(t);
   for (const c of t.cues) if (c.len) { c.fade = Math.min(c.fade || 0, c.len); if (c.out) c.out = Math.min(c.out, c.len - c.fade); }
   return drop.size;
+}
+// Crossfade: a clip that starts inside the clip before it on its track (and ends after it)
+// fades in over the overlap, from that clip's look, so its fade = the overlap. The
+// controller needs nothing for this: the later cue takes the track over, and the earlier
+// clip's end is then ignored (lastT in Show.cpp, pb.last in the mock).
+function xfadePrev(t, c) {
+  if (!isLight(c)) return null;
+  const tr = c.track || 0, ce = c.len ? c.t + c.len : Infinity;
+  let best = null;
+  for (const o of t.cues) {
+    if (o === c || !o.len || !isLight(o) || (o.track || 0) !== tr) continue;
+    const oe = o.t + o.len;
+    if (o.t < c.t && oe > c.t && oe < ce && (!best || oe > best.t + best.len)) best = o;
+  }
+  return best;
+}
+// The clip that crossfades out of c, if any.
+function xfadeNext(t, c) {
+  if (!isLight(c) || !c.len) return null;
+  const tr = c.track || 0, ce = c.t + c.len;
+  return t.cues.find((x) => x !== c && isLight(x) && (x.track || 0) === tr && x.t > c.t && x.t < ce && xfadePrev(t, x) === c) || null;
+}
+// Keeps every crossfade's fade equal to its overlap (after moving, resizing, typing a time).
+function syncXfades(t) {
+  for (const c of t.cues) {
+    const a = xfadePrev(t, c);
+    if (!a) continue;
+    c.fade = a.t + a.len - c.t;
+    a.out = 0;
+  }
 }
 // Copy of cues shifted by dt (and dl tracks), not yet in the timeline.
 const cloneCues = (cues, dt, dl = 0) => cues.map((c) => { const n = { ...structuredClone(c), t: c.t + dt }; if (isLight(c)) n.track = (c.track || 0) + dl; return n; });
@@ -886,27 +964,49 @@ function pasteCues(t, src, at, dl) {
   tlSelect(t, copies);
   return copies;
 }
-// Fixture picker of a track: groups, fixtures, and (if there is one) the map to click on.
+// Fixture picker of a track, right under the tracks: what is in it (chips in effect order,
+// drag to reorder, ✕ to remove), groups as one-click buttons, and a map or list to pick
+// from with a search box (Enter adds every match).
 function trackFixturesHtml(t, r) {
-  const p = P(), tr = t.tracks[r], base = `timelines.${S.sel.timeline}.tracks.${r}`;
-  const on = new Set(trackFxIds(tr));
-  // Which map to pick on: the one chosen here, else the map open on the Map page.
-  const mi = Math.min(S.trackMap ?? S.sel.map ?? 0, p.maps.length - 1), m = p.maps[mi];
-  const onMap = m ? m.items.filter((it) => fixture(it.fixture)) : [];
+  const p = P(), tr = t.tracks[r];
+  const on = new Set(trackFxIds(tr)), viaGroup = new Set(trackFxIds({ ...tr, fixtures: [] }));
+  // Where to pick: a map (the one chosen here, else the Map page's) or -1 = the list.
+  const mi = S.trackMap === -1 || !p.maps.length ? -1 : Math.min(S.trackMap ?? S.sel.map ?? 0, p.maps.length - 1), m = p.maps[mi];
+  const q = (S.trackSearch || '').trim().toLowerCase(), hit = (f) => !q || f.name.toLowerCase().includes(q) || String(f.id) === q;
+  const mark = (f) => (on.has(f.id) ? ' in' : ' out') + (viaGroup.has(f.id) && !tr.fixtures.includes(f.id) ? ' via' : '') + (hit(f) ? '' : ' nohit');
+  let icons = true;
+  const chip = (f) => `<button class="sc-chip${mark(f)}" data-trackfx="${f.id}" title="${esc(f.name)} · ${f.universe}.${f.address}${viaGroup.has(f.id) && !tr.fixtures.includes(f.id) ? ' · in the track through a group' : on.has(f.id) ? ' · in this track: click to remove' : ' · click to add'}"><span class="dot">${icons ? fxIcon(f) : ''}</span>${esc(f.name)}</button>`;
+  const chips = (list) => { icons = list.length <= 200; return list.map(chip).join(''); };
+  // What is in the track, in effect order (i): its own fixtures, then its groups' (trackFixtureIds).
+  const own = tr.fixtures.map(fixture).filter(Boolean);
+  const inTrack = [
+    ...own.map((f) => `<span class="tk-chip" draggable="true" data-tkown="${f.id}" title="${esc(f.name)} · drag to change the order (effects number fixtures in this order)"><span class="dot">${own.length <= 200 ? fxIcon(f) : ''}</span>${esc(f.name)}<button class="x" data-tkdel="${f.id}" title="Remove">✕</button></span>`),
+    ...tr.groups.map((gid) => p.groups.find((g) => g.id === gid)).filter(Boolean).map((g) => `<span class="tk-chip grp" title="Group '${esc(g.name)}': its fixtures come after the track's own ones"><b>▦</b>${esc(g.name)} <span class="muted">${g.fixtures.length}</span><button class="x" data-tkgrpdel="${g.id}" title="Remove the group">✕</button></span>`),
+  ].join('');
+  let pickArea;
+  if (m) {
+    const items = m.items.filter((it) => fixture(it.fixture)), placed = new Set(items.map((it) => it.fixture));
+    const rest = p.fixtures.filter((f) => !placed.has(f.id));
+    pickArea = items.length ? `<div class="map-wrap"><div class="mini-map tk-map${items.length > 40 ? ' dense' : ''}" id="trackMap" style="aspect-ratio:${m.aspect}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}${mapShapesHtml(m)}
+      ${items.map((it) => { const f = fixture(it.fixture); return mapDotHtml(f, it, mark(f) + (on.has(f.id) ? ' sel' : ''), m.labels !== false, 'data-trackfx-map'); }).join('')}<div class="band" hidden></div></div></div>
+      ${rest.length ? `<div class="sc-chips"><span class="muted">Not on this map:</span>${chips(rest)}</div>` : ''}`
+      : `<p class="muted">Map '${esc(m.name)}' has no fixtures on it yet - place them on the Map page, or pick from the list.</p>`;
+  } else pickArea = `<div class="sc-chips sc-all tk-list">${chips(p.fixtures) || '<span class="muted">No fixtures yet - add them on the Fixtures page.</span>'}</div>`;
+  const pick = `<select id="tkWhere" title="Where to pick fixtures">${p.maps.map((x, i) => `<option value="${i}"${i === mi ? ' selected' : ''}>Map: ${esc(x.name)} (${x.items.filter((it) => on.has(it.fixture)).length}/${x.items.length})</option>`).join('')}<option value="-1"${m ? '' : ' selected'}>List of all fixtures</option></select>`;
   return `<div class="track-fx">
-    <div class="row"><b>Fixtures of track '${esc(tr.name)}'</b><span class="muted">${on.size ? `${on.size} fixture(s)` : 'none: scenes play on the whole rig, presets do nothing'}</span>
-      <button class="btn small ghost" data-trackedit="${r}" style="margin-left:auto">Done</button></div>
-    ${p.groups.length ? `<div class="row"><span class="muted" style="min-width:70px">Groups</span>${p.groups.map((g) => `<label class="chk"><input type="checkbox" data-trackgrp="${g.id}"${tr.groups.includes(g.id) ? ' checked' : ''}>${esc(g.name)}</label>`).join('')}</div>` : ''}
-    <div class="row"><span class="muted" style="min-width:70px">Fixtures</span>${p.fixtures.map((f) => {
-      const viaGroup = !tr.fixtures.includes(f.id) && on.has(f.id);
-      return `<label class="chk${viaGroup ? ' muted' : ''}" title="${viaGroup ? 'In the track through a group' : ''}"><input type="checkbox" data-trackfx="${f.id}"${on.has(f.id) ? ' checked' : ''}${viaGroup ? ' disabled' : ''}>${esc(f.name)}</label>`;
-    }).join('')}</div>
-    ${m ? `<div class="row"><span class="muted" style="min-width:70px">Map</span>${p.maps.length > 1 ? `<div class="seg">${p.maps.map((x, i) => `<button class="${i === mi ? 'on' : ''}" data-trackmap="${i}">${esc(x.name)} <small>(${x.items.filter((it) => on.has(it.fixture)).length}/${x.items.length})</small></button>`).join('')}</div>` : `<span>${esc(m.name)}</span>`}${onMap.length ? mapZoomHtml(`track:${m.id}`) : ''}</div>` : ''}
-    ${m ? (onMap.length ? `<div class="map-wrap"><div class="mini-map${onMap.length > 40 ? ' dense' : ''}" id="trackMap" style="aspect-ratio:${m.aspect}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${mapShapesHtml(m)}
-      ${onMap.map((it) => { const f = fixture(it.fixture); return `<div class="mfx${on.has(f.id) ? ' sel' : ''}" data-trackfx-map="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)}"><span class="dot">${fxIcon(f)}</span>${m.labels !== false ? `<span class="lbl">${esc(f.name)}</span>` : ''}</div>`; }).join('')}<div class="band" hidden></div></div></div>
-      <p class="muted keys">Map '${esc(m.name)}': click a fixture to add or remove it · drag on the map to choose an area (only those) · Shift/Ctrl+drag adds an area · Alt+drag removes one</p>`
-      : `<p class="muted keys">Map '${esc(m.name)}' has no fixtures on it yet - place them on the Map page.</p>`) : ''}
-    <input type="hidden" data-base="${base}"></div>`;
+    <div class="row"><b>Fixtures of track '${esc(tr.name)}'</b><span class="muted">${on.size ? `${on.size} fixture${on.size > 1 ? 's' : ''}` : ''}</span>
+      <span style="margin-left:auto"></span>
+      ${on.size ? '<button class="btn small ghost" id="tkClear" title="Take every fixture and group out of this track">Clear</button>' : ''}
+      <button class="btn small" data-trackedit="${r}">Done</button></div>
+    <div class="tk-in">${inTrack || '<span class="muted">None yet: scenes play on the whole rig, colours and effects do nothing. Pick fixtures below.</span>'}</div>
+    ${p.groups.length ? `<div class="sc-groups"><span class="muted">Groups:</span>${p.groups.map((g) => `<button class="sc-grp${tr.groups.includes(g.id) ? ' on' : ''}" data-trackgrp="${g.id}" title="${tr.groups.includes(g.id) ? 'Take the group out of the track' : 'Put the whole group in the track (it follows later changes to the group)'}">${esc(g.name)} <span class="muted">${g.fixtures.length}</span></button>`).join('')}</div>` : ''}
+    <div class="row map-tools">${pick}
+      <input type="search" id="tkSearch" placeholder="Find fixtures… (Enter adds all found)" value="${esc(S.trackSearch || '')}" style="min-width:220px">
+      <button class="btn small" id="tkAddHits" title="Add every fixture that matches the search">Add found</button>
+      <button class="btn small ghost" id="tkDelHits" title="Remove every fixture that matches the search">Remove found</button>
+      ${m && m.items.length ? mapZoomHtml(`track:${m.id}`) : ''}</div>
+    <div class="muted sc-legend"><span class="sc-key in"></span> in the track <span class="sc-key out"></span> not in it · click to add or remove${m ? ' · drag an area on the map (only those) · Shift/Ctrl+drag adds an area · Alt+drag removes one' : ' · Shift+click adds a range'}</div>
+    ${pickArea}</div>`;
 }
 // Editor for the selected cue.
 function cueEditorHtml(t) {
@@ -916,7 +1016,7 @@ function cueEditorHtml(t) {
   const kind = cueKind(c);
   const tr = t.tracks[c.track || 0], fx = tr ? trackFxIds(tr) : [];
   const noFx = '<span class="bad">This track has no fixtures - choose them with the button on the track.</span>';
-  let what = '';
+  let what = '', prevHtml = '';
   if (kind === 'trigger') {
     const h = findTrigs(String(c.trigger)), cur = h.length === 1 ? h[0] : null;
     what = `<label>Trigger</label><div class="row nowrap"><select data-p="${base}.trigger" data-r class="${cur ? '' : 'invalid'}" style="flex:1">
@@ -944,23 +1044,28 @@ function cueEditorHtml(t) {
             ? `<label>${esc(q.name)}</label><div>${fxParamNote(q)}${reset}${colorWheelHtml('fxp:' + q.name, v)}</div>`
             : `<label>${esc(q.name)}</label><div><div class="row nowrap"><input type="range" min="${q.min}" max="${q.max}" step="${(q.max - q.min) / 200}" data-fxparam="${esc(q.name)}" value="${v}" style="flex:1"><span class="mono fx-pv">${(+v).toFixed(2)}</span>${reset}</div>${fxParamNote(q)}</div>`;
         }).join('') : ''}
-        <label>Preview</label><div id="cueFxPrev">${fx.length ? `<div class="fx-prev strip">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>` : noFx}</div>`;
+`;
+      prevHtml = `<div class="cue-prev" id="cueFxPrev">${fx.length ? cuePreviewHtml(tr, cuePrevKey(t, c.track)) : `<b>Preview</b><p>${noFx}</p>`}</div>`;
     } else what = `<label>Scene</label><select data-p="${base}.scene" data-t="num" data-r>${opts(p.scenes, c.scene)}</select>
       <label></label><span class="muted">${fx.length ? `Only the channels of this track's ${fx.length} fixture(s) are played.` : 'Track without fixtures: the whole scene is played.'}</span>`;
     what = `<label>Length (s)</label><div class="row nowrap">${c.len ? `<input type="number" min="0.1" step="0.1" data-p="${base}.len" data-t="sec" value="${c.len / 1000}" style="width:90px" data-r>` : ''}
         <label class="muted" title="Without a length the clip holds until the next cue on its track (Pharos style). With one, the track is empty after it: its fixtures show what is underneath."><input type="checkbox" data-cuehold${c.len ? '' : ' checked'}> hold until the next cue</label></div>
       ${what}`;
-    what += `<label>Fade in (s)</label><input type="number" min="0" step="0.1" data-p="${base}.fade" data-t="sec" value="${(c.fade || 0) / 1000}" data-r>
-      ${c.len ? `<label>Fade out (s)</label><input type="number" min="0" step="0.1" data-p="${base}.out" data-t="sec" value="${(c.out || 0) / 1000}" data-r title="Fades to what is underneath, ending at the end of the clip">` : ''}
+    const xa = xfadePrev(t, c), xn = xfadeNext(t, c);
+    what += xa
+      ? `<label>Crossfade (s)</label><div class="row nowrap"><input type="number" min="0" step="0.1" data-xfade value="${(c.fade || 0) / 1000}" style="width:90px" title="How long this clip overlaps the one before it: it fades in from that clip's look over the overlap"><span class="muted">from ${esc(cueLabel(xa, t))}</span></div>`
+      : `<label>Fade in (s)</label><input type="number" min="0" step="0.1" data-p="${base}.fade" data-t="sec" value="${(c.fade || 0) / 1000}" data-r>`;
+    what += `
+      ${xn ? `<label>Fade out (s)</label><span class="muted">crossfades into ${esc(cueLabel(xn, t))} (${((c.t + c.len - xn.t) / 1000).toFixed(1)} s)</span>` : c.len ? `<label>Fade out (s)</label><input type="number" min="0" step="0.1" data-p="${base}.out" data-t="sec" value="${(c.out || 0) / 1000}" data-r title="Fades to what is underneath, ending at the end of the clip">` : ''}
       <label>Crossfade path</label><div class="row nowrap"><select data-p="${base}.path" data-r>${PATHS.map(([v, n]) => `<option value="${v}"${(c.path || 'linear') === v ? ' selected' : ''}>${n}</option>`).join('')}</select><span class="muted">${pathCurve(c.path || 'linear')}</span></div>`;
   }
   return `<div class="cue-ed"><div class="row"><b>Cue at ${(c.t / 1000).toFixed(1)} s</b>
       <div class="seg" style="margin-left:auto">${[['preset', 'Preset'], ['effect', '✦ Effect'], ['scene', 'Scene'], ['trigger', '◆ Trigger']].map(([k, n]) => `<button class="${kind === k ? 'on' : ''}" data-cuekind="${k}">${n}</button>`).join('')}</div>
       <button class="btn small ghost" data-del="${base}">Delete cue</button></div>
-    <div class="form">
+    <div class="cue-body"><div class="form">
       <label>Time (s)</label><input type="number" min="0" step="0.1" data-p="${base}.t" data-t="sec" value="${c.t / 1000}" data-r>
       ${kind === 'trigger' ? '' : `<label>Track</label><select data-p="${base}.track" data-t="num" data-r>${t.tracks.map((x, r) => `<option value="${r}"${(c.track || 0) === r ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`}
-      ${what}</div></div>`;
+      ${what}</div>${prevHtml}</div></div>`;
 }
 // Small SVG of a crossfade path for the trigger/timeline editors.
 function pathCurve(path) {
@@ -1013,6 +1118,7 @@ views.timelines.after = () => {
     const group = mode === 'move' ? [...sel] : [c];
     const orig = new Map(group.map((x) => [x, { t: x.t, track: x.track || 0, len: x.len, fade: x.fade || 0, out: x.out || 0 }]));
     const o = orig.get(c), end0 = cueEnd(t, c, len), ms0 = msAt(e.clientX);
+    const xa = mode === 'fade' ? xfadePrev(t, c) : null, xaEl = xa && grid.querySelector(`[data-cue="${t.cues.indexOf(xa)}"]`);
     const others = new Set(group);
     let moved = false;
     const move = (ev) => {
@@ -1046,18 +1152,26 @@ views.timelines.after = () => {
       }
       const r = o.track;
       if (mode === 'right') {
-        // Up to the next clip on the track (it is not pushed away).
-        const nx = Math.min(Infinity, ...trackCues(r, others).filter((x) => x.t > o.t).map((x) => x.t));
-        c.len = Math.max(100, Math.min(nx, snap(at, ev)) - o.t);
+        // Into the next clip on the track, which then crossfades in over the overlap, up to
+        // just before that clip's end (it is not pushed away).
+        const nxs = trackCues(r, others).filter((x) => x.t > o.t);
+        const lim = Math.min(Infinity, ...nxs.map((x) => cueEnd(t, x, x.t + 60000) - 100));
+        c.len = Math.max(100, Math.min(lim, snap(at, ev)) - o.t);
       } else if (mode === 'left') {
-        // From the end of the clip before it, to just before its own end.
-        const prevEnd = Math.max(0, ...trackCues(r, others).filter((x) => x.t < o.t).map((x) => (x.len ? x.t + x.len : x.t + 100)));
+        // Back into the clip before it (crossfade over the overlap), to just after its start;
+        // to just before its own end.
+        const prevT = Math.max(0, ...trackCues(r, others).filter((x) => x.t < o.t).map((x) => x.t + 100));
         const end = o.len ? o.t + o.len : end0;
-        c.t = Math.max(prevEnd, Math.min(end - 100, snap(at, ev)));
+        c.t = Math.max(prevT, Math.min(end - 100, snap(at, ev)));
         if (o.len) c.len = end - c.t;
       } else if (mode === 'fade') {
         const span = cueEnd(t, c, len) - c.t;
         c.fade = Math.max(0, Math.min(span - (c.out || 0), Math.round((at - c.t) / (ev.altKey ? 10 : 100)) * (ev.altKey ? 10 : 100)));
+        // A crossfade's fade is its overlap: the clip before it ends where the fade does.
+        if (xa) {
+          xa.len = Math.max(100, c.t + c.fade - xa.t);   // fade 0: they just meet
+          if (xaEl) { xaEl.style.width = pctOf(xa.len); xaEl.innerHTML = blkInner(t, xa, xa.t + xa.len); paintClip(t, xa, xaEl, xa.t + xa.len); }
+        }
       } else if (mode === 'out') {
         c.out = Math.max(0, Math.min(c.len - (c.fade || 0), Math.round((c.t + c.len - at) / (ev.altKey ? 10 : 100)) * (ev.altKey ? 10 : 100)));
       }
@@ -1206,7 +1320,7 @@ views.timelines.after = () => {
   // Several times a second (also while dragging a clip): send the timeline when it changed.
   pagePoll('tlLive', () => tlLiveSync(t), 250);
   $$('[data-tlsnap]').forEach((b) => b.addEventListener('click', () => { S.tlSnap = b.dataset.tlsnap; render(); }));
-  $$('[data-trackedit]').forEach((b) => b.addEventListener('click', () => { const r = +b.dataset.trackedit; S.trackEdit = S.trackEdit === r ? null : r; render(); }));
+  $$('[data-trackedit]').forEach((b) => b.addEventListener('click', () => { const r = +b.dataset.trackedit; S.trackEdit = S.trackEdit === r ? null : r; S.trackSearch = ''; render(); }));
   $$('[data-trackdel]').forEach((b) => b.addEventListener('click', () => {
     const r = +b.dataset.trackdel, n = t.cues.filter((c) => c.trigger == null && (c.track || 0) === r).length;
     if (!confirm(`Delete track '${t.tracks[r].name}'${n ? ` and its ${n} cue(s)` : ''}?`)) return;
@@ -1218,16 +1332,77 @@ views.timelines.after = () => {
     markDirty();
     render();
   }));
-  // Track fixtures: checkboxes and the mini map.
+  // Track fixtures picker (trackFixturesHtml).
   const tr = t.tracks[S.trackEdit];
-  const toggleFx = (id, on) => { tr.fixtures = on ? [...new Set([...tr.fixtures, id])] : tr.fixtures.filter((x) => x !== id); markDirty(); render(); };
-  $$('[data-trackfx]').forEach((el) => el.addEventListener('change', () => toggleFx(+el.dataset.trackfx, el.checked)));
-  $$('[data-trackmap]').forEach((b) => b.addEventListener('click', () => { S.trackMap = +b.dataset.trackmap; render(); }));
-  $$('[data-trackfx-map]').forEach((el) => el.addEventListener('click', () => {
-    const id = +el.dataset.trackfxMap;
-    if (!tr.fixtures.includes(id) && trackFxIds(tr).includes(id)) return toast('This fixture is in the track through a group', true);
-    toggleFx(id, !tr.fixtures.includes(id));
-  }));
+  if (tr) {
+    const viaGroup = () => new Set(trackFxIds({ ...tr, fixtures: [] }));
+    const setOwn = (ids) => { const g = viaGroup(); tr.fixtures = [...new Set(ids)].filter((id) => !g.has(id)); markDirty(); render(); };
+    const toggleFx = (id) => {
+      if (!tr.fixtures.includes(id) && viaGroup().has(id)) return toast('This fixture is in the track through a group', true);
+      setOwn(tr.fixtures.includes(id) ? tr.fixtures.filter((x) => x !== id) : [...tr.fixtures, id]);
+    };
+    // List chips: click toggles, Shift+click adds everything between the last click and this one.
+    const listIds = () => $$('[data-trackfx]').filter((el) => !el.classList.contains('nohit')).map((el) => +el.dataset.trackfx);
+    $$('[data-trackfx]').forEach((el) => el.addEventListener('click', (e) => {
+      const id = +el.dataset.trackfx, ids = listIds(), a = ids.indexOf(S.tkLast), b = ids.indexOf(id);
+      S.tkLast = id;
+      if (e.shiftKey && a >= 0 && b >= 0) return setOwn([...tr.fixtures, ...ids.slice(Math.min(a, b), Math.max(a, b) + 1)]);
+      toggleFx(id);
+    }));
+    $$('[data-trackfx-map]').forEach((el) => el.addEventListener('click', () => toggleFx(+el.dataset.trackfxMap)));
+    $$('[data-tkdel]').forEach((b) => b.addEventListener('click', () => setOwn(tr.fixtures.filter((x) => x !== +b.dataset.tkdel))));
+    $$('[data-tkgrpdel]').forEach((b) => b.addEventListener('click', () => { tr.groups = tr.groups.filter((x) => x !== +b.dataset.tkgrpdel); markDirty(); render(); }));
+    $$('[data-trackgrp]').forEach((b) => b.addEventListener('click', () => {
+      const id = +b.dataset.trackgrp;
+      tr.groups = tr.groups.includes(id) ? tr.groups.filter((x) => x !== id) : [...tr.groups, id];
+      // Fixtures added one by one before now come through the group: no double entries.
+      const g = viaGroup();
+      tr.fixtures = tr.fixtures.filter((x) => !g.has(x));
+      markDirty();
+      render();
+    }));
+    $('#tkClear')?.addEventListener('click', () => { tr.fixtures = []; tr.groups = []; markDirty(); render(); });
+    $('#tkWhere')?.addEventListener('change', (e) => { S.trackMap = +e.target.value; render(); });
+    // Search: filters in place while typing (no re-render); Enter / "Add found" adds the matches.
+    const search = $('#tkSearch');
+    if (search) {
+      const match = (f, q) => f.name.toLowerCase().includes(q) || String(f.id) === q;
+      const filter = () => {
+        const q = search.value.trim().toLowerCase();
+        S.trackSearch = search.value;
+        $$('[data-trackfx], [data-trackfx-map]').forEach((el) => {
+          const f = fixture(+(el.dataset.trackfx || el.dataset.trackfxMap));
+          el.classList.toggle('nohit', !!q && !match(f, q));
+        });
+      };
+      const hits = () => { const q = search.value.trim().toLowerCase(); return q ? P().fixtures.filter((f) => match(f, q)).map((f) => f.id) : []; };
+      const add = () => { const h = hits(); if (!h.length) return toast('Type part of a fixture name first', true); S.tkFocus = true; setOwn([...tr.fixtures, ...h]); };
+      search.addEventListener('input', filter);
+      search.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); add(); }
+        else if (e.key === 'Escape' && search.value) { e.preventDefault(); e.stopPropagation(); search.value = ''; filter(); }
+      });
+      $('#tkAddHits')?.addEventListener('click', add);
+      $('#tkDelHits')?.addEventListener('click', () => { const h = new Set(hits()); if (!h.size) return toast('Type part of a fixture name first', true); setOwn(tr.fixtures.filter((x) => !h.has(x))); });
+      if (S.tkFocus) { S.tkFocus = false; search.focus(); search.setSelectionRange(search.value.length, search.value.length); }
+    }
+    // Drag the track's own chips to change their order (= i in effects).
+    let dragId = null;
+    $$('[data-tkown]').forEach((el) => {
+      el.addEventListener('dragstart', (e) => { dragId = +el.dataset.tkown; e.dataTransfer.effectAllowed = 'move'; el.classList.add('dragging'); });
+      el.addEventListener('dragend', () => { dragId = null; el.classList.remove('dragging'); });
+      el.addEventListener('dragover', (e) => { if (dragId != null) e.preventDefault(); });
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const to = +el.dataset.tkown;
+        if (dragId == null || dragId === to) return;
+        const rc = el.getBoundingClientRect(), after = e.clientX > rc.left + rc.width / 2;
+        const ids = tr.fixtures.filter((x) => x !== dragId);
+        ids.splice(ids.indexOf(to) + (after ? 1 : 0), 0, dragId);
+        setOwn(ids);
+      });
+    });
+  }
   // Area selection on the track's map, like the Map page. The track's own fixtures that are
   // not on this map stay; fixtures it gets through a group aren't added a second time.
   const tmap = $('#trackMap');
@@ -1246,12 +1421,6 @@ views.timelines.after = () => {
       if (e.button === 0 && (e.shiftKey || e.altKey)) { e.preventDefault(); begin(e, +el.dataset.trackfxMap); }
     }));
   }
-  $$('[data-trackgrp]').forEach((el) => el.addEventListener('change', () => {
-    const id = +el.dataset.trackgrp;
-    tr.groups = el.checked ? [...new Set([...tr.groups, id])] : tr.groups.filter((x) => x !== id);
-    markDirty();
-    render();
-  }));
   // Cue editor (wired again on its own when a click only changes the selection: selectUi).
   const wireCueEditor = () => {
   const box = $('#cueEdBox'), c = t.cues[S.sel.cue];
@@ -1311,9 +1480,30 @@ views.timelines.after = () => {
     if (!c || c.effect == null) return;
     const e = p.effects.find((x) => x.id === c.effect), tr = t.tracks[c.track || 0];
     if (!e || !tr) return;
-    runFxPreview($('#cueFxPrev'), fxProg(e), trackPreviewFixtures(tr, e), c.params || {}, (c.dim ?? 100) / 100);
+    const m = cuePreviewMap(trackFxIds(tr), cuePrevKey(t, c.track));
+    runFxPreview($('#cueFxPrev'), fxProg(e), trackPreviewFixtures(tr, e), c.params || {}, (c.dim ?? 100) / 100, KDModel.effectRound(p, e), m);
   }
+  $$('[data-cueprevmap]', box).forEach((el) => el.addEventListener('change', () => {
+    (S.cuePrevMap ||= {})[cuePrevKey(t, c.track)] = el.value === 'strip' ? 'strip' : +el.value;
+    render();
+  }));
+  $$('[data-cueovl]', box).forEach((el) => el.addEventListener('change', () => { setFxOverlay(el.checked); render(); }));
   startCuePreview();
+  const cpv = $('#cueFxPrev .map-canvas', box);
+  if (cpv) {
+    attachMapResize(cpv, +cpv.dataset.aspect);
+    attachMapZoom(cpv, cpv.dataset.zoomkey, $('#cueFxPrev', box));
+  }
+  // Crossfade length = the overlap: the clip before it ends where the fade does.
+  $$('[data-xfade]', box).forEach((el) => el.addEventListener('change', () => {
+    const a = xfadePrev(t, c);
+    if (!a || el.value === '') return;
+    const span = cueEnd(t, c, c.t + 60000) - c.t;
+    a.len = Math.max(100, c.t + Math.round(Math.max(0, Math.min(span - 100, +el.value * 1000))) - a.t);
+    c.fade = Math.max(0, a.t + a.len - c.t);
+    markDirty();
+    render();
+  }));
   $$('[data-cuehold]', box).forEach((el) => el.addEventListener('change', () => {
     if (el.checked) { delete c.len; delete c.out; }
     else { c.len = Math.max(100, Math.min(cueEnd(t, c, c.t + 4000), c.t + 60000) - c.t); }

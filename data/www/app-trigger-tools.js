@@ -293,7 +293,7 @@ async function fetchTrigHist() {
 let histTimer = 0;
 // A "fired" log line: fetch again shortly (several fires in a row give one fetch).
 function trigHistPoke() {
-  if (S.view !== 'triggers' || !trigHistOn()) return;
+  if (S.view !== 'live' && (S.view !== 'triggers' || !trigHistOn())) return;
   clearTimeout(histTimer);
   histTimer = setTimeout(fetchTrigHist, 400);
 }

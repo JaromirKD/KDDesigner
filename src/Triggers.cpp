@@ -49,7 +49,8 @@ struct Trigger {
   bool rising = true, falling = false;
   int state = -1;               // input: last level; calendar: period active (1) or not (0), -1 = not read yet
   uint32_t changedAt = 0;
-  int timeline = 0;
+  int timeline = 0;             // timeline trigger: its id, 0 = any
+  uint8_t tlOn = 0;             // timeline trigger: Show::TlEvent it reacts to
   int universe = -1;            // dmx_change: universe index
   BigRam::Vec<uint16_t> channels;  // dmx_change: 0-based channels, in index order
   BigRam::Vec<uint8_t> lastValues;
@@ -218,10 +219,13 @@ bool overloaded(Trigger& t, uint32_t now) {
   return true;
 }
 
+// A timeline trigger's "on", by Show::TlEvent.
+const char* const kTlOn[] = {"start", "end", "release", "pause", "resume"};
+
 Type parseType(const char* s) {
   static const struct { const char* n; Type t; } kTypes[] = {
       {"startup", Type::Startup}, {"time", Type::Time}, {"interval", Type::Interval}, {"udp", Type::Udp},
-      {"osc", Type::Osc}, {"input", Type::Input}, {"timeline_end", Type::TimelineEnd}, {"mode", Type::Mode},
+      {"osc", Type::Osc}, {"input", Type::Input}, {"timeline_end", Type::TimelineEnd}, {"timeline", Type::TimelineEnd}, {"mode", Type::Mode},
       {"panel", Type::Panel}, {"dmx_change", Type::DmxChange}, {"device", Type::Device}, {"projector", Type::Projector}, {"variable", Type::Variable},
       {"tcp", Type::TcpLine}, {"http", Type::HttpResp}, {"manual", Type::Manual},
       {"calendar", Type::Calendar}, {"dmx_in", Type::DmxIn}, {"comment", Type::Comment}};
@@ -746,7 +750,14 @@ void load() {
         }
         break;
       }
-      case Type::TimelineEnd: t.timeline = o["timeline"] | 0; break;
+      case Type::TimelineEnd: {
+        t.timeline = o["timeline"] | 0;
+        // "timeline_end" (older projects) = on end; a "timeline" trigger without "on" = on release.
+        const char* on = o["on"] | (strcmp(o["type"] | "", "timeline_end") ? "release" : "end");
+        t.tlOn = (uint8_t)Show::TlEvent::Release;
+        for (uint8_t k = 0; k < 5; k++) if (!strcmp(on, kTlOn[k])) t.tlOn = k;
+        break;
+      }
       case Type::Mode: t.match = o["mode"] | ""; t.event = o["group"] | ""; break;  // "" = any
       case Type::Panel:
         t.match = o["control"] | "";
@@ -1037,9 +1048,18 @@ void afterTick() {
   }
 }
 
-void onTimelineEnd(int timelineId) {
-  for (auto& t : triggers)
-    if (t.enabled && t.type == Type::TimelineEnd && t.timeline == timelineId) runTrigger(t, ("timeline " + String(timelineId) + " end").c_str(), nullptr);
+void onTimelineEvent(const Show::TimelineEvent& ev) {
+  const char* on = kTlOn[(int)ev.kind];
+  String reason;   // "timeline 3 release" (the fire history reads the number after "timeline ")
+  for (auto& t : triggers) {
+    if (!t.enabled || t.type != Type::TimelineEnd || t.tlOn != (uint8_t)ev.kind || (t.timeline && t.timeline != ev.timeline)) continue;
+    if (!reason.length()) reason = "timeline " + String(ev.timeline) + " " + on;
+    Vars vars;
+    vars.set("timeline", String(ev.timeline));
+    vars.set("event", on);
+    vars.set("reason", ev.reason);
+    runTrigger(t, reason.c_str(), &vars);
+  }
 }
 
 void onTimelineCue(int timelineId, const String& ref) {

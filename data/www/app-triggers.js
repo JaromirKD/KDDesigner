@@ -154,7 +154,7 @@ views.triggers = () => {
     const bang = probs.length ? `<span class="trig-err" title="${esc(probs.join('\n'))}">!</span>` : '';
     const from = `<span class="trig-io">${trigIoHtml(x)}</span>`;
     return `<div class="item${sel}${inSub[i] ? ' in-sub' : ''}${x.enabled === false ? ' disabled' : ''}${col ? ' tinted' : ''}${linkCls}${probs.length ? ' has-err' : ''}" data-sel="trigger:${i}"${drag} style="${col ? `--tc:${col}` : ''}">
-      ${grip}<span class="id">${x.id}</span>${bang}<span class="tname" style="flex:1;min-width:0">${markWords(x.name, words)}${words.length ? trigHitLines(x, words) : ''}</span>${note}${from}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.onlyIn?.group ? `<span class="tag" title="Only active when ${esc(x.onlyIn.group)} is ${esc((x.onlyIn.states || []).join(' or '))}">◇ ${esc((x.onlyIn.states || []).join('/'))}</span>` : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
+      ${grip}<span class="id">${x.id}</span>${bang}<span class="tname" style="flex:1;min-width:0">${markWords(x.name, words)}${words.length ? trigHitLines(x, words) : ''}</span>${note}${from}${linkTag}${dupName(x) ? '<span class="tag mon-warn" title="Another trigger has the same name: fire trigger &lt;name&gt; can’t tell them apart">same name</span>' : ''}${x.onlyIn?.group ? `<span class="tag" title="Only active when ${esc(x.onlyIn.group)} is ${esc((x.onlyIn.states || []).join(' or '))}">◇ ${esc((x.onlyIn.states || []).join('/'))}</span>` : ''}${x.conditions?.length ? `<span class="tag tt tt-if" title="${esc(x.conditions.join('\n'))}">if</span>` : ''}<span class="tag tt tt-${esc(x.type)}">${esc(x.type === 'time' && (x.at === 'sunrise' || x.at === 'sunset') ? x.at : x.type === 'timeline' ? `timeline ${tlOn(x)}` : x.type)}</span><button class="list-fire" data-fire="${x.id}" title="Fire now (runs the saved version on the controller)">▶</button></div>`;
   };
   return `<h2 class="trig-head">Triggers <label class="muted flow-toggle" title="Triggers in the list (and the flow diagram) light up when they fire on the controller, one after the other as they really run"><input type="checkbox" id="trigLive"${trigLiveOn() ? ' checked' : ''}> light up when fired</label>
     <label class="muted flow-toggle" title="A diagram of which triggers and timelines set off which triggers"><input type="checkbox" id="trigFlow"${trigFlowOn() ? ' checked' : ''}> show flow</label>
@@ -311,7 +311,9 @@ function trigEditorHtml(p, ti, t, multi, links) {
           ${io ? `<label></label><span class="muted">${analog ? '' : 'Rising = the input switches on (24 V). '}{input} is the point, {value} its value. Set the inputs up on Devices → Machine Control.</span>` : ''}`;
         break;
       }
-      case 'timeline_end': params = `<label>Timeline</label><select data-p="${base}.timeline" data-t="num">${opts(p.timelines, t.timeline)}</select>`; break;
+      case 'timeline': params = `<label>Timeline</label><select data-p="${base}.timeline" data-t="num" data-r><option value="0"${t.timeline ? '' : ' selected'}>(any timeline)</option>${opts(p.timelines, t.timeline)}</select>
+          <label>When it</label><select data-p="${base}.on" data-r>${TIMELINE_ON.map(([v, n]) => `<option value="${v}"${tlOn(t) === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
+          <label></label><span class="muted">${{ release: 'Fires as soon as the release starts (not after the fade-out), also when a timeline set to release at the end gets there ({reason} is then end). Saving or reloading the project doesn\'t count.', end: 'Only a timeline that doesn\'t loop reaches its end (then it releases or holds, as set on the timeline). Stopping it earlier doesn\'t count.', start: 'Every start, however it was started (button, trigger, schedule, panel); {reason} is restart when it was already running.', pause: '', resume: '' }[tlOn(t)]}</span>`; break;
     }
   }
   const custom = t && t.color && !TRIGGER_COLORS[t.color] ? t.color : '';
@@ -1021,7 +1023,7 @@ function triggerProblems(t) {
       else if (t.event === 'change' && panelControlType(t.control) === 'button') out.push(`'${t.control}' is a button: it has no value to change (use click, or make it a toggle)`);
       else if (/^(click|hold|double)$/.test(t.event || 'click') && ['slider', 'dial', 'color', 'xy'].includes(panelControlType(t.control))) out.push(`'${t.control}' is a ${{ color: 'colour wheel', xy: 'XY pad' }[panelControlType(t.control)] || panelControlType(t.control)}: it sends change, press and release, not ${t.event || 'click'}`);
       break;
-    case 'timeline_end': if (!p.timelines.some((x) => x.id === t.timeline)) out.push('The timeline it waits for doesn\'t exist'); break;
+    case 'timeline': if (t.timeline && !p.timelines.some((x) => x.id === t.timeline)) out.push('The timeline it waits for doesn\'t exist'); break;
     case 'mode':
       if (t.group && !has(p.modes.map((g) => g.name), t.group)) out.push(`Mode group '${t.group}' doesn't exist`);
       else if (t.mode && !has(p.modes.filter((g) => !t.group || g.name === t.group).flatMap((g) => g.states), t.mode)) out.push(`Mode '${t.mode}' doesn't exist`);
@@ -1102,9 +1104,13 @@ function cmdEffects(cmd) {
     if (g && s) fx.push({ kind: 'mode', group: g.name, state: s });
   } else if (l[0] === 'var' && ['=', '+', '-', '*', '/', '++', '--', '+=', '-=', '*=', '/=', 'toggle'].includes(l[2])) {
     fx.push({ kind: 'var', name: w[1], op: l[2] });
-  } else if (l[0] === 'start' && l[1] === 'timeline') {
+  } else if (['start', 'stop', 'pause', 'resume'].includes(l[0]) && l[1] === 'timeline') {
+    // act = what the timeline does (setsOff matches it with a timeline trigger's `on`).
     const tl = findRef(P().timelines, w[2] || '');
-    if (tl) fx.push({ kind: 'timeline', id: tl.id, name: tl.name });
+    if (tl) fx.push({ kind: 'timeline', id: tl.id, name: tl.name, act: l[0] === 'stop' ? 'release' : l[0] });
+    // Starting one releases the others in its group.
+    if (tl && l[0] === 'start' && tl.group)
+      for (const o of P().timelines) if (o !== tl && o.group === tl.group) fx.push({ kind: 'timeline', id: o.id, name: o.name, act: 'release', group: true });
   } else if (l[0] === 'http' && w[2]) {
     fx.push({ kind: 'http', url: w[2] });
   } else if ((l[0] === 'panel' || l[0] === 'label') && w[1] && w.length > 2) {
@@ -1174,7 +1180,7 @@ function trigInputs(t) {
     case 'dmx_in': out.push({ kind: 'dmx', name: `${t.protocol === 'sacn' ? 'sACN' : 'Art-Net'} ${t.universe ?? (t.protocol === 'sacn' ? 1 : 0)}`, why: `channels ${t.channels || '1'}` }); break;
     case 'http': out.push({ kind: 'http', name: t.url || 'any response', why: 'response' }); break;
     case 'calendar': if (t.calendar) out.push({ kind: 'calendar', name: t.calendar, why: `becomes ${t.state || 'active'}` }); break;
-    case 'timeline_end': { const tl = p.timelines.find((x) => x.id === t.timeline); out.push({ kind: 'timeline', name: tl ? `${tl.id} ${tl.name}` : String(t.timeline ?? ''), why: 'ends' }); break; }
+    case 'timeline': { const tl = p.timelines.find((x) => x.id === t.timeline); out.push({ kind: 'timeline', name: !t.timeline ? 'any timeline' : tl ? `${tl.id} ${tl.name}` : String(t.timeline), why: TL_WHY[tlOn(t)] }); break; }
     case 'variable':
       if (!t.variable) break;
       for (const d of p.drivers || [])
@@ -1232,14 +1238,18 @@ function ioChip(x, dir) {
 function triggerEffects(t) {
   return (t.actions || []).flatMap((line) => commandParts(line).flatMap(cmdEffects));
 }
+// Timeline triggers: the words for what they react to, and the command act that causes it
+// (a start leads to the end later; cmdEffects' `act`).
+const TL_WHY = { release: 'released', end: 'ends', start: 'starts', pause: 'paused', resume: 'resumed' };
+const TL_CAUSE = { release: 'release', end: 'start', start: 'start', pause: 'pause', resume: 'resume' };
 // Why `fx` (effects of one trigger) would set off trigger `dst`, or null.
 function setsOff(fx, dst) {
   for (const f of fx) {
     if (f.kind === 'fire' && f.t === dst) return f.why;
     if (f.kind === 'mode' && dst.type === 'mode' && (!dst.group || dst.group === f.group) && (!dst.mode || dst.mode === f.state)) return `mode ${f.group} ${f.state}`;
     if (f.kind === 'var' && dst.type === 'variable' && (!dst.variable || dst.variable.toLowerCase() === f.name.toLowerCase())) return `var ${f.name} changes`;
-    if (f.kind === 'timeline' && dst.type === 'timeline_end' && dst.timeline === f.id) return `timeline ${f.id} '${f.name}' ends`;
-    if (f.kind === 'timeline') {
+    if (f.kind === 'timeline' && dst.type === 'timeline' && (!dst.timeline || dst.timeline === f.id) && TL_CAUSE[tlOn(dst)] === f.act) return `timeline ${f.id} '${f.name}' ${TL_WHY[tlOn(dst)]}`;
+    if (f.kind === 'timeline' && f.act === 'start') {
       const c = P().timelines.find((tl) => tl.id === f.id)?.cues.find((c) => c.trigger != null && findTrigs(String(c.trigger))[0] === dst);
       if (c) return `timeline ${f.id} '${f.name}' cue at ${(c.t / 1000).toFixed(1)} s`;
     }
@@ -1255,6 +1265,13 @@ function loopEdges(t) {
   const out = [];
   for (const f of triggerEffects(t)) {
     if (f.kind === 'fire' && !/^(cancel|stop)/.test(f.why) && f.t.enabled !== false) out.push({ t: f.t, why: f.why });
+    // Timeline triggers: start, release, pause, resume happen at once (reaching the end takes
+    // the timeline's length: a deliberate show loop). A release / pause / resume trigger doing
+    // the same to its own timeline doesn't count: that timeline is already in that state.
+    if (f.kind === 'timeline')
+      for (const x of P().triggers)
+        if (x.type === 'timeline' && x.enabled !== false && tlOn(x) !== 'end' && tlOn(x) === f.act && (!x.timeline || x.timeline === f.id)
+          && !(x === t && f.act !== 'start')) out.push({ t: x, why: `${f.act === 'release' ? 'stop' : f.act} timeline ${f.id}` });
     if (f.kind === 'var' && f.op !== '=')
       for (const x of P().triggers)
         if (x.type === 'variable' && x.enabled !== false && (!x.variable || x.variable.toLowerCase() === f.name.toLowerCase())) out.push({ t: x, why: `var ${f.name} ${f.op}` });
@@ -1431,7 +1448,7 @@ function trigFlowGraph() {
         }
         for (const f of cmdEffects(it.cmd)) {
           if (f.kind === 'fire') reach(path, `t${f.t.id}`, f.why);
-          else if (f.kind === 'timeline') reach(path, `tl${f.id}`, 'start timeline');
+          else if (f.kind === 'timeline' && !f.group) reach(path, `tl${f.id}`, `${f.act === 'release' ? 'stop' : f.act} timeline`);
           else if (f.kind === 'panel') {
             // One feedback box per trigger (right under it), listing what it changes: a box
             // shared by every trigger that sets lbl_show would pull arrows from all over.
@@ -1493,7 +1510,7 @@ function trigFlowGraph() {
       const h = findTrigs(String(c.trigger));
       if (h.length === 1) step(`tl${tl.id}`, `t${h[0].id}`, `cue at ${(c.t / 1000).toFixed(1)} s`);
     }
-    for (const d of trigs) if (d.type === 'timeline_end' && d.timeline === tl.id) step(`tl${tl.id}`, `t${d.id}`, 'timeline ends');
+    for (const d of trigs) if (d.type === 'timeline' && d.timeline === tl.id) step(`tl${tl.id}`, `t${d.id}`, `timeline ${TL_WHY[tlOn(d)]}`);
   }
   // A trigger's own conditions: a diamond ('c<id>') just above it. Whatever sets it off goes into
   // the diamond, "yes" goes on into the trigger; a false condition stops there (lit red, onTrigLog).
@@ -1528,6 +1545,7 @@ function trigFlowGraph() {
   for (const tl of p.timelines) if (used.has(`tl${tl.id}`)) nodes.set(`tl${tl.id}`, { tl });
   return { nodes, edges: [...edges.values()], links, hidden: trigs.length - [...nodes.keys()].filter((k) => /^t\d/.test(k)).length };
 }
+const FLOW_NO_DX = 60;   // how far right of its diamond an if's "no" branch likes to sit
 const FLOW_W = 170, FLOW_H = 30, FLOW_ROW = 40, FLOW_GX = 18, FLOW_GY = 46, FLOW_PAD = 14, FLOW_LOOP = 60, FLOW_LANE = 12;
 const flowNodeH = (n) => (n.cond != null ? FLOW_ROW : n.src || n.fb || n.hub || n.out ? 26 : FLOW_H);
 const flowNodeW = (n) => (n.hub ? 140 : FLOW_W);
@@ -1566,10 +1584,15 @@ function flowPart(g, keys, edges) {
   // Lane points; up/dn = neighbours one row up/down (real boxes and lane points alike).
   const up = new Map(keys.map((k) => [k, []])), dn = new Map(keys.map((k) => [k, []])), via = new Map(), width = new Map();
   for (const k of keys) width.set(k, flowNodeW(g.nodes.get(k)));
+  // An if's "no" arrow leaves from the diamond's right point (edgeSvg): its first step down
+  // counts as coming from half a place further right, so ordering and placing keep the "no"
+  // box right of the "yes" box instead of letting the two arrows cross.
+  const noPort = new Set();
   for (const e of edges) {
     if (back.has(`${e.a}>${e.b}`)) continue;
     let prev = e.a;
     const pts = [];
+    if (e.br.length === 1 && e.br[0] === 'no') noPort.add(`${e.a}>${rowOf.get(e.b) - rowOf.get(e.a) > 1 ? `~${e.a}>${e.b}~${rowOf.get(e.a) + 1}` : e.b}`);
     for (let r = rowOf.get(e.a) + 1; r < rowOf.get(e.b); r++) {
       const d = `~${e.a}>${e.b}~${r}`;
       R[r].push(d); rowOf.set(d, r); width.set(d, FLOW_LANE); up.set(d, []); dn.set(d, []);
@@ -1584,17 +1607,18 @@ function flowPart(g, keys, edges) {
   const idx = new Map();
   const index = () => R.forEach((r) => r.forEach((k, i) => idx.set(k, i)));
   index();
+  const from = (a, b) => idx.get(a) + (noPort.has(`${a}>${b}`) ? 0.5 : 0);   // where a's arrow to b starts
   const crossings = () => {
     let n = 0;
     for (let r = 0; r + 1 < R.length; r++) {
-      const segs = R[r].flatMap((a) => dn.get(a).map((b) => [idx.get(a), idx.get(b)]));
+      const segs = R[r].flatMap((a) => dn.get(a).map((b) => [from(a, b), idx.get(b)]));
       for (let i = 0; i < segs.length; i++)
         for (let j = i + 1; j < segs.length; j++) if ((segs[i][0] - segs[j][0]) * (segs[i][1] - segs[j][1]) < 0) n++;
     }
     return n;
   };
   const median = (k, nb) => {
-    const p = nb.get(k).map((x) => idx.get(x)).sort((a, b) => a - b);
+    const p = nb.get(k).map((x) => (nb === up ? from(x, k) : idx.get(x) - (noPort.has(`${k}>${x}`) ? 0.5 : 0))).sort((a, b) => a - b);
     if (!p.length) return idx.get(k);
     const m = p.length >> 1;
     return p.length % 2 ? p[m] : (p[m - 1] + p[m]) / 2;
@@ -1605,7 +1629,11 @@ function flowPart(g, keys, edges) {
     R[r].forEach((k, i) => idx.set(k, i));
   };
   // Crossings between u (left) and v (right) with their neighbours in one other row.
-  const cross = (u, v, nb) => { let n = 0; for (const a of nb.get(u)) for (const b of nb.get(v)) if (idx.get(a) > idx.get(b)) n++; return n; };
+  const cross = (u, v, nb) => {
+    let n = 0;
+    for (const a of nb.get(u)) for (const b of nb.get(v)) if (nb === up ? from(a, u) > from(b, v) : idx.get(a) > idx.get(b)) n++;
+    return n;
+  };
   const transpose = () => {
     for (let better = true, n = 0; better && n < 6; n++) {
       better = false;
@@ -1634,7 +1662,9 @@ function flowPart(g, keys, edges) {
   for (const r of R) { let at = 0; for (const k of r) { x.set(k, at + width.get(k) / 2); at += width.get(k) + FLOW_GX; } }
   const gap = (a, b) => (width.get(a) + width.get(b)) / 2 + (a[0] === '~' && b[0] === '~' ? 4 : FLOW_GX);
   const place = (r, nb) => {
-    const want = r.map((k) => { const n = nb.get(k); return n.length ? n.reduce((s, a) => s + x.get(a), 0) / n.length : x.get(k); });
+    // (a "no" arrow's end sits a little to the right of the diamond: it leaves from its right point)
+    const shift = (k, a) => (nb === up ? (noPort.has(`${a}>${k}`) ? FLOW_NO_DX : 0) : noPort.has(`${k}>${a}`) ? -FLOW_NO_DX : 0);
+    const want = r.map((k) => { const n = nb.get(k); return n.length ? n.reduce((s, a) => s + x.get(a) + shift(k, a), 0) / n.length : x.get(k); });
     const l = [], rt = [];
     want.forEach((w, i) => (l[i] = i ? Math.max(w, l[i - 1] + gap(r[i - 1], r[i])) : w));
     for (let i = want.length - 1; i >= 0; i--) rt[i] = i < want.length - 1 ? Math.min(want[i], rt[i + 1] - gap(r[i], r[i + 1])) : want[i];
@@ -1799,7 +1829,9 @@ function trigFlowHtml(selT) {
     const br = e.br.length ? `<text class="fl-br ${e.br.join('-')}" x="${no ? sx + 6 : sx + 5}" y="${no ? sy - 4 : sy + 13}">${e.br.join('/')}</text>` : '';
     // (not into a device or feedback box: the box itself says what it does)
     // A timeline's arrows always say when on the timeline they fire (just above the trigger).
-    const when = /^tl\d/.test(e.a) ? e.why.map((w) => (w === 'timeline ends' ? 'at end' : w.replace(/^cue at /, ''))).sort((x, y) => (x === 'at end' ? 1e9 : parseFloat(x)) - (y === 'at end' ? 1e9 : parseFloat(y))) : null;
+    // Order: started, the cues by time, at end, then paused / resumed / released.
+    const whenRank = (x) => (x === 'on start' ? -1 : x === 'at end' ? 1e9 : /^on /.test(x) ? 2e9 : parseFloat(x));
+    const when = /^tl\d/.test(e.a) ? e.why.map((w) => (w === 'timeline ends' ? 'at end' : /^timeline /.test(w) ? `on ${{ starts: 'start', released: 'release', paused: 'pause', resumed: 'resume' }[w.slice(9)] || w.slice(9)}` : w.replace(/^cue at /, ''))).sort((x, y) => whenRank(x) - whenRank(y)) : null;
     const label = when?.length ? `<text class="fl-why fl-when" x="${back ? mx : b.x + b.w / 2 + 6}" y="${back ? my : b.y - 7}" text-anchor="${back ? 'middle' : 'start'}">⏱ ${esc(cut(when.join(', '), 30))}</text>`
       : sel && e.why.length && !e.why.every((w) => w.startsWith('if ')) && !/^(o|fb):/.test(e.b) ? `<text class="fl-why" x="${mx}" y="${my}" text-anchor="middle">${esc(cut(e.why.join(', '), 34))}</text>` : '';
     return `<g class="${cls}" data-ek="${esc(`${e.a}>${e.b}`)}"><title>${esc([...(e.br.length ? [e.br.join(' / ')] : []), ...e.why].join('\n'))}${loop ? '\nEndless loop!' : ''}</title><path d="${d}"/><path class="hit" d="${d}"/>${br}${label}</g>`;
@@ -1807,8 +1839,10 @@ function trigFlowHtml(selT) {
   const nodeSvg = ([k, n]) => {
     const { x, y, w, h } = L.pos.get(k), fk = esc(k);
     if (n.tl) {
+      // ◆ becomes ▶ / ⏸ / ■ and the bar along the bottom shows the position while it plays (flowTimelines).
       return `<g class="fl-node tl" data-fk="${fk}" data-goto-timeline="${n.tl.id}"><title>Timeline ${n.tl.id} '${esc(n.tl.name)}' - click to open</title>
-        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}"/><text x="${x + 12}" y="${y + 19}">◆ ${n.tl.id} ${esc(cut(n.tl.name || '', 20))}</text></g>`;
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}"/><rect class="fl-tlbar" x="${x + h / 2}" y="${y + h - 5}" width="0" height="2.5" rx="1.25" data-bw="${w - h}"/>
+        <text x="${x + 12}" y="${y + 19}"><tspan class="fl-tlico">◆</tspan> ${n.tl.id} ${esc(cut(n.tl.name || '', 20))}</text></g>`;
     }
     if (n.cond != null) {
       const i = p.triggers.indexOf(n.t), cx = x + w / 2, cy = y + h / 2;
@@ -1868,6 +1902,7 @@ function trigFlowAfter() {
   flow.addEventListener('scroll', () => (S.flowScroll = [flow.scrollLeft, flow.scrollTop]));
   // The small box can be resized (bottom edge); remember the height in this browser.
   if (!S.flowBig) new ResizeObserver(() => { try { localStorage.setItem('kd.trigFlowH', String(flow.offsetHeight)); } catch { /* private mode */ } }).observe(flow);
+  pagePoll('flowTl', flowTimelines, 200);
   $('#flowBig').addEventListener('click', () => { S.flowBig = !S.flowBig; S.flowScroll = null; render(); });
   $('#flowOnly')?.addEventListener('change', (e) => { S.flowOnly = e.target.checked; S.flowScroll = null; render(); });
   $$('[data-flowcol]').forEach((b) => b.addEventListener('click', () => {
@@ -2046,6 +2081,26 @@ function updateTrigRunning() {
     tag.title = !job ? 'Running' : job.wait != null ? `Waiting until ${job.wait}${job.in >= 0 ? ` (gives up in ${sec(job.in)})` : ''}` : job.loop != null ? `Repeating: ${job.loop} run${job.loop === 1 ? '' : 's'} to go` : 'Running: waiting in a sleep, time until the next step';
   }
   for (const n of $$('.fl-node[data-fk^="t"]')) n.classList.toggle('running', run.has(+n.dataset.fk.slice(1)));
+}
+// Timeline boxes show whether the timeline is playing (from the status, moved on between updates
+// like the Live page does): ▶ playing, ⏸ paused, ■ holding at the end, dashed while fading out.
+function flowTimelines() {
+  const pbs = S.status?.playbacks || [], dt = Date.now() - (S.status?._at || Date.now());
+  for (const n of $$('.fl-node.tl')) {
+    const id = +n.dataset.fk.slice(2), pb = pbs.find((x) => x.kind === 'timeline' && x.id === id);
+    const st = !pb ? '' : pb.releasing ? 'releasing' : pb.paused ? 'paused' : pb.ended ? 'holding' : 'playing';
+    if (n.dataset.st !== st) {
+      n.dataset.st = st;
+      for (const c of ['playing', 'paused', 'holding', 'releasing']) n.classList.toggle(c, c === st);
+      n.querySelector('.fl-tlico').textContent = { playing: '▶', releasing: '▶', paused: '⏸', holding: '■' }[st] || '◆';
+    }
+    const len = pb?.length || 0, pos = !pb ? 0 : Math.max(0, st === 'playing' || st === 'releasing' ? pb.pos + dt : pb.pos);
+    const at = len ? Math.min(pos, len) : pos, bar = n.querySelector('.fl-tlbar');
+    bar.setAttribute('width', pb && len ? Math.round((at / len) * +bar.dataset.bw * 10) / 10 : 0);
+    const title = n.querySelector('title'), base = title.textContent.split('\n')[0];
+    const txt = pb ? `${base}\n${st === 'holding' ? 'Holding at the end' : st[0].toUpperCase() + st.slice(1)}: ${fmtTime(at)}${len ? ' / ' + fmtTime(len) : ''}` : base;
+    if (title.textContent !== txt) title.textContent = txt;
+  }
 }
 // Lights an element up, then lets it fade back (the CSS transition runs when "fire" goes).
 // soft: true = the box it came from; 'no' = fired but a condition was false (grey/red).

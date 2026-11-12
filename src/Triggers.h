@@ -4,6 +4,7 @@
 #include <IPAddress.h>
 #include <vector>
 #include "Projectors.h"
+#include "Show.h"
 #include "Vars.h"
 
 // Triggers fire a list of commands (see Cmd.h) when something happens:
@@ -17,7 +18,9 @@
 //   input          a digital pin changes (edge rising|falling|both, INPUT_PULLUP), or a
 //                  Machine Control point ("io": "in3" / "io5" / "ai0"; analog: crosses "level")
 //                  vars {input} {value}
-//   timeline_end   a non-looping timeline reaches its end
+//   timeline       a timeline ("timeline" = id, 0 = any) is "on": start | end (a non-looping one
+//                  reaches its end) | release (stop, its group, release all; the default) | pause | resume.
+//                  vars {timeline} {event} {reason}. The old type "timeline_end" = on "end".
 //   mode           a mode group changes ("group" and/or "mode" = state; empty = any).
 //                  vars {group} {mode} {old}
 //   panel          a touch-panel control is pressed/released/clicked, or a slider / dial /
@@ -63,7 +66,7 @@ void begin();                // opens the UDP sockets; call after Net::begin
 void startup();
 void poll(uint32_t nowMs);   // caller must hold g_engine
 void afterTick();            // dmx_change watchers; call right after Show::tick
-void onTimelineEnd(int timelineId);
+void onTimelineEvent(const Show::TimelineEvent& ev);
 void onTimelineCue(int timelineId, const String& trigger);   // a trigger cue on a timeline was reached
 // Sets mode group g to state s (State::setMode) and, if it changed, runs the old state's
 // "leave" and the new state's "enter" actions, the mode triggers, and sets the group's variable.

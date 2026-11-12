@@ -146,6 +146,8 @@ bool parseTimeline(JsonObjectConst o, const TlCtx& x, Timeline& t, BigRam::Vec<F
   t.name = o["name"] | "";
   t.length = o["length"] | 0;
   t.loop = o["loop"] | false;
+  t.holdEnd = strcmp(o["end"] | "hold", "release") != 0;
+  t.endFade = o["endFade"] | 0;
   t.priority = o["priority"] | 0;
   t.group = o["group"] | "";
   // Tracks: each lists fixtures and/or groups; empty = the whole rig (scenes as they are).

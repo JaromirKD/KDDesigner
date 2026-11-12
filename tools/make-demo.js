@@ -136,7 +136,7 @@ const timelines = [
   { id: 4, name: 'Exterior evening', length: 20000, loop: true, priority: 0, group: 'B',
     tracks: [{ name: 'Circle', fixtures: [], groups: [4] }],
     cues: [{ t: 0, fade: 5000, effect: fxId('XY gradient'), params: {}, dim: 70 }] },
-  { id: 5, name: 'Winch move', length: 12000, loop: false, priority: 5,
+  { id: 5, name: 'Winch move', length: 12000, loop: false, end: 'release', endFade: 3000, priority: 5,
     tracks: [{ name: 'Winch', fixtures: [WINCH], groups: [] }],
     cues: [{ t: 0, fade: 8000, scene: 7, path: 'damped' }] },
 ];
@@ -184,7 +184,10 @@ trig('Show: start video', 'manual', {}, ['send tcp watchout run', 'brightsign lo
 trig('Lobby: back to loop', 'manual', {}, ['brightsign lobby play Video loop.mp4', 'brightsign lobby stop Audio'], [], { notes: 'Plays a file directly in a BrightSign zone (KD plugin).' });
 trig('Lobby: show test pattern', 'manual', {}, ['brightsign lobby test Video Testpattern'], [], { notes: 'Plays the file of the presentation\'s "Testpattern" state in the Video zone (KD plugin); the presentation carries on when it ends.' });
 trig('Show: halfway', 'manual', {}, ['netio rack output 2 pulse 5', 'pharos lpc timeline 1 start fade 3', 'digidot c4 scene 1 fade 2'], [], { notes: 'Trigger cue at 30 s: shows the show-device commands.' });
-trig('Main show finished', 'timeline_end', { timeline: 2 }, ['var show_count += 1', 'log Show {show_count} finished', 'fire trigger "Start inloop"']);
+trig('Main show finished', 'timeline', { timeline: 2, on: 'end' }, ['var show_count += 1', 'log Show {show_count} finished', 'fire trigger "Start inloop"']);
+trig('Main show stopped early', 'timeline', { timeline: 2, on: 'release' }, ['send osc qlab /cue/*/stop', 'log Main show released ({reason})'], [],
+  { notes: 'Timeline trigger "is released": fires on stop timeline, the ■ button, release all or another group-A timeline starting ({reason} says which), not when it reaches its end.' });
+trig('Any timeline paused', 'timeline', { timeline: 0, on: 'pause' }, ['log Timeline {timeline} paused'], [], { notes: 'Timeline 0 = any timeline; {timeline} is its number.' });
 trig('Stop all', 'manual', {}, ['mode System Idle', 'release all fade 3', 'send osc qlab /cue/*/stop', 'send udp screens "STOP\\r"', 'panel "Start show" reset', 'panel lbl_status text Stopped', 'panel lbl_status color #ff9f43']);
 trig('Flash walls once', 'manual', {}, ['set 1.10-29 255', 'sleep 0.2', 'clear override 1.10-29'], [], { notes: 'Used by "Flash walls 6x": {count} is the round.' });
 trig('Flash walls 6x', 'manual', {}, ['repeat "Flash walls once" 6 times every 0.5', 'log Walls flashed 6 times']);

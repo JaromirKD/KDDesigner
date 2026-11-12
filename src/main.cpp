@@ -245,7 +245,10 @@ void loop() {
     ticks++;
     CRUMB("engine events");
     int id;
-    while (Show::takeEndedTimeline(id)) Triggers::onTimelineEnd(id);
+    // Only the events queued so far: a trigger that starts or stops a timeline queues more, and
+    // a "started" trigger that restarts its own timeline would otherwise never let go of the loop.
+    Show::TimelineEvent tev;
+    for (int n = Show::timelineEventCount(); n > 0 && Show::takeTimelineEvent(tev); n--) Triggers::onTimelineEvent(tev);
     String cueTrig;
     while (Show::takeTimelineCue(id, cueTrig)) Triggers::onTimelineCue(id, cueTrig);
     Monitor::Event ev;

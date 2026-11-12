@@ -894,7 +894,12 @@ function tick() {
       pb.catchUp = 0;
       if (t.length && el >= t.length) {
         if (t.loop) { pb.start += t.length; pb.next = 0; log(0, 'SHOW', `Timeline ${t.id} '${t.name}' looped`); }
-        else { pb.ended = true; statusChanged(); log(1, 'SHOW', `Timeline ${t.id} '${t.name}' reached end (holding)`); onTimelineEnd(t.id); }
+        else {
+          // "end": "release" lets go with endFade (ms); none / "hold" keeps the last look (older projects).
+          pb.ended = true; statusChanged(); tlEvent(t.id, 'end');
+          if (t.end === 'release') { log(1, 'SHOW', `Timeline ${t.id} '${t.name}' reached end (release, fade ${((t.endFade || 0) / 1000).toFixed(1)}s)`); release(pb, t.endFade || 0, 'end'); }
+          else log(1, 'SHOW', `Timeline ${t.id} '${t.name}' reached end (holding)`);
+        }
       }
     }
     // Running effects: new targets every frame (the track's fade blends them in).
@@ -968,7 +973,8 @@ function newPb(kind, id, priority) {
   pbs.push(pb);
   return pb;
 }
-function release(pb, fade) {
+function release(pb, fade, why = 'stop') {
+  if (pb.kind === 'timeline' && !pb.releasing && !pb.dead) tlEvent(pb.id, 'release', why);   // once per release (releasePlayback)
   pb.releasing = true;
   pb.mFrom = pb.master; pb.mTo = 0; pb.mStart = Date.now(); pb.mLen = fade;
   if (!fade) pb.dead = true;
@@ -1405,7 +1411,7 @@ function execLine(line, src, vars) {
     if (x.group) for (const p of pbs) {
       const other = project.timelines.find((o) => o.id === p.id);
       if (p.kind === 'timeline' && p.id !== x.id && !p.releasing && other?.group === x.group) {
-        release(p, x.cues?.[0]?.fade || 0);
+        release(p, x.cues?.[0]?.fade || 0, 'group');
         log(1, 'SHOW', `Timeline ${other.id} '${other.name}' released by group ${x.group}`);
       }
     }
@@ -1413,7 +1419,9 @@ function execLine(line, src, vars) {
     if (t.length > 3 && (w[3] !== 'at' || t.length !== 5 || isNaN(parseFloat(t[4])))) throw new Error('expected: at <seconds>');
     let at = t.length > 3 ? Math.max(0, Math.round(parseFloat(t[4]) * 1000)) : 0;
     if (x.length && at >= x.length) at = x.length - 1;
+    const was = pbs.find((p) => p.kind === 'timeline' && p.id === x.id && !p.releasing && !p.dead);
     const pb = newPb('timeline', x.id, x.priority || 0);
+    tlEvent(x.id, 'start', was ? 'restart' : 'start');
     pb.start -= at;
     pb.catchUp = at;
     r = `Started timeline ${x.id} '${x.name}'${at ? ` at ${(at / 1000).toFixed(1)}s` : ''}`;
@@ -1421,8 +1429,9 @@ function execLine(line, src, vars) {
   else if (w[0] === 'stop' && w[1] === 'timeline') { const x = tl(2); release(running('timeline', x.id), fadeAt(t, 3)); r = `Released timeline ${x.id} '${x.name}'`; }
   else if ((w[0] === 'pause' || w[0] === 'resume') && w[1] === 'timeline') {
     const x = tl(2), p = running('timeline', x.id), now = Date.now();
-    if (w[0] === 'pause' && !p.paused) { p.paused = true; p.pausedAt = now; }
+    if (w[0] === 'pause' && !p.paused) { p.paused = true; p.pausedAt = now; tlEvent(x.id, 'pause'); }
     if (w[0] === 'resume' && p.paused) {
+      tlEvent(x.id, 'resume');
       p.paused = false;
       p.start += now - p.pausedAt;
       for (const run of Object.values(p.fx || {})) run.start += now - p.pausedAt;
@@ -1435,7 +1444,7 @@ function execLine(line, src, vars) {
     r = `Timeline ${x.id} master -> ${t[3]}%`;
   } else if (w[0] === 'scene') { const x = sc(1); const f = fadeAt(t, 2); fire(newPb('scene', x.id, 0), absLevels(x), f, Date.now()); r = `Scene ${x.id} '${x.name}'`; }
   else if (w[0] === 'release' && w[1] === 'scene') { const x = sc(2); release(running('scene', x.id), fadeAt(t, 3)); r = `Released scene ${x.id}`; }
-  else if (w[0] === 'release' && w[1] === 'all') { const f = fadeAt(t, 2); pbs.forEach((p) => release(p, f)); r = 'Released all'; }
+  else if (w[0] === 'release' && w[1] === 'all') { const f = fadeAt(t, 2); pbs.forEach((p) => release(p, f, 'release all')); r = 'Released all'; }
   else if ((w[0] === 'set' || (w[0] === 'clear' && w[1] === 'override')) && t.length === 3) {
     const setCh = w[0] === 'set', spec = t[setCh ? 1 : 2];
     const m = /^(\d+)\.(\d+)(?:-(\d+))?$/.exec(spec);
@@ -2001,10 +2010,28 @@ function onTimelineCue(id, ref) {
   try { runTrigger(trigRef(ref), `timeline ${id} cue`, { timeline: String(id) }); }
   catch (e) { log(2, 'TRIG', `Timeline ${id}: trigger cue: ${e.message}`); }
 }
-function onTimelineEnd(id) { for (const t of project.triggers) if (t.enabled !== false && t.type === 'timeline_end' && t.timeline === id) runTrigger(t, `timeline ${id} end`); }
+// Timeline triggers (= Show's tlEvents + Triggers::onTimelineEvent): queued and run after the
+// command that caused them; each flush takes only what was queued so far (a trigger that
+// restarts its own timeline must not spin here). "timeline_end" = a timeline trigger on "end".
+let tlEvents = [], tlFlush = null;
+function tlEvent(id, on, reason = '') {
+  tlEvents.push({ id, on, reason });
+  if (!tlFlush) tlFlush = setImmediate(() => {
+    tlFlush = null;
+    const now = tlEvents; tlEvents = [];
+    for (const ev of now)
+      for (const t of project.triggers) {
+        if (t.enabled === false || !(t.type === 'timeline' || t.type === 'timeline_end')) continue;
+        const want = t.type === 'timeline_end' ? 'end' : t.on || 'release';
+        if (want !== ev.on || (t.timeline && t.timeline !== ev.id)) continue;
+        runTrigger(t, `timeline ${ev.id} ${ev.on}`, { timeline: String(ev.id), event: ev.on, reason: ev.reason });
+      }
+  });
+}
 function loadProject() {
   project = JSON.parse(fs.readFileSync(PROJECT, 'utf8'));
   pbs = [];
+  tlEvents = [];   // a (re)load lets go of everything without "released" triggers
   loc.until = 0;   // its fixtures may have moved (= Show::parse)
   scheduled = [];
   rates = new Map();

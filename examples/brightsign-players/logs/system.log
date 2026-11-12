@@ -97,3 +97,62 @@
 2026-11-04 17:34:40 [INFO ] TRIG   Trigger 13 'Corridor: nobody' fired (variable)
 2026-11-04 17:34:41 [INFO ] TRIG   Trigger 28 'Wall says' fired (variable)
 2026-11-04 17:34:46 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:43:14 [INFO ] SYS    KD Designer mock booting
+2026-11-11 23:43:14 [INFO ] USB    Storage device mounted at /usb
+2026-11-11 23:43:14 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-11 23:43:14 [INFO ] SHOW   Project 'Media museum - 8 BrightSign players' loaded: 1 universes, 19 fixtures, 7 scenes, 2 timelines
+2026-11-11 23:43:14 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-11 23:43:14 [INFO ] SYS    Mode Museum changed: (none) -> Closed (by trigger 1)
+2026-11-11 23:43:14 [INFO ] TRIG   Trigger 20001 'Museum Closed (enter)' fired (mode enter from trigger 1)
+2026-11-11 23:43:14 [INFO ] SHOW   Released all
+2026-11-11 23:43:14 [INFO ] SHOW   Scene 2 'Lobby night'
+2026-11-11 23:43:14 [INFO ] TRIG   Trigger 4 'Mode -> panel' fired (mode change from trigger 1)
+2026-11-11 23:43:15 [INFO ] SYS    BrightSign lobby (192.168.1.131) online
+2026-11-11 23:43:15 [INFO ] TRIG   Trigger 11 'Film ended' skipped (variable): condition false: 'timeline "Cinema film" running'
+2026-11-11 23:43:15 [INFO ] SYS    BrightSign cinema (192.168.1.132) online
+2026-11-11 23:43:15 [INFO ] SYS    BrightSign corridor (192.168.1.133) online
+2026-11-11 23:43:15 [INFO ] TRIG   Trigger 18 'Guide language' fired (variable)
+2026-11-11 23:43:15 [INFO ] SYS    BrightSign guide (192.168.1.134) online
+2026-11-11 23:43:15 [INFO ] SYS    BrightSign signage (192.168.1.135) online
+2026-11-11 23:43:15 [INFO ] SYS    BrightSign vitrine (192.168.1.136) online
+2026-11-11 23:43:15 [INFO ] TRIG   Trigger 23 'Kiosk chapter' skipped (variable): condition false: 'var kiosk_video != "Video 1"'
+2026-11-11 23:43:15 [INFO ] SYS    BrightSign kiosk (192.168.1.137) online
+2026-11-11 23:43:15 [INFO ] TRIG   Trigger 28 'Wall says' fired (variable)
+2026-11-11 23:43:15 [INFO ] SYS    BrightSign wall (192.168.1.138) online
+2026-11-11 23:43:15 [INFO ] SYS    Clock set from browser
+2026-11-11 23:43:15 [INFO ] SYS    Clock set from browser
+2026-11-11 23:43:15 [INFO ] TRIG   Trigger 7 'Lobby says' fired (variable)
+2026-11-11 23:43:15 [INFO ] TRIG   Trigger 19 'Busy' skipped (variable): condition false: 'var visitors > 400'
+2026-11-11 23:43:19 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:43:20 [INFO ] TRIG   Trigger 13 'Corridor: nobody' fired (variable)
+2026-11-11 23:43:22 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-11 23:43:26 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:43:33 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:43:35 [INFO ] TRIG   Trigger 11 'Film ended' skipped (variable): condition false: 'timeline "Cinema film" running'
+2026-11-11 23:43:35 [INFO ] TRIG   Trigger 23 'Kiosk chapter' fired (variable)
+2026-11-11 23:43:35 [INFO ] CMD    Kiosk: Video 2
+2026-11-11 23:43:35 [INFO ] TRIG   Trigger 28 'Wall says' fired (variable)
+2026-11-11 23:43:40 [INFO ] TRIG   Trigger 13 'Corridor: nobody' fired (variable)
+2026-11-11 23:43:40 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:43:46 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-11 23:43:47 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:43:50 [INFO ] TRIG   Trigger 14 'Corridor: empty' fired (delayed from trigger 13)
+2026-11-11 23:43:50 [WARN ] CMD    [trigger 14] 'release scene "Corridor welcome" fade 10' failed: scene 6 is not running
+2026-11-11 23:43:54 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:43:55 [INFO ] TRIG   Trigger 11 'Film ended' skipped (variable): condition false: 'timeline "Cinema film" running'
+2026-11-11 23:43:55 [INFO ] TRIG   Trigger 23 'Kiosk chapter' skipped (variable): condition false: 'var kiosk_video != "Video 1"'
+2026-11-11 23:43:55 [INFO ] TRIG   Trigger 28 'Wall says' fired (variable)
+2026-11-11 23:43:58 [INFO ] TRIG   Trigger 1 'Startup' fired (manual)
+2026-11-11 23:44:00 [INFO ] TRIG   Trigger 13 'Corridor: nobody' fired (variable)
+2026-11-11 23:44:00 [INFO ] TRIG   Trigger 19 'Busy' skipped (variable): condition false: 'var visitors > 400'
+2026-11-11 23:44:01 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:44:08 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:44:10 [INFO ] TRIG   Trigger 14 'Corridor: empty' fired (delayed from trigger 13)
+2026-11-11 23:44:10 [WARN ] CMD    [trigger 14] 'release scene "Corridor welcome" fade 10' failed: scene 6 is not running
+2026-11-11 23:44:11 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-11 23:44:15 [INFO ] TRIG   Trigger 11 'Film ended' skipped (variable): condition false: 'timeline "Cinema film" running'
+2026-11-11 23:44:15 [INFO ] TRIG   Trigger 21 'Vitrine climate' fired (variable)
+2026-11-11 23:44:15 [INFO ] TRIG   Trigger 23 'Kiosk chapter' fired (variable)
+2026-11-11 23:44:15 [INFO ] CMD    Kiosk: Video 2
+2026-11-11 23:44:15 [INFO ] TRIG   Trigger 28 'Wall says' fired (variable)
+2026-11-11 23:44:20 [INFO ] TRIG   Trigger 13 'Corridor: nobody' fired (variable)

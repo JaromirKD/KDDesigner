@@ -1773,8 +1773,9 @@
     {
       "id": 5,
       "name": "Story NL finished",
-      "type": "timeline_end",
+      "type": "timeline",
       "timeline": 1,
+      "on": "end",
       "color": "purple",
       "actions": [
         "fire trigger \"Back to rest\""
@@ -1821,8 +1822,9 @@
     {
       "id": 8,
       "name": "Story EN finished",
-      "type": "timeline_end",
+      "type": "timeline",
       "timeline": 2,
+      "on": "end",
       "color": "purple",
       "actions": [
         "fire trigger \"Back to rest\""
@@ -1869,8 +1871,9 @@
     {
       "id": 11,
       "name": "Story DE finished",
-      "type": "timeline_end",
+      "type": "timeline",
       "timeline": 3,
+      "on": "end",
       "color": "purple",
       "actions": [
         "fire trigger \"Back to rest\""
