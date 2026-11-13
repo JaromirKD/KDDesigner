@@ -197,3 +197,7 @@ Already fine, checked 11 Nov: DMX out is interrupt-driven (40 fps), project rece
 trigger list problems/icons are cheap even at 108 triggers, the fixture library (259 KB) is
 only fetched when opened.
 
+New notes (13 Nov):
+-i wantt to be able to expand the agenda so i can see a day or week
+-i want to check the Brightsign KDLink plugin. i have added it to a brightsign on 172.16.1.221 it does not seem to work yet
+-in dashboard can we see all our devices right now i have added a kissbox but don't see it in my dashboard i do see the pcs and a projector i have added
