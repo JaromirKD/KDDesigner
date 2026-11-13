@@ -4890,3 +4890,8 @@
 2026-11-13 21:03:27 [WARN ] NET    Ethernet link flapped (simulated)
 2026-11-13 21:03:34 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
 2026-11-13 21:03:34 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-13 21:03:45 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:03:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:03:46 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-13 21:03:54 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:03:54 [INFO ] CMD    video2.mp4 ended in Video on lobby
