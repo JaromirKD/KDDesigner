@@ -46,6 +46,9 @@
 //                  vars {calendar} {state}
 //   dmx_in         Art-Net / sACN received ("protocol", "universe", "channels"); "when"
 //                  change | above | below "level" (0-255). vars {channel} {index} {value} {old}
+//   media_end      a BrightSign with the kdlink plugin played a video / audio file to its end
+//                  ("device", "zone" name or number, "file" = the file or its state's name in the
+//                  presentation, exact / prefix*; each empty = any). vars {device} {zone} {file} {state}
 //   comment        a separator in the trigger list, never fires
 // input: "edge" also hold (on for "hold" s) | double (two presses within "within" s);
 // panel: "event" also hold | double.
@@ -75,6 +78,7 @@ void onDeviceState(const String& kind, const String& name, bool online);
 void onProjectorAlarm(const Projectors::Alarm& a);
 void onVariable(const String& name, const String& value, const String& old);
 void onTcpLine(const String& device, const String& line);
+void onMediaEnd(const String& device, int zoneNo, const String& zone, const String& file, const String& state);
 void onHttpResponse(const String& method, const String& url, int status, const String& body);
 
 // A trigger reference is its number or its "name" (separators excluded).

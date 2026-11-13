@@ -35,5 +35,6 @@ void pollNow();
 // reading (let the presentation send e.g. "playing Intro" on every state). Returns true for a
 // packet of the kdlink plugin (zones, variables), which then fires no UDP triggers.
 bool onUdp(const IPAddress& from, const String& text);
+void follow(uint32_t now);                                // main loop, caller holds g_engine: BrightSign zones that follow a timeline
 bool state(const String& name, bool& online, bool& known);  // false if no driver has this name
 }  // namespace Drivers

@@ -602,6 +602,7 @@ views.timelines = () => {
         <label class="muted" title="Starting a timeline releases the other timelines in the same group">Group</label>
         <select data-p="timelines.${ti}.group">${TL_GROUPS.map((g) => `<option value="${g}"${(t.group || '') === g ? ' selected' : ''}>${g || 'none'}</option>`).join('')}</select>
       </div>
+      <div id="tlFollow">${tlFollowHtml(t)}</div>
       ${tlGridHtml(t)}
       ${S.trackEdit != null && t.tracks[S.trackEdit] ? trackFixturesHtml(t, S.trackEdit) : ''}
       <div class="row" style="margin-top:8px">
@@ -1073,6 +1074,39 @@ function pathCurve(path) {
   const pts = Array.from({ length: 21 }, (_, i) => `${i * 2},${20 - ease(i / 20) * 16}`).join(' ');
   return `<svg width="40" height="22" viewBox="0 -2 40 24"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
 }
+// BrightSign zones that play their video in step with this timeline ("Follow a timeline" on the
+// BrightSign tab, drivers[].follow, Drivers::follow), with the video's length as the kdlink plugin
+// (v12) reports it per presentation state, and a button to make the timeline that long.
+function tlFollowHtml(t) {
+  const rows = [];
+  for (const d of P().drivers || []) {
+    if (d.type !== 'brightsign') continue;
+    for (const f of d.follow || []) {
+      if (f.timeline !== t.id) continue;
+      const st = S.status?.drivers?.find((x) => x.id === d.id && x.type === d.type);
+      const want = String(f.file || '').toLowerCase(), zn = bsZoneNo(st, f.zone);
+      // The file or state name as typed, in that zone first (the same name can be in two zones).
+      const match = (s) => (s.n || '').toLowerCase() === want || (s.f || '').toLowerCase() === want;
+      const s = (st?.states || []).find((x) => match(x) && (!zn || x.z === zn)) || (st?.states || []).find(match);
+      const off = Math.round((+f.offset || 0) * 1000), file = s?.f && s.f !== f.file ? `${f.file} (${s.f})` : f.file || '?';
+      let len;
+      if (s?.ms > 0) {
+        // The video runs at timeline position + offset, so it ends at its length − offset.
+        const fit = Math.max(100, s.ms - off);
+        len = `<span class="muted">video ${fmtTime(s.ms)}${off ? ` · offset ${off > 0 ? '+' : ''}${off / 1000} s` : ''}</span>
+          ${Math.abs(fit - (t.length || 0)) < 50 ? '<span class="tag mon-ok" title="The timeline is as long as the video">✓ same length</span>'
+            : `<button class="btn small" data-tlvidlen="${fit}" title="Set the timeline length to ${(fit / 1000).toFixed(2)} s (the video${off ? ' minus the offset' : ''}); now ${((t.length || 0) / 1000).toFixed(2)} s">Length = video (${(fit / 1000).toFixed(1)} s)</button>`}`;
+      } else {
+        len = `<span class="muted">${!st?.online ? 'video length: player not online' : !st?.states ? 'video length unknown: needs the KD plugin in the presentation'
+          : !s ? `'${esc(f.file || '')}' is not a state or file of the presentation` : s.f && /\.(png|jpe?g|bmp|gif)$/i.test(s.f) ? 'a picture has no length' : 'video length unknown: needs kdlink v12 (download the plugin again and publish)'}</span>`;
+      }
+      rows.push(`<div class="row tl-follow"><span title="This video plays in step with the timeline: start, pause, jump, scrub">🎬</span>
+        <a href="#" data-goto-devices="brightsign" title="Open the BrightSign tab (Follow a timeline)">BrightSign ${esc(d.name)}</a>
+        <span>zone <b>${esc(f.zone || '?')}</b> follows with <b>${esc(file)}</b></span>${len}</div>`);
+    }
+  }
+  return rows.join('');
+}
 views.timelines.after = () => {
   const grid = $('#tlGrid');
   if (!grid) return;
@@ -1274,7 +1308,12 @@ views.timelines.after = () => {
     const move = (ev) => {
       const at = snap(msAt(ev.clientX), ev);
       if (endm) { t.length = Math.max(100, at); e.target.style.left = pctOf(t.length); info(`length ${(t.length / 1000).toFixed(2)} s`); }
-      else { S.tlCursor = at; $$('.tl-cur', grid).forEach((x) => (x.style.left = pctOf(at))); }
+      else {
+        S.tlCursor = at; $$('.tl-cur', grid).forEach((x) => (x.style.left = pctOf(at)));
+        // Scrubbing: a paused timeline follows the cursor while you drag (the lights, and a video that follows it).
+        const pb = tlPlayback(t);
+        if (pb && pb.paused && !pb.ended && Date.now() - (S.tlScrubAt || 0) > 150) { S.tlScrubAt = Date.now(); tlSeek(t, at); }
+      }
     };
     move(e);
     ruler.addEventListener('pointermove', move);
@@ -1282,7 +1321,7 @@ views.timelines.after = () => {
       ruler.removeEventListener('pointermove', move);
       if (endm) markDirty();
       // While it plays, the timeline jumps to where you let go.
-      else { const pb = tlPlayback(t); if (pb && !pb.paused && !pb.ended) tlPlayFrom(t, S.tlCursor); }
+      else { const pb = tlPlayback(t); if (pb && pb.paused && !pb.ended) tlSeek(t, S.tlCursor); else if (pb && !pb.ended) tlPlayFrom(t, S.tlCursor); }
       render();
     }, { once: true });
   });
@@ -1319,6 +1358,18 @@ views.timelines.after = () => {
   });
   // Several times a second (also while dragging a clip): send the timeline when it changed.
   pagePoll('tlLive', () => tlLiveSync(t), 250);
+  // The players' video lengths arrive with the status (maybe after this page was drawn).
+  // Redrawn only when it changed (comparing innerHTML never matches: the browser rewrites it).
+  pagePoll('tlFollow', () => { const el = $('#tlFollow'), h = tlFollowHtml(t); if (el && el.dataset.html !== h) { el.innerHTML = h; el.dataset.html = h; } }, 1000);
+  $('#tlFollow').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tlvidlen]');
+    if (!b) return;
+    t.length = +b.dataset.tlvidlen;
+    const past = t.cues.filter((c) => c.t >= t.length).length;
+    markDirty();
+    render();
+    toast(`Timeline length ${(t.length / 1000).toFixed(2)} s = the video${past ? ` · ${past} cue(s) now start after the end` : ''}`, !!past);
+  });
   $$('[data-tlsnap]').forEach((b) => b.addEventListener('click', () => { S.tlSnap = b.dataset.tlsnap; render(); }));
   $$('[data-trackedit]').forEach((b) => b.addEventListener('click', () => { const r = +b.dataset.trackedit; S.trackEdit = S.trackEdit === r ? null : r; S.trackSearch = ''; render(); }));
   $$('[data-trackdel]').forEach((b) => b.addEventListener('click', () => {
@@ -1699,6 +1750,16 @@ async function tlPlayFrom(t, ms) {
     S.status.playbacks.push({ kind: 'timeline', id: t.id, pos: ms, paused: false, ended: false });
     S.statusAt = Date.now();
   }
+}
+// Scrub: a paused timeline jumps to ms and stays paused ("seek timeline": no restart, no triggers).
+async function tlSeek(t, ms) {
+  const r = await cmd(`seek timeline ${t.id} ${(ms / 1000).toFixed(2)}`);
+  const pb = tlPlayback(t);
+  if (!r.ok || !pb) return;
+  S.tlJump = null;
+  S.tlPauseCursor = ms;
+  Object.assign(pb, { pos: ms });
+  S.statusAt = Date.now();
 }
 // Pause (or resume) a timeline; the playhead stops or moves on at once.
 async function tlPause(t, pause) {

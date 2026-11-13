@@ -200,18 +200,27 @@ function liveVars(st) {
 
 function liveDevices(st) {
   const el = $('#lvDev');
-  if (!el) return;
+  if (el) el.innerHTML = deviceChipsHtml(st);
+}
+// Every device the controller watches as a chip (offline first): network devices, PCs,
+// projectors, show devices, TCP and Modbus. Also the Dashboard's Devices card.
+function deviceChipsHtml(st) {
   const list = [];
   const add = (name, kind, state, extra = '') => list.push({ name, kind, state, extra });
   for (const h of st?.monitor?.hosts || []) add(h.name, h.kind === 'pc' ? 'PC' : 'device', h.state);
   for (const x of st?.projectors || []) add(x.name, 'projector', !x.seen ? 'unknown' : x.online ? 'online' : 'offline', x.online && x.power ? x.power : '');
-  for (const x of st?.drivers || []) add(x.name, x.type, !x.seen ? 'unknown' : x.online ? 'online' : 'offline');
+  for (const x of st?.drivers || []) add(x.name, DRIVERS[x.type]?.label || x.type, !x.seen ? 'unknown' : x.online ? 'online' : 'offline');
   for (const x of st?.io?.tcp || []) add(x.name, 'tcp', x.state);
   for (const x of st?.io?.modbus || []) add(x.name, 'modbus', x.state);
+  // In the project but not on the controller yet (added, not saved).
+  const known = new Set(list.map((d) => d.name.toLowerCase())), p = P();
+  for (const x of [...p.devices, ...p.pcs, ...p.projectors, ...p.drivers, ...p.tcp, ...p.modbus]) {
+    if (x.name && !known.has(x.name.toLowerCase())) add(x.name, 'not on the controller yet: save first', 'unknown');
+  }
   const order = { offline: 0, unknown: 1, online: 2 };
   list.sort((a, b) => (order[a.state] ?? 1) - (order[b.state] ?? 1) || a.name.localeCompare(b.name));
   const dot = (s) => (s === 'online' ? 'ok' : s === 'offline' ? 'bad' : '');
-  el.innerHTML = list.length ? list.map((d) => `<span class="lv-dev${d.state === 'offline' ? ' off' : ''}" data-view="monitor" title="${esc(d.kind)} · ${esc(d.state)}${d.extra ? ' · ' + esc(d.extra) : ''}">
+  return list.length ? list.map((d) => `<span class="lv-dev${d.state === 'offline' ? ' off' : ''}" data-view="monitor" title="${esc(d.kind)} · ${esc(d.state)}${d.extra ? ' · ' + esc(d.extra) : ''}">
     <span class="dot ${dot(d.state)}"></span>${esc(d.name)}${d.extra ? ` <span class="muted">${esc(d.extra)}</span>` : ''}</span>`).join('')
     : '<span class="muted">No devices.</span>';
 }

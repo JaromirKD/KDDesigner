@@ -439,15 +439,11 @@ void ShowImpl::stopAllPlaybacks() {
 // "start part-way" does: cues before that point jump in without their fades, from the live
 // look (so nothing blinks), and trigger cues before it don't fire again. Paused stays paused,
 // a timeline holding at its end stays there (no second "ended"), its master level is kept.
-void ShowImpl::timelineReplaced(int idx) {
-  Playback* p = findPlayback(false, idx);
-  if (!p || p->releasing) return;
+// Puts a running timeline at position `at` as if it had played up to there: the cues before it
+// take effect at once, it stays paused / ended, keeps its master level and its place. No "started" event.
+static void moveTimeline(Playback* p, int idx, uint32_t at, uint32_t now, bool keepEnded) {
   const Timeline& t = timelines[idx];
-  const uint32_t now = millis();
-  int32_t e = (int32_t)((p->paused ? p->pausedAt : now) - p->start);
-  uint32_t at = e > 0 ? (uint32_t)e : 0;
-  if (t.length && at >= t.length) at = t.loop ? at % t.length : t.length - 1;
-  const bool paused = p->paused, ended = p->ended;
+  const bool paused = p->paused, ended = keepEnded && p->ended;
   const float master = p->master, mFrom = p->mFrom, mTo = p->mTo;
   const uint32_t mStart = p->mStart, mLen = p->mLen, order = p->order;
   resetPlayback(*p, false, idx, t.priority, now);
@@ -458,6 +454,17 @@ void ShowImpl::timelineReplaced(int idx) {
   updateTimeline(*p, now);   // the new cues up to here, at once
   if (ended) p->ended = true;
   if (paused) { p->paused = true; p->pausedAt = now; }
+}
+
+void ShowImpl::timelineReplaced(int idx) {
+  Playback* p = findPlayback(false, idx);
+  if (!p || p->releasing) return;
+  const Timeline& t = timelines[idx];
+  const uint32_t now = millis();
+  int32_t e = (int32_t)((p->paused ? p->pausedAt : now) - p->start);
+  uint32_t at = e > 0 ? (uint32_t)e : 0;
+  if (t.length && at >= t.length) at = t.loop ? at % t.length : t.length - 1;
+  moveTimeline(p, idx, at, now, true);
 }
 
 namespace Show {
@@ -645,6 +652,35 @@ bool pauseTimeline(int idx, bool pause, String& msg) {
   msg = String(pause ? "Paused" : "Resumed") + " timeline " + t.id + " '" + t.name + "'";
   LOGI(Show, "%s", msg.c_str());
   return true;
+}
+
+// Scrubbing: a running or paused timeline jumps to atMs and stays as it was (paused stays paused).
+// Not a start: no timeline triggers fire, so it can be sent many times a second.
+bool seekTimeline(int idx, uint32_t atMs, String& msg) {
+  Playback* p = runningTimeline(idx, msg);
+  if (!p) return false;
+  const Timeline& t = timelines[idx];
+  if (t.length && atMs >= t.length) atMs = t.length - 1;
+  moveTimeline(p, idx, atMs, millis(), false);
+  msg = "Timeline " + String(t.id) + " at " + String(atMs / 1000.0f, 1) + "s";
+  LOGD(Show, "%s", msg.c_str());
+  return true;
+}
+
+// Where a timeline is (ms) and whether it stands still (paused, or held at its end); false = not running.
+bool timelinePosition(int timelineId, int32_t& pos, bool& paused) {
+  const uint32_t now = millis();
+  for (auto& p : pbs) {
+    if (!p.active || p.isScene || p.releasing || timelines[p.ref].id != timelineId) continue;
+    const Timeline& t = timelines[p.ref];
+    int32_t e = (int32_t)((p.paused ? p.pausedAt : now) - p.start);
+    if (e < 0) e = 0;
+    if (t.length && (uint32_t)e >= t.length) e = t.loop ? e % t.length : t.length;
+    pos = e;
+    paused = p.paused || p.ended;
+    return true;
+  }
+  return false;
 }
 
 bool setMaster(int idx, float level, uint32_t fadeMs, String& msg) {

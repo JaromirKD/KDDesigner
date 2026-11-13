@@ -78,6 +78,7 @@ const TRIGGER_TYPES = [
   ['input', 'Input (pin / Machine Control)'], ['timeline', 'Timeline (start / end / release / pause)'], ['mode', 'Mode change'], ['panel', 'Panel button'],
   ['dmx_change', 'DMX channel change'], ['device', 'Device online/offline'], ['projector', 'Projector alarm (errors, lamp hours)'], ['variable', 'Variable change'],
   ['tcp', 'TCP message received'], ['http', 'HTTP response'], ['dmx_in', 'DMX input (Art-Net / sACN in)'], ['calendar', 'Calendar change (a period starts / ends)'],
+  ['media_end', 'BrightSign: media file ended'],
   ['manual', 'Manual / nested list'], ['comment', '— Separator —'],
 ];
 // Variables each trigger type provides to its actions as {name}.
@@ -88,7 +89,7 @@ const TRIGGER_VARS = {
   projector: ['projector', 'alarm', 'state', 'lamp (hours)', 'hours (the limit)'],
   variable: ['variable', 'value', 'old'], tcp: ['device', 'message', '1 (text after a prefix*)'], http: ['url', 'method', 'status', 'body'],
   dmx_change: ['channel', 'index', 'value', '+ your table names'], input: ['input', 'value'], dmx_in: ['channel', 'index', 'value', 'old'],
-  calendar: ['calendar', 'state (active / inactive)'],
+  calendar: ['calendar', 'state (active / inactive)'], media_end: ['device', 'zone', 'file', 'state (its name in BrightAuthor)', '1 (text after a prefix*)'],
   timeline: ['timeline (its number)', 'event (start, end, release, pause, resume)', 'reason (start / restart; stop / group / release all / end)'],
 };
 // What a timeline trigger (`on`) reacts to; none = release. = kTlOn in Triggers.cpp.
@@ -159,7 +160,7 @@ const PLACEHOLDER = {
   '{kisspoint}': '<slot>.<channel>', '{kissval}': 'on|off|0-255', '{slot}': '<slot 1-8>', '{knxga}': '<group address or name>', '{knxval}': '<value>',
   '{dpt}': '<dpt, e.g. 1 / 5.001 / 9>', '{path}': '<path>', '{digiscene}': '<scene name or #>', '{netioout}': '<output|all>',
   '{netioact}': 'on|off|toggle|restart|pulse', '{pharostl}': 'start|release|toggle|pause|resume', '{pharossc}': 'start|release|toggle',
-  '{fixgrp}': 'fixture|group', '{pharosproto}': '<protocol>', '{word}': '<name>', '{bszone}': '<zone>', '{bsvar}': '<user variable>', '{bsfile}': '<file>', '{bsstate}': '<state>',
+  '{fixgrp}': 'fixture|group', '{pharosproto}': '<protocol>', '{word}': '<name>', '{bszone}': '<zone>', '{bsvar}': '<user variable>', '{bsfile}': '<file|state>', '{bsstate}': '<state>',
   '{iopoint}': '<point, e.g. out3, or its name>', '{ioval}': 'on|off|toggle|<volts>',
 };
 

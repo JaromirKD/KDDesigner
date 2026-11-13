@@ -186,6 +186,8 @@ trig('Start main show', 'manual', {},
 trig('Show: start video', 'manual', {}, ['send tcp watchout run', 'brightsign lobby send play1', 'brightsign lobby event video_show', 'brightsign lobby var mode show', 'log Video started from timeline {timeline}'], [],
   { notes: 'Fired by a ◆ trigger cue at 2 s on timeline "Main show". The brightsign event/var lines go through the KD plugin (kdlink) in the presentation.' });
 trig('Lobby: back to loop', 'manual', {}, ['brightsign lobby play Video loop.mp4', 'brightsign lobby stop Audio'], [], { notes: 'Plays a file directly in a BrightSign zone (KD plugin).' });
+trig('Lobby: video ended', 'media_end', { device: 'lobby', zone: 'Video', file: '' }, ['log {file} ended in {zone} on {device}'], [],
+  { notes: 'Fires when a video or audio file in the Video zone has played to its end (reported by the KD plugin). Give a file name to react to one file only.' });
 trig('Lobby: show test pattern', 'manual', {}, ['brightsign lobby test Video Testpattern'], [], { notes: 'Plays the file of the presentation\'s "Testpattern" state in the Video zone (KD plugin); the presentation carries on when it ends.' });
 trig('Show: halfway', 'manual', {}, ['netio rack output 2 pulse 5', 'pharos lpc timeline 1 start fade 3', 'digidot c4 scene 1 fade 2'], [], { notes: 'Trigger cue at 30 s: shows the show-device commands.' });
 trig('Main show finished', 'timeline', { timeline: 2, on: 'end' }, ['var show_count += 1', 'log Show {show_count} finished', 'fire trigger "Start inloop"']);
@@ -414,7 +416,9 @@ mode Simple: dim, r, g, b`],
       { ga: '1/1/1', dpt: '1', name: 'Hall light', var: 'hall_light' }, { ga: '1/2/1', dpt: '5.001', name: 'Hall dimmer' },
       { ga: '2/1/1', dpt: '3', name: 'Blinds' }, { ga: '3/1/1', dpt: '9', name: 'Hall temperature' }, { ga: '4/1/1', dpt: '232', name: 'RGB strip' }], vars: {} },
     { id: 3, type: 'brightsign', name: 'lobby', ip: '192.168.1.125', port: 80, user: 'admin', password: '', udpPort: 5000, plugin: true, pluginPort: 5010, vars: {},
-      commands: [{ name: 'Play intro', text: 'play1' }, { name: 'Loop', text: 'loop' }] },
+      commands: [{ name: 'Play intro', text: 'play1' }, { name: 'Loop', text: 'loop' }],
+      // While "Main show" runs, the Video zone plays Video 3 in step with it (start, pause, jump, scrub).
+      follow: [{ timeline: 2, zone: 'Video', file: 'Video 3', offset: 0 }] },
     { id: 4, type: 'digidot', name: 'c4', ip: '192.168.1.126', port: 80, user: 'admin', password: 'admin', vars: {} },
     { id: 5, type: 'netio', name: 'rack', ip: '192.168.1.127', port: 80, user: 'netio', password: 'netio', model: '4PZ', outputs: 4, live: true, vars: {} },
     { id: 6, type: 'pharos', name: 'lpc', ip: '192.168.1.128', port: 80, live: true, vars: { tl1: 'pharos_tl1' } },

@@ -238,7 +238,7 @@ function whereUsed(listName, x) {
     // What sets the trigger off.
     const src = { variables: t.type === 'variable' && t.variable, timelines: t.type === 'timeline' && t.timeline,
       devices: t.type === 'device' && t.device, pcs: t.type === 'device' && t.device, tcp: (t.type === 'tcp' || t.type === 'device') && t.device,
-      projectors: (t.type === 'projector' && t.projector) || (t.type === 'device' && t.device), modbus: t.type === 'device' && t.device, drivers: t.type === 'device' && t.device }[listName];
+      projectors: (t.type === 'projector' && t.projector) || (t.type === 'device' && t.device), modbus: t.type === 'device' && t.device, drivers: (t.type === 'device' || t.type === 'media_end') && t.device }[listName];
     if (src != null && src !== false && src !== '' && hit(src) !== null) out.push({ where, what: `sets it off (${t.type === 'timeline' ? `timeline ${TL_WHY[tlOn(t)]}` : t.type})`, attr });
     if (listName === 'devices' && (t.type === 'udp' || t.type === 'osc') && x.ip && t.fromIp === x.ip) out.push({ where, what: `only messages from ${x.ip}`, attr });
   }
@@ -255,6 +255,10 @@ function whereUsed(listName, x) {
       const n = tl.cues.filter((c) => (listName === 'scenes' ? c.trigger == null && c.effect == null && c.scene === x.id : c.effect === x.id)).length;
       if (n) out.push({ where: `Timeline ${tl.id} ${tl.name || ''}`, what: `${n} cue${n > 1 ? 's' : ''}`, attr: `data-goto-timeline="${tl.id}"` });
     }
+  if (listName === 'timelines')
+    for (const d of p.drivers)
+      for (const f of d.follow || [])
+        if (f.timeline === x.id) out.push({ where: `BrightSign ${d.name}`, what: `zone ${f.zone} follows this timeline with ${f.file || '?'}`, attr: 'data-goto-devices="brightsign"' });
   for (const pg of p.panel.pages)
     for (const c of pg.controls) {
       const pn = p.panel.panels.find((q) => q.id === pg.panel);

@@ -255,6 +255,7 @@ void loop() {
     for (int n = Show::timelineEventCount(); n > 0 && Show::takeTimelineEvent(tev); n--) Triggers::onTimelineEvent(tev);
     String cueTrig;
     while (Show::takeTimelineCue(id, cueTrig)) Triggers::onTimelineCue(id, cueTrig);
+    Drivers::follow(now);
     Monitor::Event ev;
     while (Monitor::takeEvent(ev)) Triggers::onDeviceState(ev.kind, ev.name, ev.online);
     Projectors::Alarm al;

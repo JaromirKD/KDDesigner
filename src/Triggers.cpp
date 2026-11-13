@@ -19,7 +19,7 @@
 #include "Util.h"
 
 namespace {
-enum class Type { Startup, Time, Interval, Udp, Osc, Input, TimelineEnd, Mode, Panel, DmxChange, Device, Projector, Variable, TcpLine, HttpResp, Manual, Calendar, DmxIn, Comment, Unknown };
+enum class Type { Startup, Time, Interval, Udp, Osc, Input, TimelineEnd, Mode, Panel, DmxChange, Device, Projector, Variable, TcpLine, HttpResp, Manual, Calendar, DmxIn, MediaEnd, Comment, Unknown };
 // What a trigger does when it fires while it still runs (waits in a sleep, wait or loop).
 enum WhileRunning : uint8_t { kAgain, kIgnore, kRestart, kQueue };
 
@@ -228,7 +228,7 @@ Type parseType(const char* s) {
       {"osc", Type::Osc}, {"input", Type::Input}, {"timeline_end", Type::TimelineEnd}, {"timeline", Type::TimelineEnd}, {"mode", Type::Mode},
       {"panel", Type::Panel}, {"dmx_change", Type::DmxChange}, {"device", Type::Device}, {"projector", Type::Projector}, {"variable", Type::Variable},
       {"tcp", Type::TcpLine}, {"http", Type::HttpResp}, {"manual", Type::Manual},
-      {"calendar", Type::Calendar}, {"dmx_in", Type::DmxIn}, {"comment", Type::Comment}};
+      {"calendar", Type::Calendar}, {"dmx_in", Type::DmxIn}, {"media_end", Type::MediaEnd}, {"comment", Type::Comment}};
   for (auto& k : kTypes) if (!strcmp(s, k.n)) return k.t;
   return Type::Unknown;
 }
@@ -791,6 +791,7 @@ void load() {
       }
       case Type::Variable: t.event = o["variable"] | ""; t.match = o["value"] | ""; break;   // "" = any
       case Type::TcpLine: t.event = o["device"] | ""; t.match = o["match"] | "*"; break;
+      case Type::MediaEnd: t.event = o["device"] | ""; t.io = o["zone"] | ""; t.match = o["file"] | ""; break;   // each "" = any
       case Type::HttpResp: t.match = o["url"] | ""; break;                                   // URL prefix, "" = any
       case Type::Calendar: {
         // "calendar": period name, "state": "active" (the period starts) | "inactive" (it ends).
@@ -1127,6 +1128,22 @@ void onTcpLine(const String& device, const String& line) {
     if (!t.enabled || t.type != Type::TcpLine || (t.event.length() && !t.event.equalsIgnoreCase(device))) continue;
     if (t.match == "*" || !t.match.length()) { runTrigger(t, "tcp", &vars); continue; }
     if (udpMatches(t.match, line, vars)) runTrigger(t, "tcp", &vars);   // exact or prefix* (rest -> {1})
+  }
+}
+
+// A BrightSign's kdlink plugin says a zone's video / audio file played to its end.
+void onMediaEnd(const String& device, int zoneNo, const String& zone, const String& file, const String& state) {
+  Vars vars;
+  vars.set("device", device);
+  vars.set("zone", zone);
+  vars.set("file", file);
+  vars.set("state", state);
+  for (auto& t : triggers) {
+    if (!t.enabled || t.type != Type::MediaEnd || (t.event.length() && !t.event.equalsIgnoreCase(device))) continue;
+    if (t.io.length() && !t.io.equalsIgnoreCase(zone) && !(zoneNo > 0 && t.io.toInt() == zoneNo)) continue;
+    // "file" is the file name or the name of its state in the presentation
+    if (t.match == "*" || !t.match.length() || t.match.equalsIgnoreCase(file) || (state.length() && t.match.equalsIgnoreCase(state))) { runTrigger(t, "media end", &vars); continue; }
+    if (udpMatches(t.match, file, vars) || (state.length() && udpMatches(t.match, state, vars))) runTrigger(t, "media end", &vars);   // prefix* (rest -> {1})
   }
 }
 

@@ -125,6 +125,11 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     }
     return Show::startTimeline(idx, r, at);
   }
+  if (is(0, "seek") && is(1, "timeline")) {   // scrub: jump, stays paused / playing, fires no triggers
+    if (!needTimeline(t, 2, idx, r)) return false;
+    if (t.size() != 4) { r = "expected: seek timeline <timeline> <seconds>"; return false; }
+    return Show::seekTimeline(idx, seconds(t[3]), r);
+  }
   if (is(0, "stop") && is(1, "timeline")) {
     return needTimeline(t, 2, idx, r) && parseFade(t, 3, fade, r) && Show::stopTimeline(idx, fade, r);
   }

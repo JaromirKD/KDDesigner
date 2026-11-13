@@ -327,8 +327,9 @@ function drv(d) {
     // The simulated presentation behind the kdlink plugin (data/www/brightsign/kdlink.brs).
     // Video: Video 1 -> Video 2 -> Video 1 ... every 20 s, the UDP command "video3" goes to Video 3, the test pattern only by hand.
     st.zones = [{ name: 'Video', state: 'Video 1', file: 'video1.mp4' }, { name: 'Ticker', state: 'News', file: 'news.png' }, { name: 'Audio', state: 'Music', file: 'bgm.mp3' }];
-    st.states = [[1, 'Video 1', 'video1.mp4'], [1, 'Video 2', 'video2.mp4'], [1, 'Testpattern', 'testpattern.png'], [1, 'Video 3', 'video3.mp4'],
-      [2, 'News', 'news.png'], [2, 'Weather', 'weather.png'], [3, 'Music', 'bgm.mp3']];
+    // [zone, state, file, length in ms] (kdlink v12 sends the length of video/audio files).
+    st.states = [[1, 'Video 1', 'video1.mp4', 83400], [1, 'Video 2', 'video2.mp4', 60000], [1, 'Testpattern', 'testpattern.png'], [1, 'Video 3', 'video3.mp4', 125520],
+      [2, 'News', 'news.png'], [2, 'Weather', 'weather.png'], [3, 'Music', 'bgm.mp3', 180000]];
     st.uvars = { mode: 'day', visitors: '0', language: 'NL' };
     st.activity = [];
     st.gpio = 0;
@@ -441,6 +442,23 @@ function bsActivity(st, text) {
   st.activity.push([epoch(), String(text).slice(0, 160)]);
   if (st.activity.length > 30) st.activity.shift();
 }
+// A zone's file played to its end (the plugin's "ended" packet): Activity + media_end triggers,
+// like Triggers::onMediaEnd ("zone" by name or number, "file" = the file or its state's name, exact / prefix*, each empty = any).
+function bsEnded(d, zi, file) {
+  const st = drv(d), zone = st.zones[zi].name, lc = (s) => String(s || '').toLowerCase();
+  const state = (st.states.find(([z, , f]) => z === zi + 1 && lc(f) === lc(file)) || [])[1] || '';
+  bsActivity(st, `${zone}: ended ${state && state !== file ? `${state} (${file})` : file}`);
+  for (const t of project.triggers) {
+    if (t.enabled === false || t.type !== 'media_end' || (t.device && lc(t.device) !== lc(d.name))) continue;
+    if (t.zone && lc(t.zone) !== lc(zone) && +t.zone !== zi + 1) continue;
+    const m = t.file || '', vars = { device: d.name, zone, file, state };
+    if (m === '' || m === '*' || lc(m) === lc(file) || (state && lc(m) === lc(state))) runTrigger(t, 'media end', vars);
+    else if (m.endsWith('*')) {
+      const hit = [file, state].find((x) => x && x.startsWith(m.slice(0, -1)));
+      if (hit) runTrigger(t, 'media end', { ...vars, 1: hit.slice(m.length - 1).trim() });
+    }
+  }
+}
 function bsReport(d) {
   const st = drv(d);
   drvSet(d, 'zones', st.zones.length, 'Zones');
@@ -461,7 +479,7 @@ setInterval(() => {
     const st = drv(d);
     if (!st.online || !st.pluginSeen) continue;
     const now = Date.now(), v = st.zones[0];
-    if (v.until && now >= v.until) { v.until = 0; v.state = v.state === 'Video 1' ? 'Video 2' : 'Video 1'; if (/^\(test\)|Video 3/.test(v.state)) v.state = 'Video 1'; }
+    if (v.until && now >= v.until) { v.until = 0; if (v.file) bsEnded(d, 0, v.file); v.state = v.state === 'Video 1' ? 'Video 2' : 'Video 1'; if (/^\(test\)|Video 3/.test(v.state)) v.state = 'Video 1'; }
     if (!v.until) v.until = now + 20000;
     v.file = (st.states.find(([z, n]) => z === 1 && n === v.state) || [])[2] || v.file;
     st.zones[1].state = Math.floor(now / 15000) % 2 ? 'Weather' : 'News';
@@ -592,6 +610,10 @@ function drvCommandOne(t) {
         if (!z) return [false, `no zone '${t[3]}'`];
         if (w[2] === 'stop') { z.state = 'stopped'; z.file = ''; return [true, `stop ${t[3]}`]; }
         let file = what, label = what;
+        if (w[2] === 'play') {   // also the name of a state: its file is played
+          const s = st.states.find(([n, name, f]) => n === st.zones.indexOf(z) + 1 && name.toLowerCase() === what.toLowerCase() && f);
+          if (s) { file = s[2]; if (file.toLowerCase() !== what.toLowerCase()) label = `${what} (${file})`; }
+        }
         if (w[2] === 'test') {
           const s = st.states.find(([n, name]) => n === st.zones.indexOf(z) + 1 && name.toLowerCase() === what.toLowerCase());
           if (!s || !s[2]) return [false, `state '${what}' in zone '${t[3]}' has no media file to play`];
@@ -615,7 +637,16 @@ function drvCommandOne(t) {
     }
     if (w[2] === 'reboot' && t.length === 3) return later('reboot', () => { st.bootAt = epoch() + 20; return '200 {"data":{"result":{"success":true,"reboot":true}}}'; });
     if (w[2] === 'api') return api(3, '/api/v1/');
-    throw new Error('expected: test <zone> <state>, play <zone> <file>, stop <zone>, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]');
+    if ((w[2] === 'seek' && t.length === 5) || (/^(pause|resume|release)$/.test(w[2]) && t.length === 4)) {
+      return plug(`${w[2]} ${t[3]}${w[2] === 'seek' ? ' ' + Math.round(parseFloat(t[4]) * 1000) : ''}`, () => {
+        const z = zone(t[3]);
+        if (!z) return [false, `no zone '${t[3]}'`];
+        if (w[2] === 'release') { Object.assign(z, { state: 'Video 1', until: 0 }); return [true, `release ${t[3]}`]; }
+        if (st.zones.indexOf(z) !== 0) return [false, `zone '${t[3]}' has no video to ${w[2]}`];
+        return [true, w[2] === 'seek' ? `seek ${t[3]} ${parseFloat(t[4])} s` : `${w[2]} ${t[3]}`];
+      });
+    }
+    throw new Error('expected: test <zone> <state>, play <zone> <file>, seek <zone> <seconds>, pause|resume|release|stop <zone>, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]');
   }
   if (type === 'digidot') {
     if (w[2] === 'scene' && t.length >= 4) {
@@ -695,7 +726,7 @@ function drvStatus() {
       restarts: st.restarts, ...(st.lastRestart ? { lastRestart: st.lastRestart } : {}), ...(st.uptime ? { uptime: st.uptime } : {}),
       ...(st.lastError ? { lastError: st.lastError, lastErrorAt: st.lastErrorAt } : {}),
       ...(st.live ? { live: st.live } : {}), ...(st.liveNote ? { liveNote: st.liveNote } : {}), ...(st.triggers ? { triggers: st.triggers } : {}), ...(st.scenes.length ? { scenes: st.scenes } : {}), ...(d.type === 'knx' ? { tunnel: !!st.tunnel } : {}),
-      ...(d.plugin && st.pluginSeen && st.states ? { states: st.states.map(([z, n, f]) => ({ z, n, ...(f ? { f } : {}) })) } : {}),
+      ...(d.plugin && st.pluginSeen && st.states ? { states: st.states.map(([z, n, f, ms]) => ({ z, n, ...(f ? { f } : {}), ...(ms ? { ms } : {}) })) } : {}),
       ...(st.activity?.length ? { activity: st.activity } : {}) };
   });
 }
@@ -997,17 +1028,58 @@ function liveTimelineError(t) {
 }
 // A running copy carries on where it is with the new cues (timelineReplaced in Show.cpp): cues
 // before that point jump in without fades, from the live look; paused / ended stay so.
-function timelineReplaced(t) {
-  const pb = pbs.find((p) => p.kind === 'timeline' && p.id === t.id);
-  if (!pb || pb.releasing) return;
-  const now = Date.now(), paused = pb.paused, ended = pb.ended;
-  let at = Math.max(0, (paused ? pb.pausedAt : now) - pb.start);
-  if (t.length && at >= t.length) at = t.loop ? at % t.length : t.length - 1;
+// moveTimeline in Show.cpp: at position `at` as if it had played up to there; stays paused (and ended, for a live edit).
+function moveTimeline(pb, t, at, keepEnded) {
+  const now = Date.now(), paused = pb.paused, ended = keepEnded && pb.ended;
   Object.assign(pb, { start: now - at, catchUp: at, next: 0, paused: false, ended: false, ch: new Map(), tf: {}, fx: {}, rel: {}, last: {}, priority: t.priority || 0 });
   tick();   // the new cues up to here, at once
   if (ended) pb.ended = true;
   if (paused) { pb.paused = true; pb.pausedAt = now; }
 }
+function timelineReplaced(t) {
+  const pb = pbs.find((p) => p.kind === 'timeline' && p.id === t.id);
+  if (!pb || pb.releasing) return;
+  let at = Math.max(0, (pb.paused ? pb.pausedAt : Date.now()) - pb.start);
+  if (t.length && at >= t.length) at = t.loop ? at % t.length : t.length - 1;
+  moveTimeline(pb, t, at, true);
+}
+// Show::timelinePosition: { pos, paused } (paused also = held at its end) or null when not running.
+function timelinePosition(id) {
+  const pb = pbs.find((p) => p.kind === 'timeline' && p.id === id && !p.releasing && !p.dead), t = pb && project.timelines.find((x) => x.id === id);
+  if (!pb || !t) return null;
+  let pos = Math.max(0, (pb.paused ? pb.pausedAt : Date.now()) - pb.start);
+  if (t.length && pos >= t.length) pos = t.loop ? pos % t.length : t.length;
+  return { pos, paused: !!(pb.paused || pb.ended) };
+}
+// Drivers::follow: BrightSign zones that follow a timeline ("follow" on the device). The simulated player
+// shows "(test) <file>" in that zone while the timeline runs and goes back to its own show after it.
+setInterval(() => {
+  for (const d of project.drivers || []) {
+    if (d.type !== 'brightsign' || !d.plugin) continue;
+    const st = drv(d);
+    if (!st.online || !st.pluginSeen) continue;
+    st.follow = st.follow || {};
+    for (const f of d.follow || []) {
+      const z = st.zones.find((x, i) => x.name.toLowerCase() === String(f.zone || '').toLowerCase() || String(i + 1) === String(f.zone));
+      if (!z || !f.timeline || !f.file) continue;
+      const key = f.timeline + '|' + z.name, was = st.follow[key], now = timelinePosition(f.timeline);
+      if (!now) {
+        if (was) { delete st.follow[key]; Object.assign(z, { state: 'Video 1', until: 0 }); bsReport(d); }
+        continue;
+      }
+      const s = st.states.find(([, name, file]) => name.toLowerCase() === f.file.toLowerCase() && file), file = s ? s[2] : f.file;
+      const want = Math.max(0, now.pos + (f.offset || 0) * 1000);
+      const predicted = was ? was.pos + (was.paused ? 0 : Date.now() - was.at) : -1e9;
+      if (!was) log(1, 'SYS', `BrightSign ${d.name}: plugin: follows the timeline with ${s && s[1] !== file ? `${s[1]} (${file})` : file} in ${z.name}`);
+      if (!was || was.paused !== now.paused || Math.abs(want - predicted) > 250) {
+        st.follow[key] = { pos: want, paused: now.paused, at: Date.now() };
+        Object.assign(z, { state: `(test) ${s && s[1] !== file ? `${s[1]} (${file})` : file}`, file, until: 1e15 });
+        bsActivity(st, `${z.name}: follows timeline ${f.timeline} at ${(want / 1000).toFixed(1)} s${now.paused ? ' (paused)' : ''}`);
+        bsReport(d);
+      }
+    }
+  }
+}, 100);
 
 // ---- command helpers (src/Cmd.cpp) -----------------------------------------
 function tokenize(s) { return (s.match(/"[^"]*"|\S+/g) || []).map((t) => t.replace(/^"|"$/g, '')); }
@@ -1425,6 +1497,14 @@ function execLine(line, src, vars) {
     pb.start -= at;
     pb.catchUp = at;
     r = `Started timeline ${x.id} '${x.name}'${at ? ` at ${(at / 1000).toFixed(1)}s` : ''}`;
+  }
+  else if (w[0] === 'seek' && w[1] === 'timeline') {   // scrub: jump, stays paused / playing, fires no triggers
+    const x = tl(2), p = running('timeline', x.id);
+    if (t.length !== 4 || isNaN(parseFloat(t[3]))) throw new Error('expected: seek timeline <timeline> <seconds>');
+    let at = Math.max(0, Math.round(parseFloat(t[3]) * 1000));
+    if (x.length && at >= x.length) at = x.length - 1;
+    moveTimeline(p, x, at, false);
+    r = `Timeline ${x.id} at ${(at / 1000).toFixed(1)}s`;
   }
   else if (w[0] === 'stop' && w[1] === 'timeline') { const x = tl(2); release(running('timeline', x.id), fadeAt(t, 3)); r = `Released timeline ${x.id} '${x.name}'`; }
   else if ((w[0] === 'pause' || w[0] === 'resume') && w[1] === 'timeline') {

@@ -240,6 +240,7 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 /* timeline "Live editing" switch: green dot when on */
 .btn.tl-live { color: var(--muted); }
 .btn.tl-live.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 60%, var(--border)); background: color-mix(in srgb, var(--ok) 12%, var(--panel2)); }
+.tl-follow { margin-top: 6px; gap: 8px; font-size: 13px; }
 .tl-live-msg { font-size: 12px; color: var(--err); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* clip level: dark above the line, the line can be dragged up/down */
 .blk .lv-shade { position: absolute; left: 0; right: 0; top: 0; background: rgba(0, 0, 0, .42); pointer-events: none; }
@@ -753,6 +754,21 @@ table.sched td:first-child { white-space: nowrap; }
 .narrow .cal-ev { display: none; }
 .narrow .cal-count { display: inline; }
 .narrow .cal-tag { font-size: 0; height: 4px; border-left: 0; padding: 0; margin-top: 2px; background: var(--c); border-radius: 2px; }
+/* week view: seven tall columns with every trigger of the day; day view: one list with sun / now marks */
+.cal-more:hover { color: var(--text); text-decoration: underline; }
+.cal-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; min-width: 700px; }
+.cal-wday { min-height: 200px; font-size: 12px; padding: 5px 6px; }
+.cal-whead { margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border); }
+.cal-whead .muted { font-size: 11px; white-space: nowrap; }
+.cal-wev { white-space: normal; padding: 1px 0; }
+.cal-wev a { color: var(--text); }
+span.cal-tag { font-size: 12px; }
+tr.cal-mark td { color: var(--muted); font-size: 12px; border-bottom-style: dashed; }
+tr.cal-mark.now td { color: var(--accent); border-bottom: 1px solid var(--accent); }
+.narrow .cal-week { grid-template-columns: 1fr; min-width: 0; }
+.narrow .cal-wday { min-height: 0; }
+.narrow .cal-wday .cal-ev { display: block; }
+.narrow .cal-wday .cal-tag, .narrow span.cal-tag { font-size: 12px; height: auto; border-left: 3px solid var(--c); padding-left: 4px; background: none; border-radius: 0; }
 
 /* mode groups on the dashboard */
 .mode-groups { display: flex; flex-direction: column; gap: 10px; }

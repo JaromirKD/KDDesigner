@@ -726,20 +726,78 @@ function monthHtml() {
       <div class="cal-num">${d.getDate()}</div>${ev.length ? `<span class="cal-count" title="${ev.length} timed trigger${ev.length > 1 ? 's' : ''}">${ev.length}</span>` : ''}
       ${cal.map((n) => `<div class="cal-tag" style="--c:${calColor(n)}">${esc(n)}</div>`).join('')}
       ${shown.map((e) => `<div class="cal-ev${e.skip ? ' skipped' : ''}" title="${esc(`${hhmm(e.min)} ${e.t.name}${e.skip ? ' – skipped: ' + e.skip : ''}`)}"><span class="mono">${hhmm(e.min)}</span> ${esc(e.t.name)}</div>`).join('')}
-      ${ev.length > shown.length ? `<div class="cal-ev muted">+${ev.length - shown.length} more</div>` : ''}
+      ${ev.length > shown.length ? `<div class="cal-ev cal-more muted" data-cal-open="${key}" title="Show the whole day">+${ev.length - shown.length} more</div>` : ''}
     </div>`;
   }
-  const [sd, sm, sy] = sel.split('-').map(Number), selDate = new Date(sy, sm - 1, sd), selEv = dayEvents(selDate, -1, prep);
-  return `<div class="row cal-nav">
-      <button class="btn small" data-cal-month="-1" title="Previous month">◀</button>
-      <b class="cal-title">${MONTHS[mv.m]} ${mv.y}</b>
-      <button class="btn small" data-cal-month="1" title="Next month">▶</button>
-      <button class="btn small" data-cal-month="0">Today</button>
-    </div>
+  return `${calNavHtml(`${MONTHS[mv.m]} ${mv.y}`)}
     <div class="cal-month">${WEEK.map((d) => `<div class="cal-head">${d[0].toUpperCase() + d.slice(1)}</div>`).join('')}${cells}</div>
-    <h4 style="margin:12px 0 4px">${dayLabel(selDate)}-${sy}${(() => { const c = [...calActiveOn(selDate)]; return c.length ? ` <span class="muted">· ${esc(P().calendar.filter((e) => c.includes((e.name || '').toLowerCase())).map((e) => e.name).filter((n, i, a) => a.indexOf(n) === i).join(', '))}</span>` : ''; })()}</h4>
-    ${selEv.length ? `<table class="sched"><tr><th>When</th><th>Trigger</th><th>Note</th></tr>${selEv.map((e) => schedEventRow(e)).join('')}</table>` : '<p class="muted">No time triggers on this day.</p>'}`;
+    ${calDayHtml(schedSel(), prep)}`;
 }
+// The chosen day of the Schedule's calendar (S.schedDay, DD-MM-YYYY; today when none).
+function schedSel() {
+  const [d, m, y] = (S.schedDay ?? euDate(schedNow())).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+const CAL_VIEWS = [['month', 'Month'], ['week', 'Week'], ['day', 'Day']];
+// ◀ title ▶ Today + the Month / Week / Day switch (S.schedView).
+function calNavHtml(title) {
+  const v = S.schedView || 'month';
+  return `<div class="row cal-nav">
+      <button class="btn small" data-cal-month="-1" title="Previous ${v}">◀</button>
+      <b class="cal-title">${esc(title)}</b>
+      <button class="btn small" data-cal-month="1" title="Next ${v}">▶</button>
+      <button class="btn small" data-cal-month="0">Today</button>
+      <span class="spacer"></span>
+      <div class="seg">${CAL_VIEWS.map(([k, n]) => `<button class="${v === k ? 'on' : ''}" data-cal-view="${k}">${n}</button>`).join('')}</div>
+    </div>`;
+}
+const sunText = (d) => {
+  const r = Sched.sun(d.getFullYear(), d.getMonth() + 1, d.getDate(), true), s = Sched.sun(d.getFullYear(), d.getMonth() + 1, d.getDate(), false);
+  return r >= 0 && s >= 0 ? `☀ ${hhmm(r)} – ${hhmm(s)}` : '';
+};
+// Calendar period names on a date, as typed, each once.
+const calNamesOn = (d) => [...new Set(P().calendar.filter((e) => e.name && KDModel.periodOn(e, d.getFullYear(), d.getMonth() + 1, d.getDate())).map((e) => e.name))];
+// One day in full: heading with its calendar periods, then every timed trigger. marks = also
+// rows for sunrise, sunset and (today) the time now, for the Day view.
+function calDayHtml(day, prep, marks = false) {
+  const ev = dayEvents(day, -1, prep), cal = calNamesOn(day), now = schedNow();
+  const rows = ev.map((e) => ({ min: e.min, html: schedEventRow(e) }));
+  if (marks) {
+    const mark = (min, text, cls = '') => rows.push({ min: min - 0.5, html: `<tr class="cal-mark ${cls}"><td class="mono">${hhmm(min)}</td><td colspan="2">${text}</td></tr>` });
+    const r = Sched.sun(day.getFullYear(), day.getMonth() + 1, day.getDate(), true), s = Sched.sun(day.getFullYear(), day.getMonth() + 1, day.getDate(), false);
+    if (r >= 0) mark(r, '☀ sunrise');
+    if (s >= 0) mark(s, '☾ sunset');
+    if (euDate(day) === euDate(now)) mark(now.getHours() * 60 + now.getMinutes(), 'now', 'now');
+    rows.sort((a, b) => a.min - b.min);
+  }
+  return `<h4 style="margin:12px 0 4px">${dayLabel(day)}-${day.getFullYear()}${cal.length ? ` <span class="muted">· ${esc(cal.join(', '))}</span>` : ''}</h4>
+    ${cal.length && marks ? `<div class="row" style="margin-bottom:6px">${cal.map((n) => `<span class="cal-tag" style="--c:${calColor(n)}">${esc(n)}</span>`).join('')}</div>` : ''}
+    ${ev.length || marks ? `<table class="sched"><tr><th>When</th><th>Trigger</th><th>Note</th></tr>${rows.map((r) => r.html).join('')}</table>` : ''}
+    ${ev.length ? '' : '<p class="muted">No time triggers on this day.</p>'}`;
+}
+// Week view: Monday to Sunday of the chosen day, every timed trigger of each day.
+function weekHtml() {
+  const sel = schedSel(), prep = schedTriggers(), todayKey = euDate(schedNow()), selKey = euDate(sel);
+  const mon = new Date(sel.getFullYear(), sel.getMonth(), sel.getDate() - (sel.getDay() + 6) % 7);
+  const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+  let cols = '';
+  for (let k = 0; k < 7; k++) {
+    const d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + k), key = euDate(d), cal = calNamesOn(d), ev = dayEvents(d, -1, prep);
+    cols += `<div class="cal-day cal-wday${key === todayKey ? ' today' : ''}${key === selKey ? ' sel' : ''}" data-cal-pick="${key}" ${cal.length ? `style="--cal-tint:${calColor(cal[0])}"` : ''}>
+      <div class="cal-whead"><span class="cal-num">${esc(dayLabel(d))}</span> <span class="muted">${sunText(d)}</span></div>
+      ${cal.map((n) => `<div class="cal-tag" style="--c:${calColor(n)}">${esc(n)}</div>`).join('')}
+      ${ev.map((e) => `<div class="cal-ev cal-wev${e.skip ? ' skipped' : ''}" title="${esc(e.skip ? 'skipped: ' + e.skip : e.notes.length ? 'if ' + e.notes.join(' and ') : '')}"><span class="mono">${hhmm(e.min)}</span> <a href="#" data-goto-trigger="${e.t.id}">${esc(e.t.name)}</a></div>`).join('') || '<div class="cal-ev muted">—</div>'}
+    </div>`;
+  }
+  return `${calNavHtml(`${pad2(mon.getDate())}-${pad2(mon.getMonth() + 1)} – ${euDate(sun)}`)}
+    <div class="cal-week">${cols}</div>
+    ${calDayHtml(sel, prep)}`;
+}
+function dayViewHtml() {
+  const sel = schedSel();
+  return `${calNavHtml(`${dayLabel(sel)}-${sel.getFullYear()}`)}${calDayHtml(sel, schedTriggers(), true)}`;
+}
+const calViewHtml = () => (S.schedView === 'week' ? weekHtml() : S.schedView === 'day' ? dayViewHtml() : monthHtml());
 views.schedule = () => {
   const p = P(), s = p.settings, c = S.status?.clock;
   const today = schedNow();
@@ -773,7 +831,7 @@ views.schedule = () => {
     <div class="cal-list">${p.calendar.map((e, i) => calRowHtml(e, i, today)).join('') || '<p class="muted">No periods yet.</p>'}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="calendar">+ Period</button></div>
   </div>
-  <div class="card sched-card"><h3 style="margin-top:0">Month</h3>${monthHtml()}</div>
+  <div class="card sched-card"><h3 style="margin-top:0">Agenda</h3>${calViewHtml()}</div>
   <div class="card sched-card"><h3 style="margin-top:0">Next 7 days</h3>
   ${ev.length ? `<table class="sched"><tr><th>When</th><th>Trigger</th><th>Note</th></tr>${ev.map((e) => {
     const dl = dayLabel(e.date);
@@ -808,13 +866,26 @@ views.schedule.after = () => {
     render();
   }));
   $$('[data-cal-month]').forEach((b) => b.addEventListener('click', () => {
-    const n = +b.dataset.calMonth, now = schedNow(), mv = S.schedMonth;
+    const n = +b.dataset.calMonth, now = schedNow(), mv = S.schedMonth, v = S.schedView || 'month';
     if (!n) { S.schedMonth = { y: now.getFullYear(), m: now.getMonth() }; S.schedDay = euDate(now); }
-    else { const d = new Date(mv.y, mv.m + n, 1); S.schedMonth = { y: d.getFullYear(), m: d.getMonth() }; }
+    else if (v === 'month') { const d = new Date(mv.y, mv.m + n, 1); S.schedMonth = { y: d.getFullYear(), m: d.getMonth() }; }
+    else {
+      // Week and Day step the chosen day; the month view follows it.
+      const s = schedSel(), d = new Date(s.getFullYear(), s.getMonth(), s.getDate() + n * (v === 'week' ? 7 : 1));
+      S.schedDay = euDate(d);
+      S.schedMonth = { y: d.getFullYear(), m: d.getMonth() };
+    }
+    render();
+  }));
+  $$('[data-cal-view]').forEach((b) => b.addEventListener('click', () => {
+    S.schedView = b.dataset.calView;
+    const s = schedSel();
+    S.schedMonth = { y: s.getFullYear(), m: s.getMonth() };
     render();
   }));
   $$('[data-cal-pick]').forEach((el) => el.addEventListener('click', (ev) => {
     if (ev.target.closest('a')) return;
+    if (ev.target.closest('[data-cal-open]')) S.schedView = 'day';
     S.schedDay = el.dataset.calPick;
     const [, m, y] = S.schedDay.split('-').map(Number);
     S.schedMonth = { y, m: m - 1 };   // a day of the next/previous month opens that month

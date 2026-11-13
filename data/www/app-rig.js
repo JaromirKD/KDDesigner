@@ -9,6 +9,8 @@ views.dashboard = () => `
     <div class="card"><h3 style="margin-top:0">System</h3><div id="sys"></div></div>
     <div class="card"><h3 style="margin-top:0">Outputs</h3><div id="outs" class="row"></div>
       <p class="muted" style="margin:8px 0 0">Switches the output at once and changes the project setting (same switch as under Patch): save to keep it after a restart.</p></div>
+    ${dashHasDevices() ? `<div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">Devices</h3><div id="dashDev" class="lv-devs"></div>
+      <p class="muted" style="margin:8px 0 0">Every device the controller watches, offline first. Click one for Monitoring.</p></div>` : ''}
     ${P().projectors.length ? `<div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">Projectors</h3><div id="pjs"></div></div>` : ''}
     ${P().pcs.length ? `<div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">PCs</h3><div id="pcs"></div></div>` : ''}
   </div>
@@ -20,6 +22,10 @@ views.dashboard = () => `
   <h3>Recent warnings &amp; errors</h3>
   <div class="log" id="recent" style="height:auto;max-height:240px;min-height:0"></div>`;
 views.dashboard.after = () => { renderPlaybacks(); renderRecent(); };
+function dashHasDevices() {
+  const p = P();
+  return !!(p.devices.length + p.pcs.length + p.projectors.length + p.drivers.length + p.tcp.length + p.modbus.length);
+}
 
 function renderPlaybacks() {
   const el = $('#pbs');
@@ -52,6 +58,9 @@ function renderPlaybacks() {
   // Only when it changed: rebuilding at every status update (~10/s) could swallow a click.
   const outsHtml = PROTOCOLS.map(([k, n]) => outputSwitch(k, n)).join(''), outsEl = $('#outs');
   if (outsEl.dataset.html !== outsHtml) { outsEl.innerHTML = outsHtml; outsEl.dataset.html = outsHtml; }
+  // Only when it changed, like the outputs: a rebuild under the mouse could swallow a click.
+  const devEl = $('#dashDev');
+  if (devEl) { const h = deviceChipsHtml(st); if (devEl.dataset.html !== h) { devEl.innerHTML = h; devEl.dataset.html = h; } }
   const pjs = $('#pjs');
   if (pjs) {
     pjs.innerHTML = P().projectors.map((x) => {

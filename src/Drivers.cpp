@@ -33,7 +33,7 @@ int typeOf(const String& s) {
 
 struct Point { String key, name, value, dpt; };
 struct Trig { int num; String name, type; };   // a Pharos trigger (fired with "pharos <dev> trigger <num>")
-struct BsState { uint8_t zone; String name, file; };   // a BrightSign presentation state (kdlink plugin)
+struct BsState { uint8_t zone; String name, file; uint32_t ms; };   // a BrightSign presentation state (kdlink plugin); ms = file length (v12, 0 = unknown)
 const size_t kMaxBsStates = 80, kMaxActivity = 30;
 struct Drv {
   int id = 0;
@@ -76,6 +76,11 @@ struct Drv {
   uint16_t pluginPort = 5010;
   uint32_t pluginSeen = 0;        // epoch of its last packet
   std::vector<BsState> states;    // every state of every zone (test buttons)
+  // Zones whose video follows one of our timelines ("follow": timeline id, zone, file or state name, offset s):
+  // the plugin gets "kd sync <zone> <file> <ms> play|pause" on a start, pause, resume, jump or loop
+  // (and every 3 s, which it ignores while it is in step), "kd release <zone>" when the timeline stops.
+  struct Follow { int timeline; String zone, file; int32_t offset; bool active, paused; int32_t sentPos; uint32_t sentAt, lastSend; };
+  std::vector<Follow> follows;
   std::deque<std::pair<uint32_t, String>> activity;   // what the player received: serial, UDP, GPIO, zone changes
 };
 
@@ -1379,6 +1384,9 @@ bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
   // With the plugin, reboot doesn't need the DWS (which may be https-only).
   if (is("reboot") && t.size() == 3 && d.plugin) return pluginSend(d, "reboot", "", "", msg);
   if (is("stop") && t.size() == 4) return pluginSend(d, "stop", t[3], "", msg);
+  // The video of a zone: jump to a position (seconds), pause, carry on; release = back to the presentation's own state.
+  if (is("seek") && t.size() == 5) return pluginSend(d, "seek", t[3], String((long)(t[4].toFloat() * 1000)), msg);
+  if ((is("pause") || is("resume") || is("release")) && t.size() == 4) { String what = t[2]; what.toLowerCase(); return pluginSend(d, what, t[3], "", msg); }
   if (t.size() >= 4 && t[2].equalsIgnoreCase("send")) {
     Triggers::sendUdp(d.ip, d.udpPort, rest(t, 3));
     d.last = "UDP '" + rest(t, 3) + "'";
@@ -1387,7 +1395,7 @@ bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
   }
   if (t.size() == 3 && t[2].equalsIgnoreCase("reboot")) return queueHttp(d, "PUT", "/api/v1/control/reboot", "", "reboot", msg);
   if (t.size() >= 3 && t[2].equalsIgnoreCase("api")) return apiCmd(d, t, 3, "/api/v1/", msg);
-  msg = "expected: test <zone> <state>, play <zone> <file>, stop <zone>, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]";
+  msg = "expected: test <zone> <state>, play <zone> <file>, seek <zone> <seconds>, pause|resume|release|stop <zone>, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]";
   return false;
 }
 
@@ -1566,6 +1574,10 @@ void addActivity(Drv& d, const String& text) {
   d.activity.push_back({epochNow(), text.substring(0, 160)});
 }
 
+// Files that played to their end ("ended" packets): fired as media_end triggers by onUdp once mtx is free.
+struct MediaEnd { String device, zone, file, state; int zoneNo; };
+std::vector<MediaEnd> mediaEnds;
+
 // Readings from the kdlink plugin: zones as z<n> (state) + z<n>.file, user variables as var.<name>,
 // GPIO inputs as gpio<n>, the last serial line as "serial".
 void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
@@ -1579,7 +1591,7 @@ void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
     setPoint(d, "zones", String(j["zones"] | 0), "Zones", vars);
     d.states.clear();   // the state list follows
   } else if (kind == "state") {
-    if (d.states.size() < kMaxBsStates) d.states.push_back({(uint8_t)(j["z"] | 0), j["name"] | "", j["file"] | ""});
+    if (d.states.size() < kMaxBsStates) d.states.push_back({(uint8_t)(j["z"] | 0), j["name"] | "", j["file"] | "", (uint32_t)(j["ms"] | 0)});
   } else if (kind == "zone") {
     String k = "z" + String(j["i"] | 0), name = "Zone " + String(j["i"] | 0) + " " + (j["name"] | "");
     String state = j["state"] | "";
@@ -1587,6 +1599,10 @@ void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
     if (was && was->value != state) addActivity(d, String(j["name"] | "zone") + ": " + state);
     setPoint(d, k, state, name, vars);
     setPoint(d, k + ".file", j["file"] | "", name + " file", vars);
+  } else if (kind == "ended") {
+    String zone = j["name"] | "", file = j["file"] | "", state = j["state"] | "";
+    addActivity(d, zone + ": ended " + (state.length() && state != file ? state + " (" + file + ")" : file));
+    if (mediaEnds.size() < 8) mediaEnds.push_back({d.name, zone, file, state, (int)(j["i"] | 0)});
   } else if (kind == "gpio") {
     long bits = j["bits"] | 0L;
     for (int i = 0; i < 8; i++) setPoint(d, "gpio" + String(i), (bits >> i) & 1 ? "1" : "0", "GPIO " + String(i), vars);
@@ -1607,15 +1623,52 @@ void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
   }
 }
 
+// Main loop (under g_engine): keeps the players' zones in step with the timelines they follow.
+void follow(uint32_t now) {
+  static uint32_t last = 0;
+  if (now - last < 50) return;
+  last = now;
+  mtx.lock();
+  for (auto& d : list) {
+    if (d.type != Bsign || !d.plugin) continue;
+    for (auto& f : d.follows) {
+      int32_t pos = 0;
+      bool paused = false;
+      if (!Show::timelinePosition(f.timeline, pos, paused)) {
+        if (f.active) {
+          f.active = false;
+          String text = String("kd\trelease\t") + f.zone;
+          Triggers::sendRaw(d.ip, d.pluginPort, (const uint8_t*)text.c_str(), text.length());
+        }
+        continue;
+      }
+      int32_t want = pos + f.offset;
+      if (want < 0) want = 0;
+      // Where the video should be by now if nothing happened since the last message.
+      int32_t predicted = f.sentPos + (f.paused ? 0 : (int32_t)(now - f.sentAt));
+      bool changed = !f.active || paused != f.paused || abs(want - predicted) > 250;
+      if (changed ? now - f.lastSend < 150 : now - f.lastSend < 3000) continue;   // scrubbing: at most ~7 a second
+      String text = String("kd\tsync\t") + f.zone + "\t" + f.file + "\t" + String((long)want) + (paused ? "\tpause" : "\tplay");
+      Triggers::sendRaw(d.ip, d.pluginPort, (const uint8_t*)text.c_str(), text.length());
+      f.active = true;
+      f.paused = paused;
+      f.sentPos = want;
+      f.sentAt = f.lastSend = now;
+    }
+  }
+  mtx.unlock();
+}
+
 bool onUdp(const IPAddress& from, const String& text) {
   mtx.lock();
   for (auto& d : list)
     if (d.type == Bsign && d.ip == from) {
       VarSets vars;
       bool mine = false;
-      if (text.startsWith("{\"kd\"")) {
+      // The player's FormatJson sorts the keys, so "kd" can be anywhere: {"bits":0,"kd":"gpio"}.
+      if (text.startsWith("{") && text.indexOf("\"kd\":") > 0) {
         JsonDocument j;
-        mine = !deserializeJson(j, text);
+        mine = !deserializeJson(j, text) && j["kd"].is<const char*>();
         if (mine) pluginPacket(d, j, vars);
       }
       if (!mine) {
@@ -1623,8 +1676,11 @@ bool onUdp(const IPAddress& from, const String& text) {
         setPoint(d, "msgAt", String(epochNow()), "", vars);
       }
       d.lastSeen = epochNow();
+      std::vector<MediaEnd> ends;
+      ends.swap(mediaEnds);
       mtx.unlock();
       applyVars(vars);
+      for (auto& e : ends) Triggers::onMediaEnd(e.device, e.zoneNo, e.zone, e.file, e.state);
       return mine;
     }
   mtx.unlock();
@@ -1662,6 +1718,11 @@ void load() {
     d.push = o["live"] | false;
     d.plugin = ty == Bsign && (o["plugin"] | false);
     d.pluginPort = o["pluginPort"] | 5010;
+    if (d.plugin)
+      for (JsonObjectConst fo : o["follow"].as<JsonArrayConst>()) {
+        Drv::Follow f = {fo["timeline"] | 0, fo["zone"] | "", fo["file"] | "", (int32_t)((fo["offset"] | 0.0f) * 1000), false, false, 0, 0, 0};
+        if (f.timeline && f.zone.length() && f.file.length() && d.follows.size() < 4) d.follows.push_back(f);
+      }
     d.outputs = o["outputs"] | 0;
     d.readEvery = o["readEvery"] | 0;
     for (JsonPairConst kv : o["vars"].as<JsonObjectConst>()) {
@@ -1804,7 +1865,7 @@ void statusJson(JsonArray arr) {
     }
     if (!d.states.empty()) {
       JsonArray st = o["states"].to<JsonArray>();
-      for (auto& s : d.states) { JsonObject x = st.add<JsonObject>(); x["z"] = s.zone; x["n"] = s.name; if (s.file.length()) x["f"] = s.file; }
+      for (auto& s : d.states) { JsonObject x = st.add<JsonObject>(); x["z"] = s.zone; x["n"] = s.name; if (s.file.length()) x["f"] = s.file; if (s.ms) x["ms"] = s.ms; }
     }
     if (!d.activity.empty()) {
       JsonArray ac = o["activity"].to<JsonArray>();

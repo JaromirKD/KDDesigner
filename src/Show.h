@@ -72,6 +72,8 @@ bool timelineRunning(int idx);                     // active and not releasing
 bool startTimeline(int idx, String& msg, uint32_t atMs = 0);   // atMs: start part-way
 bool stopTimeline(int idx, uint32_t fadeMs, String& msg);
 bool pauseTimeline(int idx, bool pause, String& msg);
+bool seekTimeline(int idx, uint32_t atMs, String& msg);          // jump while running / paused, no triggers (scrubbing)
+bool timelinePosition(int timelineId, int32_t& pos, bool& paused);   // false = not running; paused also = held at its end
 bool setMaster(int idx, float level, uint32_t fadeMs, String& msg);
 bool playScene(int idx, uint32_t fadeMs, String& msg, Path path = Path::Linear);
 bool releaseScene(int idx, uint32_t fadeMs, String& msg);

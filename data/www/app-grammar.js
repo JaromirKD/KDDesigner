@@ -10,6 +10,7 @@ const GRAMMAR = [
   ['start timeline {tl} at {sec}', 'Start (or restart) a timeline part-way, at this many seconds'],
   ['stop timeline {tl}', 'Release a timeline'],
   ['stop timeline {tl} fade {sec}', 'Release a timeline with a fade'],
+  ['seek timeline {tl} {sec}', 'Jump a running or paused timeline to this many seconds (stays paused / playing, fires no timeline triggers): for scrubbing'],
   ['pause timeline {tl}', 'Pause a timeline'],
   ['resume timeline {tl}', 'Resume a paused timeline'],
   ['master timeline {tl} {pct}', 'Set a timeline master level'],
@@ -106,8 +107,12 @@ const GRAMMAR = [
   ['brightsign {bsign} test {bszone} {bsstate}', 'BrightSign (KD plugin): play the file of a state in a zone, for testing (the presentation carries on after it)'],
   ['brightsign {bsign} event {text...}','BrightSign (KD plugin): a Plugin Message to the presentation - use it on a transition to go to any state'],
   ['brightsign {bsign} var {bsvar} {text...}', 'BrightSign (KD plugin): set a user variable of the presentation'],
-  ['brightsign {bsign} play {bszone} {bsfile}','BrightSign (KD plugin): play a file in a zone directly'],
+  ['brightsign {bsign} play {bszone} {bsfile}','BrightSign (KD plugin): play a file in a zone directly, once - by file name or by the name of its state in BrightAuthor'],
   ['brightsign {bsign} stop {bszone}', 'BrightSign (KD plugin): stop the video/audio of a zone'],
+  ['brightsign {bsign} seek {bszone} {sec}', 'BrightSign (KD plugin): jump to this many seconds in the video of a zone'],
+  ['brightsign {bsign} pause {bszone}', 'BrightSign (KD plugin): hold the video of a zone on the current frame'],
+  ['brightsign {bsign} resume {bszone}', 'BrightSign (KD plugin): carry on with a paused video'],
+  ['brightsign {bsign} release {bszone}', 'BrightSign (KD plugin): the zone goes back to its own state of the presentation'],
   ['brightsign {bsign} reboot', 'BrightSign: reboot the player'],
   ['brightsign {bsign} api {httpmethod} {path}', 'BrightSign: any local DWS API call, e.g. api get info'],
   ['brightsign {bsign} api {httpmethod} {path} {text...}', 'BrightSign: local DWS API call with a JSON body'],
@@ -233,6 +238,12 @@ const findKindGroup = (kind, tok) => kindGroups(kind).find((g) => g.name.toLower
 const groupDesc = (g) => `group · ${g.devices.length} device${g.devices.length === 1 ? '' : 's'}`;
 const groupTip = (g, label) => `${label} group ${g.name} → ${g.devices.join(', ') || 'no devices'}`;
 // A show device named on the line, or the first one of the group named there (for its outputs, addresses…).
+// A BrightSign zone typed by name or number -> its number (0 = not reported by the player).
+const bsZoneNo = (st, tok) => {
+  const zt = String(tok || '').replace(/^"|"$/g, '').toLowerCase();
+  const zp = (st?.points || []).find((x) => /^z\d+$/.test(x.k) && (x.k.slice(1) === zt || (x.n || '').replace(/^Zone \d+ ?/, '').toLowerCase() === zt));
+  return zp ? +zp.k.slice(1) : 0;
+};
 const ctxDrv = (type) => findRef(drvList(type), CTX[1] ?? '') || findRef(drvList(type), findKindGroup(type, CTX[1] ?? '')?.devices[0] ?? '');
 const knxAddr = (tok) => (ctxDrv('knx')?.addresses || []).find((a) => a.ga === tok || (a.name || '').toLowerCase() === String(tok).toLowerCase());
 // Panel controls that fire Panel triggers (everything with a name except labels).
@@ -435,7 +446,16 @@ function candidates(part, partial) {
       .filter(([n, name]) => n.startsWith(pl) || name.toLowerCase().includes(pl)).map(([n, name, v]) => ({ insert: quote(name || n), label: name || n, desc: `zone ${n}${v ? ' · now ' + v : ''}`, key: 'bz' + n })), ...hint('<zone name or #>')];
     case '{bsvar}': return [...(drvStatusOf(ctxDrv('brightsign'))?.points || []).filter((x) => x.k.startsWith('var.') && (x.n || x.k).toLowerCase().includes(pl))
       .map((x) => ({ insert: quote(x.n || x.k.slice(4)), label: x.n || x.k.slice(4), desc: `user variable · now ${x.v}`, key: 'bv' + x.k })), ...hint('<user variable>')];
-    case '{bsfile}': return hint('<file on the card, e.g. clip.mp4>');
+    case '{bsfile}': {
+      // The media of the typed zone (one per state, as the plugin read them; every zone's when the zone isn't known),
+      // by the name the state has in BrightAuthor where it has one of its own, else by file name.
+      const st = drvStatusOf(ctxDrv('brightsign')), zn = bsZoneNo(st, CTX[3]), seen = new Set();
+      const own = (s) => s.n && s.n !== s.f;
+      const items = (st?.states || []).filter((s) => s.f && (!zn || s.z === zn) && (s.f.toLowerCase().includes(pl) || (s.n || '').toLowerCase().includes(pl)))
+        .filter((s) => !seen.has(own(s) ? s.n : s.f) && seen.add(own(s) ? s.n : s.f))
+        .sort((a, b) => a.z - b.z || (own(a) ? a.n : a.f).localeCompare(own(b) ? b.n : b.f, undefined, { numeric: true }));
+      return [...items.map((s) => ({ insert: quote(own(s) ? s.n : s.f), label: own(s) ? s.n : s.f, desc: `zone ${s.z}${own(s) ? ' · ' + s.f : ''}`, key: 'bf' + s.z + s.n + s.f })), ...hint('<state name, or a file on the card, e.g. clip.mp4>')];
+    }
     case '{bsstate}': {
       // The states of the zone typed before (by name or number), as the plugin read them from the presentation.
       const st = drvStatusOf(ctxDrv('brightsign')), zt = String(CTX[3] || '').replace(/^"|"$/g, '').toLowerCase();

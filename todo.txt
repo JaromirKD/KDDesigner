@@ -198,6 +198,17 @@ trigger list problems/icons are cheap even at 108 triggers, the fixture library 
 only fetched when opened.
 
 New notes (13 Nov):
--i wantt to be able to expand the agenda so i can see a day or week
+-(done 13 Nov, in the mock) the agenda on Schedule has Month / Week / Day views
+-(done 13 Nov, in the mock) Dashboard: a Devices card with every device (Kiss-Box, KNX, … too)
 -i want to check the Brightsign KDLink plugin. i have added it to a brightsign on 172.16.1.221 it does not seem to work yet
--in dashboard can we see all our devices right now i have added a kissbox but don't see it in my dashboard i do see the pcs and a projector i have added
+ 13 Nov: the plugin made the player (LS425, OS 9.1.164) restart every minute: "Member function
+ not found in SD:/kdlink.brs(224)" = Keys() on a list, which BrightSign OS doesn't have. Fixed
+ in data/www/brightsign/kdlink.brs and the fixed file is on the player's SD card (uploaded via
+ the DWS). After that it stayed up and answered "kd hello" with its 3 zones, states and files.
+ Later that day: player reset, fixed plugin published from BrightAuthor. From the PC: hello,
+ test, stop, play, event and the wrong-name answers all fine; 16 minutes up without a restart
+ or script error (covers the 10-minute clean-up of controllers that stopped saying hello).
+ Still to do: set a real user variable (the test presentation has none), kd reboot, and the
+ real controller talking to the player (zones, test buttons, Activity list).
+ The PC mock only fakes a BrightSign, it never talks to a real player.
+ PC probe: node tools/bs-probe.js <player ip> (says "kd hello" on UDP 5010, prints the answers)

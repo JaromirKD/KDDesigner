@@ -207,6 +207,20 @@ function trigEditorHtml(p, ti, t, multi, links) {
         params = `<label>TCP device</label><select data-p="${base}.device"><option value="">any TCP device</option>${p.tcp.map((d) => `<option${t.device === d.name ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select>
           <label>Message</label><input data-p="${base}.match" value="${esc(t.match ?? '*')}" placeholder="* (any)   or   READY   or   POS*  (prefix)">`;
         break;
+      case 'media_end': {
+        // The player's zones and files as its kdlink plugin reported them (a typed value stays when the player is off).
+        const players = p.drivers.filter((d) => d.type === 'brightsign'), d = players.find((x) => x.name === t.device), st = d && drvStatusOf(d);
+        const sts = d ? [st] : players.map((x) => drvStatusOf(x)), zn = d ? bsZoneNo(st, t.zone) : 0;
+        const zones = [...new Set(sts.flatMap((s) => (s?.points || []).filter((x) => /^z\d+$/.test(x.k)).map((x) => (x.n || '').replace(/^Zone \d+ ?/, '') || x.k.slice(1))))];
+        const files = [...new Set(sts.flatMap((s) => (s?.states || []).filter((x) => x.f && (!zn || x.z === zn)).flatMap((x) => (x.n && x.n !== x.f ? [x.n, x.f] : [x.f]))))];
+        const opts = (list, cur, any) => `<option value="">${any}</option>${[...new Set([...list, ...(cur ? [cur] : [])])].map((v) => `<option${cur === v ? ' selected' : ''}>${esc(v)}</option>`).join('')}`;
+        params = `<label>Player</label><select data-p="${base}.device" data-r>${opts(players.map((x) => x.name), t.device, 'any BrightSign player')}</select>
+          <label>Zone</label><select data-p="${base}.zone" data-r>${opts(zones, t.zone, 'any zone')}</select>
+          <label>File or state</label><input data-p="${base}.file" value="${esc(t.file || '')}" list="bsfiles-${ti}" placeholder="any   or   intro.mp4   or   Intro (its name in BrightAuthor)   or   intro*"><datalist id="bsfiles-${ti}">${files.map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
+          <label></label><span class="muted">Fires when a video or audio file in that zone has played to its end. Needs the KD plugin (kdlink v11) in the player's presentation.${
+            !players.length ? ' <b>There is no BrightSign player yet (Devices).</b>' : d && !d.plugin ? ' <b>The KD plugin is switched off for this player (Devices &gt; BrightSign).</b>' : ''}</span>`;
+        break;
+      }
       case 'http':
         params = `<label>URL starts with</label><input data-p="${base}.url" value="${esc(t.url || '')}" placeholder="any response, or e.g. http://10.0.0.20/api">
           <label></label><span class="muted">Fires when a response arrives for a request made with <code>http get …</code>.</span>`;
@@ -1030,6 +1044,12 @@ function triggerProblems(t) {
       break;
     case 'variable': if (t.variable && !has(p.variables.map((v) => v.name), t.variable)) out.push(`Variable '${t.variable}' doesn't exist`); break;
     case 'tcp': if (t.device && !has(p.tcp.map((d) => d.name), t.device)) out.push(`TCP device '${t.device}' doesn't exist`); break;
+    case 'media_end': {
+      const d = p.drivers.find((x) => x.type === 'brightsign' && x.name.toLowerCase() === String(t.device || '').toLowerCase());
+      if (t.device && !d) out.push(`BrightSign player '${t.device}' doesn't exist`);
+      else if (d ? !d.plugin : !p.drivers.some((x) => x.type === 'brightsign' && x.plugin)) out.push(d ? `The KD plugin is switched off for '${d.name}' (Devices > BrightSign): it can't report a file ending` : 'No BrightSign player has the KD plugin switched on (Devices > BrightSign)');
+      break;
+    }
     case 'device': if (t.device && !has(monitoredNames(), t.device)) out.push(`Device '${t.device}' isn't monitored or doesn't exist`); break;
     case 'projector':
       if (!p.projectors.length) out.push('There are no projectors (Devices → Projectors)');
@@ -1171,6 +1191,7 @@ function trigInputs(t) {
     case 'device': out.push({ kind: deviceKind(t.device) || 'device', name: t.device || 'any monitored device', why: `goes ${t.state || 'offline'}` }); break;
     case 'projector': out.push({ kind: 'projector', name: t.projector || 'any projector', why: t.alarm === 'lamp_hours' ? `lamp hours ${t.hours ?? 3000}` : `${t.alarm || 'any'} alarm` }); break;
     case 'tcp': out.push({ kind: 'tcp', name: t.device || 'any TCP device', why: `message ${t.match ?? '*'}` }); break;
+    case 'media_end': out.push({ kind: 'brightsign', name: t.device || 'any BrightSign player', why: `${t.file || 'a file'} ended${t.zone ? ' in ' + t.zone : ''}` }); break;
     case 'udp': case 'osc': {
       const from = t.fromIp && p.devices.find((d) => d.ip === t.fromIp);
       out.push({ kind: 'network', name: from ? from.name : t.fromIp || `port ${t.port || p.settings.udpPort}`, why: t.type === 'udp' ? `UDP ${t.match || ''}` : `OSC ${t.address || ''}` });
@@ -1382,6 +1403,7 @@ function trigSource(t) {
     case 'panel': return t.control ? [`s:panel:${lc(t.control)}`, `▣ ${t.control}`, t.event || 'click', `From the touch panel: ${panelControlType(t.control) || 'control'} '${t.control}'`] : null;
     case 'device': return [`s:dev:${lc(t.device)}`, `⌁ ${t.device || 'any device'}`, `goes ${t.state || 'offline'}`, `From a monitored device going online / offline: ${t.device || 'any device'} (checked on the Monitoring page)`];
     case 'projector': return [`s:pj:${lc(t.projector)}`, `▭ ${t.projector || 'any projector'}`, t.alarm === 'lamp_hours' ? `lamp hours ${t.hours ?? 3000}` : `${t.alarm || 'any'} alarm`, `From a projector over PJLink: ${t.projector || 'any projector'} (errors, lamp hours)`];
+    case 'media_end': return [`s:drv:${lc(t.device)}`, `⌁ ${t.device || 'any BrightSign player'}`, `${t.file || 'a file'} ended${t.zone ? ' in ' + t.zone : ''}`, `From a BrightSign player (KD plugin): a video or audio file played to its end on ${t.device || 'any player'}`];
     case 'tcp': return [`s:tcp:${lc(t.device)}`, `⇄ ${t.device || 'any TCP device'}`, `message ${t.match ?? '*'}`, `From a TCP device: messages received from ${t.device || 'any TCP device'}`];
     case 'udp': case 'osc': {
       const port = t.port || p.settings.udpPort;

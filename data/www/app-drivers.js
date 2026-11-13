@@ -264,7 +264,8 @@ function drvPanel(x, j, mode, i) {
       const msg = ptVal(j, 'msg'), at = +ptVal(j, 'msgAt') || 0;
       const says = `${liveText(id, 'msg', msg)} <span class="muted">${at ? ago(at) : ''}</span>`;
       // From the kdlink plugin: zones z<n> (state) + z<n>.file, user variables var.<name>.
-      const zones = pts.filter((p) => /^z\d+$/.test(p.k)), uvars = pts.filter((p) => p.k.startsWith('var.'));
+      // (in zone order: the player reports them in the order they change)
+      const zones = pts.filter((p) => /^z\d+$/.test(p.k)).sort((a, b) => a.k.slice(1) - b.k.slice(1)), uvars = pts.filter((p) => p.k.startsWith('var.'));
       const zname = (p) => p.n.replace(/^Zone \d+ ?/, '') || p.k.slice(1);
       const zref = (p) => quote(zname(p));
       const gpio = pts.filter((p) => /^gpio\d$/.test(p.k));
@@ -283,6 +284,22 @@ function drvPanel(x, j, mode, i) {
             title="${esc(s.f ? `Play ${s.f} in ${zname(p)}` : 'This state has no media file to play')}"${s.f ? '' : ' disabled'}>${esc(s.n)}</button>`).join('')}</div>`;
       }).join('');
       const act = (j.activity || []).slice().reverse();
+      // Zones whose video runs in step with one of our timelines (Drivers::follow).
+      const fol = x.follow || [], znames = zones.map((p) => zname(p));
+      const folRow = (f, k) => {
+        const b = `drivers.${i}.follow.${k}`, tl = P().timelines.find((q) => q.id === f.timeline), zn = bsZoneNo(j, f.zone);
+        if (!edit) return `<tr><td>${tl ? `<a href="#" data-goto-timeline="${tl.id}">${esc(tl.name || 'Timeline ' + tl.id)}</a>` : 'no timeline'}</td><td>${esc(f.zone || '')}</td><td>${esc(f.file || '')}</td><td>${f.offset || 0}</td></tr>`;
+        const names = [...new Set(states.filter((s) => s.f && (!zn || s.z === zn)).map((s) => (s.n && s.n !== s.f ? s.n : s.f)))];
+        return `<tr><td><select data-p="${b}.timeline" data-t="num"><option value="0">choose…</option>${P().timelines.map((q) => `<option value="${q.id}"${q.id === f.timeline ? ' selected' : ''}>${esc(q.name || 'Timeline ' + q.id)}</option>`).join('')}</select></td>
+          <td><select data-p="${b}.zone" data-r>${[...new Set([...znames, ...(f.zone ? [f.zone] : [])])].map((n) => `<option${n === f.zone ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></td>
+          <td><input data-p="${b}.file" value="${esc(f.file || '')}" list="bsfol-${i}-${k}" placeholder="vid1 or clip.mp4" style="width:170px"><datalist id="bsfol-${i}-${k}">${names.map((n) => `<option value="${esc(n)}">`).join('')}</datalist></td>
+          <td><input type="number" step="0.1" data-p="${b}.offset" data-t="num" value="${f.offset || 0}" style="width:70px" title="Seconds the video is ahead of (+) or behind (−) the timeline"></td>
+          <td><button class="btn small ghost" data-del="${b}">✕</button></td></tr>`;
+      };
+      const followHtml = `<h4>Follow a timeline <span class="muted" style="font-weight:normal">the zone's video runs in step with a timeline: start, pause, jump, scrub</span></h4>
+        ${fol.length ? `<table class="drv-tbl"><tr><th>Timeline</th><th>Zone</th><th>File or state</th><th>Offset (s)</th>${edit ? '<th></th>' : ''}</tr>${fol.map(folRow).join('')}</table>` : ''}
+        ${edit ? `<div class="row" style="margin-top:6px"><button class="btn small" data-bsfollow="${i}">+ Follow a timeline</button><span class="muted">While that timeline runs, the zone plays the file at the timeline's position; when it stops, the zone goes back to the presentation.</span></div>`
+          : fol.length ? '' : '<p class="muted">Not set (Devices &gt; BrightSign).</p>'}`;
       const plugin = !x.plugin ? '' : `${tests ? `<h4>Test</h4><p class="muted" style="margin:0 0 4px">Plays the file of that state in the zone. When it ends, the presentation carries on by itself.</p>${tests}` : ''}
         ${gpio.length ? `<h4>GPIO inputs</h4><div class="row">${leds}<span class="muted">link one to a variable in the table below</span></div>` : ''}
         <h4>Activity <span class="muted" style="font-weight:normal">what the player received: serial, UDP, GPIO, zone changes</span></h4>
@@ -294,7 +311,8 @@ function drvPanel(x, j, mode, i) {
         <div class="row" style="margin-top:6px"><span class="muted" title="A Plugin Message event (plugin kdlink) in the presentation: use it on a transition to go to any state in any zone">Plugin message:</span>${cmdSet(`brightsign ${ref} event {v}`, 'e.g. video_intro', true)}</div>
         <h4>User variables</h4>${uvars.length ? `<table class="drv-tbl"><tr><th>Name</th><th>Value</th><th>Variable</th><th>Set</th></tr>
           ${uvars.map((p) => `<tr><td>${esc(p.n || p.k.slice(4))}</td><td>${liveText(id, p.k, p.v)}</td>${vcell(p.k)}<td>${cmdSet(`brightsign ${ref} var ${quote(p.n || p.k.slice(4))} {v}`, 'value', true)}</td></tr>`).join('')}</table>`
-          : '<p class="muted">No user variables reported (the presentation has none, or the plugin hasn\'t answered yet).</p>'}`;
+          : '<p class="muted">No user variables reported (the presentation has none, or the plugin hasn\'t answered yet).</p>'}
+        ${followHtml}`;
       return `${plugin}<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th></tr>
           <tr><td title="The last UDP message the presentation sent to the controller (or a Send Plugin Message to kdlink)">Player says</td><td>${says}</td>${vcell('msg')}</tr>
           ${pts.some((p) => p.k === 'serial') ? `<tr><td title="The last line the player received on its serial port">Serial in</td><td class="mono">${liveText(id, 'serial', ptVal(j, 'serial'))}</td>${vcell('serial')}</tr>` : ''}
@@ -549,7 +567,7 @@ const bsActHtml = (act) => act.map(([t, s]) => `<div><span class="muted">${esc(n
 
 // ---- global handlers (this page's inputs aren't plain data-p paths) -----------------------
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-devtab],[data-montab],[data-phtab],[data-knxadd],[data-knxpaste],[data-bscmd],[data-cmdset] button');
+  const t = e.target.closest('[data-devtab],[data-montab],[data-phtab],[data-knxadd],[data-knxpaste],[data-bscmd],[data-bsfollow],[data-cmdset] button');
   if (!t) return;
   const p = P();
   if (t.dataset.devtab) { S.devTab = t.dataset.devtab; render(); }
@@ -568,6 +586,10 @@ document.addEventListener('click', async (e) => {
       .filter((a) => /^\d+\/\d+(\/\d+)?$/.test(a.ga) && !d.addresses.some((x) => x.ga === a.ga));
     d.addresses.push(...add);
     toast(`${add.length} group address${add.length === 1 ? '' : 'es'} added`);
+    markDirty(); render();
+  } else if (t.dataset.bsfollow) {
+    const d = p.drivers[+t.dataset.bsfollow], z1 = (drvSt(d).points || []).find((q) => /^z\d+$/.test(q.k));
+    (d.follow = d.follow || []).push({ timeline: p.timelines[0]?.id || 0, zone: z1 ? (z1.n || '').replace(/^Zone \d+ ?/, '') || '1' : 'Zone 1', file: '', offset: 0 });
     markDirty(); render();
   } else if (t.dataset.bscmd) {
     const d = p.drivers[+t.dataset.bscmd];
