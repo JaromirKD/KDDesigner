@@ -3127,6 +3127,40 @@
     },
     {
       "id": 19,
+      "name": "Lobby: night",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "brightsign lobby volume Video 30",
+        "brightsign lobby mute Audio on",
+        "brightsign lobby master 60",
+        "sleep 5",
+        "brightsign lobby mute on",
+        "brightsign lobby screen off",
+        "brightsign lobby gpio 3 off",
+        "brightsign lobby serial STANDBY"
+      ],
+      "conditions": [],
+      "notes": "Sound and screen through the KD plugin (kdlink v13): a zone's volume, mute for one zone, the master volume of the whole player, then everything muted and the video output off (the screen goes to standby). GPIO 3 is ticked as an output on the BrightSign tab (a lamp in a button, say); the last line goes out of the player's serial port."
+    },
+    {
+      "id": 20,
+      "name": "Lobby: day",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "brightsign lobby gpio 3 on",
+        "brightsign lobby screen on",
+        "brightsign lobby mute off",
+        "brightsign lobby mute Audio off",
+        "brightsign lobby master 100",
+        "brightsign lobby volume Video 100"
+      ],
+      "conditions": [],
+      "notes": "Undoes \"Lobby: night\"."
+    },
+    {
+      "id": 21,
       "name": "Lobby: video ended",
       "type": "media_end",
       "device": "lobby",
@@ -3140,7 +3174,7 @@
       "notes": "Fires when a video or audio file in the Video zone has played to its end (reported by the KD plugin). Give a file name to react to one file only."
     },
     {
-      "id": 20,
+      "id": 22,
       "name": "Lobby: show test pattern",
       "type": "manual",
       "color": "purple",
@@ -3151,20 +3185,21 @@
       "notes": "Plays the file of the presentation's \"Testpattern\" state in the Video zone (KD plugin); the presentation carries on when it ends."
     },
     {
-      "id": 21,
+      "id": 23,
       "name": "Show: halfway",
       "type": "manual",
       "color": "purple",
       "actions": [
         "netio rack output 2 pulse 5",
         "pharos lpc timeline 1 start fade 3",
-        "digidot c4 scene 1 fade 2"
+        "digidot c4 scene 1 fade 2",
+        "kissbox io 1.2 pulse 0.5"
       ],
       "conditions": [],
       "notes": "Trigger cue at 30 s: shows the show-device commands."
     },
     {
-      "id": 22,
+      "id": 24,
       "name": "Main show finished",
       "type": "timeline",
       "timeline": 2,
@@ -3178,7 +3213,7 @@
       "conditions": []
     },
     {
-      "id": 23,
+      "id": 25,
       "name": "Main show stopped early",
       "type": "timeline",
       "timeline": 2,
@@ -3192,7 +3227,7 @@
       "notes": "Timeline trigger \"is released\": fires on stop timeline, the ■ button, release all or another group-A timeline starting ({reason} says which), not when it reaches its end."
     },
     {
-      "id": 24,
+      "id": 26,
       "name": "Any timeline paused",
       "type": "timeline",
       "timeline": 0,
@@ -3205,7 +3240,7 @@
       "notes": "Timeline 0 = any timeline; {timeline} is its number."
     },
     {
-      "id": 25,
+      "id": 27,
       "name": "Stop all",
       "type": "manual",
       "color": "purple",
@@ -3221,7 +3256,7 @@
       "conditions": []
     },
     {
-      "id": 26,
+      "id": 28,
       "name": "Flash walls once",
       "type": "manual",
       "color": "purple",
@@ -3234,7 +3269,7 @@
       "notes": "Used by \"Flash walls 6x\": {count} is the round."
     },
     {
-      "id": 27,
+      "id": 29,
       "name": "Flash walls 6x",
       "type": "manual",
       "color": "purple",
@@ -3245,7 +3280,7 @@
       "conditions": []
     },
     {
-      "id": 28,
+      "id": 30,
       "name": "Find the first fixtures",
       "type": "manual",
       "color": "purple",
@@ -3256,7 +3291,7 @@
       "notes": "Locate: fixtures 1-4 blink white for 8 s to find them in the room (also Fixtures / Map: Locate, or the L key). \"locate off\" stops it."
     },
     {
-      "id": 29,
+      "id": 31,
       "name": "Relay chase",
       "type": "manual",
       "color": "purple",
@@ -3268,7 +3303,19 @@
       "conditions": []
     },
     {
-      "id": 30,
+      "id": 32,
+      "name": "C4 evening playlist",
+      "type": "manual",
+      "color": "purple",
+      "actions": [
+        "digidot c4 playlist \"Evening loop\"",
+        "kissbox io 1.1 toggle"
+      ],
+      "conditions": [],
+      "notes": "DiGidot playlists and triggers go by name (read from the C4); toggle flips a Kiss-Box relay."
+    },
+    {
+      "id": 33,
       "name": "Step through scenes",
       "type": "manual",
       "color": "purple",
@@ -3280,7 +3327,7 @@
       "notes": "Fired with repeat by the Teststand button: {count} = 1, 2, 3…"
     },
     {
-      "id": 31,
+      "id": 34,
       "name": "Winch up",
       "type": "manual",
       "color": "purple",
@@ -3302,7 +3349,7 @@
       "notes": "Every kind of panel event: click, hold, double click, change (slider, dial, colour, XY, toggle)."
     },
     {
-      "id": 32,
+      "id": 35,
       "name": "CLICK Start show",
       "type": "panel",
       "control": "Start show",
@@ -3318,7 +3365,7 @@
       "notes": "Visitor button: 30 s cooldown so pressing it again does nothing."
     },
     {
-      "id": 33,
+      "id": 36,
       "name": "CLICK Inloop",
       "type": "panel",
       "control": "Inloop",
@@ -3330,7 +3377,7 @@
       "conditions": []
     },
     {
-      "id": 34,
+      "id": 37,
       "name": "CLICK Stop",
       "type": "panel",
       "control": "Stop",
@@ -3342,7 +3389,7 @@
       "conditions": []
     },
     {
-      "id": 35,
+      "id": 38,
       "name": "HOLD All off (3 s)",
       "type": "panel",
       "control": "All off",
@@ -3358,7 +3405,7 @@
       "conditions": []
     },
     {
-      "id": 36,
+      "id": 39,
       "name": "DOUBLE Blackout",
       "type": "panel",
       "control": "Blackout",
@@ -3372,7 +3419,7 @@
       "conditions": []
     },
     {
-      "id": 37,
+      "id": 40,
       "name": "House level slider",
       "type": "panel",
       "control": "House level",
@@ -3384,7 +3431,7 @@
       "conditions": []
     },
     {
-      "id": 38,
+      "id": 41,
       "name": "Grand master dial",
       "type": "panel",
       "control": "Grand master",
@@ -3396,7 +3443,7 @@
       "conditions": []
     },
     {
-      "id": 39,
+      "id": 42,
       "name": "Wall colour wheel",
       "type": "panel",
       "control": "Wall colour",
@@ -3410,7 +3457,7 @@
       "conditions": []
     },
     {
-      "id": 40,
+      "id": 43,
       "name": "Mover XY pad",
       "type": "panel",
       "control": "Mover position",
@@ -3423,7 +3470,7 @@
       "conditions": []
     },
     {
-      "id": 41,
+      "id": 44,
       "name": "Fog toggle",
       "type": "panel",
       "control": "Fog",
@@ -3435,7 +3482,7 @@
       "conditions": []
     },
     {
-      "id": 42,
+      "id": 45,
       "name": "CLICK Projectors on",
       "type": "panel",
       "control": "Projectors on",
@@ -3447,7 +3494,7 @@
       "conditions": []
     },
     {
-      "id": 43,
+      "id": 46,
       "name": "CLICK Projectors off",
       "type": "panel",
       "control": "Projectors off",
@@ -3459,7 +3506,7 @@
       "conditions": []
     },
     {
-      "id": 44,
+      "id": 47,
       "name": "Hall projectors mute",
       "type": "manual",
       "color": "cyan",
@@ -3470,7 +3517,7 @@
       "notes": "Projector group \"hall\" (Devices > Projectors): one command for both hall projectors."
     },
     {
-      "id": 45,
+      "id": 48,
       "name": "CLICK Teststand",
       "type": "panel",
       "control": "Teststand",
@@ -3483,7 +3530,7 @@
       "conditions": []
     },
     {
-      "id": 46,
+      "id": 49,
       "name": "HOLD Service mode (5 s)",
       "type": "panel",
       "control": "Service",
@@ -3509,7 +3556,7 @@
       "notes": "UDP, OSC, TCP, HTTP, Art-Net/sACN in, DMX change."
     },
     {
-      "id": 47,
+      "id": 50,
       "name": "UDP SHOW <name>",
       "type": "udp",
       "match": "SHOW*",
@@ -3521,7 +3568,7 @@
       "conditions": []
     },
     {
-      "id": 48,
+      "id": 51,
       "name": "UDP PING",
       "type": "udp",
       "match": "PING",
@@ -3532,7 +3579,7 @@
       "conditions": []
     },
     {
-      "id": 49,
+      "id": 52,
       "name": "UDP from QLab only (port 7001)",
       "type": "udp",
       "match": "GO",
@@ -3545,7 +3592,7 @@
       "conditions": []
     },
     {
-      "id": 50,
+      "id": 53,
       "name": "OSC /kd/cue/*",
       "type": "osc",
       "address": "/kd/cue/*",
@@ -3557,7 +3604,7 @@
       "conditions": []
     },
     {
-      "id": 51,
+      "id": 54,
       "name": "OSC fader -> grand master",
       "type": "osc",
       "address": "/kd/master",
@@ -3571,7 +3618,7 @@
       "notes": "A TouchOSC fader sending 0-100. \"Latest value only\": at most 40 runs a second, with the newest value."
     },
     {
-      "id": 52,
+      "id": 55,
       "name": "Visitor counted (UDP)",
       "type": "udp",
       "match": "VISITOR",
@@ -3583,7 +3630,7 @@
       "conditions": []
     },
     {
-      "id": 53,
+      "id": 56,
       "name": "Watchout answers",
       "type": "tcp",
       "device": "watchout",
@@ -3595,7 +3642,7 @@
       "conditions": []
     },
     {
-      "id": 54,
+      "id": 57,
       "name": "Media server status",
       "type": "http",
       "url": "http://192.168.1.95",
@@ -3606,7 +3653,7 @@
       "conditions": []
     },
     {
-      "id": 55,
+      "id": 58,
       "name": "Desk ch1 >= 50 %: start show",
       "type": "dmx_in",
       "protocol": "artnet",
@@ -3622,7 +3669,7 @@
       "notes": "Mock console: dmxin artnet 0 1 255"
     },
     {
-      "id": 56,
+      "id": 59,
       "name": "Desk ch2 = grand master",
       "type": "dmx_in",
       "protocol": "sacn",
@@ -3636,7 +3683,7 @@
       "conditions": []
     },
     {
-      "id": 57,
+      "id": 60,
       "name": "Winch -> motor controller",
       "type": "dmx_change",
       "universe": 3,
@@ -3667,7 +3714,7 @@
       "notes": "Device online/offline, projector alarms, PLC, KNX and Machine Control readings."
     },
     {
-      "id": 58,
+      "id": 61,
       "name": "Device offline -> email",
       "type": "device",
       "device": "",
@@ -3682,7 +3729,7 @@
       ]
     },
     {
-      "id": 59,
+      "id": 62,
       "name": "PJ left back online",
       "type": "device",
       "device": "PJ left",
@@ -3694,7 +3741,7 @@
       "conditions": []
     },
     {
-      "id": 60,
+      "id": 63,
       "name": "Projector error",
       "type": "projector",
       "projector": "",
@@ -3707,7 +3754,7 @@
       "conditions": []
     },
     {
-      "id": 61,
+      "id": 64,
       "name": "Lamp hours 4000",
       "type": "projector",
       "projector": "PJ left",
@@ -3721,7 +3768,7 @@
       "notes": "Mock console: projector \"PJ left\" send LAMP=4100"
     },
     {
-      "id": 62,
+      "id": 65,
       "name": "Door opened (PLC)",
       "type": "variable",
       "variable": "door",
@@ -3733,7 +3780,7 @@
       "conditions": []
     },
     {
-      "id": 63,
+      "id": 66,
       "name": "KNX hall light changed",
       "type": "variable",
       "variable": "hall_light",
@@ -3744,7 +3791,7 @@
       "conditions": []
     },
     {
-      "id": 64,
+      "id": 67,
       "name": "Daylight above 5 V (ai0)",
       "type": "input",
       "io": "ai0",
@@ -3757,7 +3804,7 @@
       "conditions": []
     },
     {
-      "id": 65,
+      "id": 68,
       "name": "Visitor sensor (in1)",
       "type": "input",
       "io": "in1",
@@ -3777,7 +3824,7 @@
       "notes": "Only counts while the museum is open (Only active in)."
     },
     {
-      "id": 66,
+      "id": 69,
       "name": "Reset button held (in3)",
       "type": "input",
       "io": "in3",
@@ -3791,7 +3838,7 @@
       "conditions": []
     },
     {
-      "id": 67,
+      "id": 70,
       "name": "Museum open",
       "type": "manual",
       "color": "blue",
@@ -3804,7 +3851,7 @@
       "notes": "\"Starting up\" goes to Open by itself after 120 s (its actions on the Modes page); this skips the wait."
     },
     {
-      "id": 68,
+      "id": 71,
       "name": "Museum: next state",
       "type": "manual",
       "color": "blue",
@@ -3815,7 +3862,7 @@
       "conditions": []
     },
     {
-      "id": 69,
+      "id": 72,
       "name": "Emergency over",
       "type": "manual",
       "color": "blue",
@@ -3828,7 +3875,7 @@
       "notes": "Back to the state System was in before the emergency."
     },
     {
-      "id": 70,
+      "id": 73,
       "name": "Long maintenance reminder",
       "type": "interval",
       "seconds": 600,
@@ -3841,7 +3888,7 @@
       ]
     },
     {
-      "id": 71,
+      "id": 74,
       "name": "Museum closed",
       "type": "mode",
       "group": "Museum",
@@ -3863,7 +3910,7 @@
       "notes": "Disabled triggers and comment lines."
     },
     {
-      "id": 72,
+      "id": 75,
       "name": "Disabled example",
       "type": "manual",
       "color": "grey",
@@ -3875,7 +3922,7 @@
       "enabled": false
     },
     {
-      "id": 73,
+      "id": 76,
       "name": "Every 10 s heartbeat (disabled)",
       "type": "interval",
       "seconds": 10,
@@ -3887,7 +3934,7 @@
       "enabled": false
     },
     {
-      "id": 74,
+      "id": 77,
       "name": "Weekend check every 20 s",
       "type": "interval",
       "seconds": 20,
@@ -3901,21 +3948,38 @@
       "notes": "Fires every 20 s. On weekdays its condition is false: the row flashes red instead of orange, the diamond in Show flow flashes red and the fire history says \"condition false\"."
     }
   ],
+  "variableGroups": [
+    {
+      "name": "Counters",
+      "color": "green"
+    },
+    {
+      "name": "PLC",
+      "color": "orange"
+    },
+    {
+      "name": "Touch panel",
+      "color": "cyan"
+    }
+  ],
   "variables": [
     {
       "name": "visitors",
+      "group": "Counters",
       "type": "number",
       "initial": 0,
       "persist": true
     },
     {
       "name": "show_count",
+      "group": "Counters",
       "type": "number",
       "initial": 0,
       "persist": true
     },
     {
       "name": "door",
+      "group": "PLC",
       "type": "bool",
       "initial": false,
       "modbus": {
@@ -3926,6 +3990,7 @@
     },
     {
       "name": "work_lights",
+      "group": "PLC",
       "type": "bool",
       "initial": false,
       "modbus": {
@@ -3941,6 +4006,7 @@
     },
     {
       "name": "museum_state",
+      "group": "PLC",
       "type": "number",
       "initial": 1,
       "modbus": {
@@ -3961,36 +4027,43 @@
     },
     {
       "name": "house_level",
+      "group": "Touch panel",
       "type": "number",
       "initial": 0
     },
     {
       "name": "wall_colour",
+      "group": "Touch panel",
       "type": "text",
       "initial": "#000000"
     },
     {
       "name": "wall_r",
+      "group": "Touch panel",
       "type": "number",
       "initial": 0
     },
     {
       "name": "wall_g",
+      "group": "Touch panel",
       "type": "number",
       "initial": 0
     },
     {
       "name": "wall_b",
+      "group": "Touch panel",
       "type": "number",
       "initial": 0
     },
     {
       "name": "pan",
+      "group": "Touch panel",
       "type": "number",
       "initial": 50
     },
     {
       "name": "tilt",
+      "group": "Touch panel",
       "type": "number",
       "initial": 50
     },
@@ -4712,6 +4785,9 @@
       "plugin": true,
       "pluginPort": 5010,
       "vars": {},
+      "gpioOut": [
+        3
+      ],
       "commands": [
         {
           "name": "Play intro",
@@ -4727,7 +4803,8 @@
           "timeline": 2,
           "zone": "Video",
           "file": "Video 3",
-          "offset": 0
+          "offset": 0,
+          "drift": true
         }
       ]
     },

@@ -96,7 +96,8 @@ const GRAMMAR = [
   ['http {httpmethod} {url} {text...}', 'HTTP request with a body (JSON or text)'],
   ['modbus {mbdev} write {mbtable} {num} {num}', 'Write a PLC coil (0/1) or holding register'],
   // Device drivers (src/Drivers.cpp)
-  ['kissbox {kiss} {kisspoint} {kissval}', 'Kiss-Box: switch an output (slot.channel) on/off, or set an analog output 0-255'],
+  ['kissbox {kiss} {kisspoint} {kissval}', 'Kiss-Box: switch an output (slot.channel) on/off, toggle it, or set an analog output 0-255'],
+  ['kissbox {kiss} {kisspoint} pulse {sec}', 'Kiss-Box: switch an output on for this many seconds, then off again'],
   ['kissbox {kiss} {slot} all {text...}', 'Kiss-Box: set all 8 channels of a slot, e.g. 1 0 1 0 0 0 0 0'],
   ['kissbox {kiss} read {slot}', 'Kiss-Box: read a slot now'],
   ['kissbox {kiss} send {text...}', 'Kiss-Box: raw bytes in hex, e.g. A5 00 02 01'],
@@ -113,16 +114,25 @@ const GRAMMAR = [
   ['brightsign {bsign} pause {bszone}', 'BrightSign (KD plugin): hold the video of a zone on the current frame'],
   ['brightsign {bsign} resume {bszone}', 'BrightSign (KD plugin): carry on with a paused video'],
   ['brightsign {bsign} release {bszone}', 'BrightSign (KD plugin): the zone goes back to its own state of the presentation'],
+  ['brightsign {bsign} volume {bszone} {pct}', 'BrightSign (KD plugin): the volume of a zone, 0-100'],
+  ['brightsign {bsign} master {pct}', 'BrightSign (KD plugin): the volume of the whole player (all zones), 0-100'],
+  ['brightsign {bsign} mute {onoff}', 'BrightSign (KD plugin): mute the whole player, or give the sound back'],
+  ['brightsign {bsign} mute {bszone} {onoff}', 'BrightSign (KD plugin): mute one zone, or give its sound back'],
+  ['brightsign {bsign} screen {onoff}', 'BrightSign (KD plugin): the video output off (the screen gets no signal and goes to standby) or on again'],
+  ['brightsign {bsign} gpio {num} {onoff}', 'BrightSign (KD plugin): switch a GPIO output of the player (pin 0-7, ticked as an output on the BrightSign tab)'],
+  ['brightsign {bsign} serial {text...}', 'BrightSign (KD plugin): send a line out of the player\'s serial port'],
+  ['brightsign {bsign} probe', 'BrightSign (KD plugin): for fault-finding - the plugin writes what it sees (video positions, GPIO settings) to the log'],
   ['brightsign {bsign} reboot', 'BrightSign: reboot the player'],
   ['brightsign {bsign} api {httpmethod} {path}', 'BrightSign: any local DWS API call, e.g. api get info'],
   ['brightsign {bsign} api {httpmethod} {path} {text...}', 'BrightSign: local DWS API call with a JSON body'],
   ['digidot {digi} scene {digiscene}', 'DiGidot: play a scene'],
   ['digidot {digi} scene {digiscene} fade {sec}', 'DiGidot: play a scene with a fade'],
-  ['digidot {digi} playlist {num}', 'DiGidot: play a playlist (unique id)'],
+  ['digidot {digi} playlist {digilist}', 'DiGidot: play a playlist, by its name, its place in the list or its unique id'],
   ['digidot {digi} stop', 'DiGidot: stop the scene or playlist'],
   ['digidot {digi} master {pct}', 'DiGidot: master brightness'],
   ['digidot {digi} speed {num}', 'DiGidot: playback speed in % (100 = normal)'],
-  ['digidot {digi} trigger {num}', 'DiGidot: fire a C4 trigger (unique id)'],
+  ['digidot {digi} trigger {digitrig}', 'DiGidot: fire one of the C4\'s own triggers, by its name, its place in the list or its unique id'],
+  ['digidot {digi} refresh', 'DiGidot: read the scenes, playlists and triggers from the C4 again'],
   ['digidot {digi} reset', 'DiGidot: restart the controller'],
   ['digidot {digi} send {text...}', 'DiGidot: any API call as JSON, e.g. {"action":"status"}'],
   ['netio {netio} output {netioout} {netioact}', 'NETIO: switch a power output'],
@@ -308,10 +318,10 @@ function matchPart(part, tok) {
     }
     case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': return !!findRef(drvList(DRV_PART[part]), tok) || !!findKindGroup(DRV_PART[part], tok);
     case '{kisspoint}': return /^[1-8]\.[1-8]$/.test(tok);
-    case '{kissval}': return /^(on|off)$/i.test(tok) || (/^\d+$/.test(tok) && +tok <= 255);
+    case '{kissval}': return /^(on|off|toggle)$/i.test(tok) || (/^\d+$/.test(tok) && +tok <= 255);
     case '{slot}': return /^[1-8]$/.test(tok);
     case '{knxga}': return /^\d+\/\d+(\/\d+)?$/.test(tok) || !!knxAddr(tok);
-    case '{knxval}': case '{word}': case '{path}': case '{digiscene}': case '{bszone}': case '{bsvar}': case '{bsfile}': case '{bsstate}': return tok.length > 0;
+    case '{knxval}': case '{word}': case '{path}': case '{digiscene}': case '{digilist}': case '{digitrig}': case '{bszone}': case '{bsvar}': case '{bsfile}': case '{bsstate}': return tok.length > 0;
     case '{dpt}': return /^\d+(\.\d+)?$/.test(tok);
     case '{netioout}': return /^(all|\d+)$/i.test(tok) || (drvStatusOf(ctxDrv('netio'))?.points || []).some((x) => /^out\d+$/.test(x.k) && (x.n || '').toLowerCase() === tok.toLowerCase());
     case '{netioact}': return /^(on|off|toggle|restart|pulse)$/i.test(tok);
@@ -426,7 +436,7 @@ function candidates(part, partial) {
       });
       return [...pts.filter(([v]) => v.startsWith(pl)).slice(0, 24).map(([v, n]) => ({ insert: v, label: v, desc: n, key: 'kp' + v })), ...hint('<slot>.<channel>')];
     }
-    case '{kissval}': return presets(['on', 'off', '0', '128', '255'], 'on|off|0-255');
+    case '{kissval}': return presets(['on', 'off', 'toggle', '0', '128', '255'], 'on|off|toggle|0-255');
     case '{slot}': return presets(['1', '2', '3'], '<slot 1-8>');
     case '{knxga}': return [...(ctxDrv('knx')?.addresses || []).filter((a) => a.ga.startsWith(pl) || (a.name || '').toLowerCase().includes(pl))
       .map((a) => ({ insert: quote(a.name || a.ga), label: a.name || a.ga, desc: `${a.ga} · DPT ${a.dpt || '1'}`, key: 'ga' + a.ga })), ...hint('<main/middle/sub>')];
@@ -466,6 +476,11 @@ function candidates(part, partial) {
     }
     case '{digiscene}': return [...(drvStatusOf(ctxDrv('digidot'))?.scenes || []).filter((s) => s.toLowerCase().includes(pl))
       .map((s) => ({ insert: quote(s), label: s, desc: 'DiGidot scene', key: 'ds' + s })), ...hint('<scene name or #>')];
+    case '{digilist}': case '{digitrig}': {
+      const tr = part === '{digitrig}', what = tr ? 'trigger' : 'playlist';
+      return [...(drvStatusOf(ctxDrv('digidot'))?.[tr ? 'c4triggers' : 'playlists'] || []).filter((s) => s.toLowerCase().includes(pl))
+        .map((s) => ({ insert: quote(s), label: s, desc: 'DiGidot ' + what, key: 'd' + what + s })), ...hint(`<${what} name, # or unique id>`)];
+    }
     case '{netioout}': {
       const outs = (drvStatusOf(ctxDrv('netio'))?.points || []).filter((x) => /^out\d+$/.test(x.k));
       return [...('all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every output', key: 'noall' }] : []),
@@ -986,7 +1001,7 @@ const PART_CLASS = {
   '{onoff}': 'kw', '{loglvl}': 'kw', '{text...}': 'str', '{pc}': 'ref', '{pcaction}': 'kw', '{devname}': 'ref', '{updown}': 'kw',
   '{var}': 'ref', '{num}': 'num', '{op}': 'kw', '{tcpdev}': 'ref', '{httpmethod}': 'kw', '{url}': 'addr', '{mbdev}': 'ref', '{mbtable}': 'kw',
   '{calname}': 'ref', '{activity}': 'kw', '{date}': 'addr',
-  '{kiss}': 'ref', '{knx}': 'ref', '{bsign}': 'ref', '{digi}': 'ref', '{netio}': 'ref', '{pharos}': 'ref', '{digiscene}': 'ref', '{word}': 'ref', '{bszone}': 'ref', '{bsvar}': 'ref', '{bsfile}': 'str', '{bsstate}': 'ref',
+  '{kiss}': 'ref', '{knx}': 'ref', '{bsign}': 'ref', '{digi}': 'ref', '{netio}': 'ref', '{pharos}': 'ref',  '{digiscene}': 'ref', '{digilist}': 'ref', '{digitrig}': 'ref', '{word}': 'ref', '{bszone}': 'ref', '{bsvar}': 'ref', '{bsfile}': 'str', '{bsstate}': 'ref',
   '{kisspoint}': 'addr', '{knxga}': 'addr', '{path}': 'addr', '{kissval}': 'num', '{slot}': 'num', '{dpt}': 'num', '{netioout}': 'num', '{knxval}': 'str',
   '{netioact}': 'kw', '{pharostl}': 'kw', '{pharossc}': 'kw', '{fixgrp}': 'kw', '{pharosproto}': 'kw',
   '{iopoint}': 'addr', '{ioval}': 'num',
@@ -1079,6 +1094,7 @@ function partHelp(part, tok, g) {
     }
     case '{ioval}': return /^\d/.test(tok) ? `${tok} V` : `Switch ${tok}`;
     case '{digiscene}': return `DiGidot scene “${tok}”${/^\d+$/.test(tok) ? ' (by position in the list)' : ''}`;
+    case '{digilist}': case '{digitrig}': return `DiGidot ${part === '{digitrig}' ? 'trigger' : 'playlist'} “${tok}”${/^\d+$/.test(tok) ? ' (by position in the list, or its unique id)' : ''}`;
     case '{bsstate}': {
       const s = (drvStatusOf(ctxDrv('brightsign'))?.states || []).find((x) => x.n.toLowerCase() === tok.toLowerCase());
       return s ? `State “${s.n}” in zone ${s.z}${s.f ? ` · plays ${s.f}` : ' · has no media file'}` : `State “${tok}” (not reported by the player yet)`;

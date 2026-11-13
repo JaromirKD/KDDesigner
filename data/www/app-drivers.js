@@ -157,7 +157,7 @@ function drvPanel(x, j, mode, i) {
           const name = edit ? `<input data-dname="${i}|${k}" value="${esc(x.names?.[k] || '')}" placeholder="${kind === 'in' ? 'e.g. Door contact' : kind === 'out' ? 'e.g. Fog machine' : 'name'}" style="width:160px">`
             : esc(x.names?.[k] || '');
           const state = kind === 'out' || kind === 'in' ? led(id, k, v, kind === 'in' ? 'closed = on' : '') : liveText(id, k, v);
-          const ctl = kind === 'out' ? cmdBtn(`kissbox ${ref} ${k} on`, 'On') + cmdBtn(`kissbox ${ref} ${k} off`, 'Off')
+          const ctl = kind === 'out' ? cmdBtn(`kissbox ${ref} ${k} on`, 'On') + cmdBtn(`kissbox ${ref} ${k} off`, 'Off') + cmdBtn(`kissbox ${ref} ${k} pulse 1`, 'Pulse', '', 'On for 1 second')
             : kind === 'aout' ? cmdRange(`kissbox ${ref} ${k} {v}`, v, 0, 255, id, k) : '';
           return `<tr><td class="mono">${k}</td><td>${name}</td><td>${state}</td>${vcell(k)}<td><div class="row nowrap">${ctl}</div></td></tr>`;
         }).join('');
@@ -251,14 +251,22 @@ function drvPanel(x, j, mode, i) {
     }
     case 'digidot': {
       const scenes = j.scenes || [];
-      const rows = [['scene', 'Scene playing'], ['master', 'Master (%)'], ['speed', 'Speed (%)'], ['paused', 'Paused']];
-      if (mode === 'compact') return rows.slice(0, 3).map(([k, n]) => `<div class="drv-row"><span class="drv-name">${n}</span><span>${liveText(id, k, ptVal(j, k))}</span><span></span></div>`).join('') +
+      const lists = j.playlists || [], trigs = j.c4triggers || [];
+      const rows = [['scene', 'Scene playing'], ['playlist', 'Playlist playing'], ['master', 'Master (%)'], ['speed', 'Speed (%)'], ['paused', 'Paused']];
+      // A button per scene / playlist / trigger; the one playing now is lit.
+      // (lit live through data-bstest, like the BrightSign test buttons)
+      const btns = (l, word, key) => `<div class="row" style="gap:4px">${l.map((s, k) => `<button class="btn small bs-test${key && ptVal(j, key) === s ? ' on' : ''}" data-cmd="${esc(`digidot ${ref} ${word} ${quote(s)}`)}"${key ? ` data-bstest="${id}|${key}|${esc(s)}"` : ''}>${k + 1} · ${esc(s)}</button>`).join('')}</div>`;
+      if (mode === 'compact') return rows.filter(([k]) => ['scene', 'master', 'speed'].includes(k) || (k === 'playlist' && lists.length)).map(([k, n]) => `<div class="drv-row"><span class="drv-name">${n}</span><span>${liveText(id, k, ptVal(j, k))}</span><span></span></div>`).join('') +
         (scenes.length ? `<div class="row" style="gap:4px;margin-top:4px">${scenes.map((s) => cmdBtn(`digidot ${ref} scene ${quote(s)}`, esc(s))).join('')}</div>` : '');
       return `<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th><th>Control</th></tr>
         ${rows.map(([k, n]) => `<tr><td>${n}</td><td>${liveText(id, k, ptVal(j, k))}</td>${vcell(k)}<td>${k === 'master' ? cmdRange(`digidot ${ref} master {v}`, ptVal(j, 'master'), 0, 100, id, 'master')
           : k === 'speed' ? cmdSet(`digidot ${ref} speed {v}`, '100') : k === 'scene' ? cmdBtn(`digidot ${ref} stop`, '■ Stop') : ''}</td></tr>`).join('')}</table>
-        <h4>Scenes on the C4</h4>${scenes.length ? `<div class="row" style="gap:4px">${scenes.map((s, k) => cmdBtn(`digidot ${ref} scene ${quote(s)}`, `${k + 1} · ${esc(s)}`)).join('')}</div>`
-          : '<p class="muted">The scene list is read from the C4 at the first status read.</p>'}`;
+        <h4>Scenes on the C4 ${cmdBtn(`digidot ${ref} refresh`, '⟳', '', 'Read the scenes, playlists and triggers from the C4 again')}</h4>${scenes.length ? btns(scenes, 'scene', 'scene')
+          : '<p class="muted">The scene list is read from the C4 at the first status read.</p>'}
+        <h4>Playlists</h4>${lists.length ? btns(lists, 'playlist', 'playlist')
+          : '<p class="muted">No playlists found on the C4 (playlists need a C4 Extended; they are read from its card).</p>'}
+        <h4>Triggers on the C4</h4>${trigs.length ? btns(trigs, 'trigger') + '<p class="muted">A button fires that trigger\'s action on the C4.</p>'
+          : '<p class="muted">No triggers found on the C4.</p>'}`;
     }
     case 'brightsign': {
       const msg = ptVal(j, 'msg'), at = +ptVal(j, 'msgAt') || 0;
@@ -288,35 +296,55 @@ function drvPanel(x, j, mode, i) {
       const fol = x.follow || [], znames = zones.map((p) => zname(p));
       const folRow = (f, k) => {
         const b = `drivers.${i}.follow.${k}`, tl = P().timelines.find((q) => q.id === f.timeline), zn = bsZoneNo(j, f.zone);
-        if (!edit) return `<tr><td>${tl ? `<a href="#" data-goto-timeline="${tl.id}">${esc(tl.name || 'Timeline ' + tl.id)}</a>` : 'no timeline'}</td><td>${esc(f.zone || '')}</td><td>${esc(f.file || '')}</td><td>${f.offset || 0}</td></tr>`;
+        if (!edit) return `<tr><td>${tl ? `<a href="#" data-goto-timeline="${tl.id}">${esc(tl.name || 'Timeline ' + tl.id)}</a>` : 'no timeline'}</td><td>${esc(f.zone || '')}</td><td>${esc(f.file || '')}</td><td>${f.offset || 0}</td><td>${f.drift ? '✓' : ''}</td></tr>`;
         const names = [...new Set(states.filter((s) => s.f && (!zn || s.z === zn)).map((s) => (s.n && s.n !== s.f ? s.n : s.f)))];
         return `<tr><td><select data-p="${b}.timeline" data-t="num"><option value="0">choose…</option>${P().timelines.map((q) => `<option value="${q.id}"${q.id === f.timeline ? ' selected' : ''}>${esc(q.name || 'Timeline ' + q.id)}</option>`).join('')}</select></td>
           <td><select data-p="${b}.zone" data-r>${[...new Set([...znames, ...(f.zone ? [f.zone] : [])])].map((n) => `<option${n === f.zone ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></td>
           <td><input data-p="${b}.file" value="${esc(f.file || '')}" list="bsfol-${i}-${k}" placeholder="vid1 or clip.mp4" style="width:170px"><datalist id="bsfol-${i}-${k}">${names.map((n) => `<option value="${esc(n)}">`).join('')}</datalist></td>
           <td><input type="number" step="0.1" data-p="${b}.offset" data-t="num" value="${f.offset || 0}" style="width:70px" title="Seconds the video is ahead of (+) or behind (−) the timeline"></td>
+          <td><label class="chk" title="The video runs on the player's own clock and slowly runs away from a long timeline. Ticked: the player compares the video's real position with the timeline every 3 s and jumps when they are more than 0.12 s apart (a short hitch in the picture). Needs kdlink v13."><input type="checkbox" data-p="${b}.drift" data-t="bool"${f.drift ? ' checked' : ''}> correct</label></td>
           <td><button class="btn small ghost" data-del="${b}">✕</button></td></tr>`;
       };
       const followHtml = `<h4>Follow a timeline <span class="muted" style="font-weight:normal">the zone's video runs in step with a timeline: start, pause, jump, scrub</span></h4>
-        ${fol.length ? `<table class="drv-tbl"><tr><th>Timeline</th><th>Zone</th><th>File or state</th><th>Offset (s)</th>${edit ? '<th></th>' : ''}</tr>${fol.map(folRow).join('')}</table>` : ''}
+        ${fol.length ? `<table class="drv-tbl"><tr><th>Timeline</th><th>Zone</th><th>File or state</th><th>Offset (s)</th><th>Drift</th>${edit ? '<th></th>' : ''}</tr>${fol.map(folRow).join('')}</table>` : ''}
         ${edit ? `<div class="row" style="margin-top:6px"><button class="btn small" data-bsfollow="${i}">+ Follow a timeline</button><span class="muted">While that timeline runs, the zone plays the file at the timeline's position; when it stops, the zone goes back to the presentation.</span></div>`
           : fol.length ? '' : '<p class="muted">Not set (Devices &gt; BrightSign).</p>'}`;
+      // Sound, screen and health (kdlink v13: the readings are there once the plugin has reported them).
+      const has = (k) => pts.some((p) => p.k === k), v13 = has('vol');
+      const soundRows = [
+        has('vol') && ['Master volume (%)', 'vol', liveText(id, 'vol', ptVal(j, 'vol')), cmdRange(`brightsign ${ref} master {v}`, ptVal(j, 'vol'), 0, 100, id, 'vol'), 'The volume of the whole player: all zones, on its HDMI, analog and SPDIF outputs'],
+        has('mute') && ['Mute', 'mute', led(id, 'mute', ptVal(j, 'mute')), cmdBtn(`brightsign ${ref} mute on`, 'Mute') + cmdBtn(`brightsign ${ref} mute off`, 'Sound on'), 'Mutes the whole player'],
+        has('screen') && ['Screen output', 'screen', led(id, 'screen', ptVal(j, 'screen')), cmdBtn(`brightsign ${ref} screen on`, 'On') + cmdBtn(`brightsign ${ref} screen off`, 'Off'), 'Off = no signal on the video output: the screen goes to standby. The presentation keeps running.'],
+        has('hdmi') && ['Screen connected', 'hdmi', led(id, 'hdmi', ptVal(j, 'hdmi')), '', 'Whether a screen is connected to the HDMI output and switched on (looked at every 2 s)'],
+        has('sdfree') && ['Card free (MB)', 'sdfree', liveText(id, 'sdfree', ptVal(j, 'sdfree')), '', 'Free space on the player\'s card'],
+      ].filter(Boolean);
+      const soundHtml = `<h4>Sound and screen</h4>${soundRows.length ? `<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th><th>Control</th></tr>
+        ${soundRows.map(([n, k, now, ctl, tip]) => `<tr><td title="${esc(tip)}">${n}</td><td>${now}</td>${vcell(k)}<td><div class="row nowrap">${ctl}</div></td></tr>`).join('')}</table>`
+        : '<p class="muted">Volume, mute, screen on/off and the player\'s health need <b>kdlink v13</b>: download the plugin again and publish the presentation once more.</p>'}`;
       const plugin = !x.plugin ? '' : `${tests ? `<h4>Test</h4><p class="muted" style="margin:0 0 4px">Plays the file of that state in the zone. When it ends, the presentation carries on by itself.</p>${tests}` : ''}
-        ${gpio.length ? `<h4>GPIO inputs</h4><div class="row">${leds}<span class="muted">link one to a variable in the table below</span></div>` : ''}
+        ${gpio.length ? `<h4>GPIO</h4><div class="row">${leds}<span class="muted">link one to a variable in the table below${edit ? '; tick <b>output</b> there for the pins that are outputs in BrightAuthor' : ''}</span></div>` : ''}
         <h4>Activity <span class="muted" style="font-weight:normal">what the player received: serial, UDP, GPIO, zone changes</span></h4>
         <div class="bs-act" data-bsact="${id}">${bsActHtml(act)}</div>
-        <h4>Zones</h4>${zones.length ?`<table class="drv-tbl"><tr><th>#</th><th>Zone</th><th>Playing (state)</th><th>File</th><th>Variable</th><th>Control</th></tr>
+        ${soundHtml}
+        <h4>Zones</h4>${zones.length ?`<table class="drv-tbl"><tr><th>#</th><th>Zone</th><th>Playing (state)</th><th>File</th><th>Variable</th><th>Control</th>${v13 ? '<th>Volume</th>' : ''}</tr>
           ${zones.map((p) => `<tr><td>${p.k.slice(1)}</td><td>${esc(zname(p))}</td><td>${liveText(id, p.k, p.v)}</td><td class="mono">${liveText(id, p.k + '.file', ptVal(j, p.k + '.file'))}</td>${vcell(p.k)}
-            <td><div class="row nowrap">${cmdSet(`brightsign ${ref} play ${zref(p)} {v}`, 'file.mp4')}${cmdBtn(`brightsign ${ref} stop ${zref(p)}`, '■', '', 'Stop the video/audio of this zone')}</div></td></tr>`).join('')}</table>`
+            <td><div class="row nowrap">${cmdSet(`brightsign ${ref} play ${zref(p)} {v}`, 'file.mp4')}${cmdBtn(`brightsign ${ref} stop ${zref(p)}`, '■', '', 'Stop the video/audio of this zone')}</div></td>
+            ${v13 ? `<td><div class="row nowrap" title="Volume of this zone">${cmdRange(`brightsign ${ref} volume ${zref(p)} {v}`, ptVal(j, p.k + '.vol') || 100, 0, 100, id, p.k + '.vol')}
+              ${cmdBtn(`brightsign ${ref} mute ${zref(p)} on`, 'Mute', '', 'Mute this zone')}${cmdBtn(`brightsign ${ref} mute ${zref(p)} off`, 'Sound', '', 'Give this zone its sound back')}
+              <span class="kiss ${ptVal(j, p.k + '.mute') === '1' ? 'on' : ''}" data-live="${id}|${p.k}.mute" data-fmt="muted" title="Lit = this zone is muted">${ptVal(j, p.k + '.mute') === '1' ? 'muted' : ''}</span></div></td>` : ''}</tr>`).join('')}</table>`
           : '<p class="muted">No zones reported yet: the plugin answers at the next status check (check it is in the presentation, named <code>kdlink</code>).</p>'}
         <div class="row" style="margin-top:6px"><span class="muted" title="A Plugin Message event (plugin kdlink) in the presentation: use it on a transition to go to any state in any zone">Plugin message:</span>${cmdSet(`brightsign ${ref} event {v}`, 'e.g. video_intro', true)}</div>
         <h4>User variables</h4>${uvars.length ? `<table class="drv-tbl"><tr><th>Name</th><th>Value</th><th>Variable</th><th>Set</th></tr>
           ${uvars.map((p) => `<tr><td>${esc(p.n || p.k.slice(4))}</td><td>${liveText(id, p.k, p.v)}</td>${vcell(p.k)}<td>${cmdSet(`brightsign ${ref} var ${quote(p.n || p.k.slice(4))} {v}`, 'value', true)}</td></tr>`).join('')}</table>`
           : '<p class="muted">No user variables reported (the presentation has none, or the plugin hasn\'t answered yet).</p>'}
         ${followHtml}`;
-      return `${plugin}<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th></tr>
+      return `${plugin}<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th><th>Control</th></tr>
           <tr><td title="The last UDP message the presentation sent to the controller (or a Send Plugin Message to kdlink)">Player says</td><td>${says}</td>${vcell('msg')}</tr>
           ${pts.some((p) => p.k === 'serial') ? `<tr><td title="The last line the player received on its serial port">Serial in</td><td class="mono">${liveText(id, 'serial', ptVal(j, 'serial'))}</td>${vcell('serial')}</tr>` : ''}
-          ${gpio.map((p) => `<tr><td>GPIO ${p.k.slice(4)}</td><td>${led(id, p.k, p.v)}</td>${vcell(p.k)}</tr>`).join('')}</table>
+          ${gpio.map((p) => { const n = +p.k.slice(4), out = (x.gpioOut || []).includes(n); return `<tr><td>GPIO ${n}${out && !edit ? ' <span class="muted">out</span>' : ''}</td><td>${led(id, p.k, p.v)}</td>${vcell(p.k)}
+            <td><div class="row nowrap">${edit ? `<label class="chk" title="Tick when this pin is set as an output in BrightAuthor (Presentation Settings > Interactive > GPIO). KD never changes a pin's direction; it only switches pins ticked here."><input type="checkbox" data-bsgpio="${i}|${n}"${out ? ' checked' : ''}> output</label>` : ''}
+              ${out ? cmdBtn(`brightsign ${ref} gpio ${n} on`, 'On') + cmdBtn(`brightsign ${ref} gpio ${n} off`, 'Off') : ''}</div></td></tr>`; }).join('')}
+          ${x.plugin ? `<tr><td title="Send a line out of the player's serial port">Serial out</td><td></td><td></td><td>${cmdSet(`brightsign ${ref} serial {v}`, 'text', true)}</td></tr>` : ''}</table>
         <h4>Commands</h4>
         <table class="drv-tbl"><tr><th>Button</th><th>UDP text sent to the player</th><th></th>${edit ? '<th></th>' : ''}</tr>
           ${cmds.map((c, k) => `<tr><td>${edit ? `<input data-p="drivers.${i}.commands.${k}.name" value="${esc(c.name || '')}" placeholder="e.g. Play intro" style="width:130px">` : esc(c.name || '')}</td>
@@ -372,7 +400,7 @@ const DRV_HELP = {
   kissbox: `Kiss-Box I/O with the <b>Kiss-Box protocol</b> firmware in <b>UDP</b> mode (port 9813). Pick the frame and the card in each slot, name the channels and link them to variables.
     <b>The box answers on its own destination port</b> (Kiss-Box Editor, I/O Mode Setup), usually as a broadcast, not to the port it was asked from: set the <b>listen port</b> below to that port (e.g. 9817). If they differ, commands still work but the box shows <b>offline</b>, the buttons don't follow and inputs never arrive. If the box sends to a fixed IP instead of broadcast, that IP must be this controller's.
     For instant input changes, also switch on automatic input state (timed updates) for the input cards.
-    Commands: <code>kissbox io 1.3 on</code>, <code>kissbox io 2 all 1 0 1 0 0 0 0 0</code>, <code>kissbox io read 3</code>, <code>kissbox io 3.1 128</code> (analog).`,
+    Commands: <code>kissbox io 1.3 on</code>, <code>kissbox io 1.3 toggle</code>, <code>kissbox io 1.3 pulse 0.5</code> (on for half a second), <code>kissbox io 2 all 1 0 1 0 0 0 0 0</code>, <code>kissbox io read 3</code>, <code>kissbox io 3.1 128</code> (analog).`,
   knx: `A <b>KNX IP interface or router</b> (KNXnet/IP tunnelling, UDP 3671; it uses one of its tunnels). Add the group addresses with their datapoint type.
     They are read once when the tunnel opens and then follow every telegram on the bus live - no polling.
     Commands: <code>knx gw write "Hall light" on</code>, <code>knx gw write 1/2/1 40</code>, <code>knx gw read "Hall temp"</code>.`,
@@ -380,9 +408,10 @@ const DRV_HELP = {
     <b>What's playing:</b> let the presentation send a UDP message to this controller (port ${'${port}'}) on every state, e.g. <code>playing Intro</code>: it shows as <b>Player says</b>.<br>
     <b>KD plugin</b> (watch and test, the player keeps running its own show): download <code>kdlink.brs</code>, add it in BrightAuthor:connected under Presentation Settings → Support Content → Script Plugins with the name <code>kdlink</code>, publish, and tick KD plugin below. Nothing else in the presentation changes, and it works without the DWS.
     You get every zone with what it plays, a <b>Test</b> button per state (plays that state's file; the presentation carries on after it), the GPIO inputs, an <b>Activity</b> list (serial lines, UDP, buttons) and the user variables.
-    Commands: <code>brightsign player test Video "Video 2"</code>, <code>play Video clip.mp4</code>, <code>stop Video</code>, <code>var mode night</code>, <code>event &lt;text&gt;</code> (a Plugin Message, if you ever use one).`,
+    Commands: <code>brightsign player test Video "Video 2"</code>, <code>play Video clip.mp4</code>, <code>stop Video</code>, <code>volume Video 60</code>, <code>master 80</code>, <code>mute on</code>, <code>screen off</code>, <code>gpio 3 on</code>, <code>serial &lt;text&gt;</code>, <code>var mode night</code>, <code>event &lt;text&gt;</code> (a Plugin Message, if you ever use one).`,
   digidot: `DiGidot C4 pixel controllers (JSON API, default user/password <code>admin</code>/<code>admin</code>). The C4 has no push option: it is polled.
-    Commands: <code>digidot c4 scene "Rainbow" fade 2</code>, <code>digidot c4 master 50</code>, <code>digidot c4 stop</code>, any API call with <code>digidot c4 send {…}</code>.`,
+    Scenes, playlists and the C4's own triggers are read from the C4 and get a button each.
+    Commands: <code>digidot c4 scene "Rainbow" fade 2</code>, <code>digidot c4 playlist "Evening loop"</code>, <code>digidot c4 trigger "All off"</code>, <code>digidot c4 master 50</code>, <code>digidot c4 stop</code>, any API call with <code>digidot c4 send {…}</code>.`,
   netio: `NETIO power sockets (JSON API: enable it on the NETIO under M2M API Protocols → JSON API, read/write, default <code>netio</code>/<code>netio</code>).
     <b>Live updates</b> uses the NETIO's MQTT-flex: it publishes every change to the MQTT broker built into this controller, so the outputs update at once instead of every poll.
     Commands: <code>netio rack output 1 on</code>, <code>output all off</code>, <code>output 2 restart 5</code>, <code>output 3 pulse 10</code>.`,
@@ -537,6 +566,7 @@ function updateDrvLive() {
     const v = ptVal(j, k);
     const f = el.dataset.fmt;
     if (f === 'led') { el.classList.toggle('on', v === '1'); el.textContent = v === '1' ? 'on' : v === '0' ? 'off' : '?'; }
+    else if (f === 'muted') { el.classList.toggle('on', v === '1'); el.textContent = v === '1' ? 'muted' : ''; }
     else if (f === 'range') { if (document.activeElement !== el && v !== '') el.value = v; }
     else if (f === 'badge') { el.textContent = v || 'none'; el.className = `tag ${v === 'running' || v === 'started' ? 'mon-ok' : v === 'paused' || v === 'holding_at_end' ? 'mon-warn' : ''}`; }
     else el.textContent = v === '' ? '—' : v;
@@ -559,7 +589,7 @@ function updateDrvLive() {
     if (j && !typing && liveKeys(j) !== el.dataset.keys) { render(); return; }
   }
 }
-const liveKeys = (j) => [...(j.points || []).map((p) => p.k), ...(j.scenes || []), (j.triggers || []).length, (j.states || []).length, j.info?.Model || ''].join(',');
+const liveKeys = (j) => [...(j.points || []).map((p) => p.k), ...(j.scenes || []), ...(j.playlists || []), ...(j.c4triggers || []), (j.triggers || []).length, (j.states || []).length, j.info?.Model || ''].join(',');
 // A zone plays a state: by itself (the state's name) or as a test ("(test) <state> (<file>)", see kdlink.brs).
 const bsTestOn = (v, n) => v === n || v.startsWith(`(test) ${n} (`);
 const bsActHtml = (act) => act.map(([t, s]) => `<div><span class="muted">${esc(new Date(t * 1000).toLocaleTimeString())}</span>${esc(s)}</div>`).join('')
@@ -617,6 +647,12 @@ document.addEventListener('change', async (e) => {
     const d = P().drivers[+i], obj = t.dataset.dname ? (d.names = d.names || {}) : (d.vars = d.vars || {});
     if (t.value.trim()) obj[k] = t.value.trim(); else delete obj[k];
     markDirty();
+  } else if (t.dataset.bsgpio) {
+    const [di, pin] = t.dataset.bsgpio.split('|').map(Number), d = P().drivers[di];
+    d.gpioOut = (d.gpioOut || []).filter((n) => n !== pin);
+    if (t.checked) d.gpioOut.push(pin);
+    d.gpioOut.sort();
+    markDirty(); render();
   } else if (t.dataset.netiomodel) {
     const d = P().drivers[+t.dataset.netiomodel], m = NETIO_MODELS.find(([c]) => c === t.value);
     if (t.value) { d.model = t.value; d.outputs = m[2]; } else { delete d.model; delete d.outputs; }   // outputs: for "output all" before the first read

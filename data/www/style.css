@@ -1180,6 +1180,13 @@ body.narrow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto au
 @keyframes lv-flash { from { background: color-mix(in srgb, var(--c) 35%, transparent); } to { background: transparent; } }
 #lvWarn .lv-fire { grid-template-columns: auto minmax(0, 1fr); }
 .lv-var { padding: 2px 0; transition: background .6s; border-radius: 3px; }
+.lv-group { margin-top: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 2px solid var(--tc, var(--border)); }
+/* variable groups: tabs like the trigger colour tabs, the group's colour as a bar left of its rows */
+table.vars td.vcol { border-left: 4px solid var(--tc, transparent); }
+tr.vgroup td { background: color-mix(in srgb, var(--tc) 14%, var(--panel2)); padding-top: 5px; padding-bottom: 5px; font-weight: 600; }
+tr.vgroup a { color: var(--text); text-decoration: none; }
+tr.vgroup a:hover { text-decoration: underline; }
+.vgroup-bar { align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 8px; background: var(--panel2); border-left: 4px solid var(--tc); border-radius: 3px; }
 .lv-var.fresh { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .lv-devs { display: flex; flex-wrap: wrap; gap: 6px; }
 .lv-dev { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); cursor: pointer; white-space: nowrap; }

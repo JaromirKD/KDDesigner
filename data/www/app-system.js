@@ -515,16 +515,23 @@ function panelCtlDetails(c, cb, i) {
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
+// Variable groups are for keeping the page tidy only: project.variableGroups is a list of
+// { name, color } (colours as for triggers), shown as tabs in that order, and a variable's
+// optional "group" names one. Nothing else reads them (the controller drops the list).
+const varGroups = () => P().variableGroups;
+const varGroup = (name) => varGroups().find((g) => g.name === name);
+const varGroupColor = (name) => trigColor(varGroup(name)?.color) || '';
+// The open tab: 'all', '' (variables without a group) or a group's name.
+function varTab() {
+  const t = S.varTab ?? 'all';
+  return t === 'all' || (t === '' && varGroups().length) || varGroup(t) ? t : 'all';
+}
 views.variables = () => {
   const p = P(), vals = S.status?.vars || {};
+  const groups = varGroups(), tab = varTab(), cur = varGroup(tab);
+  const count = (g) => p.variables.filter((v) => (v.group || '') === g).length;
   const mbOpts = (sel) => `<option value="">—</option>${p.modbus.map((d) => `<option${sel === d.name ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}`;
-  return `<h2>Variables</h2>
-  <p class="muted" style="margin-top:-6px">Like Medialon variables. Use them in any command as <code>{name}</code>,
-    change them with <code>var visitors + 1</code>, test them with <code>var visitors > 50</code> or <code>if var door = 1 then …</code>,
-    and react with a <b>Variable change</b> trigger. Link one to a Modbus point and it follows the PLC.</p>
-  <table class="vars"><tr><th>Name</th><th class="narrow">Type</th><th>Initial</th><th class="narrow" title="Keep the value across reboots">Keep</th>
-    <th>Modbus link (device · table · address)</th><th>Live value</th><th></th></tr>
-  ${p.variables.map((v, i) => {
+  const row = (v, i) => {
     const base = `variables.${i}`, cur = vals[v.name];
     const ro = v.modbus?.device && ['discrete', 'input'].includes(v.modbus.table);
     const live = cur == null ? '<span class="muted">save first</span>'
@@ -532,8 +539,9 @@ views.variables = () => {
       : `<div class="row nowrap">${v.type === 'number' ? `<button class="btn small" data-cmd="var ${esc(quote(v.name))} - 1"${ro ? ' disabled' : ''}>−</button>` : ''}
           <input class="mono" data-varset="${esc(v.name)}" value="${esc(cur)}" style="width:110px"${ro ? ' disabled' : ''}>
           ${v.type === 'number' ? `<button class="btn small" data-cmd="var ${esc(quote(v.name))} + 1"${ro ? ' disabled' : ''}>+</button>` : ''}</div>`;
-    return `<tr>
-    <td><input data-p="${base}.name" value="${esc(v.name)}" class="mono" data-r></td>
+    return `<tr style="--tc:${varGroupColor(v.group) || 'transparent'}">
+    <td class="vcol"><input data-p="${base}.name" value="${esc(v.name)}" class="mono" data-r></td>
+    ${groups.length ? `<td><select data-vgroup="${i}" title="Move this variable to another group"><option value="">—</option>${groups.map((g) => `<option${v.group === g.name ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select></td>` : ''}
     <td><select data-p="${base}.type" data-r>${['number', 'text', 'bool'].map((t) => `<option value="${t}"${v.type === t ? ' selected' : ''}>${t === 'bool' ? 'on/off' : t}</option>`).join('')}</select></td>
     <td>${v.type === 'bool' ? `<select data-p="${base}.initial" data-t="bool-sel"><option value="0"${v.initial ? '' : ' selected'}>off</option><option value="1"${v.initial ? ' selected' : ''}>on</option></select>`
       : `<input data-p="${base}.initial"${v.type === 'number' ? ' type="number" data-t="num"' : ''} value="${esc(v.initial ?? '')}">`}</td>
@@ -543,8 +551,37 @@ views.variables = () => {
         <input type="number" min="0" max="65535" data-mb="${i}" data-k="address" value="${v.modbus.address ?? 0}" style="width:80px">` : ''}</div></td>
     <td>${live}${ro ? ' <span class="tag" title="Follows the PLC input">PLC</span>' : ''}</td>
     <td><button class="btn small ghost" data-del="${base}">✕</button></td></tr>`;
-  }).join('')}</table>
-  <div class="row" style="margin-top:6px"><button class="btn small" data-add="variable">+ Variable</button>
+  };
+  const rowsOf = (g) => p.variables.map((v, i) => [v, i]).filter(([v]) => (v.group || '') === g).map(([v, i]) => row(v, i)).join('');
+  // "All": the variables without a group, then a heading per group (click it to open its tab).
+  const section = (g) => `<tr class="vgroup" style="--tc:${trigColor(g.color) || 'var(--border2)'}"><td colspan="8" class="vcol">
+      <a href="#" data-vtab="${esc(g.name)}" title="Open this group's tab">${esc(g.name)}</a> <span class="muted">${count(g.name)}</span></td></tr>${rowsOf(g.name)}`;
+  const tabBtn = (key, label, n, color, extra) => `<button class="trig-tab${tab === key ? ' on' : ''}${extra || ''}" data-vtab="${esc(key)}" style="${color ? `--tc:${color}` : ''}">
+      <span class="tab-name">${esc(label)}</span><span class="tab-n">${n}</span></button>`;
+  const custom = cur && /^#/.test(cur.color || '') ? cur.color : '', gi = groups.indexOf(cur);
+  return `<h2>Variables</h2>
+  <p class="muted" style="margin-top:-6px">Like Medialon variables. Use them in any command as <code>{name}</code>,
+    change them with <code>var visitors + 1</code>, test them with <code>var visitors > 50</code> or <code>if var door = 1 then …</code>,
+    and react with a <b>Variable change</b> trigger. Link one to a Modbus point and it follows the PLC.
+    <b>Groups</b> (the tabs) only keep this page tidy: commands still use the variable's name alone.</p>
+  <div class="trig-tabs">
+    ${groups.length ? `<button class="trig-tab all${tab === 'all' ? ' on' : ''}" data-vtab="all"><span class="tab-name">All</span><span class="tab-n">${p.variables.length}</span></button>
+      ${count('') || tab === '' ? tabBtn('', 'no group', count(''), '', ' unnamed nocol') : ''}
+      ${groups.map((g) => tabBtn(g.name, g.name, count(g.name), trigColor(g.color))).join('')}` : ''}
+    <button class="trig-tab unnamed nocol" id="varGroupAdd" title="New group (tab) for variables"><span class="tab-name">+ Group</span></button></div>
+  ${cur ? `<div class="row vgroup-bar" style="--tc:${trigColor(cur.color) || 'var(--border2)'}">
+      <label>Group</label><input id="varGroupName" value="${esc(cur.name)}" style="width:200px">
+      <label>Colour</label><div class="row swatches">${Object.entries(TRIGGER_COLORS).map(([k, c]) => `<button class="swatch${(cur.color || '') === k ? ' on' : ''}" data-vcol="${k}" title="${k || 'none'}" style="${k ? `background:${c}` : ''}">${k ? '' : '∅'}</button>`).join('')}
+        <label class="swatch custom${custom ? ' on' : ''}" title="Custom colour" style="${custom ? `background:${custom}` : ''}">${custom ? '' : '+'}<input type="color" id="varGroupColor" value="${custom || '#4aa3ff'}"></label></div>
+      <span class="spacer"></span>
+      <button class="btn small ghost" data-vgmove="-1" title="Move this tab to the left"${gi <= 0 ? ' disabled' : ''}>◀</button>
+      <button class="btn small ghost" data-vgmove="1" title="Move this tab to the right"${gi >= groups.length - 1 ? ' disabled' : ''}>▶</button>
+      <button class="btn small ghost" id="varGroupDel" title="Remove this group; its variables stay, without a group">Delete group</button></div>` : ''}
+  <table class="vars"><tr><th>Name</th>${groups.length ? '<th style="width:140px">Group</th>' : ''}<th class="narrow">Type</th><th>Initial</th><th class="narrow" title="Keep the value across reboots">Keep</th>
+    <th>Modbus link (device · table · address)</th><th>Live value</th><th></th></tr>
+  ${tab === 'all' ? rowsOf('') + groups.map(section).join('') : rowsOf(tab)}</table>
+  ${tab !== 'all' && !count(tab) ? `<p class="muted">No variables ${tab ? 'in this group yet' : 'without a group'}.</p>` : ''}
+  <div class="row" style="margin-top:6px"><button class="btn small" id="varAdd">+ Variable${cur ? ` in ${esc(cur.name)}` : ''}</button>
     <span class="muted">Modbus tables: coil & discrete = on/off, holding & input = 16-bit number. Discrete inputs and input registers are read-only.</span></div>`;
 };
 views.variables.after = () => {
@@ -561,6 +598,62 @@ views.variables.after = () => {
     markDirty();
     render();
   }));
+  const p = P(), groups = varGroups(), cur = varGroup(varTab());
+  const changed = () => { markDirty(); render(); };
+  $$('[data-vtab]').forEach((el) => el.addEventListener('click', (e) => { e.preventDefault(); S.varTab = el.dataset.vtab; render(); }));
+  $$('[data-vgroup]').forEach((el) => el.addEventListener('change', () => {
+    const v = p.variables[+el.dataset.vgroup];
+    if (el.value) v.group = el.value; else delete v.group;
+    changed();
+  }));
+  $('#varAdd').addEventListener('click', () => {
+    let n = 1;
+    while (p.variables.some((v) => v.name === 'var' + n)) n++;
+    p.variables.push(Object.assign({ name: 'var' + n, type: 'number', initial: 0, persist: false }, cur && { group: cur.name }));
+    changed();
+  });
+  $('#varGroupAdd').addEventListener('click', () => {
+    let k = 1;
+    while (varGroup('Group ' + k)) k++;
+    // The next colour nobody uses yet, so a new tab is easy to tell apart straight away.
+    const free = Object.keys(TRIGGER_COLORS).filter((c) => c && !groups.some((g) => g.color === c));
+    groups.push({ name: 'Group ' + k, color: free[0] || 'blue' });
+    S.varTab = 'Group ' + k;
+    changed();
+    $('#varGroupName').focus();
+    $('#varGroupName').select();
+  });
+  if (!cur) return;
+  $('#varGroupName').addEventListener('change', (e) => {
+    const name = e.target.value.trim(), old = cur.name;
+    if (!name || name === old) { e.target.value = old; return; }
+    if (name.toLowerCase() === 'all' || groups.some((g) => g !== cur && g.name.toLowerCase() === name.toLowerCase())) {
+      toast(`There already is a tab '${name}'`, true);
+      e.target.value = old;
+      return;
+    }
+    for (const v of p.variables) if (v.group === old) v.group = name;
+    cur.name = S.varTab = name;
+    changed();
+  });
+  $$('[data-vcol]').forEach((el) => el.addEventListener('click', () => {
+    if (el.dataset.vcol) cur.color = el.dataset.vcol; else delete cur.color;
+    changed();
+  }));
+  $('#varGroupColor').addEventListener('change', (e) => { cur.color = e.target.value; changed(); });
+  $$('[data-vgmove]').forEach((el) => el.addEventListener('click', () => {
+    const i = groups.indexOf(cur), j = i + +el.dataset.vgmove;
+    if (j < 0 || j >= groups.length) return;
+    groups.splice(i, 1);
+    groups.splice(j, 0, cur);
+    changed();
+  }));
+  $('#varGroupDel').addEventListener('click', () => {
+    for (const v of p.variables) if (v.group === cur.name) delete v.group;
+    groups.splice(groups.indexOf(cur), 1);
+    S.varTab = 'all';
+    changed();
+  });
 };
 // Live values change every second: update them without re-rendering the editor.
 function renderVarValues() {

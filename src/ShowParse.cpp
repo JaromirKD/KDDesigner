@@ -476,6 +476,7 @@ bool parse(const char* json, size_t len, String& err) {
   for (JsonObject o : d["fixtures"].as<JsonArray>()) { o.remove("type"); o.remove("mode"); o.remove("icon"); }
   d.remove("fixtureTypes");   // the project's own fixture definitions (web UI only)
   d.remove("triggerColorNames");   // tab names of the trigger colours (web UI only)
+  d.remove("variableGroups");   // tabs of the Variables page (web UI only)
   d.remove("colorThemes");   // colour themes for the editor's colour wheels (web UI only)
   d.remove("maps");      // fixture maps are only used by the web UI (positions are copied above)
   d.remove("effects");   // compiled into fxProgs

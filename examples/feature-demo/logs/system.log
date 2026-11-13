@@ -4803,3 +4803,90 @@
 2026-11-12 08:05:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
 2026-11-12 08:05:45 [INFO ] TRIG   Trigger 59 'Door opened (PLC)' fired (variable)
 2026-11-12 08:05:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 20:59:12 [INFO ] SYS    KD Designer mock booting
+2026-11-13 20:59:12 [INFO ] USB    Storage device mounted at /usb
+2026-11-13 20:59:12 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-13 20:59:12 [INFO ] SYS    Mode System starts in Idle
+2026-11-13 20:59:12 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-13 20:59:12 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-13 20:59:12 [INFO ] SYS    pc 'Media PC' (192.168.1.41) is online (8 ms)
+2026-11-13 20:59:12 [WARN ] SYS    pc 'Kiosk PC' (192.168.1.199) is OFFLINE
+2026-11-13 20:59:12 [INFO ] SYS    device 'mediaserver' (192.168.1.52) is online (5 ms)
+2026-11-13 20:59:12 [INFO ] SYS    device 'qlab' (192.168.1.51) is online (12 ms)
+2026-11-13 20:59:12 [INFO ] SYS    device 'motors' (192.168.1.70) is online (12 ms)
+2026-11-13 20:59:12 [INFO ] SYS    device 'screen1' (192.168.1.61) is online (11 ms)
+2026-11-13 20:59:12 [INFO ] SYS    device 'screen2' (192.168.1.62) is online (7 ms)
+2026-11-13 20:59:12 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (10 ms)
+2026-11-13 20:59:12 [WARN ] PJLINK PJ left: filter warning
+2026-11-13 20:59:12 [INFO ] TRIG   Trigger 63 'Projector error' fired (projector alarm)
+2026-11-13 20:59:12 [INFO ] SYS    Email 'PJ left: filter warning' sent to tech@example.com (simulated)
+2026-11-13 20:59:12 [INFO ] PJLINK PJ left (192.168.1.101) online
+2026-11-13 20:59:12 [INFO ] PJLINK PJ right (192.168.1.102) online
+2026-11-13 20:59:12 [WARN ] PJLINK PJ foyer (192.168.1.199) offline: no connection
+2026-11-13 20:59:12 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 20:59:12 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 20:59:12 [INFO ] SYS    Kiss-Box io (192.168.1.121) online
+2026-11-13 20:59:12 [INFO ] SYS    KNX gw (192.168.1.123) online
+2026-11-13 20:59:12 [INFO ] SYS    BrightSign lobby (192.168.1.125) online
+2026-11-13 20:59:12 [INFO ] SYS    DiGidot c4 (192.168.1.126) online
+2026-11-13 20:59:12 [INFO ] SYS    NETIO rack (192.168.1.127) online
+2026-11-13 20:59:12 [INFO ] SYS    Pharos lpc (192.168.1.128) online
+2026-11-13 20:59:12 [INFO ] SYS    Clock set from browser
+2026-11-13 20:59:15 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 20:59:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 20:59:17 [INFO ] TRIG   Trigger 15 'Start inloop' fired (delayed from trigger 1)
+2026-11-13 20:59:17 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-13 20:59:33 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 20:59:33 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-13 20:59:45 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 20:59:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 20:59:53 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 20:59:53 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-13 21:00:06 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-13 21:00:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:00:13 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-13 21:00:15 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:00:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:00:34 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:00:34 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-13 21:00:45 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:00:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:00:54 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:00:54 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-13 21:01:14 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:01:14 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-13 21:01:14 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:01:14 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:01:15 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:01:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:01:34 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:01:34 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-13 21:01:45 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:01:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:01:54 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:01:54 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-13 21:01:57 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-13 21:02:13 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-13 21:02:13 [INFO ] TRIG   Trigger 61 'Device offline -> email' fired (device offline)
+2026-11-13 21:02:13 [INFO ] CMD    device Wi-Fi bridge is offline
+2026-11-13 21:02:13 [INFO ] SYS    Email 'Wi-Fi bridge offline' sent to tech@example.com (simulated)
+2026-11-13 21:02:14 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:02:14 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-13 21:02:15 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:02:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:02:34 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:02:34 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-13 21:02:45 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:02:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:02:54 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:02:54 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-13 21:03:13 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (6 ms)
+2026-11-13 21:03:14 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:03:14 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-13 21:03:14 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:03:14 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:03:15 [INFO ] TRIG   Trigger 65 'Door opened (PLC)' fired (variable)
+2026-11-13 21:03:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-13 21:03:27 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-13 21:03:34 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-13 21:03:34 [INFO ] CMD    video1.mp4 ended in Video on lobby

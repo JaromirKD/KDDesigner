@@ -333,10 +333,15 @@ function drv(d) {
     st.uvars = { mode: 'day', visitors: '0', language: 'NL' };
     st.activity = [];
     st.gpio = 0;
+    // kdlink v13: master volume, mute, video output, zone volumes (set by the controller), the card and the screen.
+    Object.assign(st, { vol: 100, mute: 0, screen: 1, zvol: {}, hdmi: 1, sdFree: 12480, sdSize: 29800 });
   } else if (d.type === 'digidot') {
     st.info = { 'Device name': 'DiGidot C4', Serial: 'C4--20170803-4AFAE-9288B', Memory: '7984 of 46960 bytes', 'Frame rates': 'Art-Net 16 fps · scenes 24 fps' };
     st.scenes = ['Rainbow', 'Warm white', 'Fire', 'Ocean'];
-    pt('scene', 'Scene playing', '-'); pt('master', 'Master (%)', 100); pt('speed', 'Speed (%)', 100); pt('paused', 'Paused', 0);
+    // Playlists and the C4's own triggers: the firmware reads them from the C4's card (digiCardLists in Drivers.cpp).
+    st.playlists = ['Evening loop', 'Party', 'Christmas'];
+    st.c4triggers = ['Button 1', 'Sunset', 'All off', 'Art-Net lost'];
+    pt('scene', 'Scene playing', '-'); pt('playlist', 'Playlist playing', '-'); pt('master', 'Master (%)', 100); pt('speed', 'Speed (%)', 100); pt('paused', 'Paused', 0);
   } else if (d.type === 'pharos') {
     st.info = { Model: 'LPC X', Firmware: '2.9.3', Serial: '009812', 'Last boot': '17 Oct 2026 09:12:40', 'Reset reason': 'Software Reset',
       Memory: '24056Kb used of 127940Kb', Project: 'Museum', 'Project file': 'museum_v12.pd2 (uploaded 2026-10-01T15:19:08)',
@@ -366,7 +371,7 @@ function drvOnOff(d, k, v) {
   if (d.type === 'kissbox') { const t = kissKinds(d)[parseInt(k, 10) - 1]; bin = k.includes('.') && (t === 'out' || t === 'in'); }
   else if (d.type === 'netio') bin = /^(out|in)\d+$/.test(k);
   else if (d.type === 'knx') bin = parseInt((d.addresses || []).find((a) => a.ga === k)?.dpt || '1', 10) === 1;
-  else if (d.type === 'brightsign') bin = /^gpio\d$/.test(k);
+  else if (d.type === 'brightsign') bin = /^gpio\d$/.test(k) || k === 'screen' || k === 'hdmi';
   else if (d.type === 'pharos' && /^(tl|sc)/.test(k)) return v === '' ? -1 : v === 'none' || v === 'released' ? 0 : 1;
   if (!bin) return -1;
   return v === '1' ? 1 : v === '0' ? 0 : -1;
@@ -434,7 +439,9 @@ function bsPlugin(d) {
   st.pluginSeen = epoch();
   st.live = 'live';
   st.liveNote = undefined;
-  st.info['KD plugin'] = `kdlink v2 · ${st.zones.length} zones · ${Object.keys(st.uvars).length} user variables · GPIO · serial port`;
+  st.info.Card = `${(st.sdFree / 1024).toFixed(1)} GB free of ${(st.sdSize / 1024).toFixed(1)} GB`;
+  st.info.Screen = st.hdmi ? 'connected (HDMI)' : 'not connected';
+  st.info['KD plugin'] = `kdlink v13 · ${st.zones.length} zones · ${Object.keys(st.uvars).length} user variables · GPIO · serial port`;
   bsReport(d);
 }
 // Like pluginPacket in Drivers.cpp: zone changes and what the player receives go into the Activity list.
@@ -469,6 +476,13 @@ function bsReport(d) {
   });
   for (const [k, v] of Object.entries(st.uvars)) drvSet(d, 'var.' + k, v, k);
   for (let i = 0; i < 8; i++) drvSet(d, 'gpio' + i, (st.gpio >> i) & 1, 'GPIO ' + i);
+  // The plugin's "audio", "vol" and "health" packets.
+  drvSet(d, 'vol', st.vol, 'Master volume (%)'); drvSet(d, 'mute', st.mute, 'Mute'); drvSet(d, 'screen', st.screen, 'Screen output');
+  st.zones.forEach((z, i) => {
+    const zv = st.zvol[i];
+    if (zv) { drvSet(d, `z${i + 1}.vol`, zv.v, `Zone ${i + 1} ${z.name} volume (%)`); drvSet(d, `z${i + 1}.mute`, zv.mute, `Zone ${i + 1} ${z.name} mute`); }
+  });
+  drvSet(d, 'sdfree', st.sdFree, 'Card free (MB)'); drvSet(d, 'hdmi', st.hdmi, 'Screen connected');
 }
 // The simulated presentation runs by itself, every second (the plugin pushes its changes at once):
 // the Video zone plays Video 1 / Video 2 (20 s each) unless a UDP command or a test play took it elsewhere,
@@ -486,7 +500,7 @@ setInterval(() => {
     st.zones[1].file = st.zones[1].state.toLowerCase() + '.png';
     st.uvars.visitors = String(Math.floor(now / 60000) % 500);
     const motion = Math.floor(now / 10000) % 2;
-    if (motion !== (st.gpio & 1)) { st.gpio = (st.gpio & ~1) | motion; bsActivity(st, `gpio: input 0 ${motion ? 'on' : 'off'}`); }
+    if (!(d.gpioOut || []).includes(0) && motion !== (st.gpio & 1)) { st.gpio = (st.gpio & ~1) | motion; bsActivity(st, `gpio: input 0 ${motion ? 'on' : 'off'}`); }
     if (Math.floor(now / 1000) % 7 === 0) {
       const line = `TEMP ${(21 + Math.sin(now / 60000) * 1.5).toFixed(1)}`;
       bsActivity(st, 'serial: ' + line);
@@ -541,20 +555,39 @@ function drvCommandOne(t) {
     return later(`${t[i].toUpperCase()} ${path}`, () => '200 {"simulated":true}');
   };
   if (type === 'kissbox') {
+    // st.kissSet = what was last written (for a toggle before the read-back), st.kissPulse = running pulses.
+    const set = st.kissSet || (st.kissSet = {}), pulses = st.kissPulse || (st.kissPulse = {});
+    const wrote = (k, on) => { set[k] = { on: !!on, at: Date.now() }; clearTimeout(pulses[k]); delete pulses[k]; };
     if (w[2] === 'send' && t.length >= 4) return later('send ' + rest(3));
     if (w[2] === 'read' && t.length === 4) { if (!(+t[3] >= 1 && +t[3] <= 8)) throw new Error('slot must be 1-8'); return later('read slot ' + t[3]); }
     if (t.length === 12 && w[3] === 'all') {
       if (!(+t[2] >= 1 && +t[2] <= 8)) throw new Error('slot must be 1-8');
+      for (let c = 1; c <= 8; c++) wrote(`${t[2]}.${c}`, truthy(t[3 + c]) ?? +t[3 + c]);
       return later(`slot ${t[2]} all ${rest(4)}`, () => { t.slice(4).forEach((v, i) => drvSet(d, `${t[2]}.${i + 1}`, truthy(v) ?? Math.max(0, Math.min(255, +v || 0)))); return 'sent'; });
+    }
+    // <slot>.<ch> toggle | <slot>.<ch> pulse <s> (like kissCmd in Drivers.cpp): on/off output cards only.
+    const toggle = t.length === 4 && w[3] === 'toggle', pulse = t.length === 5 && w[3] === 'pulse';
+    if (toggle || pulse) {
+      const k = t[2], pm = /^([1-8])\.([1-8])$/.exec(k);
+      if (!pm) throw new Error('expected <slot>.<channel>, both 1-8');
+      if (kissKinds(d)[+pm[1] - 1] !== 'out') throw new Error(`slot ${pm[1]} is not an on/off output card`);
+      const sec = +t[4];
+      if (pulse && !(/^\d*\.?\d+$/.test(t[4]) && sec > 0 && sec <= 3600)) throw new Error('pulse length must be 0.01-3600 s');
+      const cur = set[k] && Date.now() - set[k].at < 2000 ? set[k].on : +(st.points.find((x) => x.k === k)?.v || 0) !== 0;
+      const on = pulse ? true : !cur;
+      wrote(k, on);
+      if (pulse) pulses[k] = setTimeout(() => { delete pulses[k]; set[k] = { on: false, at: Date.now() }; if (answers(d.ip)) drvSet(d, k, 0); log(1, 'SYS', `Kiss-Box ${d.name}: ${k} off (end of pulse) (simulated)`); }, sec * 1000);
+      return later(pulse ? `${k} on for ${t[4]} s` : `${k} = ${on ? 'on' : 'off'} (toggle)`, () => { drvSet(d, k, on ? 1 : 0); return 'sent'; });
     }
     const m = t.length === 4 && /^([1-8])\.([1-8])$/.exec(t[2]);
     if (t.length === 4 && !m && /^\d+\.\d+$/.test(t[2])) throw new Error('expected <slot>.<channel>, both 1-8');
     if (m) {
       const v = truthy(t[3]) ?? (/^\d+$/.test(t[3]) ? Math.min(255, +t[3]) : null);
-      if (v == null) throw new Error('value must be on|off or 0-255');
+      if (v == null) throw new Error('value must be on|off|toggle, pulse <s> or 0-255');
+      wrote(t[2], v);
       return later(`${t[2]} = ${t[3]}`, () => { drvSet(d, t[2], v); return 'sent'; });
     }
-    throw new Error('expected: <slot>.<ch> on|off|<0-255>, <slot> all <8 values>, read <slot> or send <hex bytes>');
+    throw new Error('expected: <slot>.<ch> on|off|toggle|<0-255>, <slot>.<ch> pulse <s>, <slot> all <8 values>, read <slot> or send <hex bytes>');
   }
   if (type === 'knx') {
     const write = t.length >= 5 && t.length <= 6 && w[2] === 'write', read = t.length === 4 && w[2] === 'read';
@@ -623,6 +656,42 @@ function drvCommandOne(t) {
         return [true, `play ${label} in ${t[3]}`];
       });
     }
+    // A GPIO output (only pins ticked as outputs: "gpioOut") and a line out of the serial port.
+    if (w[2] === 'gpio' && t.length === 5) {
+      const on = truthy(t[4]);
+      if (!/^[0-7]$/.test(t[3])) throw new Error('GPIO pins are 0-7');
+      if (on == null) throw new Error('expected on or off');
+      if (!(d.gpioOut || []).includes(+t[3])) throw new Error(`BrightSign ${d.name}: GPIO ${t[3]} is not ticked as an output (Devices > BrightSign > GPIO)`);
+      return plug(`gpio ${t[3]} ${on ? 'on' : 'off'}`, () => { st.gpio = (st.gpio & ~(1 << +t[3])) | (on << +t[3]); return [true, `GPIO ${t[3]} ${on ? 'on' : 'off'}`]; });
+    }
+    if (w[2] === 'serial' && t.length >= 4) return plug(`serial ${rest(3)}`, () => { bsActivity(st, `serial out: ${rest(3)}`); return [true, `serial out: ${rest(3)}`]; });
+    if (w[2] === 'probe' && t.length === 3) return plug('probe', () => [true, `gpio settings: (simulated player) outputs ${(d.gpioOut || []).join(',') || 'none'}`]);
+    // Sound and screen (bsignCmd in Drivers.cpp).
+    if ((w[2] === 'volume' && t.length === 5) || (w[2] === 'master' && t.length === 4)) {
+      const v = t[t.length - 1];
+      if (!/^\d+$/.test(v) || +v > 100) throw new Error('volume must be 0-100');
+      if (w[2] === 'master') return plug(`master ${+v}`, () => { st.vol = +v; return [true, `master volume ${+v} %`]; });
+      return plug(`volume ${t[3]} ${+v}`, () => {
+        const z = zone(t[3]), i = st.zones.indexOf(z);
+        if (!z) return [false, `no zone '${t[3]}'`];
+        if (z.name === 'Ticker') return [false, `zone '${t[3]}' has no sound`];
+        st.zvol[i] = { mute: 0, ...st.zvol[i], v: +v };
+        return [true, `volume ${t[3]} ${+v} %`];
+      });
+    }
+    if ((w[2] === 'mute' || w[2] === 'screen') && (t.length === 4 || (t.length === 5 && w[2] === 'mute'))) {
+      const on = truthy(t[t.length - 1]);
+      if (on == null) throw new Error('expected on or off');
+      if (t.length === 5) return plug(`mute ${t[3]} ${on ? 'on' : 'off'}`, () => {
+        const z = zone(t[3]), i = st.zones.indexOf(z);
+        if (!z) return [false, `no zone '${t[3]}'`];
+        if (z.name === 'Ticker') return [false, `zone '${t[3]}' has no sound`];
+        st.zvol[i] = { v: 100, ...st.zvol[i], mute: on };
+        return [true, `${on ? 'mute' : 'sound on'} ${t[3]}`];
+      });
+      if (w[2] === 'mute') return plug(`mute ${on ? 'on' : 'off'}`, () => { st.mute = on; return [true, on ? 'muted' : 'sound on']; });
+      return plug(`screen ${on ? 'on' : 'off'}`, () => { st.screen = on; return [true, `screen ${on ? 'on' : 'off'}`]; });
+    }
     if (w[2] === 'reboot' && t.length === 3 && d.plugin) return plug('reboot', () => { st.bootAt = epoch() + 20; return [true, 'rebooting']; });
     if (w[2] === 'send' && t.length >= 4) {
       st.last = `UDP '${rest(3)}'`;
@@ -646,7 +715,7 @@ function drvCommandOne(t) {
         return [true, w[2] === 'seek' ? `seek ${t[3]} ${parseFloat(t[4])} s` : `${w[2]} ${t[3]}`];
       });
     }
-    throw new Error('expected: test <zone> <state>, play <zone> <file>, seek <zone> <seconds>, pause|resume|release|stop <zone>, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]');
+    throw new Error('expected: test <zone> <state>, play <zone> <file>, seek <zone> <seconds>, pause|resume|release|stop <zone>, volume <zone> <0-100>, master <0-100>, mute [<zone>] on|off, screen on|off, gpio <0-7> on|off, serial <text>, probe, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]');
   }
   if (type === 'digidot') {
     if (w[2] === 'scene' && t.length >= 4) {
@@ -654,16 +723,27 @@ function drvCommandOne(t) {
       const i = st.scenes.findIndex((s) => s.toLowerCase() === w[3]);
       const name = i >= 0 ? st.scenes[i] : /^\d+$/.test(t[3]) ? (st.scenes[+t[3] - 1] || t[3]) : null;
       if (!name) throw new Error(`unknown DiGidot scene '${t[3]}'`);
-      return later('scene ' + t[3], () => { drvSet(d, 'scene', name); drvSet(d, 'paused', 0); return '{"result":"ok"}'; });
+      return later('scene ' + t[3], () => { drvSet(d, 'scene', name); drvSet(d, 'playlist', '-'); drvSet(d, 'paused', 0); return '{"result":"ok"}'; });
     }
-    if (w[2] === 'playlist' && t.length === 4) return later('playlist ' + t[3]);
-    if (w[2] === 'stop' && t.length === 3) return later('stop', () => { drvSet(d, 'scene', '-'); return '{"result":"ok"}'; });
+    // A playlist or C4 trigger by its name, its place in the list (1..) or its unique id (any other number).
+    const pick = (l, what) => {
+      const i = l.findIndex((s) => s.toLowerCase() === w[3]);
+      const name = i >= 0 ? l[i] : /^\d+$/.test(t[3]) && +t[3] > 0 ? (l[+t[3] - 1] || t[3]) : null;
+      if (!name) throw new Error(`unknown DiGidot ${what} '${t[3]}'`);
+      return name;
+    };
+    if (w[2] === 'playlist' && t.length === 4) {
+      const name = pick(st.playlists, 'playlist');
+      return later('playlist ' + t[3], () => { drvSet(d, 'playlist', name); drvSet(d, 'scene', st.scenes[0]); drvSet(d, 'paused', 0); return '{"result":"ok"}'; });
+    }
+    if (w[2] === 'refresh' && t.length === 3) return `DiGidot ${d.name}: reading the scenes, playlists and triggers again`;
+    if (w[2] === 'stop' && t.length === 3) return later('stop', () => { drvSet(d, 'scene', '-'); drvSet(d, 'playlist', '-'); return '{"result":"ok"}'; });
     if (w[2] === 'reset' && t.length === 3) return later('reset');
     if (w[2] === 'master' && t.length === 4) return later(`master ${t[3]}%`, () => { drvSet(d, 'master', Math.round(Math.max(0, Math.min(100, +t[3])))); return '{"result":"ok"}'; });
     if (w[2] === 'speed' && t.length === 4) return later(`speed ${t[3]}%`, () => { drvSet(d, 'speed', +t[3] | 0); return '{"result":"ok"}'; });
-    if (w[2] === 'trigger' && t.length === 4) return later('trigger ' + t[3]);
+    if (w[2] === 'trigger' && t.length === 4) { pick(st.c4triggers, 'trigger'); return later('trigger ' + t[3]); }
     if (w[2] === 'send' && t.length >= 4) return later('send ' + rest(3));
-    throw new Error('expected: scene <name|#> [fade <s>], playlist <id>, stop, master <0-100>, speed <%>, trigger <id>, reset or send <json>');
+    throw new Error('expected: scene <name|#> [fade <s>], playlist <name|#>, stop, master <0-100>, speed <%>, trigger <name|#>, refresh, reset or send <json>');
   }
   if (type === 'netio') {
     if (w[2] === 'send' && t.length >= 4) return later('send ' + rest(3));
@@ -725,7 +805,7 @@ function drvStatus() {
       history: st.history, checks: st.checks, info: st.info, points: st.points, onlineSince: st.online ? st.onlineSince : 0, dropouts: st.dropouts,
       restarts: st.restarts, ...(st.lastRestart ? { lastRestart: st.lastRestart } : {}), ...(st.uptime ? { uptime: st.uptime } : {}),
       ...(st.lastError ? { lastError: st.lastError, lastErrorAt: st.lastErrorAt } : {}),
-      ...(st.live ? { live: st.live } : {}), ...(st.liveNote ? { liveNote: st.liveNote } : {}), ...(st.triggers ? { triggers: st.triggers } : {}), ...(st.scenes.length ? { scenes: st.scenes } : {}), ...(d.type === 'knx' ? { tunnel: !!st.tunnel } : {}),
+      ...(st.live ? { live: st.live } : {}), ...(st.liveNote ? { liveNote: st.liveNote } : {}), ...(st.triggers ? { triggers: st.triggers } : {}), ...(st.scenes.length ? { scenes: st.scenes } : {}), ...(st.playlists ? { playlists: st.playlists, c4triggers: st.c4triggers } : {}), ...(d.type === 'knx' ? { tunnel: !!st.tunnel } : {}),
       ...(d.plugin && st.pluginSeen && st.states ? { states: st.states.map(([z, n, f, ms]) => ({ z, n, ...(f ? { f } : {}), ...(ms ? { ms } : {}) })) } : {}),
       ...(st.activity?.length ? { activity: st.activity } : {}) };
   });
@@ -1074,7 +1154,7 @@ setInterval(() => {
       if (!was || was.paused !== now.paused || Math.abs(want - predicted) > 250) {
         st.follow[key] = { pos: want, paused: now.paused, at: Date.now() };
         Object.assign(z, { state: `(test) ${s && s[1] !== file ? `${s[1]} (${file})` : file}`, file, until: 1e15 });
-        bsActivity(st, `${z.name}: follows timeline ${f.timeline} at ${(want / 1000).toFixed(1)} s${now.paused ? ' (paused)' : ''}`);
+        bsActivity(st, `${z.name}: follows timeline ${f.timeline} at ${(want / 1000).toFixed(1)} s${now.paused ? ' (paused)' : ''}${f.drift ? ' · corrects drift' : ''}`);
         bsReport(d);
       }
     }

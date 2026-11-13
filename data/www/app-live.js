@@ -195,7 +195,9 @@ function liveVars(st) {
     const shown = v.type === 'bool' ? (val === '1' ? '● on' : '○ off') : val === '' ? '–' : val;
     return `<div class="row nowrap lv-var${fresh ? ' fresh' : ''}"><span class="muted" style="flex:1">${esc(v.name)}</span><span class="mono">${esc(String(shown))}</span></div>`;
   });
-  el.innerHTML = modes.join('') + vars.join('');
+  // Grouped like the Variables page: ungrouped first, then a heading per group in its colour.
+  const inGroup = (g) => vars.filter((_, i) => (p.variables[i].group || '') === g).join('');
+  el.innerHTML = modes.join('') + inGroup('') + varGroups().filter((g) => inGroup(g.name)).map((g) => `<div class="lv-group" style="--tc:${trigColor(g.color) || 'var(--border)'}">${esc(g.name)}</div>${inGroup(g.name)}`).join('');
 }
 
 function liveDevices(st) {

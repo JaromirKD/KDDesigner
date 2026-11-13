@@ -23,6 +23,8 @@
 //   "live":true                                             Pharos: WebSocket; NETIO: MQTT-flex to our broker
 //   kissbox:    "frame":"IO8", "cards":["DO4PR","DI8DC",""], "listenPort":9813   (or "slots":"out,in,ain")
 //   brightsign: "udpPort":5000, "plugin":true, "pluginPort":5010   (kdlink plugin: zones, user variables, control)
+//               "gpioOut":[3,4]   GPIO pins that are outputs in the presentation ("gpio 3 on")
+//               "follow":[{"timeline":2,"zone":"Video","file":"Video 3","offset":0,"drift":true}]   a zone's video in step with a timeline
 //   knx:        "addresses":[{"ga":"1/1/1","name":"Hall light","dpt":"1","var":"hall"}], "readEvery":0
 namespace Drivers {
 void begin();                                             // starts the worker threads

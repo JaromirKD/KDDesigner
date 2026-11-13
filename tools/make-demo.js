@@ -186,10 +186,13 @@ trig('Start main show', 'manual', {},
 trig('Show: start video', 'manual', {}, ['send tcp watchout run', 'brightsign lobby send play1', 'brightsign lobby event video_show', 'brightsign lobby var mode show', 'log Video started from timeline {timeline}'], [],
   { notes: 'Fired by a ◆ trigger cue at 2 s on timeline "Main show". The brightsign event/var lines go through the KD plugin (kdlink) in the presentation.' });
 trig('Lobby: back to loop', 'manual', {}, ['brightsign lobby play Video loop.mp4', 'brightsign lobby stop Audio'], [], { notes: 'Plays a file directly in a BrightSign zone (KD plugin).' });
+trig('Lobby: night', 'manual', {}, ['brightsign lobby volume Video 30', 'brightsign lobby mute Audio on', 'brightsign lobby master 60', 'sleep 5', 'brightsign lobby mute on', 'brightsign lobby screen off', 'brightsign lobby gpio 3 off', 'brightsign lobby serial STANDBY'], [],
+  { notes: 'Sound and screen through the KD plugin (kdlink v13): a zone\'s volume, mute for one zone, the master volume of the whole player, then everything muted and the video output off (the screen goes to standby). GPIO 3 is ticked as an output on the BrightSign tab (a lamp in a button, say); the last line goes out of the player\'s serial port.' });
+trig('Lobby: day', 'manual', {}, ['brightsign lobby gpio 3 on', 'brightsign lobby screen on', 'brightsign lobby mute off', 'brightsign lobby mute Audio off', 'brightsign lobby master 100', 'brightsign lobby volume Video 100'], [], { notes: 'Undoes "Lobby: night".' });
 trig('Lobby: video ended', 'media_end', { device: 'lobby', zone: 'Video', file: '' }, ['log {file} ended in {zone} on {device}'], [],
   { notes: 'Fires when a video or audio file in the Video zone has played to its end (reported by the KD plugin). Give a file name to react to one file only.' });
 trig('Lobby: show test pattern', 'manual', {}, ['brightsign lobby test Video Testpattern'], [], { notes: 'Plays the file of the presentation\'s "Testpattern" state in the Video zone (KD plugin); the presentation carries on when it ends.' });
-trig('Show: halfway', 'manual', {}, ['netio rack output 2 pulse 5', 'pharos lpc timeline 1 start fade 3', 'digidot c4 scene 1 fade 2'], [], { notes: 'Trigger cue at 30 s: shows the show-device commands.' });
+trig('Show: halfway', 'manual', {}, ['netio rack output 2 pulse 5', 'pharos lpc timeline 1 start fade 3', 'digidot c4 scene 1 fade 2', 'kissbox io 1.2 pulse 0.5'], [], { notes: 'Trigger cue at 30 s: shows the show-device commands.' });
 trig('Main show finished', 'timeline', { timeline: 2, on: 'end' }, ['var show_count += 1', 'log Show {show_count} finished', 'fire trigger "Start inloop"']);
 trig('Main show stopped early', 'timeline', { timeline: 2, on: 'release' }, ['send osc qlab /cue/*/stop', 'log Main show released ({reason})'], [],
   { notes: 'Timeline trigger "is released": fires on stop timeline, the ■ button, release all or another group-A timeline starting ({reason} says which), not when it reaches its end.' });
@@ -199,6 +202,7 @@ trig('Flash walls once', 'manual', {}, ['set 1.10-29 255', 'sleep 0.2', 'clear o
 trig('Flash walls 6x', 'manual', {}, ['repeat "Flash walls once" 6 times every 0.5', 'log Walls flashed 6 times']);
 trig('Find the first fixtures', 'manual', {}, ['locate 1-4 for 8'], [], { notes: 'Locate: fixtures 1-4 blink white for 8 s to find them in the room (also Fixtures / Map: Locate, or the L key). "locate off" stops it.' });
 trig('Relay chase', 'manual', {}, ['repeat 4 times every 0.5 kissbox io 1.{i} on', 'sleep 1', 'kissbox io 1 all 0 0 0 0 0 0 0 0']);
+trig('C4 evening playlist', 'manual', {}, ['digidot c4 playlist "Evening loop"', 'kissbox io 1.1 toggle'], [], { notes: 'DiGidot playlists and triggers go by name (read from the C4); toggle flips a Kiss-Box relay.' });
 trig('Step through scenes', 'manual', {}, ['log Step {count}', 'scene {=1+count%3} fade 1'], [], { notes: 'Fired with repeat by the Teststand button: {count} = 1, 2, 3…' });
 trig('Winch up', 'manual', {}, ['start timeline "Winch move"'], ['io in2 is on'], { notes: 'Only when the safety contact (in2) is closed.' });
 
@@ -369,23 +373,25 @@ const project = {
     { id: 3, name: 'PJ foyer', ip: '192.168.1.199', port: 4352, password: '', lowercase: true },   // sends %1powr 1
   ],
   panel, triggers,
+  // Tabs of the Variables page (UI only); a variable's 'group' names one.
+  variableGroups: [{ name: 'Counters', color: 'green' }, { name: 'PLC', color: 'orange' }, { name: 'Touch panel', color: 'cyan' }],
   variables: [
-    { name: 'visitors', type: 'number', initial: 0, persist: true },
-    { name: 'show_count', type: 'number', initial: 0, persist: true },
-    { name: 'door', type: 'bool', initial: false, modbus: { device: 'plc', table: 'discrete', address: 0 } },
-    { name: 'work_lights', type: 'bool', initial: false, modbus: { device: 'plc', table: 'coil', address: 3 } },
+    { name: 'visitors', group: 'Counters', type: 'number', initial: 0, persist: true },
+    { name: 'show_count', group: 'Counters', type: 'number', initial: 0, persist: true },
+    { name: 'door', group: 'PLC', type: 'bool', initial: false, modbus: { device: 'plc', table: 'discrete', address: 0 } },
+    { name: 'work_lights', group: 'PLC', type: 'bool', initial: false, modbus: { device: 'plc', table: 'coil', address: 3 } },
     { name: 'media_status', type: 'text', initial: 'unknown' },
     // Linked to the mode group Museum (both ways): a PLC holding register could set it too.
-    { name: 'museum_state', type: 'number', initial: 1, modbus: { device: 'plc', table: 'holding', address: 20 } },
+    { name: 'museum_state', group: 'PLC', type: 'number', initial: 1, modbus: { device: 'plc', table: 'holding', address: 20 } },
     { name: 'blackout', type: 'bool', initial: false },
     { name: 'fog_on', type: 'bool', initial: false },
-    { name: 'house_level', type: 'number', initial: 0 },
-    { name: 'wall_colour', type: 'text', initial: '#000000' },
-    { name: 'wall_r', type: 'number', initial: 0 },
-    { name: 'wall_g', type: 'number', initial: 0 },
-    { name: 'wall_b', type: 'number', initial: 0 },
-    { name: 'pan', type: 'number', initial: 50 },
-    { name: 'tilt', type: 'number', initial: 50 },
+    { name: 'house_level', group: 'Touch panel', type: 'number', initial: 0 },
+    { name: 'wall_colour', group: 'Touch panel', type: 'text', initial: '#000000' },
+    { name: 'wall_r', group: 'Touch panel', type: 'number', initial: 0 },
+    { name: 'wall_g', group: 'Touch panel', type: 'number', initial: 0 },
+    { name: 'wall_b', group: 'Touch panel', type: 'number', initial: 0 },
+    { name: 'pan', group: 'Touch panel', type: 'number', initial: 50 },
+    { name: 'tilt', group: 'Touch panel', type: 'number', initial: 50 },
     { name: 'hall_light', type: 'bool', initial: false },
     { name: 'daylight', type: 'number', initial: 0 },
     { name: 'pharos_tl1', type: 'text', initial: '' },
@@ -415,10 +421,11 @@ mode Simple: dim, r, g, b`],
     { id: 2, type: 'knx', name: 'gw', ip: '192.168.1.123', port: 3671, addresses: [
       { ga: '1/1/1', dpt: '1', name: 'Hall light', var: 'hall_light' }, { ga: '1/2/1', dpt: '5.001', name: 'Hall dimmer' },
       { ga: '2/1/1', dpt: '3', name: 'Blinds' }, { ga: '3/1/1', dpt: '9', name: 'Hall temperature' }, { ga: '4/1/1', dpt: '232', name: 'RGB strip' }], vars: {} },
-    { id: 3, type: 'brightsign', name: 'lobby', ip: '192.168.1.125', port: 80, user: 'admin', password: '', udpPort: 5000, plugin: true, pluginPort: 5010, vars: {},
+    { id: 3, type: 'brightsign', name: 'lobby', ip: '192.168.1.125', port: 80, user: 'admin', password: '', udpPort: 5000, plugin: true, pluginPort: 5010, vars: {}, gpioOut: [3],
       commands: [{ name: 'Play intro', text: 'play1' }, { name: 'Loop', text: 'loop' }],
       // While "Main show" runs, the Video zone plays Video 3 in step with it (start, pause, jump, scrub).
-      follow: [{ timeline: 2, zone: 'Video', file: 'Video 3', offset: 0 }] },
+      // drift: the player also compares the video's real position with the timeline and puts it right.
+      follow: [{ timeline: 2, zone: 'Video', file: 'Video 3', offset: 0, drift: true }] },
     { id: 4, type: 'digidot', name: 'c4', ip: '192.168.1.126', port: 80, user: 'admin', password: 'admin', vars: {} },
     { id: 5, type: 'netio', name: 'rack', ip: '192.168.1.127', port: 80, user: 'netio', password: 'netio', model: '4PZ', outputs: 4, live: true, vars: {} },
     { id: 6, type: 'pharos', name: 'lpc', ip: '192.168.1.128', port: 80, live: true, vars: { tl1: 'pharos_tl1' } },

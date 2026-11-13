@@ -158,7 +158,7 @@ const PLACEHOLDER = {
   '{date}': '<DD-MM|DD-MM-YYYY>', '{cond...}': '<condition>', '{command...}': '<command>',
   '{kiss}': '<kiss-box>', '{knx}': '<knx interface>', '{bsign}': '<brightsign>', '{digi}': '<digidot>', '{netio}': '<netio>', '{pharos}': '<pharos>',
   '{kisspoint}': '<slot>.<channel>', '{kissval}': 'on|off|0-255', '{slot}': '<slot 1-8>', '{knxga}': '<group address or name>', '{knxval}': '<value>',
-  '{dpt}': '<dpt, e.g. 1 / 5.001 / 9>', '{path}': '<path>', '{digiscene}': '<scene name or #>', '{netioout}': '<output|all>',
+  '{dpt}': '<dpt, e.g. 1 / 5.001 / 9>', '{path}': '<path>', '{digiscene}': '<scene name or #>', '{digilist}': '<playlist name or #>', '{digitrig}': '<trigger name or #>', '{netioout}': '<output|all>',
   '{netioact}': 'on|off|toggle|restart|pulse', '{pharostl}': 'start|release|toggle|pause|resume', '{pharossc}': 'start|release|toggle',
   '{fixgrp}': 'fixture|group', '{pharosproto}': '<protocol>', '{word}': '<name>', '{bszone}': '<zone>', '{bsvar}': '<user variable>', '{bsfile}': '<file|state>', '{bsstate}': '<state>',
   '{iopoint}': '<point, e.g. out3, or its name>', '{ioval}': 'on|off|toggle|<volts>',
@@ -194,7 +194,9 @@ function emptyProject() {
 function normalize(p) {
   const e = emptyProject();
   for (const k of ['universes', 'fixtures', 'groups', 'scenes', 'timelines', 'triggers', 'projectors', 'pcs', 'devices', 'modes',
-    'variables', 'tcp', 'modbus', 'calendar', 'maps', 'effects', 'deviceGroups', 'fixtureTypes', 'drivers', 'colorThemes']) p[k] = p[k] || [];
+    'variables', 'tcp', 'modbus', 'calendar', 'maps', 'effects', 'deviceGroups', 'fixtureTypes', 'drivers', 'colorThemes', 'variableGroups']) p[k] = p[k] || [];
+  // A variable's group that is not in the list (typed by hand, an older project) gets its tab.
+  for (const v of p.variables) if (v.group && !p.variableGroups.some((g) => g.name === v.group)) p.variableGroups.push({ name: v.group });
   p.deviceGroups.forEach((g) => (g.devices = g.devices || []));
   p.drivers.forEach(normDriver);   // app-drivers.js
   // "Round effects" moved from the map (`square`) to each effect (`round`, Nov 2026): every

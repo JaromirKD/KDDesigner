@@ -20,11 +20,21 @@
 '   kd stop <zone>                    stop the video/audio of a zone
 '   kd seek <zone> <ms>               jump to a position in the zone's video
 '   kd pause <zone> / kd resume <zone>   hold the zone's video / carry on
-'   kd sync <zone> <file|state> <ms> play|pause   the zone follows a timeline of the controller (see kdlink_sync)
+'   kd sync <zone> <file|state> <ms> play|pause [drift]   the zone follows a timeline of the controller (see kdlink_sync);
+'                                     drift (v13) = also put the video right when it slowly runs away from the timeline
+'   kd volume <zone> <0-100>          the volume of a zone's video / audio (v13)
+'   kd zmute <zone> on|off            mute one zone
+'   kd master <0-100>                 the volume of the whole player: its HDMI, analog and SPDIF outputs
+'   kd mute on|off                    mute the whole player
+'   kd screen on|off                  the video output: off = no signal, the screen goes to standby
+'   kd gpio <0-7> on|off              switch a GPIO pin that the presentation has set as an output (BrightAuthor:
+'                                     Presentation Settings > Interactive > GPIO). The plugin never changes a pin's direction.
+'   kd serial <text>                  send a line out of the serial port
 '   kd release <zone>                 the zone goes back to its own state of the presentation
 '   kd event <text>                   a Plugin Message (plugin kdlink) to the presentation
 '   kd var <name> <value>             set a user variable (User Variable events in the presentation fire)
 '   kd probe                          for fault-finding: each zone's video position, length and the last player events
+'                                     and (a second reply) what the presentation holds about the GPIO pins
 '   kd reboot                         restart the player (the show starts again from the beginning)
 ' To the controller: one JSON object per UDP packet:
 '   {"kd":"hello","v":12,"zones":3,"vars":4,"model":"XT1144","gpio":true,"serial":false}
@@ -39,6 +49,11 @@
 '   {"kd":"msg","text":"..."}         a Send Plugin Message (plugin kdlink) from the presentation;
 '                                     "zone <zone> <text>" sets what that zone shows as playing instead
 '   {"kd":"reply","ok":true,"text":"..."}
+'   {"kd":"audio","master":100,"mute":false,"screen":true}   v13: master volume, mute and the video output
+'   {"kd":"vol","i":1,"v":60,"mute":false}   a zone's volume, once the controller has set it
+'   {"kd":"health","up":86400,"fw":"9.1.164","serial":"...","free":12000,"size":29000,"hdmi":1}
+'                                     every minute and when the screen is plugged in or out: seconds since the
+'                                     player started, the card in MB, hdmi 1 = a screen is connected, 0 = none, -1 = unknown
 '
 ' Everything the plugin reads from the presentation (zones, states, players) belongs to the
 ' player's autorun and differs between versions, so every object is type-checked before use:
@@ -71,6 +86,19 @@ Function kdlink_Initialize(msgPort As Object, userVariables As Object, bsp As Ob
   k.playAt = {}         ' zone name (lower case) -> tickNo when a "kd play" / "kd test" started there
   k.evLog = []          ' the last video / audio events as "<second>:<code>", for "kd probe"
   k.gpioSeen = -1
+  k.outMask = 0         ' GPIO pins the controller has switched (bit n = pin n) and what it set them to:
+  k.outBits = 0         ' reported back in "gpio", whatever the port itself says about an output
+  k.master = 100        ' master volume, mute and video output as the controller last set them
+  k.mute = false
+  k.screenOn = true
+  k.outs = invalid      ' the player's audio outputs (made at the first master / mute command)
+  k.zoneVol = {}        ' zone name (lower case) -> {v, mute}: a zone volume the controller set
+  k.volSeen = {}        ' zone index -> "v|mute" last sent
+  k.audioSeen = ""      ' "master|mute|screen" last sent
+  k.hdmiSeen = -1       ' 1 = a screen is connected, 0 = none, -1 = unknown
+  k.healthAt = -1000    ' tickNo of the last "health" packet
+  k.vm = CreateObject("roVideoMode")
+  if type(k.vm) <> "roVideoMode" then k.vm = invalid
   k.logCount = 0        ' log lines this tick (a chatty serial device mustn't flood the network)
   k.clock = CreateObject("roTimespan")
   k.clock.Mark()
@@ -164,13 +192,16 @@ Sub kdlink_command(m As Object, text As String, host As String, port As Integer)
     m.zoneSeen = {}
     m.varSeen = {}
     m.gpioSeen = -1
+    m.volSeen = {}
+    m.audioSeen = ""
+    m.healthAt = -1000
     zones = kdlink_zones(m)
     nVars = 0
     nVars = kdlink_count(m.userVariables)
     model = ""
     di = CreateObject("roDeviceInfo")
     if type(di) = "roDeviceInfo" then model = di.GetModel()
-    kdlink_queue(m, {kd: "hello", v: 12, zones: zones.Count(), vars: nVars, model: model, gpio: m.gpio <> invalid, serial: m.serial <> invalid})
+    kdlink_queue(m, {kd: "hello", v: 13, zones: zones.Count(), vars: nVars, model: model, gpio: m.gpio <> invalid, serial: m.serial <> invalid})
     kdlink_states(m)
     kdlink_tick(m)
     return
@@ -194,7 +225,75 @@ Sub kdlink_command(m As Object, text As String, host As String, port As Integer)
       kdlink_reply(m, false, "can't set '" + f[2] + "' on this player")
     end if
   else if cmd = "sync" and f.Count() >= 6 then
-    kdlink_sync(m, f[2], f[3], Int(Val(f[4])), LCase(f[5]) = "pause")
+    drift = false
+    if f.Count() >= 7 then drift = LCase(f[6]) = "drift"
+    kdlink_sync(m, f[2], f[3], Int(Val(f[4])), LCase(f[5]) = "pause", drift)
+  else if cmd = "master" and f.Count() >= 3 then
+    m.master = kdlink_pct(f[2])
+    kdlink_applyMaster(m)
+    kdlink_reply(m, true, "master volume " + Str(m.master).Trim() + " %")
+  else if cmd = "mute" and f.Count() >= 3 then
+    m.mute = LCase(f[2]) <> "off"
+    kdlink_applyMaster(m)
+    kdlink_reply(m, true, kdlink_iif(m.mute, "muted", "sound on"))
+  else if (cmd = "volume" or cmd = "zmute") and f.Count() >= 4 then
+    z = kdlink_findZone(m, f[2])
+    if z = invalid then
+      kdlink_reply(m, false, "no zone '" + f[2] + "'")
+    else if type(z.videoPlayer) <> "roVideoPlayer" and type(z.audioPlayer) <> "roAudioPlayer" then
+      kdlink_reply(m, false, "zone '" + f[2] + "' has no sound")
+    else
+      lname = LCase(kdlink_zoneName(z, 0))
+      zv = m.zoneVol[lname]
+      if zv = invalid then zv = {v: kdlink_startVol(z), mute: false}
+      if cmd = "volume" then
+        zv.v = kdlink_pct(f[3])
+        kdlink_reply(m, true, "volume " + f[2] + " " + Str(zv.v).Trim() + " %")
+      else
+        zv.mute = LCase(f[3]) <> "off"
+        kdlink_reply(m, true, kdlink_iif(zv.mute, "mute ", "sound on ") + f[2])
+      end if
+      m.zoneVol[lname] = zv
+      kdlink_applyVol(m, z)
+    end if
+  else if cmd = "gpio" and f.Count() >= 4 then
+    pin = Int(Val(f[2]))
+    if m.gpio = invalid then
+      kdlink_reply(m, false, "this player has no GPIO port")
+    else if pin < 0 or pin > 7 or kdlink_str(pin) <> f[2] then
+      kdlink_reply(m, false, "GPIO pins are 0-7")
+    else
+      level = LCase(f[3]) <> "off"
+      m.gpio.SetOutputState(pin, level)
+      bitv = Int(2 ^ pin + 0.5)
+      if (m.outMask and bitv) = 0 then m.outMask = m.outMask + bitv
+      if level and (m.outBits and bitv) = 0 then m.outBits = m.outBits + bitv
+      if not level and (m.outBits and bitv) <> 0 then m.outBits = m.outBits - bitv
+      kdlink_reply(m, true, "GPIO " + f[2] + kdlink_iif(level, " on", " off"))
+    end if
+  else if cmd = "serial" and f.Count() >= 3 then
+    sp = m.serial
+    ' The presentation's own serial port, where it has one open.
+    if sp = invalid and type(m.bsp) = "roAssociativeArray" and type(m.bsp.serial) = "roAssociativeArray" then
+      for each key in m.bsp.serial
+        if sp = invalid and type(m.bsp.serial[key]) = "roSerialPort" then sp = m.bsp.serial[key]
+      end for
+    end if
+    if sp = invalid then
+      kdlink_reply(m, false, "no serial port open: give the presentation a user variable kdSerial with the baud rate (e.g. 9600)")
+    else
+      sp.SendLine(f[2])
+      kdlink_reply(m, true, "serial out: " + f[2])
+    end if
+  else if cmd = "screen" and f.Count() >= 3 then
+    if m.vm = invalid then
+      kdlink_reply(m, false, "this player has no video output to switch")
+    else
+      m.screenOn = LCase(f[2]) <> "off"
+      ' Power save = no signal on the output: the screen shows "no signal" and goes to standby.
+      m.vm.SetPowerSaveMode(not m.screenOn)
+      kdlink_reply(m, true, "screen " + kdlink_iif(m.screenOn, "on", "off"))
+    end if
   else if (cmd = "seek" and f.Count() >= 4) or ((cmd = "pause" or cmd = "resume" or cmd = "release") and f.Count() >= 3) then
     z = kdlink_findZone(m, f[2])
     if z = invalid then
@@ -316,15 +415,48 @@ Sub kdlink_tick(m As Object)
   kdlink_resume(m)
   kdlink_loops(m)
   zones = kdlink_zones(m)
+  moved = false
   for i = 0 to zones.Count() - 1
     z = zones[i]
     sig = z.state + "|" + z.file
     k = Str(i + 1).Trim()
     if kdlink_str(m.zoneSeen[k]) <> sig or m.zoneSeen[k] = invalid then
       m.zoneSeen[k] = sig
+      moved = true
       kdlink_queue(m, {kd: "zone", i: i + 1, name: z.name, state: z.state, file: z.file})
     end if
+    zv = m.zoneVol[LCase(z.name)]
+    if zv <> invalid then
+      vs = Str(zv.v).Trim() + "|" + kdlink_str(zv.mute)
+      if kdlink_str(m.volSeen[k]) <> vs then
+        m.volSeen[k] = vs
+        kdlink_queue(m, {kd: "vol", i: i + 1, v: zv.v, mute: zv.mute})
+      end if
+    end if
   end for
+  ' A state of the presentation may set its own volume when it starts: the controller's stays.
+  if moved and kdlink_count(m.zoneVol) > 0 then
+    list = kdlink_zoneList(m)
+    if list <> invalid then
+      for each zo in list
+        if type(zo) = "roAssociativeArray" then kdlink_applyVol(m, zo)
+      end for
+    end if
+  end if
+  asig = Str(m.master).Trim() + "|" + kdlink_str(m.mute) + "|" + kdlink_str(m.screenOn)
+  if asig <> m.audioSeen then
+    m.audioSeen = asig
+    kdlink_queue(m, {kd: "audio", master: m.master, mute: m.mute, screen: m.screenOn})
+  end if
+  ' Health: every minute, and at once when a screen is plugged in or out (looked at every 2 s).
+  if m.tickNo MOD 8 = 0 or m.healthAt < 0 then
+    h = kdlink_hdmi(m)
+    if h <> m.hdmiSeen or m.tickNo - m.healthAt >= 240 or m.healthAt < 0 then
+      m.hdmiSeen = h
+      m.healthAt = m.tickNo
+      kdlink_health(m)
+    end if
+  end if
   if type(m.userVariables) = "roAssociativeArray" then
     for each name in m.userVariables
       uv = m.userVariables[name]
@@ -339,6 +471,14 @@ Sub kdlink_tick(m As Object)
   end if
   if m.gpio <> invalid then
     bits = m.gpio.GetWholeState()
+    ' Pins the controller switched show what it set them to.
+    for pin = 0 to 7
+      bitv = Int(2 ^ pin + 0.5)
+      if (m.outMask and bitv) <> 0 then
+        if (bits and bitv) <> 0 then bits = bits - bitv
+        if (m.outBits and bitv) <> 0 then bits = bits + bitv
+      end if
+    end for
     if bits <> m.gpioSeen then
       m.gpioSeen = bits
       kdlink_queue(m, {kd: "gpio", bits: bits})
@@ -360,7 +500,11 @@ End Sub
 ' at that position, playing or standing still. Sent on every start, pause, jump and loop of the
 ' timeline and every 3 s; while the video is in step (within 0.6 s by the plugin's own count) nothing
 ' is touched, so the picture doesn't stutter.
-Sub kdlink_sync(m As Object, zone As String, ref As String, ms As Integer, paused As Boolean)
+' drift: the video runs on the player's own clock, so over a long timeline it slowly runs away. With
+' drift the plugin also compares the video's real position with the timeline's and jumps when they are
+' more than 120 ms apart - at most every 5 s, and it learns how far a jump lands off ("lead"). When
+' four jumps in a row don't bring it in step (a video with few key frames), it leaves the video alone.
+Sub kdlink_sync(m As Object, zone As String, ref As String, ms As Integer, paused As Boolean, drift As Boolean)
   z = kdlink_findZone(m, zone)
   if z = invalid then return
   file = ref
@@ -397,7 +541,7 @@ Sub kdlink_sync(m As Object, zone As String, ref As String, ms As Integer, pause
     m.wasTest[lname] = "sync"
     m.resume.Delete(lname)
     m.playAt[lname] = m.tickNo
-    sy = {file: file, ms: -100000, tick: m.tickNo, paused: false, ended: false, seen: m.tickNo}
+    sy = {file: file, ms: -100000, tick: m.tickNo, paused: false, ended: false, seen: m.tickNo, lead: 0, fixes: 0, fixAt: -100}
     kdlink_reply(m, true, "follows the timeline with " + label + " in " + zone)
   end if
   if type(z.videoPlayer) = "roVideoPlayer" and not kdlink_isImage(file) then
@@ -413,9 +557,40 @@ Sub kdlink_sync(m As Object, zone As String, ref As String, ms As Integer, pause
       m.playAt[lname] = m.tickNo
       sy.ms = ms
       sy.tick = m.tickNo
+      sy.fixes = 0
+      sy.fixAt = m.tickNo
     else if fresh then
       sy.ms = ms
       sy.tick = m.tickNo
+    else if drift and m.canPoll and not paused and not sy.paused and not sy.ended and sy.fixes < 4 and m.tickNo - sy.fixAt >= 20 then
+      vpos = Val(kdlink_str(z.videoPlayer.GetPlaybackPosition()))
+      if vpos > 0 then
+        err = ms - vpos
+        away = err
+        if away < 0 then away = -away
+        if away <= 120 then
+          sy.fixes = 0
+        else
+          ' What the last jump missed by is added to the next one.
+          if sy.fixes > 0 then sy.lead = sy.lead + err
+          if sy.lead > 1000 then sy.lead = 1000
+          if sy.lead < -300 then sy.lead = -300
+          go = ms + sy.lead
+          if go < 0 then go = 0
+          z.videoPlayer.Seek(Int(go))
+          m.loopSeen.Delete(lname)
+          sy.ms = ms
+          sy.tick = m.tickNo
+          sy.fixes = sy.fixes + 1
+          sy.fixAt = m.tickNo
+          side = kdlink_iif(err > 0, " ms behind", " ms ahead")
+          if sy.fixes >= 4 then
+            kdlink_reply(m, false, zone + ": can't keep the video in step with the timeline (still " + Str(Int(away)).Trim() + side + " after 4 jumps), left alone until the timeline jumps")
+          else
+            kdlink_log(m, "sync", zone + ": video was " + Str(Int(away)).Trim() + side + ", put right")
+          end if
+        end if
+      end if
     end if
     if paused and not sy.paused then
       z.videoPlayer.Pause()
@@ -515,6 +690,75 @@ Sub kdlink_ended(m As Object, event As Object)
       end if
     end if
   end for
+End Sub
+
+' A typed volume as 0-100.
+Function kdlink_pct(text As String) As Integer
+  v = Int(Val(text))
+  if v < 0 then v = 0
+  if v > 100 then v = 100
+  return v
+End Function
+
+' The volume a zone starts with in the presentation (100 when it can't be read).
+Function kdlink_startVol(z As Object) As Integer
+  for each key in ["videoVolume%", "initialVideoVolume%", "audioVolume%", "initialAudioVolume%"]
+    v = kdlink_str(z[key])
+    if v <> "" then return kdlink_pct(v)
+  end for
+  return 100
+End Function
+
+' Sets the zone's players to the volume the controller asked for (nothing when it never did).
+Sub kdlink_applyVol(m As Object, z As Object)
+  zv = m.zoneVol[LCase(kdlink_zoneName(z, 0))]
+  if zv = invalid then return
+  v = zv.v
+  if zv.mute then v = 0
+  if type(z.videoPlayer) = "roVideoPlayer" then z.videoPlayer.SetVolume(v)
+  if type(z.audioPlayer) = "roAudioPlayer" then z.audioPlayer.SetVolume(v)
+End Sub
+
+' Master volume and mute: on the player's outputs, so they hold whatever the zones do.
+Sub kdlink_applyMaster(m As Object)
+  if m.outs = invalid then
+    m.outs = []
+    for each name in ["HDMI", "Analog", "SPDIF"]
+      o = CreateObject("roAudioOutput", name)
+      if type(o) = "roAudioOutput" then m.outs.Push(o)
+    end for
+  end if
+  for each o in m.outs
+    o.SetVolume(m.master)
+    o.SetMute(m.mute)
+  end for
+End Sub
+
+' 1 = a screen is connected to the HDMI output, 0 = none, -1 = can't tell (older OS, or the output is off).
+Function kdlink_hdmi(m As Object) As Integer
+  if m.vm = invalid or not m.canPoll then return -1
+  if not m.screenOn then return m.hdmiSeen
+  st = m.vm.GetHdmiOutputStatus()
+  if type(st) <> "roAssociativeArray" then return 0
+  if kdlink_str(st["output_present"]) = "false" then return 0
+  return 1
+End Function
+
+' How the player is doing: time since it started, OS version, the card, the screen.
+Sub kdlink_health(m As Object)
+  o = {kd: "health", up: Int(UpTime(0)), hdmi: m.hdmiSeen}
+  di = CreateObject("roDeviceInfo")
+  if type(di) = "roDeviceInfo" then
+    o.fw = kdlink_str(di.GetVersion())
+    o.serial = kdlink_str(di.GetDeviceUniqueId())
+  end if
+  si = CreateObject("roStorageInfo", "SD:")
+  if type(si) <> "roStorageInfo" then si = CreateObject("roStorageInfo", "SSD:")
+  if type(si) = "roStorageInfo" then
+    o.free = si.GetFreeInMegabytes()
+    o.size = si.GetSizeInMegabytes()
+  end if
+  kdlink_queue(m, o)
 End Sub
 
 Sub kdlink_queue(m As Object, o As Object)
@@ -872,7 +1116,43 @@ Sub kdlink_probe(m As Object)
     ev = ev + " " + e
   end for
   kdlink_reply(m, true, text + " | events" + ev)
+  ' What the presentation holds about the GPIO pins (which are inputs, which outputs): the names differ
+  ' per OS version, so they are listed here to find out. A reply of its own (a packet holds 450 characters).
+  g = ""
+  if type(m.bsp) = "roAssociativeArray" then
+    g = kdlink_gpioKeys(m.bsp, "bsp")
+    if type(m.bsp.sign) = "roAssociativeArray" then g = g + kdlink_gpioKeys(m.bsp.sign, "sign")
+  end if
+  if g = "" then g = " nothing found"
+  kdlink_reply(m, true, "gpio settings:" + g)
 End Sub
+
+' " <where>.<key>=<value>" for every entry of an associative array with "gpio" in its name
+' (a list or a table: its first 8 values).
+Function kdlink_gpioKeys(aa As Object, where As String) As String
+  out = ""
+  for each key in aa
+    if Instr(1, LCase(key), "gpio") > 0 then
+      v = aa[key]
+      val = kdlink_str(v)
+      if type(v) = "roArray" or type(v) = "roList" or type(v) = "roAssociativeArray" then
+        val = type(v) + "["
+        n = 0
+        for each e in v
+          if n < 8 then
+            if type(v) = "roAssociativeArray" then val = val + e + ":" + kdlink_str(v[e]) + "," else val = val + kdlink_str(e) + ","
+          end if
+          n = n + 1
+        end for
+        val = val + "]"
+      else if val = "" then
+        val = type(v)
+      end if
+      out = out + " " + where + "." + key + "=" + Left(val, 60)
+    end if
+  end for
+  return out
+End Function
 
 ' A test file ended in a zone whose state loops its own file: start that file again (looping), so
 ' the presentation looks as before the test.

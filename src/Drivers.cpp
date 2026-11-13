@@ -45,6 +45,16 @@ struct Drv {
   std::vector<std::pair<String, String>> info;    // shown on the Monitoring page
   std::vector<std::pair<String, String>> links;   // point key -> variable
   std::vector<std::pair<String, uint32_t>> scenes;  // DiGidot scene name -> unique id
+  // DiGidot playlists and the C4's own triggers, name -> unique id. The API has no list call for them:
+  // they are read as files from the C4's card (digiCardLists), again when the folders change (listSig)
+  // or after "digidot <dev> refresh" (listsDue).
+  std::vector<std::pair<String, uint32_t>> playlists, c4trigs;
+  uint32_t listSig = 0;
+  bool listsDue = false;
+  // Kiss-Box: what we last wrote to each output (a bit per channel) and when, so "toggle" twice in a row
+  // works before the box's read-back has come in.
+  uint8_t kissSet[8] = {}, kissSetMask[8] = {};
+  uint32_t kissSetAt[8] = {};
   std::vector<Trig> triggers;                       // Pharos
   int outputs = 0;                                  // NETIO: number of outputs of the model (for "output all")
   // live state
@@ -79,7 +89,10 @@ struct Drv {
   // Zones whose video follows one of our timelines ("follow": timeline id, zone, file or state name, offset s):
   // the plugin gets "kd sync <zone> <file> <ms> play|pause" on a start, pause, resume, jump or loop
   // (and every 3 s, which it ignores while it is in step), "kd release <zone>" when the timeline stops.
-  struct Follow { int timeline; String zone, file; int32_t offset; bool active, paused; int32_t sentPos; uint32_t sentAt, lastSend; };
+  // drift: the plugin also compares the video's real position with ours and puts it right ("Correct drift").
+  struct Follow { int timeline; String zone, file; int32_t offset; bool active, paused; int32_t sentPos; uint32_t sentAt, lastSend; bool drift; };
+ uint8_t gpioOut = 0;            // GPIO pins ticked as outputs ("gpioOut":[3,4]): the only ones "gpio <n> on|off" switches
+  bool cardLow = false;           // the player's card had under 5 % free at the last health report (warned once)
   std::vector<Follow> follows;
   std::deque<std::pair<uint32_t, String>> activity;   // what the player received: serial, UDP, GPIO, zone changes
 };
@@ -87,10 +100,14 @@ struct Drv {
 struct Job { int id; String method, path, body, label; };          // HTTP (method "POLL" = status poll)
 struct UJob { int id; std::vector<uint8_t> data; String label; uint32_t at; bool quiet; };  // KNX cEMI frame or Kiss-Box bytes; quiet = not logged
 using VarSets = std::vector<std::pair<String, String>>;
+// A Kiss-Box output that is on for a while ("pulse"): switched off at 'at' by the UDP thread.
+// Not cleared by a reload (the relay would stay on); one whose device is gone is dropped there.
+struct KPulse { int id; uint8_t slot, ch; uint32_t at; };
 
 std::vector<Drv> list;
 std::deque<Job> jobs;
 std::deque<UJob> ujobs;
+std::vector<KPulse> kpulses;
 rtos::Mutex mtx;   // guards everything above; never held during network waits
 rtos::Thread httpThread(osPriorityNormal, 10 * 1024, nullptr, "drv-http");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 rtos::Thread udpThread(osPriorityNormal, 4 * 1024, nullptr, "drv-udp");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
@@ -120,7 +137,7 @@ int onOff(const Drv& d, const Point& p) {
   } else if (d.type == Knx) {
     bin = p.dpt.toInt() == 1;
   } else if (d.type == Bsign) {
-    bin = k.startsWith("gpio");
+    bin = k.startsWith("gpio") || k == "screen" || k == "hdmi";   // inputs, video output on/off, a screen connected
   } else if (d.type == Pharos && (k.startsWith("tl") || k.startsWith("sc"))) {
     return !v.length() ? -1 : v == "none" || v == "released" ? 0 : 1;   // running, paused, started... = on
   }
@@ -189,6 +206,22 @@ String b64(const String& in) {
     out += T[(v >> 12) & 63];
     out += i + 1 < n ? T[(v >> 6) & 63] : '=';
     out += i + 2 < n ? T[v & 63] : '=';
+  }
+  return out;
+}
+// Base64 text -> text (the DiGidot hands out card files this way; JSON, so no zero bytes).
+String unb64(const char* in) {
+  String out;
+  out.reserve(strlen(in) * 3 / 4 + 1);
+  uint32_t v = 0;
+  int bits = 0;
+  for (; *in; in++) {
+    char ch = *in;
+    int x = ch >= 'A' && ch <= 'Z' ? ch - 'A' : ch >= 'a' && ch <= 'z' ? ch - 'a' + 26 : ch >= '0' && ch <= '9' ? ch - '0' + 52 : ch == '+' ? 62 : ch == '/' ? 63 : -1;
+    if (x < 0) continue;   // padding, line breaks
+    v = v << 6 | (uint32_t)x;
+    bits += 6;
+    if (bits >= 8) { bits -= 8; char c = (char)(v >> bits & 0xFF); if (c) out += c; }
   }
   return out;
 }
@@ -401,6 +434,15 @@ struct Update {
   long uptime = -1;      // device uptime in seconds, when its API reports it
   std::vector<Trig> triggers;   // Pharos trigger list
   bool newTriggers = false;
+  std::vector<std::pair<String, uint32_t>> playlists, c4trigs;   // DiGidot, read from its card
+  bool newLists = false;
+  uint32_t listSig = 0;
+};
+// What we already know of a DiGidot when a poll starts (copied under mtx).
+struct DigiKnown {
+  std::vector<std::pair<String, uint32_t>> scenes, playlists;
+  uint32_t listSig;
+  bool listsDue;
 };
 
 // netio.json (poll) and the MQTT-flex ${INOUT_STATUS} payload have the same layout.
@@ -526,14 +568,97 @@ void pollPharos(Conn& c, Update& u, String& err, bool& ok) {
   err = "";
 }
 
-void pollDigi(Conn& c, Update& u, String& err, bool& ok, uint32_t polls, const std::vector<std::pair<String, uint32_t>>& scenes) {
+// ---- DiGidot: playlists and triggers from the C4's card ----------------------
+// The C4 API v2 lists scenes only. Playlists and the C4's own triggers are files on its card
+// (the document's example: ./SYSTEM/TRIGGERS/2754ACD.JSN = {"unique_id":41241293,"name":...}, the file
+// name being the id in hex), so we read those: "sd_card" "ls" for the folder, "cat" for each file.
+// The document doesn't name the playlist folder: any folder starting with PLAYLIST in . or ./SYSTEM is
+// taken, and the log says which folders were seen so it can be put right on a real C4.
+const size_t kMaxC4Trigs = 48, kMaxC4Lists = 24;
+bool digiLs(Conn& c, const String& dir, JsonDocument& d, String& err) {
+  HttpRes r;
+  JsonDocument f;
+  JsonObject ff = f["files"][0].to<JsonObject>();
+  for (const char* k : {"name", "info", "date", "time", "size"}) ff[k] = true;
+  if (!digi(c, "{\"action\":\"sd_card\",\"subaction\":\"ls\",\"dir\":\"" + dir + "\"}", r, err)) return false;
+  return !deserializeJson(d, r.body, DeserializationOption::Filter(f));
+}
+// One file: its name and unique id. false = the C4 didn't answer (try again at a later poll).
+bool digiFile(Conn& c, const String& path, const String& fname, std::pair<String, uint32_t>& out, String& err) {
+  HttpRes r;
+  if (!digi(c, "{\"action\":\"sd_card\",\"subaction\":\"cat\",\"filename\":\"" + path + "\",\"seek\":0,\"length\":2048}", r, err)) return false;
+  int dot = fname.lastIndexOf('.');
+  String base = dot > 0 ? fname.substring(0, dot) : fname;
+  out = {"", (uint32_t)strtoul(base.c_str(), nullptr, 16)};
+  JsonDocument d, f, j, jf;
+  f["data"] = true;
+  jf["name"] = true;
+  jf["unique_id"] = true;
+  if (!deserializeJson(d, r.body, DeserializationOption::Filter(f))) {
+    // A file over 2 KB is cut off here: what was read before the cut still counts.
+    deserializeJson(j, unb64(d["data"] | ""), DeserializationOption::Filter(jf));
+    if (j["name"].is<const char*>()) out.first = j["name"].as<const char*>();
+    uint32_t id = j["unique_id"] | 0u;
+    if (id) out.second = id;
+  }
+  if (!out.first.length()) out.first = base;
+  return true;
+}
+void digiCardLists(Conn& c, Update& u, const DigiKnown& known) {
+  String err, trigDir, listDir, seen;
+  JsonDocument d;
+  for (const char* root : {".", "./SYSTEM"}) {
+    if (!digiLs(c, root, d, err)) return;
+    for (JsonObject f : d["files"].as<JsonArray>()) {
+      const char* n = f["name"] | "";
+      if (!((f["info"] | 0) & 16)) continue;   // 16 = a folder
+      if (seen.length() < 160) seen += String(seen.length() ? ", " : "") + (root[1] ? "SYSTEM/" : "") + n;
+      if (!trigDir.length() && !strncasecmp(n, "TRIGGER", 7)) trigDir = String(root) + "/" + n;
+      if (!listDir.length() && !strncasecmp(n, "PLAYLIST", 8)) listDir = String(root) + "/" + n;
+    }
+  }
+  // The files of both folders, and a signature of them (names, dates, sizes): unchanged = nothing to read.
+  std::vector<String> files[2];
+  uint32_t sig = 2166136261u;
+  auto mix = [&](const char* p) { for (; *p; p++) sig = (sig ^ (uint8_t)*p) * 16777619u; };
+  for (int k = 0; k < 2; k++) {
+    const String& dir = k ? listDir : trigDir;
+    mix(dir.c_str());
+    if (!dir.length()) continue;
+    if (!digiLs(c, dir, d, err)) return;
+    for (JsonObject f : d["files"].as<JsonArray>()) {
+      const char* n = f["name"] | "";
+      if (((f["info"] | 0) & 16) || !*n || strchr(n, '"') || strchr(n, '\\')) continue;
+      char meta[48];
+      snprintf(meta, sizeof meta, "|%ld|%ld|%ld|", (long)(f["date"] | 0), (long)(f["time"] | 0), (long)(f["size"] | 0));
+      mix(n);
+      mix(meta);
+      if (files[k].size() < (k ? kMaxC4Lists : kMaxC4Trigs)) files[k].push_back(n);
+    }
+  }
+  if (!sig) sig = 1;
+  if (sig == known.listSig && !known.listsDue) return;
+  for (int k = 0; k < 2; k++)
+    for (auto& n : files[k]) {
+      std::pair<String, uint32_t> e;
+      if (!digiFile(c, (k ? listDir : trigDir) + "/" + n, n, e, err)) return;
+      if (e.second) (k ? u.playlists : u.c4trigs).push_back(e);
+    }
+  u.newLists = true;
+  u.listSig = sig;
+  LOGI(Sys, "DiGidot %s: %d playlist(s) from %s, %d trigger(s) from %s (folders on the card: %s)", c.name.c_str(), (int)u.playlists.size(),
+       listDir.length() ? listDir.c_str() : "no playlist folder", (int)u.c4trigs.size(), trigDir.length() ? trigDir.c_str() : "no trigger folder", seen.c_str());
+}
+
+void pollDigi(Conn& c, Update& u, String& err, bool& ok, uint32_t polls, const DigiKnown& known) {
+  const auto& scenes = known.scenes;
   HttpRes r;
   JsonDocument d;
-  // Scene list (5 per page) and device details now and then: they rarely change.
-  bool full = scenes.empty() || polls % 10 == 0;
+  // Scene list (5 per page), playlists, triggers and device details now and then: they rarely change.
+  bool full = scenes.empty() || polls % 10 == 0 || known.listsDue;
   if (full) {
     u.newScenes = true;
-    for (int off = 0; off < 40; off += 5) {
+    for (int off = 0; off < 100; off += 5) {
       ok = digi(c, "{\"action\":\"scene_manager\",\"subaction\":\"list\",\"length\":5,\"offset\":" + String(off) + "}", r, err);
       if (!ok || deserializeJson(d, r.body)) break;
       JsonArray l = d["list"];
@@ -545,6 +670,7 @@ void pollDigi(Conn& c, Update& u, String& err, bool& ok, uint32_t polls, const s
       u.info.push_back({"Device name", d["settings"]["name"] | ""});
     if (digi(c, "{\"action\":\"license\",\"subaction\":\"get\"}", r, err) && !deserializeJson(d, r.body))
       u.info.push_back({"Serial", d["serial_number"] | ""});
+    digiCardLists(c, u, known);
   }
   ok = digi(c, "{\"action\":\"scene_manager\",\"subaction\":\"state\"}", r, err);
   if (!ok) return;
@@ -560,6 +686,15 @@ void pollDigi(Conn& c, Update& u, String& err, bool& ok, uint32_t polls, const s
       u.points.push_back({"paused", "Paused", (s["paused"] | false) ? "1" : "0", ""});
     }
     u.points.push_back({"scene", "Scene playing", scene, ""});
+    // "playlist" is an empty list in the document's example: taken to hold the running playlist's unique_id like "scene" does.
+    JsonObject pl = d["playlist"][0];
+    String list = "-";
+    if (pl) {
+      uint32_t uid = pl["unique_id"] | 0;
+      list = String(uid);
+      for (auto& n : (u.newLists ? u.playlists : known.playlists)) if (n.second == uid) list = n.first;
+    }
+    u.points.push_back({"playlist", "Playlist playing", list, ""});
   }
   if (digi(c, "{\"action\":\"fader\",\"type\":\"master_fader\"}", r, err) && !deserializeJson(d, r.body))
     u.points.push_back({"master", "Master (%)", String((int)lround((d["master_fader"]["value"] | 0) * 100.0 / 65535)), ""});
@@ -580,22 +715,26 @@ String preview(const String& s) {
   return p;
 }
 
+// The device says how long it has been running (seconds).
+void noteUptime(Drv& d, long uptime) {
+  // Uptime went down (with a minute's margin for clock jitter): the device restarted -
+  // a crash, a power cut or someone rebooting it - even if we never saw it go offline.
+  if (d.uptime && (uint32_t)uptime + 60 < d.uptime) {
+    d.restarts++;
+    d.lastRestart = epochNow() - uptime;
+    LOGW(Sys, "%s %s restarted (uptime %lu s, was %lu s)", kTypeNames[d.type], d.name.c_str(), (unsigned long)uptime, (unsigned long)d.uptime);
+  }
+  d.uptime = uptime;
+}
+
 // Stores a poll result or a pushed status (caller holds mtx).
 void applyUpdate(Drv& d, const Update& u, bool ok, VarSets& vars) {
   for (auto& i : u.info) if (i.second.length()) setInfo(d, i.first, i.second);
   for (auto& p : u.points) setPoint(d, p.key, p.value, p.name, vars);
   if (u.newScenes && ok) d.scenes = u.scenes;
+  if (u.newLists && ok) { d.playlists = u.playlists; d.c4trigs = u.c4trigs; d.listSig = u.listSig; d.listsDue = false; }
   if (u.newTriggers && ok && !u.triggers.empty()) d.triggers = u.triggers;
-  if (u.uptime >= 0) {
-    // Uptime went down (with a minute's margin for clock jitter): the device restarted -
-    // a crash, a power cut or someone rebooting it - even if we never saw it go offline.
-    if (d.uptime && (uint32_t)u.uptime + 60 < d.uptime) {
-      d.restarts++;
-      d.lastRestart = epochNow() - u.uptime;
-      LOGW(Sys, "%s %s restarted (uptime %lu s, was %lu s)", kTypeNames[d.type], d.name.c_str(), (unsigned long)u.uptime, (unsigned long)d.uptime);
-    }
-    d.uptime = u.uptime;
-  }
+  if (u.uptime >= 0) noteUptime(d, u.uptime);
 }
 
 // Runs one queued command or a status poll in the HTTP thread.
@@ -605,7 +744,8 @@ void execHttp(const Job& job) {
   if (!dp) { mtx.unlock(); return; }
   Conn c = connOf(*dp);
   uint32_t polls = dp->polls;
-  auto scenes = dp->scenes;
+  DigiKnown known;
+  if (c.type == Digi) known = {dp->scenes, dp->playlists, dp->listSig, dp->listsDue};
   mtx.unlock();
 
   bool isPoll = job.method == "POLL", ok = false;
@@ -615,7 +755,7 @@ void execHttp(const Job& job) {
     if (c.type == Netio) pollNetio(c, u, err, ok);
     else if (c.type == Bsign) pollBsign(c, u, err, ok);
     else if (c.type == Pharos) pollPharos(c, u, err, ok);
-    else if (c.type == Digi) pollDigi(c, u, err, ok, polls, scenes);
+    else if (c.type == Digi) pollDigi(c, u, err, ok, polls, known);
   } else {
     HttpRes r;
     ok = c.type == Digi ? digi(c, job.body, r, err) : request(c, job.method, job.path, job.body, r, err);
@@ -928,6 +1068,20 @@ void runUdp() {
       if (kissOpen) kissSock.stop();
       kissOpen = kissPort;
       if (kissOpen && !kissSock.begin(kissOpen)) LOGW(Sys, "Kiss-Box: cannot listen on UDP port %u", kissOpen);
+    }
+    // Kiss-Box pulses that are over: output off, then read the slot back.
+    for (auto it = kpulses.begin(); it != kpulses.end();) {
+      if ((int32_t)(now - it->at) < 0) { ++it; continue; }
+      Drv* d = byId(it->id);
+      if (d && d->type == Kiss && ujobs.size() < 64) {
+        String key = String(it->slot + 1) + "." + String(it->ch + 1);
+        d->kissSetMask[it->slot] |= 1 << it->ch;
+        d->kissSet[it->slot] &= ~(1 << it->ch);
+        d->kissSetAt[it->slot] = now;
+        ujobs.push_back({d->id, {0xA5, it->slot, it->ch, 0}, key + " off (end of pulse)", now, false});
+        ujobs.push_back({d->id, {0xA0, it->slot}, "read slot " + String(it->slot + 1), now, true});
+      }
+      it = kpulses.erase(it);
     }
     // Queued frames. KNX ones wait (up to 10 s) for the tunnel.
     for (auto it = ujobs.begin(); it != ujobs.end();) {
@@ -1312,6 +1466,41 @@ bool apiCmd(const Drv& d, const std::vector<String>& t, size_t i, const char* pr
 bool kissCmd(Drv& d, const std::vector<String>& t, String& msg) {
   auto slotOf = [&](const String& s, int& slot) { slot = s.toInt(); return isNumber(s) && slot >= 1 && slot <= 8; };
   int slot;
+  // Every write to an output: remember it for "toggle" and end a pulse that was running on it.
+  auto wrote = [&](int s, int ch, bool on) {
+    uint8_t m = 1 << (ch - 1);
+    d.kissSetMask[s - 1] |= m;
+    d.kissSet[s - 1] = on ? d.kissSet[s - 1] | m : d.kissSet[s - 1] & ~m;
+    d.kissSetAt[s - 1] = millis();
+    for (auto it = kpulses.begin(); it != kpulses.end();)
+      it = it->id == d.id && it->slot == s - 1 && it->ch == ch - 1 ? kpulses.erase(it) : it + 1;
+  };
+  // <slot>.<ch> toggle | <slot>.<ch> pulse <s>: relay and digital output cards only.
+  bool toggle = t.size() == 4 && t[3].equalsIgnoreCase("toggle"), pulse = t.size() == 5 && t[3].equalsIgnoreCase("pulse");
+  if (toggle || pulse) {
+    int dot = t[2].indexOf('.'), ch = dot > 0 ? t[2].substring(dot + 1).toInt() : 0;
+    if (dot <= 0 || !slotOf(t[2].substring(0, dot), slot) || ch < 1 || ch > 8) { msg = "expected <slot>.<channel>, both 1-8"; return false; }
+    if (d.slots.length() && kissSlotType(d.slots, slot - 1) != "out") { msg = "slot " + String(slot) + " is not an on/off output card"; return false; }
+    String key = String(slot) + "." + String(ch), readMsg;
+    float s = pulse ? t[4].toFloat() : 0;
+    if (pulse && (!isNumber(t[4]) || s <= 0 || s > 3600)) { msg = "pulse length must be 0.01-3600 s"; return false; }
+    bool on = true;
+    if (toggle) {
+      // What we wrote in the last 2 s counts (the read-back may not be in yet), else what the box reported.
+      uint8_t m = 1 << (ch - 1);
+      const Point* p = findPoint(d, key);
+      bool now = (d.kissSetMask[slot - 1] & m) && millis() - d.kissSetAt[slot - 1] < 2000 ? (d.kissSet[slot - 1] & m) != 0 : p && p->value.toInt() != 0;
+      on = !now;
+    }
+    wrote(slot, ch, on);
+    if (!queueUdp(d, {0xA5, (uint8_t)(slot - 1), (uint8_t)(ch - 1), (uint8_t)on}, key + (pulse ? " on for " + t[4] + " s" : on ? " = on (toggle)" : " = off (toggle)"), msg)) return false;
+    if (pulse) {
+      uint32_t ms = (uint32_t)(s * 1000);
+      kpulses.push_back({d.id, (uint8_t)(slot - 1), (uint8_t)(ch - 1), millis() + (ms ? ms : 1)});
+    }
+    queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + String(slot), readMsg, true);
+    return true;
+  }
   if (t.size() >= 4 && t[2].equalsIgnoreCase("send")) {
     std::vector<uint8_t> raw;
     for (size_t i = 3; i < t.size(); i++) raw.push_back((uint8_t)strtol(t[i].c_str() + (t[i].startsWith("$") ? 1 : 0), nullptr, 16));
@@ -1325,6 +1514,7 @@ bool kissCmd(Drv& d, const std::vector<String>& t, String& msg) {
     if (!slotOf(t[2], slot)) { msg = "slot must be 1-8"; return false; }
     std::vector<uint8_t> p = {0xA4, (uint8_t)(slot - 1)};
     for (int i = 4; i < 12; i++) { bool b; p.push_back(truthy(t[i], b) ? b : (uint8_t)constrain(t[i].toInt(), 0L, 255L)); }
+    for (int c = 0; c < 8; c++) wrote(slot, c + 1, p[2 + c] != 0);
     String readMsg;   // the reply describes the write, not the read-back after it
     return queueUdp(d, p, "slot " + t[2] + " all " + rest(t, 4), msg) && queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + t[2], readMsg, true);
   }
@@ -1334,13 +1524,14 @@ bool kissCmd(Drv& d, const std::vector<String>& t, String& msg) {
     if (!slotOf(t[2].substring(0, dot), slot) || ch < 1 || ch > 8) { msg = "expected <slot>.<channel>, both 1-8"; return false; }
     bool b;
     uint8_t v = truthy(t[3], b) ? b : (uint8_t)constrain(t[3].toInt(), 0L, 255L);
-    if (!truthy(t[3], b) && !isNumber(t[3])) { msg = "value must be on|off or 0-255"; return false; }
+    if (!truthy(t[3], b) && !isNumber(t[3])) { msg = "value must be on|off|toggle, pulse <s> or 0-255"; return false; }
+    wrote(slot, ch, v != 0);
     // Write one channel, then read the slot back so the status follows.
     String readMsg;
     return queueUdp(d, {0xA5, (uint8_t)(slot - 1), (uint8_t)(ch - 1), v}, t[2] + " = " + t[3], msg) &&
            queueUdp(d, {0xA0, (uint8_t)(slot - 1)}, "read slot " + String(slot), readMsg, true);   // read-back: not logged (a log line per click is enough)
   }
-  msg = "expected: <slot>.<ch> on|off|<0-255>, <slot> all <8 values>, read <slot> or send <hex bytes>";
+  msg = "expected: <slot>.<ch> on|off|toggle|<0-255>, <slot>.<ch> pulse <s>, <slot> all <8 values>, read <slot> or send <hex bytes>";
   return false;
 }
 
@@ -1370,7 +1561,7 @@ bool pluginSend(Drv& d, const String& what, const String& a, const String& b, St
   if (!d.plugin) { msg = "BrightSign " + d.name + ": switch on the KD plugin for this player first (Devices > BrightSign)"; return false; }
   String text = "kd\t" + what + (a.length() ? "\t" + a : String("")) + (b.length() ? "\t" + b : String(""));
   Triggers::sendRaw(d.ip, d.pluginPort, (const uint8_t*)text.c_str(), text.length());
-  String label = what + (a.length() ? " " + a : String("")) + (b.length() ? " " + b : String(""));
+  String label = (what == "zmute" ? String("mute") : what) + (a.length() ? " " + a : String("")) + (b.length() ? " " + b : String(""));
   d.last = label;
   msg = "BrightSign " + d.name + ": " + label;
   return true;
@@ -1390,6 +1581,30 @@ bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
   // The video of a zone: jump to a position (seconds), pause, carry on; release = back to the presentation's own state.
   if (is("seek") && t.size() == 5) return pluginSend(d, "seek", t[3], String((long)(t[4].toFloat() * 1000)), msg);
   if ((is("pause") || is("resume") || is("release")) && t.size() == 4) { String what = t[2]; what.toLowerCase(); return pluginSend(d, what, t[3], "", msg); }
+  // Sound: a zone's volume, the whole player's ("master": its outputs), mute for either; the video output on/off.
+  if ((is("volume") && t.size() == 5) || (is("master") && t.size() == 4)) {
+    const String& v = t[t.size() - 1];
+    if (!isNumber(v) || v.toInt() < 0 || v.toInt() > 100) { msg = "volume must be 0-100"; return false; }
+    return is("master") ? pluginSend(d, "master", String(v.toInt()), "", msg) : pluginSend(d, "volume", t[3], String(v.toInt()), msg);
+  }
+  if ((is("mute") || is("screen")) && (t.size() == 4 || (t.size() == 5 && is("mute")))) {
+    bool on;
+    if (!truthy(t[t.size() - 1], on)) { msg = "expected on or off"; return false; }
+    if (t.size() == 5) return pluginSend(d, "zmute", t[3], on ? "on" : "off", msg);
+    return pluginSend(d, is("mute") ? "mute" : "screen", on ? "on" : "off", "", msg);
+  }
+  // A GPIO output: only pins ticked as outputs on the BrightSign tab (as they are set in BrightAuthor);
+  // the plugin never changes a pin's direction.
+  if (is("gpio") && t.size() == 5) {
+    bool on;
+    if (!isNumber(t[3]) || t[3].length() != 1 || t[3].toInt() > 7) { msg = "GPIO pins are 0-7"; return false; }
+    if (!truthy(t[4], on)) { msg = "expected on or off"; return false; }
+    if (!(d.gpioOut & (1 << t[3].toInt()))) { msg = "BrightSign " + d.name + ": GPIO " + t[3] + " is not ticked as an output (Devices > BrightSign > GPIO)"; return false; }
+    return pluginSend(d, "gpio", t[3], on ? "on" : "off", msg);
+  }
+  if (is("serial") && t.size() >= 4) return pluginSend(d, "serial", rest(t, 3), "", msg);
+  // For fault-finding: what the plugin sees (video positions, GPIO settings); the answers come in the log.
+  if (is("probe") && t.size() == 3) return pluginSend(d, "probe", "", "", msg);
   if (t.size() >= 4 && t[2].equalsIgnoreCase("send")) {
     Triggers::sendUdp(d.ip, d.udpPort, rest(t, 3));
     d.last = "UDP '" + rest(t, 3) + "'";
@@ -1398,7 +1613,7 @@ bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
   }
   if (t.size() == 3 && t[2].equalsIgnoreCase("reboot")) return queueHttp(d, "PUT", "/api/v1/control/reboot", "", "reboot", msg);
   if (t.size() >= 3 && t[2].equalsIgnoreCase("api")) return apiCmd(d, t, 3, "/api/v1/", msg);
-  msg = "expected: test <zone> <state>, play <zone> <file>, seek <zone> <seconds>, pause|resume|release|stop <zone>, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]";
+  msg = "expected: test <zone> <state>, play <zone> <file>, seek <zone> <seconds>, pause|resume|release|stop <zone>, volume <zone> <0-100>, master <0-100>, mute [<zone>] on|off, screen on|off, gpio <0-7> on|off, serial <text>, probe, event <text>, var <name> <value>, send <text>, reboot or api get|put|post|delete <path> [body]";
   return false;
 }
 
@@ -1425,10 +1640,29 @@ bool digiCmd(Drv& d, const std::vector<String>& t, String& msg) {
     j["priority"] = 2;
     return queueHttp(d, "POST", "", json(j), "scene " + t[3], msg);
   }
+  // A playlist or C4 trigger by its name, its place in the list (1..) or its unique id.
+  auto pick = [&](const std::vector<std::pair<String, uint32_t>>& l, const char* what, uint32_t& uid) {
+    uid = 0;
+    for (auto& s : l) if (s.first.equalsIgnoreCase(t[3])) uid = s.second;
+    if (!uid && isNumber(t[3])) {
+      long n = t[3].toInt();
+      uid = n >= 1 && n <= (long)l.size() ? l[n - 1].second : (uint32_t)strtoul(t[3].c_str(), nullptr, 10);
+    }
+    if (!uid) msg = String("unknown DiGidot ") + what + " '" + t[3] + "'" + (l.empty() ? " (the list is not read yet: use its unique id, or 'digidot " + d.name + " refresh')" : "");
+    return uid != 0;
+  };
   if (is(2, "playlist") && t.size() == 4) {
+    uint32_t uid;
+    if (!pick(d.playlists, "playlist", uid)) return false;
     j["action"] = "playback"; j["subaction"] = "play"; j["type"] = "playlist";
-    j["start_index"] = 0; j["unique_id"] = strtoul(t[3].c_str(), nullptr, 10); j["alpha"] = 65535; j["priority"] = 2;
+    j["start_index"] = 0; j["unique_id"] = uid; j["alpha"] = 65535; j["priority"] = 2;
     return queueHttp(d, "POST", "", json(j), "playlist " + t[3], msg);
+  }
+  if (is(2, "refresh") && t.size() == 3) {
+    d.listsDue = true;
+    d.nextPoll = millis();
+    msg = "DiGidot " + d.name + ": reading the scenes, playlists and triggers again";
+    return true;
   }
   if (is(2, "stop") && t.size() == 3) return queueHttp(d, "POST", "", "{\"action\":\"playback\",\"subaction\":\"stop\"}", "stop", msg);
   if (is(2, "reset") && t.size() == 3) return queueHttp(d, "POST", "", "{\"action\":\"reset\"}", "reset", msg);
@@ -1441,11 +1675,13 @@ bool digiCmd(Drv& d, const std::vector<String>& t, String& msg) {
     return queueHttp(d, "POST", "", json(j), "speed " + t[3] + "%", msg);
   }
   if (is(2, "trigger") && t.size() == 4) {
-    j["action"] = "trigger"; j["subaction"] = "fire"; j["unique_id"][0] = strtoul(t[3].c_str(), nullptr, 10);
+    uint32_t uid;
+    if (!pick(d.c4trigs, "trigger", uid)) return false;
+    j["action"] = "trigger"; j["subaction"] = "fire"; j["unique_id"][0] = uid;
     return queueHttp(d, "POST", "", json(j), "trigger " + t[3], msg);
   }
   if (is(2, "send") && t.size() >= 4) return queueHttp(d, "POST", "", rest(t, 3), "send " + rest(t, 3), msg);
-  msg = "expected: scene <name|#> [fade <s>], playlist <id>, stop, master <0-100>, speed <%>, trigger <id>, reset or send <json>";
+  msg = "expected: scene <name|#> [fade <s>], playlist <name|#>, stop, master <0-100>, speed <%>, trigger <name|#>, refresh, reset or send <json>";
   return false;
 }
 
@@ -1582,7 +1818,8 @@ struct MediaEnd { String device, zone, file, state; int zoneNo; };
 std::vector<MediaEnd> mediaEnds;
 
 // Readings from the kdlink plugin: zones as z<n> (state) + z<n>.file, user variables as var.<name>,
-// GPIO inputs as gpio<n>, the last serial line as "serial".
+// GPIO inputs as gpio<n>, the last serial line as "serial"; master volume "vol", "mute", video output
+// "screen", zone volume z<n>.vol / z<n>.mute; health: "hdmi" (a screen is connected), "sdfree" (MB).
 void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
   String kind = j["kd"] | "";
   d.pluginSeen = epochNow();
@@ -1619,6 +1856,41 @@ void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
   } else if (kind == "msg") {
     setPoint(d, "msg", j["text"] | "", "Player says", vars);
     setPoint(d, "msgAt", String(epochNow()), "", vars);
+  } else if (kind == "audio") {
+    setPoint(d, "vol", String(j["master"] | 100), "Master volume (%)", vars);
+    setPoint(d, "mute", j["mute"] | false ? "1" : "0", "Mute", vars);
+    setPoint(d, "screen", j["screen"] | true ? "1" : "0", "Screen output", vars);
+  } else if (kind == "vol") {
+    String k = "z" + String(j["i"] | 0);
+    const Point* z = findPoint(d, k);
+    String name = z && z->name.length() ? z->name : k;
+    setPoint(d, k + ".vol", String(j["v"] | 0), name + " volume (%)", vars);
+    setPoint(d, k + ".mute", j["mute"] | false ? "1" : "0", name + " mute", vars);
+  } else if (kind == "health") {
+    // What the DWS would tell (which newer players only serve over https): running time, OS, card, screen.
+    if (j["up"].is<uint32_t>()) noteUptime(d, j["up"].as<uint32_t>());
+    String fw = j["fw"] | "", serial = j["serial"] | "";
+    if (fw.length()) setInfo(d, "Firmware", fw);
+    if (serial.length()) setInfo(d, "Serial", serial);
+    uint32_t size = j["size"] | 0, left = j["free"] | 0;
+    if (size) {
+      setInfo(d, "Card", String(left / 1024.0f, 1) + " GB free of " + String(size / 1024.0f, 1) + " GB");
+      setPoint(d, "sdfree", String(left), "Card free (MB)", vars);
+      bool low = left < size / 20;
+      if (low && !d.cardLow) LOGW(Sys, "BrightSign %s: the card is nearly full (%lu MB free of %lu)", d.name.c_str(), (unsigned long)left, (unsigned long)size);
+      d.cardLow = low;
+    }
+    int hdmi = j["hdmi"] | -1;
+    if (hdmi >= 0) {
+      const Point* was = findPoint(d, "hdmi");
+      if (was && was->value.length() && (was->value == "1") != (hdmi == 1)) {
+        addActivity(d, hdmi ? "screen connected" : "screen disconnected");
+        if (hdmi) LOGI(Sys, "BrightSign %s: screen connected", d.name.c_str());
+        else LOGW(Sys, "BrightSign %s: no screen on the HDMI output (unplugged or switched off)", d.name.c_str());
+      }
+      setPoint(d, "hdmi", hdmi ? "1" : "0", "Screen connected", vars);
+      setInfo(d, "Screen", hdmi ? "connected (HDMI)" : "not connected");
+    }
   } else if (kind == "reply") {
     d.last = String("plugin: ") + (j["text"] | "");
     if (j["ok"] | false) LOGI(Sys, "BrightSign %s: %s", d.name.c_str(), d.last.c_str());
@@ -1651,7 +1923,7 @@ void follow(uint32_t now) {
       int32_t predicted = f.sentPos + (f.paused ? 0 : (int32_t)(now - f.sentAt));
       bool changed = !f.active || paused != f.paused || abs(want - predicted) > 250;
       if (changed ? now - f.lastSend < 150 : now - f.lastSend < 3000) continue;   // scrubbing: at most ~7 a second
-      String text = String("kd\tsync\t") + f.zone + "\t" + f.file + "\t" + String((long)want) + (paused ? "\tpause" : "\tplay");
+      String text = String("kd\tsync\t") + f.zone + "\t" + f.file + "\t" + String((long)want) + (paused ? "\tpause" : "\tplay") + (f.drift ? "\tdrift" : "");
       Triggers::sendRaw(d.ip, d.pluginPort, (const uint8_t*)text.c_str(), text.length());
       f.active = true;
       f.paused = paused;
@@ -1723,9 +1995,10 @@ void load() {
     d.pluginPort = o["pluginPort"] | 5010;
     if (d.plugin)
       for (JsonObjectConst fo : o["follow"].as<JsonArrayConst>()) {
-        Drv::Follow f = {fo["timeline"] | 0, fo["zone"] | "", fo["file"] | "", (int32_t)((fo["offset"] | 0.0f) * 1000), false, false, 0, 0, 0};
+        Drv::Follow f = {fo["timeline"] | 0, fo["zone"] | "", fo["file"] | "", (int32_t)((fo["offset"] | 0.0f) * 1000), false, false, 0, 0, 0, fo["drift"] | false};
         if (f.timeline && f.zone.length() && f.file.length() && d.follows.size() < 4) d.follows.push_back(f);
       }
+    for (JsonVariantConst pin : o["gpioOut"].as<JsonArrayConst>()) { int n = pin | -1; if (n >= 0 && n < 8) d.gpioOut |= 1 << n; }
     d.outputs = o["outputs"] | 0;
     d.readEvery = o["readEvery"] | 0;
     for (JsonPairConst kv : o["vars"].as<JsonObjectConst>()) {
@@ -1753,12 +2026,12 @@ void load() {
     for (auto& old : list)
       if (old.type == d.type && old.name == d.name && old.ip == d.ip && old.port == d.port) {
         d.online = old.online; d.seen = old.seen; d.last = old.last; d.lastSeen = old.lastSeen; d.lastCheck = old.lastCheck;
-        d.history = old.history; d.checks = old.checks; d.info = old.info; d.scenes = old.scenes; d.token = old.token; d.triggers = old.triggers;
+        d.history = old.history; d.checks = old.checks; d.info = old.info; d.scenes = old.scenes; d.playlists = old.playlists; d.c4trigs = old.c4trigs; d.listSig = old.listSig; d.token = old.token; d.triggers = old.triggers;
         d.onlineSince = old.onlineSince; d.dropouts = old.dropouts; d.restarts = old.restarts; d.lastRestart = old.lastRestart;
         d.uptime = old.uptime; d.lastError = old.lastError; d.lastErrorAt = old.lastErrorAt;
         d.pushState = d.push ? old.pushState : 0; d.pushNote = old.pushNote; d.lastRead = old.lastRead;
         d.nonce = old.nonce; d.session = old.session; d.up = old.up; d.channel = old.channel; d.seq = old.seq; d.aliveAt = old.aliveAt;
-        d.pluginSeen = old.pluginSeen; d.states = old.states; d.activity = old.activity;
+        d.pluginSeen = old.pluginSeen; d.states = old.states; d.activity = old.activity; d.cardLow = old.cardLow;
         for (auto& p : old.points)
           if (ty != Knx) d.points.push_back(p);
           else for (auto& np : d.points) if (np.key == p.key) np.value = p.value;
@@ -1865,6 +2138,14 @@ void statusJson(JsonArray arr) {
     if (!d.scenes.empty()) {
       JsonArray sc = o["scenes"].to<JsonArray>();
       for (auto& s : d.scenes) sc.add(s.first);
+    }
+    if (!d.playlists.empty()) {
+      JsonArray a = o["playlists"].to<JsonArray>();
+      for (auto& s : d.playlists) a.add(s.first);
+    }
+    if (!d.c4trigs.empty()) {
+      JsonArray a = o["c4triggers"].to<JsonArray>();
+      for (auto& s : d.c4trigs) a.add(s.first);
     }
     if (!d.states.empty()) {
       JsonArray st = o["states"].to<JsonArray>();
