@@ -84,6 +84,7 @@ function compareShow() {
   T.trig('Contact in0: snap to Full (S9)', 'input', { io: 'in0', edge: 'rising' }, ['scene Full'], 'Machine Control input 0. Only if the LPC has a contact wired too.');
   T.sec('== SWITCHING BETWEEN TESTS', 'orange');
   T.trig('UDP STOP: everything released', 'udp', { match: 'STOP' }, ['release all']);
+  T.trig('UDP REL2: everything released in 2 s', 'udp', { match: 'REL2' }, ['release all fade 2'], 'For tools/lpc/compare.js --udp: the same as the LPC test project\'s "off" trigger (UDP in, the light starts to move).');
   T.trig('UDP FX1: rainbow only (T2, T8)', 'udp', { match: 'FX1' }, ['release all', 'start timeline "Rainbow (S4)"']);
   T.trig('UDP FX2: + chase on top (T8)', 'udp', { match: 'FX2' }, ['start timeline "Rainbow (S4)"', 'start timeline "Chase on top"', 'master timeline "Chase on top" 50']);
   T.trig('UDP FX3: + sparkle on top (T8)', 'udp', { match: 'FX3' }, ['fire trigger "UDP FX2: + chase on top (T8)"', 'start timeline "Sparkle on top"', 'master timeline "Sparkle on top" 50']);
@@ -138,8 +139,7 @@ function deviceShow() {
   cmd('Clear overrides', 'pharos lpc clear overrides');
   cmd('Art-Net output off', 'pharos lpc output art-net off');
   cmd('Art-Net output on', 'pharos lpc output art-net on');
-  cmd('Beacon on', 'pharos lpc beacon on');
-  cmd('Beacon off', 'pharos lpc beacon off');
+  cmd('Beacon (toggles: fire twice)', 'pharos lpc beacon');
   cmd('API: get system', 'pharos lpc api get system');
   cmd('API: start timeline 1 with raw JSON', 'pharos lpc api post timeline {"action":"start","num":1}');
   cmd('Release all, fade 2', 'pharos lpc release all fade 2');

@@ -712,7 +712,7 @@ function drvCommandOne(t) {
     }
     if (w[2] === 'clear' && w[3] === 'overrides') { fadeAt(4); return later(rest(2)); }
     if (w[2] === 'output' && t.length === 5 && /^(on|off)$/.test(w[4])) return later(rest(2));
-    if (w[2] === 'beacon' && t.length === 4 && /^(on|off)$/.test(w[3])) return later(rest(2));
+    if (w[2] === 'beacon' && (t.length === 3 || (t.length === 4 && /^(on|off)$/.test(w[3])))) return later('beacon (toggle)');   // the real API only toggles
     if (w[2] === 'api') return api(3, '/api/');
     throw new Error('expected: timeline|scene|group|trigger|release all|text|override|clear overrides|output|beacon|api ...');
   }

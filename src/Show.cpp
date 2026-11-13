@@ -420,12 +420,18 @@ Playback* runningTimeline(int idx, String& msg) {
 // True when a universe is due on a network protocol: its frame period has
 // passed and either it changed, sending is continuous, or the 1 s keep-alive is due.
 bool due(Pace& p, int u, uint32_t now, uint8_t fps, bool changesOnly) {
-  uint32_t period = 1000 / fps;
-  uint32_t since = now - p.at[u];
-  if (since + 2 < period) return false;  // 2 ms slack so engine ticks don't alias the rate
+  int32_t period = 1000 / fps;
+  int32_t since = (int32_t)(now - p.at[u]);   // can be a little negative: `at` follows the schedule, see below
+  // A quarter of a period of slack: engine ticks come a few ms early or late. With 2 ms of slack
+  // and `at = now`, a tick 3 ms late followed by one on time looked "too soon" and that frame was
+  // never sent: a 50 ms hole in a 40 fps stream, several times a minute (seen next to an LPC).
+  if (since + period / 4 < period) return false;
   if (changesOnly && since < 1000 && memcmp(out[u], p.sent[u], 512) == 0) return false;
   memcpy(p.sent[u], out[u], 512);
-  p.at[u] = now;
+  // Keep to the schedule (so a late tick doesn't push every later frame back, and a rate below
+  // the engine's averages out exactly); start a new one after a pause.
+  if (since < 2 * period) p.at[u] += period;
+  else p.at[u] = now;
   return true;
 }
 }  // namespace

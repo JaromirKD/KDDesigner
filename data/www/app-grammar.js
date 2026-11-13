@@ -148,7 +148,7 @@ const GRAMMAR = [
   ['pharos {pharos} clear overrides', 'Pharos: clear all overrides'],
   ['pharos {pharos} clear overrides fade {sec}', 'Pharos: clear all overrides with a fade'],
   ['pharos {pharos} output {pharosproto} {onoff}', 'Pharos: switch an output protocol on or off'],
-  ['pharos {pharos} beacon {onoff}', 'Pharos: blink the controller to find it'],
+  ['pharos {pharos} beacon', 'Pharos: beacon on / off (blinks the controller to find it; each time toggles)'],
   ['pharos {pharos} api {httpmethod} {path}', 'Pharos: any controller API call, e.g. api get system'],
   ['pharos {pharos} api {httpmethod} {path} {text...}', 'Pharos: controller API call with a JSON body'],
   // Machine Control I/O (src/Board.cpp)
@@ -973,7 +973,7 @@ const KEYWORD_HELP = {
   playlist: 'A DiGidot playlist.', speed: 'Playback speed in percent.', reset: 'DiGidot: restart the controller. Panel: back to how it is set on the Panel page.',
   rate: 'Timeline speed: 1 = normal, 0.5 = half speed.', position: 'Jump to a point in the timeline (percent of its length).',
   group: 'A Pharos group.', override: 'An override: a value set directly, on top of what is playing (Pharos: intensity or colour).', intensity: 'Brightness 0-100 %.',
-  text: 'Pharos: a text slot. Panel: the text shown on the control.', beacon: 'Blink the controller’s LEDs so you can find it.',
+  text: 'Pharos: a text slot. Panel: the text shown on the control.', beacon: 'Blink the controller’s LEDs so you can find it: each time switches it on or off.',
   restart: 'Off for a moment, then on again (NETIO short off; the time is set on the NETIO or given in seconds).',
   pulse: 'On for a moment, then off again (NETIO short on; Machine Control: for the seconds given).',
   locate: 'Find fixtures in the room: they blink full white (on top of everything, also a blackout), then go back to the show by themselves.',

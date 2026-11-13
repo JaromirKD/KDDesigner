@@ -513,6 +513,9 @@ void pollPharos(Conn& c, Update& u, String& err, bool& ok) {
     u.points.push_back({"sc" + n, "Scene " + n + " " + (s["name"] | ""), s["state"] | "", ""});
   });
   list("/api/group", "groups", [&](JsonObject g) {
+    // A real LPC also lists its automatic groups ("All DALI Ballast", one per fixture type) without
+    // a number: they can't be addressed by "group <n>" and would all land on grp0 (= All Fixtures).
+    if (!g["num"].is<int>()) return;
     String n = String(g["num"] | 0);
     u.points.push_back({"grp" + n, String(g["name"] | ("Group " + n).c_str()) + " (%)", String(g["level"] | 0), ""});
   });
@@ -1548,10 +1551,10 @@ bool pharosCmd(Drv& d, const std::vector<String>& t, String& msg) {
     j["action"] = is(4, "on") ? "enable" : "disable";
     return queueHttp(d, "POST", "/api/output", json(j), label, msg);
   }
-  if (is(2, "beacon") && t.size() == 4 && (is(3, "on") || is(3, "off"))) {
-    j["enable"] = is(3, "on");
-    return queueHttp(d, "PUT", "/api/beacon", json(j), label, msg);
-  }
+  // The real API only toggles the beacon (POST without a body; a PUT gets 404 on an LPC 1,
+  // firmware 2.16), and its state can't be read. An old "beacon on|off" toggles too.
+  if (is(2, "beacon") && (t.size() == 3 || (t.size() == 4 && (is(3, "on") || is(3, "off")))))
+    return queueHttp(d, "POST", "/api/beacon", String(""), "beacon (toggle)", msg);
   if (is(2, "api")) return apiCmd(d, t, 3, "/api/", msg);
   msg = "expected: timeline|scene|group|trigger|release all|text|override|clear overrides|output|beacon|api ...";
   return false;

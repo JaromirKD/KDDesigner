@@ -334,7 +334,7 @@ function drvActions(x) {
   switch (x.type) {
     case 'brightsign': return cmdBtn(`brightsign ${ref} reboot`, 'Reboot', `Reboot ${x.name}?`);
     case 'digidot': return cmdBtn(`digidot ${ref} stop`, 'Stop') + cmdBtn(`digidot ${ref} master 100`, 'Master 100%') + cmdBtn(`digidot ${ref} master 0`, 'Master 0%');
-    case 'pharos': return cmdBtn(`pharos ${ref} release all`, 'Release all') + cmdBtn(`pharos ${ref} beacon on`, 'Beacon');
+    case 'pharos': return cmdBtn(`pharos ${ref} release all`, 'Release all') + cmdBtn(`pharos ${ref} beacon`, 'Beacon', '', 'Blinks the controller to find it; click again to stop');
     case 'netio': return cmdBtn(`netio ${ref} output all on`, 'All on') + cmdBtn(`netio ${ref} output all off`, 'All off', `Switch off ALL outputs of ${x.name}?`);
     default: return '';
   }

@@ -697,7 +697,7 @@
   },
   {
    "name": "lpcnet",
-   "ip": "172.16.1.50",
+   "ip": "172.16.1.236",
    "port": 5000
   }
  ],
@@ -733,7 +733,7 @@
    "id": 1,
    "type": "pharos",
    "name": "lpc",
-   "ip": "172.16.1.50",
+   "ip": "172.16.1.236",
    "port": 80,
    "user": "",
    "password": "",
@@ -988,26 +988,16 @@
   },
   {
    "id": 24,
-   "name": "Beacon on",
+   "name": "Beacon (toggles: fire twice)",
    "type": "manual",
    "color": "purple",
    "actions": [
-    "pharos lpc beacon on"
+    "pharos lpc beacon"
    ],
    "conditions": []
   },
   {
    "id": 25,
-   "name": "Beacon off",
-   "type": "manual",
-   "color": "purple",
-   "actions": [
-    "pharos lpc beacon off"
-   ],
-   "conditions": []
-  },
-  {
-   "id": 26,
    "name": "API: get system",
    "type": "manual",
    "color": "purple",
@@ -1017,7 +1007,7 @@
    "conditions": []
   },
   {
-   "id": 27,
+   "id": 26,
    "name": "API: start timeline 1 with raw JSON",
    "type": "manual",
    "color": "purple",
@@ -1027,7 +1017,7 @@
    "conditions": []
   },
   {
-   "id": 28,
+   "id": 27,
    "name": "Release all, fade 2",
    "type": "manual",
    "color": "purple",
@@ -1037,7 +1027,7 @@
    "conditions": []
   },
   {
-   "id": 29,
+   "id": 28,
    "name": "Four commands at once",
    "type": "manual",
    "color": "purple",
@@ -1050,7 +1040,7 @@
    "conditions": []
   },
   {
-   "id": 30,
+   "id": 29,
    "name": "Ten commands a second for 5 s",
    "type": "manual",
    "color": "purple",
@@ -1060,7 +1050,7 @@
    "conditions": []
   },
   {
-   "id": 31,
+   "id": 30,
    "name": "UDP to the LPC",
    "type": "manual",
    "color": "purple",
@@ -1070,7 +1060,7 @@
    "conditions": []
   },
   {
-   "id": 32,
+   "id": 31,
    "name": "OSC to the LPC",
    "type": "manual",
    "color": "purple",
@@ -1089,7 +1079,7 @@
    "notes": "The pars turn green / blue / red, so it shows without the log too. Start and release things on the LPC itself (its web page or Designer 2)."
   },
   {
-   "id": 33,
+   "id": 32,
    "name": "LPC timeline 1 changed",
    "type": "variable",
    "variable": "lpc_tl1",
@@ -1101,7 +1091,7 @@
    "conditions": []
   },
   {
-   "id": 34,
+   "id": 33,
    "name": "LPC timeline 2 changed",
    "type": "variable",
    "variable": "lpc_tl2",
@@ -1112,7 +1102,7 @@
    "conditions": []
   },
   {
-   "id": 35,
+   "id": 34,
    "name": "LPC scene 1 changed",
    "type": "variable",
    "variable": "lpc_sc1",
@@ -1123,7 +1113,7 @@
    "conditions": []
   },
   {
-   "id": 36,
+   "id": 35,
    "name": "LPC group 1 level changed",
    "type": "variable",
    "variable": "lpc_grp1",
@@ -1134,7 +1124,7 @@
    "conditions": []
   },
   {
-   "id": 37,
+   "id": 36,
    "name": "LPC offline",
    "type": "device",
    "device": "lpc",
@@ -1147,7 +1137,7 @@
    "conditions": []
   },
   {
-   "id": 38,
+   "id": 37,
    "name": "LPC back online",
    "type": "device",
    "device": "lpc",
@@ -1169,7 +1159,7 @@
    "notes": "On the LPC: a trigger with a UDP or OSC action to the KD's address, and Art-Net / sACN output to the KD."
   },
   {
-   "id": 39,
+   "id": 38,
    "name": "UDP \"LPC <text>\" (port 4000)",
    "type": "udp",
    "match": "LPC*",
@@ -1182,7 +1172,7 @@
    "conditions": []
   },
   {
-   "id": 40,
+   "id": 39,
    "name": "OSC /lpc/* (port 8000)",
    "type": "osc",
    "address": "/lpc/*",
@@ -1195,7 +1185,7 @@
    "conditions": []
   },
   {
-   "id": 41,
+   "id": 40,
    "name": "Art-Net universe 0, channel 1 above 50 %",
    "type": "dmx_in",
    "protocol": "artnet",
@@ -1211,7 +1201,7 @@
    "conditions": []
   },
   {
-   "id": 42,
+   "id": 41,
    "name": "Art-Net universe 0, channel 2 = grand master",
    "type": "dmx_in",
    "protocol": "artnet",
@@ -1225,7 +1215,7 @@
    "conditions": []
   },
   {
-   "id": 43,
+   "id": 42,
    "name": "sACN universe 1, channel 1 above 50 %",
    "type": "dmx_in",
    "protocol": "sacn",
@@ -1249,7 +1239,7 @@
    "conditions": []
   },
   {
-   "id": 44,
+   "id": 43,
    "name": "Startup",
    "type": "startup",
    "color": "green",
@@ -1260,7 +1250,7 @@
    "conditions": []
   },
   {
-   "id": 45,
+   "id": 44,
    "name": "Rainbow on the pars",
    "type": "manual",
    "color": "green",
@@ -1270,7 +1260,7 @@
    "conditions": []
   },
   {
-   "id": 46,
+   "id": 45,
    "name": "Release all",
    "type": "manual",
    "color": "green",

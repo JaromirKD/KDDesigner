@@ -66,6 +66,8 @@ and `HOUR` (S5). Use the same words on the LPC.
 | T8 | **Effect load** | S4 at 170 pixels, then 2 effects layered, then 3 | frame rate on the wire stays at the set rate? (T2 method) |
 | T9 | **Boot** | Switch power on with the stopwatch / logic analyser | power-on -> first DMX frame; -> first Art-Net packet; -> startup effect running; -> web page answers |
 | T10 | **Power cut** | Cut power 10 times at random moments (once right after saving a show change) | comes back by itself? show intact? same state? |
+
+Measured with `node tools/lpc/compare.js lpc|kd <ip>` (add `--udp` for T4c, T5, T6; both send Art-Net universe 0 to the PC; close the KD launcher first). The KD now and then has one gap of ~48 ms (a frame sent late or skipped) where the LPC never went over 36 ms. Web API answer time during the rainbow: LPC 5.1 ms, KD 9.0 ms (median).
 | T11 | **Robustness** | Unplug/replug the network cable while running; open the web UI and click around during S4; heavy broadcast traffic on the switch (lab only, never on a live network) | output keeps going? recovers? how long? |
 | T12 | **24 h soak** | Leave S4 + PINGs at 10/s running for 24 h | any gap > 100 ms, any restart, still answering |
 | T13 | **Programming** (subjective, but useful) | Time yourself building the same show on each; time a save/upload of a change until it is live | minutes to build, seconds until a change is live |
@@ -75,14 +77,15 @@ and `HOUR` (S5). Use the same words on the LPC.
 | Test | Figure | LPC 1 | KD Designer | Notes |
 |---|---|---|---|---|
 | T1 | DMX frames/s, jitter (min-max gap), break/MAB | | | |
-| T2 | Art-Net packets/s, longest gap | | | |
-| T3 | steps in 10 s fade, backward steps, duration | | | |
-| T4 | GO -> output: median / 95 % / worst (ms) | | | |
+| T2 | Art-Net packets/s, longest gap | 33.2 /s, 34.6 ms | 40.0 /s, 29.6 ms | 13 Nov 2026, idle, 8 s. KD rate is its setting (40), DMX output off |
+| T3 | steps in 10 s fade, backward steps, duration | 255 levels in 332 frames, 0 back, 9.97 s | 254 levels in 398 frames, 0 back, 9.92 s | channel 1, Art-Net, full -> released in 10 s; biggest step 1 on both |
+| T4 | GO -> output: median / 95 % / worst (ms) | 45.6 / 61.2 / 61.5 | 13.7 / 30.5 / 30.7 | 60 snaps each, fired over the web API (the LPC project had no UDP triggers), to the first changed Art-Net frame |
+| T4c | UDP in -> light starts to move: median / 95 % / worst (ms) | 43.4 / 60.0 / 62.1 | 17.3 / 26.1 / 26.7 | 30 times: all on, then UDP "release all in 2 s" (LPC "off", KD "REL2"), to the first changed Art-Net frame |
 | T4b | contact -> DMX (ms) | | | |
-| T5 | round trip median / 95 % / worst (ms) | | | |
-| T6 | PONG % at 10 / 50 / 100 / 200 / 500 per s | | | |
+| T5 | round trip median / 95 % / worst (ms) | 16.6 / 32.1 / 34.9 | 1.7 / 2.9 / 4.0 | 13 Nov 2026, 100 messages one at a time, none lost. LPC: Ethernet Input "pong" sends "pong" back; KD: PING -> reply PONG |
+| T6 | PONG % at 10 / 50 / 100 / 200 / 500 per s | 100 / 89 / 44 / 22 / 9 (about 44 answers a second at most) | 100 / 100 / 100 / 17 / 0 | 3 s per rate. The KD stops a trigger that fires over 100 times a second on purpose (loop protection), hence 17 and 0. Output stayed at 33 /s (LPC) and 40 /s (KD) throughout |
 | T7 | cue drift after 60 min; clock trigger error | | | |
-| T8 | frame rate with 1 / 2 / 3 effects | | | |
+| T8 | frame rate with 1 / 2 / 3 effects | 33.2 /s with the rainbow (only 16.7 new frames/s) | 39.9 /s, every frame new | 1 effect only; the two rainbows may not turn at the same speed. Worst gap 34.3 / 47.9 ms |
 | T9 | boot to DMX / Art-Net / show / web (s) | | | |
 | T10 | recovered after 10 power cuts | | | |
 | T11 | cable replug recovery (s), output during web use | | | |

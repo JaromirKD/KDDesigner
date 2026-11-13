@@ -29,3 +29,6 @@ npm-debug.log*
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# The board's own project, saved before tests on the real controller
+board-backup/

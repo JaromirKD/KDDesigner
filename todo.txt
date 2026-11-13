@@ -212,3 +212,37 @@ New notes (13 Nov):
  real controller talking to the player (zones, test buttons, Activity list).
  The PC mock only fakes a BrightSign, it never talks to a real player.
  PC probe: node tools/bs-probe.js <player ip> (says "kd hello" on UDP 5010, prints the answers)
+
+Board day 13 Nov 2026, results (board 172.16.1.165, Machine Control; LPC 1 at 172.16.1.236):
+-step 1 DONE: 0.3.0 was already on the board by network update; colour themes survive a save (T10);
+ the big test update installed ("390 KB of test data … all bytes correct", 37c), normal 0.3.0 put back
+ (upload 28 s for 1.15 MB, back after 46 s). The board's show is saved in board-backup/
+-step 2: fade snap DONE: 500 x 'scene … fade 3' from UDP, 0 snapped (measured on sACN);
+ DMX monitor DONE: 40 fps with /api/dmx 15x a second, biggest gap 46 ms.
+ Still open (need hands on the board): kept variables after pulling the power, power cut in a save
+-step 3, reading only: the LPC answers on plain http without login; model, firmware, project,
+ uptime, reset reason shown; 6 timelines / 8 scenes / 127 triggers match; WebSocket "live" connected;
+ variable links fire the Variable triggers. No temperature on an LPC 1 (it answers {"temp":false}).
+ Fixed in the code (not on the board yet): automatic groups without a number were put on group 0.
+ Commands DONE on the real LPC (project "Hortus"): timeline start / pause / resume / rate / position /
+ toggle / release, scene start / toggle / release, group master (with fade), override intensity and
+ colour, clear overrides, release all, api get / post, 4 commands at once, 50 commands in 5 s: all OK,
+ and the board saw every change at once over the live connection.
+ Fixed and on the board: beacon (the real API only toggles: "pharos <dev> beacon"), automatic groups.
+ Not tested: LPC trigger and text slot (Hortus has none: both gave a clear error), output art-net
+ off/on (the LPC only has DMX), login with user/password, LPC power off/on and cable out,
+ UDP / OSC / Art-Net / sACN from the LPC into the KD (needs a test project on the LPC).
+ Note: the launcher holds Art-Net port 6454 on the PC, so PC tests can't receive unicast Art-Net
+ while it runs (stress.js art): close the launcher first, or measure sACN.
+-step 4, first comparison DONE (tools/lpc/compare.js, results in PHAROS-COMPARISON-PLAN.md section 5):
+ Art-Net 33 /s (LPC) vs 40 /s (KD); web request -> light 46 ms vs 14 ms median; 10 s fade equally
+ smooth (255 / 254 levels, no steps back). LPC test project "KDDesginerTester": no UDP triggers, so
+ fired over the web API. Still open: UDP GO / PING-PONG, message load, 2-3 effects, boot time,
+ power cuts, the 1 hour timeline, DMX on the cable (needs an analyser).
+-the board now has a fixed address: 172.16.1.172 (set by Jaromir 13 Nov); backup of its show:
+ board-backup/board-project-2026-11-13-b.json
+-step 4, second round with UDP (compare.js --udp): UDP in -> light 43 ms (LPC) vs 17 ms (KD) median;
+ round trip 16.6 vs 1.7 ms; the LPC answers at most ~44 messages a second, the KD 100 (then its loop
+ protection stops the trigger). To look at: the KD shows one ~48 ms gap in the Art-Net now and then
+ (a frame late or skipped; the LPC stays under 36 ms) - find out where it comes from.
+ Still open: 2-3 effects layered, boot time, power cuts, the 1 hour timeline, DMX on the cable.

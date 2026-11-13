@@ -5,6 +5,9 @@
 #include <vector>
 #include "D2Ram.h"
 #include "Storage.h"
+#if defined(SERIAL_CDC)
+#include "USB/PluggableUSBSerial.h"
+#endif
 
 namespace {
 const char* const kCatNames[] = {"SYS", "USB", "NET", "DMX", "ARTNET", "SACN", "SHOW", "TRIG", "WEB", "CMD", "PJLINK"};
@@ -189,7 +192,14 @@ void flush() {
   // Serial: entries that fell out of the ring are skipped. USB serial drops what is
   // printed while no monitor is open (the boot log, usually), so when one opens the
   // port it gets the whole ring again.
+  // connected(), not (bool)Serial: the core's operator bool has a delay(1) in it (for the
+  // "while (!Serial)" idiom). Asked on every round of the main loop that was 1 ms each time: the
+  // loop made 500 rounds a second instead of 1000 and engine frames went out up to 4.5 ms late.
+#if defined(SERIAL_CDC)
+  bool open = _SerialUSB.connected();   // Serial is the USB port on this board; this is what its operator bool returns
+#else
   bool open = (bool)Serial;
+#endif
   if (open && !serialOpen) serialSeq = firstSeq();
   serialOpen = open;
   if (serialSeq < firstSeq()) serialSeq = firstSeq();

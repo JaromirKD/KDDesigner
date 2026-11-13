@@ -304,6 +304,17 @@ void buildStatus(JsonDocument& d) {
   parts["fade"] = g_stats.tickPartUs[Show::kPartFade];
   parts["mix"] = g_stats.tickPartUs[Show::kPartMix];
   parts["out"] = g_stats.tickPartUs[Show::kPartOut];
+  // Main loop per part: [us in the last second, worst single time]; see Stats.h.
+  static const char* const kLoopPart[Stats::kLoopParts] = {"storage", "net", "lock", "netpoll", "trig", "tick", "events", "log", "history", "vars", "update", "stats"};
+  JsonObject lp = s["loop"].to<JsonObject>();
+  lp["rounds"] = g_stats.loopRounds;
+  lp["gapUs"] = g_stats.loopGapUs;
+  lp["sleepUs"] = g_stats.loopSleepUs;
+  for (int k = 0; k < Stats::kLoopParts; k++) {
+    JsonArray a = lp[kLoopPart[k]].to<JsonArray>();
+    a.add(g_stats.loopPartUs[k]);
+    a.add(g_stats.loopPartMax[k]);
+  }
   s["udpDropped"] = g_stats.udpDropped;
   s["trigUs"] = g_stats.trigUs;   // per second
   s["busyUs"] = g_stats.busyUs;

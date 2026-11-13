@@ -45,6 +45,15 @@ uint32_t lastUdp = 0;
 uint32_t tickUsMax = 0, loopUsMax = 0;
 uint32_t trigUs = 0, busyUs = 0;   // time in Triggers::poll / in the loop (not sleeping), summed per second
 uint32_t lastLowMemWarn = 0;
+// Per part of the loop: summed and worst us this second (Stats::loopPartUs, order as kLoopPart in Web.cpp).
+uint32_t partUs[Stats::kLoopParts] = {}, partMax[Stats::kLoopParts] = {};
+uint32_t rounds = 0, gapUsMax = 0, sleepUsMax = 0, lastLoopStart = 0;
+inline void part(int k, uint32_t& mark) {
+  uint32_t t = micros(), d = t - mark;
+  mark = t;
+  partUs[k] += d;
+  if (d > partMax[k]) partMax[k] = d;
+}
 
 // Identifies this build (Log::startReason tells a restart after flashing from a hang): a
 // hash of the firmware in flash (code + initial data, ~10 ms). __DATE__/__TIME__ only
@@ -123,6 +132,11 @@ void updateStats(uint32_t now) {
   g_stats.tickUsMax = tickUsMax;
   g_stats.loopUsMax = loopUsMax;
   tickUsMax = loopUsMax = 0;
+  for (int k = 0; k < Stats::kLoopParts; k++) { g_stats.loopPartUs[k] = partUs[k]; g_stats.loopPartMax[k] = partMax[k]; partUs[k] = partMax[k] = 0; }
+  g_stats.loopRounds = rounds;
+  g_stats.loopGapUs = gapUsMax;
+  g_stats.loopSleepUs = sleepUsMax;
+  rounds = gapUsMax = sleepUsMax = 0;
   uint32_t budgetUs = 1000000 / Show::engineHz();
   if (g_stats.tickUsMax > budgetUs / 2)
     LOGW(Show, "Engine tick took %lu us (budget %lu us)", (unsigned long)g_stats.tickUsMax, (unsigned long)budgetUs);
@@ -212,26 +226,35 @@ void setup() {
 
 void loop() {
   uint32_t t0 = micros();
+  if (lastLoopStart) gapUsMax = max(gapUsMax, t0 - lastLoopStart);
+  lastLoopStart = t0;
+  rounds++;
+  uint32_t pm = t0;
   uint32_t now = millis();
   mbed::Watchdog::get_instance().kick();   // a hung loop or a stuck g_engine restarts the board
   if (!crashesCleared && now > KD_SAFE_MODE_OK_MS) { crashesCleared = true; countCrash(false); }   // runs fine: not crashing any more
 
   CRUMB("Storage::poll");
   Storage::poll();
+  part(0, pm);
   CRUMB("Net::maintain");
   Net::maintain(now);
+  part(1, pm);
 
   CRUMB("waiting for g_engine");
   g_engine.lock();
+  part(2, pm);
   // Read again: while we waited the web thread may have started a timeline at a later
   // millis(), and the engine must not see a start time in its future.
   now = millis();
   CRUMB("Net::poll");
   Net::poll();   // ArtPoll answers, sACN group for DMX input (set up by a project (re)load)
+  part(3, pm);
   CRUMB("Triggers::poll");
   uint32_t tp = micros();
   Triggers::poll(now);
   trigUs += micros() - tp;
+  part(4, pm);
   if ((int32_t)(now - nextTick) >= 0) {
     nextTick += 1000 / Show::engineHz();
     if ((int32_t)(now - nextTick) > 200) nextTick = now;  // don't try to catch up after a stall
@@ -247,6 +270,7 @@ void loop() {
     Triggers::afterTick();
     tickUsMax = max(tickUsMax, micros() - tt);
     ticks++;
+    part(5, pm);
     CRUMB("engine events");
     int id;
     // Only the events queued so far: a trigger that starts or stops a timeline queues more, and
@@ -275,16 +299,24 @@ void loop() {
   }
   Cmd::reloadDue();
   g_engine.unlock();
+  part(6, pm);
 
   CRUMB("Log::flush");
   Log::flush();
+  part(7, pm);
   CRUMB("history / variables / update");
   Monitor::flushHistory();
+  part(8, pm);
   Globals::flush();
+  part(9, pm);
   Update::poll();
+  part(10, pm);
   CRUMB("stats / sleep");
   updateStats(now);
   loopUsMax = max(loopUsMax, micros() - t0);
+  part(11, pm);
   busyUs += micros() - t0;
+  uint32_t ts = micros();
   rtos::ThisThread::sleep_for(1ms);
+  sleepUsMax = max(sleepUsMax, micros() - ts);
 }
