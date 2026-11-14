@@ -1,13 +1,18 @@
 /* Touch-panel controls (panel-ui.js): the panel itself (panel.html) and the Panel page preview.
    Colours and sizes come from the panel theme: --p-* variables set on .pgrid by panelThemeVars
    (the fallbacks here are the default dark theme). A control's own colour is an inline style. */
-.pgrid { position: relative; display: grid; gap: var(--p-gap, 12px); grid-auto-rows: minmax(var(--p-row, 84px), auto); max-width: var(--p-width, 1100px); margin: 0 auto;
+.pgrid { position: relative; display: grid; gap: var(--p-gap, 12px); grid-auto-rows: minmax(var(--p-cell, var(--p-row, 84px)), auto); max-width: var(--p-width, 1100px); margin: 0 auto;
   font: var(--p-font, 18px)/1.3 system-ui, "Segoe UI", sans-serif; color: var(--p-text, #e6e8ee); }
-.pbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; min-height: var(--p-row, 84px); border: 0; border-radius: var(--p-radius, 12px);
+.pbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; min-height: var(--p-cell, var(--p-row, 84px)); border: 0; border-radius: var(--p-radius, 12px);
   background: var(--p-button, #2a3140); color: var(--p-buttonText, #fff); font: 600 1em system-ui, "Segoe UI", sans-serif; cursor: pointer; padding: 8px; box-shadow: inset 0 -4px 0 #0005; position: relative; }
 .pbtn.down { transform: translateY(2px); filter: brightness(1.25); box-shadow: inset 0 -1px 0 #0005; }
 .plabel { position: relative; display: flex; align-items: center; min-width: 0; min-height: 44px; padding: 0 4px; color: var(--p-label, #d8dbe2); }
 .pclock { font-size: 1.9em; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* A finer grid (page Grid ½ ⅓ ¼): tighter padding so a one-cell button or LED stays one cell */
+.pfine .pbtn { padding: 2px 6px; }
+.pfine .plabel, .pfine .pled { min-height: 0; }
+.pfine .ptoggle::before { margin-bottom: 4px; height: 4px; }
 
 /* Group: a frame behind the controls placed inside it. It fills its own grid cells exactly (so
    the editor measures it like any control) and draws the frame half a gap further out, around
@@ -36,9 +41,68 @@
 .phead .ptitle { flex: 1; }
 .pval { font-weight: 600; font-size: .83em; font-variant-numeric: tabular-nums; color: var(--p-muted, #8a90a0); }
 .pslider .ptrack { position: relative; flex: 1; min-height: 36px; border-radius: calc(var(--p-radius, 12px) * .8); background: var(--p-track, #0b0c10); overflow: hidden; cursor: pointer; }
-.pslider .pfill { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--v) * 100%); background: var(--c); box-shadow: 3px 0 0 #fff; }
+/* The fill runs from --from over --len of the track; --pad = room at both ends for a knob or cap.
+   "From the middle" (ps-mid) starts at --a and is --b long (set by panelPaint). */
+.pslider { --pad: 0px; --from: 0px; --len: calc(var(--pad) + var(--v) * (100% - 2 * var(--pad))); }
+.pslider.ps-mid { --from: calc(var(--pad) + var(--a, .5) * (100% - 2 * var(--pad))); --len: calc(var(--b, 0) * (100% - 2 * var(--pad))); }
+.pslider .pfill { position: absolute; left: var(--from); top: 0; bottom: 0; width: var(--len); background: var(--c); box-shadow: 3px 0 0 #fff; }
+.pslider .pthumb { display: none; }
 .pslider.pvert .ptrack { min-height: 80px; }
-.pslider.pvert .pfill { top: auto; right: 0; width: auto; height: calc(var(--v) * 100%); box-shadow: 0 -3px 0 #fff; }
+.pslider.pvert .pfill { left: 0; top: auto; right: 0; bottom: var(--from); width: auto; height: var(--len); box-shadow: 0 -3px 0 #fff; }
+.pslider.ps-mid .pfill { box-shadow: none; min-width: 3px; min-height: 3px; }
+/* Looks (c.look). Line and fader: a thin groove with a knob or a cap on it. */
+.pslider.ps-line, .pslider.ps-fader { --pad: 14px; }
+.pslider.ps-line .ptrack, .pslider.ps-fader .ptrack { background: none; overflow: visible; border-radius: 0; }
+.pslider.ps-line .ptrack::before, .pslider.ps-fader .ptrack::before { content: ''; position: absolute; left: 0; right: 0; top: calc(50% - 4px); height: 8px; border-radius: 4px; background: var(--p-track, #0b0c10); box-shadow: inset 0 0 0 1px var(--p-border, #2c313d); }
+.pslider.ps-line .pfill, .pslider.ps-fader .pfill { top: calc(50% - 4px); bottom: auto; height: 8px; border-radius: 4px; box-shadow: none; }
+.pslider.ps-fader .pfill { opacity: .75; }
+.pslider.ps-line .pthumb { display: block; position: absolute; top: 50%; left: calc(var(--pad) + var(--v) * (100% - 2 * var(--pad))); width: 28px; height: 28px; margin: -14px 0 0 -14px;
+  border: 3px solid #fff; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px #000a, 0 2px 5px #0008; }
+.pslider.ps-fader .pthumb { display: block; position: absolute; top: 0; bottom: 0; left: calc(var(--pad) + var(--v) * (100% - 2 * var(--pad))); width: 28px; margin-left: -14px; border-radius: 6px;
+  background: linear-gradient(90deg, #e3e6ec 0 calc(50% - 1.5px), #20242c calc(50% - 1.5px) calc(50% + 1.5px), #c9cdd6 calc(50% + 1.5px)); box-shadow: 0 0 0 1px #000a, 0 2px 6px #000a; }
+.pslider.pvert.ps-line .ptrack::before, .pslider.pvert.ps-fader .ptrack::before { left: calc(50% - 4px); right: auto; top: 0; bottom: 0; width: 8px; height: auto; }
+.pslider.pvert.ps-line .pfill, .pslider.pvert.ps-fader .pfill { left: calc(50% - 4px); right: auto; top: auto; width: 8px; height: var(--len); }
+.pslider.pvert.ps-line .pthumb { left: 50%; top: auto; bottom: calc(var(--pad) + var(--v) * (100% - 2 * var(--pad))); margin: 0 0 -14px -14px; }
+.pslider.pvert.ps-fader .pthumb { left: 0; right: 0; top: auto; bottom: calc(var(--pad) + var(--v) * (100% - 2 * var(--pad))); width: auto; height: 28px; margin: 0 0 -14px;
+  background: linear-gradient(0deg, #c9cdd6 0 calc(50% - 1.5px), #20242c calc(50% - 1.5px) calc(50% + 1.5px), #e3e6ec calc(50% + 1.5px)); }
+/* Segments: the bar cut into --n blocks, like a level meter */
+.pslider.ps-segments .ptrack { border-radius: 3px; --seg: repeating-linear-gradient(90deg, #000 0 calc(100% / var(--n, 10) - 3px), #0000 calc(100% / var(--n, 10) - 3px) calc(100% / var(--n, 10)));
+  -webkit-mask-image: var(--seg); mask-image: var(--seg); }
+.pslider.pvert.ps-segments .ptrack { --seg: repeating-linear-gradient(0deg, #000 0 calc(100% / var(--n, 10) - 3px), #0000 calc(100% / var(--n, 10) - 3px) calc(100% / var(--n, 10))); }
+.pslider.ps-segments .pfill { box-shadow: none; }
+.p-noval .pval { display: none; }
+/* "No frame": the control without its card */
+.pctl.p-plain { border-color: transparent; background: none; padding: 0; }
+
+/* Radio group: one of several, the lit one is the value */
+.pradio .ptitle:empty, .pnumber .ptitle:empty { display: none; }
+.pradio .popts { flex: 1; display: flex; gap: 4px; min-height: 36px; padding: 4px; border-radius: calc(var(--p-radius, 12px) * .8); background: var(--p-track, #0b0c10); }
+.pradio.pvert .popts { flex-direction: column; }
+.pradio .popt { flex: 1 1 0; display: flex; align-items: center; justify-content: center; text-align: center; min-width: 0; padding: 4px 8px; overflow: hidden;
+  border-radius: calc(var(--p-radius, 12px) * .6); font-weight: 600; color: var(--p-muted, #8a90a0); cursor: pointer; }
+.pradio .popt.p-on { background: var(--c); color: var(--p-buttonText, #fff); box-shadow: 0 1px 4px #0006; }
+.pradio .popt:active { filter: brightness(1.3); }
+
+/* LED: a lamp with a text; lit = .p-on */
+.pled { --c: var(--p-toggle, #3a7d44); position: relative; display: flex; align-items: center; gap: .55em; min-width: 0; min-height: 44px; padding: 0 4px; color: var(--p-label, #d8dbe2); }
+.pled .plamp { flex: none; width: 1.15em; height: 1.15em; border-radius: 50%; background: color-mix(in srgb, var(--c) 22%, var(--p-bg, #000)); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 55%, var(--p-bg, #000)); }
+.pled.p-on .plamp { background: color-mix(in srgb, var(--c) 82%, #fff); box-shadow: 0 0 12px var(--c), inset 0 -2px 3px #0004, inset 0 2px 3px #fff8; }
+.pled .ptitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pled.p-flash { animation: none; }
+.pled.p-flash .plamp { animation: p-blink 1s steps(1, end) infinite; }
+.pled.p-flash.p-fcol .plamp { background: var(--flash); box-shadow: 0 0 12px var(--flash); }
+
+/* Number: a big value, as large as fits its box (--n = characters) */
+.pnumber .pbigbox { flex: 1; min-height: 30px; container-type: size; display: flex; align-items: center; justify-content: center; }
+.pnumber .pbig { font-weight: 700; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--p-label, #d8dbe2); font-size: min(90cqh, calc(150cqw / var(--n, 3))); }
+.pnumber .pbig .pval { font-size: 1em; font-weight: inherit; color: inherit; }
+.pnumber .punit { margin-left: .15em; font-size: .45em; color: var(--p-muted, #8a90a0); }
+
+/* Image (a logo): all of it inside its box, or p-cover = fills the box */
+.pimage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.pimage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.pimage.p-cover img { object-fit: cover; border-radius: var(--p-radius, 12px); }
+.pimage .pnoimg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--p-border, #2c313d); border-radius: var(--p-radius, 12px); color: var(--p-muted, #8a90a0); font-size: .8em; }
 .pdial .pknob { position: relative; flex: 1; min-height: 70px; display: flex; align-items: center; justify-content: center; cursor: ns-resize; }
 .pdial svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .parc0, .parc { fill: none; stroke-width: 10; stroke-linecap: round; }

@@ -47,8 +47,9 @@ views.live = () => {
       <div class="lv-side">
         <div class="card"><h3>Playing now</h3><div id="lvPlay"></div></div>
         <div class="card"><h3>Triggers <span class="muted" style="font-weight:normal">· last fired</span></h3><div id="lvFeed" class="lv-feed"></div></div>
-        ${p.modes.length || p.variables.length ? `<div class="card"><h3>Modes &amp; variables</h3><div id="lvVars"></div></div>` : ''}
-        <div class="card"><h3>Devices</h3><div id="lvDev" class="lv-devs"></div></div>
+        ${p.modes.length ? `<div class="card"><h3>Modes</h3><div id="lvModes"></div></div>` : ''}
+        ${p.variables.some((v) => v.live) ? `<div class="card"><h3>Variables</h3><div id="lvVars"></div></div>` : ''}
+        <div class="card"><h3>Devices</h3><div id="lvDev" class="lv-devgroups"></div></div>
         <div class="card"><h3>Warnings &amp; errors</h3><div id="lvWarn" class="lv-feed"></div></div>
       </div>
     </div>
@@ -178,16 +179,20 @@ function livePosFrame() {
 }
 
 function liveVars(st) {
-  const el = $('#lvVars');
-  if (!el) return;
-  const p = P(), vals = st?.vars || {}, prev = S.liveVarPrev || (S.liveVarPrev = {}), now = Date.now();
-  const changed = S.liveVarChanged || (S.liveVarChanged = {});
-  const modes = p.modes.map((g) => {
+  const p = P();
+  const mEl = $('#lvModes');
+  if (mEl) mEl.innerHTML = p.modes.map((g) => {
     const cur = st?.modes?.[g.name] || '', icon = g.stateInfo?.[cur]?.icon || '';
     return `<div class="row nowrap lv-var"><span class="muted" style="flex:1">${esc(g.name)}</span>
       <span class="chip" style="${cur ? `border-color:${modeColor(g, cur)};color:${modeColor(g, cur)}` : ''}">${esc(icon)} ${esc(cur || '–')}</span></div>`;
-  });
-  const vars = p.variables.map((v) => {
+  }).join('');
+  const el = $('#lvVars');
+  if (!el) return;
+  // Only the variables ticked "Live" on the Variables page (default off).
+  const vals = st?.vars || {}, prev = S.liveVarPrev || (S.liveVarPrev = {}), now = Date.now();
+  const changed = S.liveVarChanged || (S.liveVarChanged = {});
+  const shownVars = p.variables.filter((v) => v.live);
+  const vars = shownVars.map((v) => {
     const val = vals[v.name] ?? '';
     if (prev[v.name] !== undefined && prev[v.name] !== val) changed[v.name] = now;
     prev[v.name] = val;
@@ -196,35 +201,43 @@ function liveVars(st) {
     return `<div class="row nowrap lv-var${fresh ? ' fresh' : ''}"><span class="muted" style="flex:1">${esc(v.name)}</span><span class="mono">${esc(String(shown))}</span></div>`;
   });
   // Grouped like the Variables page: ungrouped first, then a heading per group in its colour.
-  const inGroup = (g) => vars.filter((_, i) => (p.variables[i].group || '') === g).join('');
-  el.innerHTML = modes.join('') + inGroup('') + varGroups().filter((g) => inGroup(g.name)).map((g) => `<div class="lv-group" style="--tc:${trigColor(g.color) || 'var(--border)'}">${esc(g.name)}</div>${inGroup(g.name)}`).join('');
+  const inGroup = (g) => vars.filter((_, i) => (shownVars[i].group || '') === g).join('');
+  el.innerHTML = inGroup('') + varGroups().filter((g) => inGroup(g.name)).map((g) => `<div class="lv-group" style="--tc:${trigColor(g.color) || 'var(--border)'}">${esc(g.name)}</div>${inGroup(g.name)}`).join('');
 }
 
 function liveDevices(st) {
   const el = $('#lvDev');
-  if (el) el.innerHTML = deviceChipsHtml(st);
+  if (el) el.innerHTML = deviceChipsHtml(st, true);
 }
 // Every device the controller watches as a chip (offline first): network devices, PCs,
-// projectors, show devices, TCP and Modbus. Also the Dashboard's Devices card.
-function deviceChipsHtml(st) {
+// projectors, show devices, TCP and Modbus. Also the Dashboard's Devices card (flat);
+// the Live page groups them by type (`grouped`), offline first within each group.
+function deviceChipsHtml(st, grouped) {
   const list = [];
-  const add = (name, kind, state, extra = '') => list.push({ name, kind, state, extra });
-  for (const h of st?.monitor?.hosts || []) add(h.name, h.kind === 'pc' ? 'PC' : 'device', h.state);
-  for (const x of st?.projectors || []) add(x.name, 'projector', !x.seen ? 'unknown' : x.online ? 'online' : 'offline', x.online && x.power ? x.power : '');
-  for (const x of st?.drivers || []) add(x.name, DRIVERS[x.type]?.label || x.type, !x.seen ? 'unknown' : x.online ? 'online' : 'offline');
-  for (const x of st?.io?.tcp || []) add(x.name, 'tcp', x.state);
-  for (const x of st?.io?.modbus || []) add(x.name, 'modbus', x.state);
+  const add = (name, kind, group, state, extra = '') => list.push({ name, kind, group, state, extra });
+  for (const h of st?.monitor?.hosts || []) h.kind === 'pc' ? add(h.name, 'PC', 'PCs', h.state) : add(h.name, 'device', 'Network devices', h.state);
+  for (const x of st?.projectors || []) add(x.name, 'projector', 'Projectors', !x.seen ? 'unknown' : x.online ? 'online' : 'offline', x.online && x.power ? x.power : '');
+  for (const x of st?.drivers || []) { const l = DRIVERS[x.type]?.label || x.type; add(x.name, l, l, !x.seen ? 'unknown' : x.online ? 'online' : 'offline'); }
+  for (const x of st?.io?.tcp || []) add(x.name, 'tcp', 'TCP', x.state);
+  for (const x of st?.io?.modbus || []) add(x.name, 'modbus', 'Modbus', x.state);
   // In the project but not on the controller yet (added, not saved).
   const known = new Set(list.map((d) => d.name.toLowerCase())), p = P();
   for (const x of [...p.devices, ...p.pcs, ...p.projectors, ...p.drivers, ...p.tcp, ...p.modbus]) {
-    if (x.name && !known.has(x.name.toLowerCase())) add(x.name, 'not on the controller yet: save first', 'unknown');
+    if (x.name && !known.has(x.name.toLowerCase())) add(x.name, 'not on the controller yet: save first', 'Not saved yet', 'unknown');
   }
+  if (!list.length) return '<span class="muted">No devices.</span>';
+  const groupOrder = [...new Set(list.map((d) => d.group))];   // fixed: PCs, network, projectors, show devices, TCP, Modbus
   const order = { offline: 0, unknown: 1, online: 2 };
   list.sort((a, b) => (order[a.state] ?? 1) - (order[b.state] ?? 1) || a.name.localeCompare(b.name));
   const dot = (s) => (s === 'online' ? 'ok' : s === 'offline' ? 'bad' : '');
-  return list.length ? list.map((d) => `<span class="lv-dev${d.state === 'offline' ? ' off' : ''}" data-view="monitor" title="${esc(d.kind)} · ${esc(d.state)}${d.extra ? ' · ' + esc(d.extra) : ''}">
-    <span class="dot ${dot(d.state)}"></span>${esc(d.name)}${d.extra ? ` <span class="muted">${esc(d.extra)}</span>` : ''}</span>`).join('')
-    : '<span class="muted">No devices.</span>';
+  const chips = (l) => l.map((d) => `<span class="lv-dev${d.state === 'offline' ? ' off' : ''}" data-view="monitor" title="${esc(d.kind)} · ${esc(d.state)}${d.extra ? ' · ' + esc(d.extra) : ''}">
+    <span class="dot ${dot(d.state)}"></span>${esc(d.name)}${d.extra ? ` <span class="muted">${esc(d.extra)}</span>` : ''}</span>`).join('');
+  if (!grouped) return chips(list);
+  return groupOrder.map((g) => {
+    const l = list.filter((d) => d.group === g), off = l.filter((d) => d.state === 'offline').length;
+    return `<div class="lv-group">${esc(g)} <span class="muted">${l.length}</span>${off ? ` <span class="lv-off">${off} offline</span>` : ''}</div>
+      <div class="lv-devs">${chips(l)}</div>`;
+  }).join('');
 }
 
 // ---- Trigger feed and warnings (from the log stream; called from addLog) --------------

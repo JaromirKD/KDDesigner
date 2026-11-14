@@ -181,7 +181,7 @@ trig('Poll media server', 'interval', { seconds: 60 }, ['http get http://192.168
 sec('== SHOW TASK LISTS', 'purple', 'Manual triggers = task lists that other triggers (buttons, UDP, clock) fire by name.');
 trig('Start inloop', 'manual', {}, ['mode System Idle', 'start timeline "Inloop"', 'panel lbl_status text Inloop', 'panel lbl_status color #d8dbe2', 'panel "Start show" reset'], ['mode System not Emergency']);
 trig('Start main show', 'manual', {},
-  ['mode System Show', 'start timeline "Main show"', 'send osc mediaserver /play', 'send udp screens "PLAY\\r"', 'panel "Start show" flash on', 'panel "Start show" text RUNNING', 'panel "Show progress" value 100', 'panel lbl_status text Show is running', 'panel lbl_status color #3ecf8e'],
+  ['mode System Show', 'start timeline "Main show"', 'send osc mediaserver /play', 'send udp screens "PLAY\\r"', 'panel "Start show" flash on', 'panel "Start show" text RUNNING', 'panel "Show progress" value 100', 'panel led_show value on', 'panel lbl_status text Show is running', 'panel lbl_status color #3ecf8e'],
   ['mode System not Emergency', 'timeline "Main show" stopped'], { whileRunning: 'ignore' });
 trig('Show: start video', 'manual', {}, ['send tcp watchout run', 'brightsign lobby send play1', 'brightsign lobby event video_show', 'brightsign lobby var mode show', 'log Video started from timeline {timeline}'], [],
   { notes: 'Fired by a ◆ trigger cue at 2 s on timeline "Main show". The brightsign event/var lines go through the KD plugin (kdlink) in the presentation.' });
@@ -197,7 +197,7 @@ trig('Main show finished', 'timeline', { timeline: 2, on: 'end' }, ['var show_co
 trig('Main show stopped early', 'timeline', { timeline: 2, on: 'release' }, ['send osc qlab /cue/*/stop', 'log Main show released ({reason})'], [],
   { notes: 'Timeline trigger "is released": fires on stop timeline, the ■ button, release all or another group-A timeline starting ({reason} says which), not when it reaches its end.' });
 trig('Any timeline paused', 'timeline', { timeline: 0, on: 'pause' }, ['log Timeline {timeline} paused'], [], { notes: 'Timeline 0 = any timeline; {timeline} is its number.' });
-trig('Stop all', 'manual', {}, ['mode System Idle', 'release all fade 3', 'send osc qlab /cue/*/stop', 'send udp screens "STOP\\r"', 'panel "Start show" reset', 'panel lbl_status text Stopped', 'panel lbl_status color #ff9f43']);
+trig('Stop all', 'manual', {}, ['mode System Idle', 'release all fade 3', 'send osc qlab /cue/*/stop', 'send udp screens "STOP\\r"', 'panel "Start show" reset', 'panel led_show value off', 'panel lbl_status text Stopped', 'panel lbl_status color #ff9f43']);
 trig('Flash walls once', 'manual', {}, ['set 1.10-29 255', 'sleep 0.2', 'clear override 1.10-29'], [], { notes: 'Used by "Flash walls 6x": {count} is the round.' });
 trig('Flash walls 6x', 'manual', {}, ['repeat "Flash walls once" 6 times every 0.5', 'log Walls flashed 6 times']);
 trig('Find the first fixtures', 'manual', {}, ['locate 1-4 for 8'], [], { notes: 'Locate: fixtures 1-4 blink white for 8 s to find them in the room (also Fixtures / Map: Locate, or the L key). "locate off" stops it.' });
@@ -216,6 +216,7 @@ trig('House level slider', 'panel', { control: 'House level', event: 'change' },
 trig('Grand master dial', 'panel', { control: 'Grand master', event: 'change' }, ['grandmaster {value}']);
 trig('Wall colour wheel', 'panel', { control: 'Wall colour', event: 'change' }, ['set 1.11 {r}', 'set 1.12 {g}', 'set 1.13 {b}']);
 trig('Mover XY pad', 'panel', { control: 'Mover position', event: 'change' }, ['set 1.45 {=round(x*2.55)}', 'set 1.47 {=round(y*2.55)}']);
+trig('Preset radio group', 'panel', { control: 'Preset', event: 'change' }, ['log Preset {value}', 'if var preset = Off then release all fade 3'], [], { notes: 'A radio group sends the text of the choice as {value}; it is also in the variable preset.' });
 trig('Fog toggle', 'panel', { control: 'Fog', event: 'change' }, ['if var fog_on = on then io Fog on else io Fog off']);
 trig('CLICK Projectors on', 'panel', { control: 'Projectors on', event: 'click' }, ['projector all on']);
 trig('CLICK Projectors off', 'panel', { control: 'Projectors off', event: 'click' }, ['projector all off']);
@@ -258,6 +259,9 @@ trig('Every 10 s heartbeat (disabled)', 'interval', { seconds: 10 }, ['send udp 
 trig('Weekend check every 20 s', 'interval', { seconds: 20 }, ['log It is the weekend'], ['day is sat,sun'],
   { notes: 'Fires every 20 s. On weekdays its condition is false: the row flashes red instead of orange, the diamond in Show flow flashes red and the fire history says "condition false".' });
 
+trig('Power up one by one', 'manual', {}, ['pc all wake interval 2', 'projector hall on interval 5', 'kissbox io 1.all on interval 0.5', 'netio rack output all on interval 1', 'knx gw write "Hall light" on'],
+  [], { notes: 'interval <s> at the end: the PCs, projectors, relays of Kiss-Box slot 1 and NETIO outputs switch on one after another, <s> apart (cancel intervals stops the rest).' });
+
 let n = 0;
 for (const t of triggers) if (t.type !== 'comment') t.id = ++n;
 
@@ -265,7 +269,7 @@ for (const t of triggers) if (t.type !== 'comment') t.id = ++n;
 // Two panels: the operator's (pages 1-3, /panel) and a front desk one (page 4, /panel?p=2) whose
 // controls share names with the operator's, so they share their live state.
 const panel = { theme: {}, panels: [
-  { id: 1, name: 'Operator', title: 'KD Feature demo', start: 1 },
+  { id: 1, name: 'Operator', title: 'KD Feature demo', start: 1, sleep: 300 },   // black after 5 minutes without a touch
   { id: 2, name: 'Front desk', title: 'Front desk', start: 4 },
 ], pages: [
   { id: 1, name: 'Show', columns: 4, controls: [
@@ -288,6 +292,13 @@ const panel = { theme: {}, panels: [
     // Labels showing a variable ("Visitors: 12") and the time left of timeline 2 ("Time left -0:48").
     { type: 'label', name: 'lbl_visitors', text: 'Visitors:', var: 'visitors', span: 2, col: 1, row: 9 },
     { type: 'label', name: 'lbl_time', text: 'Time left', follow: 2, timeShow: 'left', span: 2, col: 3, row: 9 },
+    // Radio group: one of several, kept in the variable "preset" (its trigger gets the choice as {value}).
+    { type: 'radio', name: 'Preset', text: 'Room preset', options: 'Walk-in, Show, Cleaning, Off', var: 'preset', span: 4, col: 1, row: 10 },
+    // A big number from a variable, LEDs (one follows a variable, one is switched by triggers) and a logo.
+    { type: 'number', name: 'num_visitors', text: 'Visitors today', var: 'visitors', col: 1, row: 11, rows: 2 },
+    { type: 'led', name: 'led_fog', text: 'Fog', var: 'fog_on', color: '#4c8dff', col: 2, row: 11 },
+    { type: 'led', name: 'led_show', text: 'Show running', col: 2, row: 12 },
+    { type: 'image', image: 'demo-logo.svg', span: 2, rows: 2, col: 3, row: 11 },
   ] },
   { id: 2, name: 'Technician', columns: 4, pin: '1234', controls: [
     { type: 'label', name: 'lbl_mode', text: 'Mode: -', span: 4 },
@@ -297,14 +308,18 @@ const panel = { theme: {}, panels: [
     { type: 'dial', name: 'Grand master', text: 'Grand master', min: 0, max: 100, step: 1, unit: ' %', value: 100, rows: 2 },
     { type: 'button', name: 'All off', text: 'All off (hold 3 s)', color: '#b71c1c' },
     { type: 'button', name: 'Blackout', text: 'Blackout (double-click)', color: '#000000' },
-    { type: 'slider', name: 'Fader', text: 'Vertical slider', vertical: true, min: 0, max: 1, step: 0.01, rows: 3 },
+    { type: 'slider', name: 'Fader', text: 'Vertical slider', vertical: true, look: 'fader', min: 0, max: 1, step: 0.01, rows: 3 },
     { type: 'spacer' },
     { type: 'button', name: 'Service', text: 'Service (hold 5 s)', color: '#424242', span: 3 },
     { type: 'button', name: 'Groups page', text: 'Groups…', color: '#424242', goto: 3 },
+    // Slider looks: a line with a knob, level-meter segments, and a balance that fills from the middle.
+    { type: 'slider', name: 'Line slider', text: 'Line + knob', look: 'line', min: 0, max: 100, unit: ' %', span: 2 },
+    { type: 'slider', name: 'Segment slider', text: 'Segments', look: 'segments', min: 0, max: 10, step: 1, span: 2 },
+    { type: 'slider', name: 'Balance', text: 'Balance', mid: true, min: -100, max: 100, value: 0, span: 4 },
     { type: 'button', name: 'Back', text: '← Back', color: '#424242', goto: 1, span: 4 },
   ] },
   // Groups in groups: "Stage" holds the "Haze" group and the curtain buttons.
-  { id: 3, name: 'Groups', columns: 4, controls: [
+  { id: 3, name: 'Groups', columns: 4, bg: '#101826', controls: [   // bg: this page's own background colour
     { type: 'group', name: 'grp_stage', text: 'Stage', col: 1, row: 1, span: 4, rows: 2 },
     { type: 'group', name: 'grp_haze', text: 'Haze', col: 1, row: 1, span: 2, rows: 2, color: '#6a5acd' },
     { type: 'toggle', name: 'Haze', text: 'Haze', col: 1, row: 1, span: 2 },
@@ -314,10 +329,13 @@ const panel = { theme: {}, panels: [
     { type: 'button', name: 'Groups back', text: '← Back', color: '#424242', goto: 2, col: 1, row: 3, span: 4 },
   ] },
   // The front desk panel: the same "lbl_status" / "Start show" / "Stop" as the operator's.
-  { id: 4, name: 'Desk', panel: 2, columns: 2, controls: [
-    { type: 'label', name: 'lbl_status', text: 'Status: -', span: 2 },
+  // grid 2: half-size cells (sizes count in those), so the LEDs can be one small cell.
+  { id: 4, name: 'Desk', panel: 2, columns: 2, grid: 2, controls: [
+    { type: 'label', name: 'lbl_status', text: 'Status: -', span: 4 },
     { type: 'button', name: 'Start show', text: 'START SHOW', color: '#2e7d32' },
     { type: 'button', name: 'Stop', text: 'STOP', color: '#b71c1c', confirm: 'Stop everything?' },
+    { type: 'led', name: 'led_show', text: 'Show', span: 1, rows: 1 },
+    { type: 'led', name: 'led_fog', text: 'Fog', var: 'fog_on', color: '#4c8dff', span: 1, rows: 1 },
   ] },
 ] };
 for (const pg of panel.pages) pg.panel = pg.panel || 1;
@@ -385,6 +403,7 @@ const project = {
     { name: 'museum_state', group: 'PLC', type: 'number', initial: 1, modbus: { device: 'plc', table: 'holding', address: 20 } },
     { name: 'blackout', type: 'bool', initial: false },
     { name: 'fog_on', type: 'bool', initial: false },
+    { name: 'preset', group: 'Touch panel', type: 'text', initial: 'Walk-in' },
     { name: 'house_level', group: 'Touch panel', type: 'number', initial: 0 },
     { name: 'wall_colour', group: 'Touch panel', type: 'text', initial: '#000000' },
     { name: 'wall_r', group: 'Touch panel', type: 'number', initial: 0 },
@@ -438,4 +457,10 @@ mode Simple: dim, r, g, b`],
 };
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, JSON.stringify(project, null, 2));
+// The touch panel's image control: a small logo in the show's media folder.
+fs.mkdirSync(path.join(path.dirname(out), 'media'), { recursive: true });
+fs.writeFileSync(path.join(path.dirname(out), 'media', 'demo-logo.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80"><rect x="2" y="2" width="76" height="76" rx="14" fill="#4c8dff"/>
+<path d="M22 20v40M22 42l22-22M30 36l18 24" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="92" y="38" font-family="system-ui,Segoe UI,sans-serif" font-size="26" font-weight="700" fill="#e6e8ee">Demo</text>
+<text x="92" y="64" font-family="system-ui,Segoe UI,sans-serif" font-size="20" fill="#8a90a0">Museum</text></svg>\n`);
 console.log(`wrote ${out}: ${fixtures.length} fixtures, ${effects.length} effects, ${triggers.length} triggers`);

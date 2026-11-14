@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <vector>
 
 // PJLink (class 1) projector control over TCP 4352, with optional password
 // (MD5 auth). Commands are queued and sent from a worker thread so a slow or
@@ -11,6 +12,7 @@ namespace Projectors {
 void begin();                                     // starts the worker thread
 void load();                                      // (re)reads the project; caller holds g_engine
 int find(const String& ref);                      // id, name or -1
+std::vector<String> names();                      // every projector, in list order ("projector all ... interval")
 // Queues a PJLink command body without the "%1" prefix, e.g. "POWR 1".
 // idx < 0 sends to every projector.
 bool queue(int idx, const String& body, String& msg);

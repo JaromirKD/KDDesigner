@@ -329,6 +329,7 @@ void buildStatus(JsonDocument& d) {
   g_engine.lock();
   Show::statusJson(d.as<JsonObject>());
   Triggers::statusJson(d.as<JsonObject>());
+  Cmd::statusJson(d.as<JsonObject>());
   Pcs::statusJson(d["pcs"].to<JsonArray>());
   g_engine.unlock();
   State::statusJson(d.as<JsonObject>());

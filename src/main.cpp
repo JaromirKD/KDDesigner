@@ -297,6 +297,7 @@ void loop() {
     Http::Response resp;
     while (Http::takeResponse(resp)) Triggers::onHttpResponse(resp.method, resp.url, resp.status, resp.body);
   }
+  Cmd::poll();
   Cmd::reloadDue();
   g_engine.unlock();
   part(6, pm);

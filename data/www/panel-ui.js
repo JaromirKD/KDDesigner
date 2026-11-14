@@ -2,13 +2,14 @@
 // Touch-panel controls, shared by panel.html (the panel itself) and the Panel page preview in
 // KD Designer: theme (panelThemeVars), markup (panelPageHtml), live state (panelUpdate) and
 // dragging sliders, dials and colour wheels (panelDrag). Styles are in panel.css.
+// Display-only types: led (a lamp), number (a big value), image (a logo); radio = one of several.
 // The live state per control name is the status "labels" (State.cpp): text / colour / flash /
 // disabled / locked set by panel and label actions, and the value a panel sent or "panel X value" set.
 // locked (true/false from panel lock/unlock) wins over the control's own "display only" (c.readonly),
 // disabled (true/false from panel disable/enable) over its own "disabled" (c.disabled).
 // A control linked to a variable shows that variable instead.
 
-const PANEL_VALUE_TYPES = ['toggle', 'slider', 'dial', 'color', 'xy'];   // these send "change" with a value
+const PANEL_VALUE_TYPES = ['toggle', 'slider', 'dial', 'color', 'xy', 'radio'];   // these send "change" with a value
 
 // Several panels (e.g. one for the technician, one for the operator): project.panel.panels
 // [{id, name, title, start}], each page belongs to one (page.panel; none = the first). They share
@@ -36,7 +37,7 @@ const PANEL_THEMES = {
   Contrast: { bg: '#000000', card: '#000000', border: '#ffffff', text: '#ffffff', muted: '#dddddd', track: '#333333', button: '#1a1a1a', toggle: '#00b050', accent: '#ffd400', label: '#ffffff' },
 };
 // The theme setting a control type takes its colour from.
-const PANEL_TYPE_COLOR = { button: 'button', toggle: 'toggle', slider: 'accent', dial: 'accent', xy: 'accent', label: 'label', clock: 'label', group: 'border' };
+const PANEL_TYPE_COLOR = { button: 'button', toggle: 'toggle', slider: 'accent', dial: 'accent', xy: 'accent', label: 'label', clock: 'label', group: 'border', radio: 'accent', led: 'toggle', number: 'label' };
 const panelTheme = (t) => ({ ...PANEL_THEME, ...(t || {}) });
 const panelThemeColor = (t, type) => panelTheme(t)[PANEL_TYPE_COLOR[type]] || '';
 function panelThemeVars(t) {
@@ -80,7 +81,23 @@ function panelXY(c, value) {
 }
 const panelXYText = (c, x, y) => `${panelFmt(c, x)},${panelFmt(c, y, panelRangeY(c))}`;
 // Grid rows a control takes when the project doesn't say.
-const panelRows = (c) => (c.type === 'slider' && c.vertical ? 3 : c.type === 'dial' || c.type === 'group' ? 2 : c.type === 'color' || c.type === 'xy' ? 3 : 1);
+const panelRows = (c) => (c.type === 'slider' && c.vertical ? 3 : c.type === 'dial' || c.type === 'group' || c.type === 'image' ? 2 : c.type === 'color' || c.type === 'xy' ? 3
+  : c.type === 'radio' && c.vertical ? Math.max(1, Math.ceil(panelOptions(c).length * 0.6)) : 1);
+// A radio group's choices: c.options "Walk-in, Lecture, Film" (the text is also the value it sends).
+const panelOptions = (c) => String(c.options || '').split(',').map((o) => o.trim()).filter(Boolean);
+const panelSame = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+// Is a LED lit? With c.is ("on when it is …") only for that value; else for anything that isn't
+// empty, 0, off, false or no.
+const panelLit = (c, v) => (c.is != null && c.is !== '' ? panelSame(v, c.is) : !/^(|0+(\.0+)?|off|false|no)$/i.test(String(v ?? '').trim()));
+// A slider's look (c.look): '' = a filled bar, 'line' = a thin line with a round knob, 'fader' = a
+// groove with a cap like on a mixing desk, 'segments' = blocks like a level meter.
+const PANEL_SLIDER_LOOKS = [['', 'bar'], ['line', 'line + knob'], ['fader', 'fader'], ['segments', 'segments']];
+function panelSliderClass(c) {
+  const look = PANEL_SLIDER_LOOKS.some(([k]) => k && k === c.look) ? ` ps-${c.look}` : '';
+  return `pctl pslider${c.vertical ? ' pvert' : ''}${look}${c.mid ? ' ps-mid' : ''}${c.noValue ? ' p-noval' : ''}${c.plain ? ' p-plain' : ''}`;
+}
+// Room at both ends of the track for a knob or cap (px, panel.css --pad): where you touch = its middle.
+const panelTrackPad = (c) => (c.look === 'line' || c.look === 'fader' ? 14 : 0);
 
 // #rrggbb <-> [hue 0-360, saturation 0-1, brightness 0-1]
 function pHsv(hex) {
@@ -122,7 +139,7 @@ function panelCtlState(c, st) {
   // A control that follows a timeline can't be touched: dragging it would only fight the timeline.
   const follow = c.follow && ['slider', 'dial', 'label'].includes(c.type) ? panelFollow(c, st) : null;
   const { min, max } = panelRange(c);
-  let text = l.text ?? (c.text || (c.type === 'label' ? '' : c.name || ''));
+  let text = l.text ?? (c.text || (['label', 'number', 'radio'].includes(c.type) ? '' : c.name || ''));
   // A label linked to a timeline or a variable: its text (also one set by "panel X text") goes in front.
   if (c.type === 'label' && (follow || c.var)) {
     const v = follow ? panelTimeText(c, follow) : st?.vars?.[c.var] ?? '';
@@ -180,9 +197,32 @@ function panelLinkValues(c, value, hsv) {
   return out;
 }
 
+// A page's grid (pg.grid): each normal cell split into 2, 3 or 4 smaller ones each way, for
+// smaller controls. Columns, spans, rows and places of its controls are counted in small cells;
+// a control without its own size takes the normal size (g cells). 1 = the normal grid.
+const PANEL_GRIDS = [[1, 'normal'], [2, '½ cells'], [3, '⅓ cells'], [4, '¼ cells']];
+const panelFine = (pg) => ([2, 3, 4].includes(+pg?.grid) ? +pg.grid : 1);
+const panelCols = (pg) => (pg.columns || 3) * panelFine(pg);
+// A control's size in cells: [columns wide, rows high].
+const panelSize = (c, cols, g = 1) => [Math.min(c.span || g, cols), Math.max(1, c.rows || panelRows(c) * g)];
+// Height of one cell (px): g small rows and their gaps fill one normal row.
+const panelCellPx = (theme, g) => { const th = panelTheme(theme); return Math.max(8, ((+th.row || 84) - (+th.gap || 0) * (g - 1)) / g); };
+// Changes a page's grid and rescales what is already on it, so it keeps its look.
+function panelSetFine(pg, g) {
+  const old = panelFine(pg), f = g / old, sc = (v) => Math.max(1, Math.round(v * f)), pos = (v) => Math.max(1, Math.round((v - 1) * f) + 1);
+  if (g === old) return;
+  for (const c of pg.controls) {
+    if (c.span) c.span = sc(c.span);
+    if (c.rows) c.rows = sc(c.rows);
+    if (c.col > 0) c.col = pos(c.col);
+    if (c.row > 0) c.row = pos(c.row);
+  }
+  if (g > 1) pg.grid = g; else delete pg.grid;
+}
+
 // Where a control sits: its own column/row (moved in the editor) or the next free place.
-function panelPlace(c, cols) {
-  const span = Math.min(c.span || 1, cols), rows = Math.max(1, c.rows || panelRows(c));
+function panelPlace(c, cols, g = 1) {
+  const [span, rows] = panelSize(c, cols, g);
   const col = c.col > 0 ? Math.min(c.col, cols - span + 1) : 0;
   return `grid-column:${col ? col + ' / ' : ''}span ${span};grid-row:${col && c.row > 0 ? c.row + ' / ' : ''}span ${rows}`;
 }
@@ -210,12 +250,12 @@ function panelParents(boxes) {
 // control sits a full gap from the frame (drawn half a gap out) and below the title; a group in
 // a group half a gap in, and below the outer title. Groups also get their depth
 // as z-index, so an inner frame is drawn over the outer one. Between controls nothing changes.
-function panelGroupMargins(controls, cols) {
+function panelGroupMargins(controls, cols, g = 1) {
   const boxes = [];
   controls.forEach((c, k) => {
     if (!(c.col > 0 && c.row > 0) || c.type === 'spacer') return;
-    const span = Math.min(c.span || 1, cols);
-    boxes.push({ k, col: Math.min(c.col, cols - span + 1), row: c.row, span, rows: Math.max(1, c.rows || panelRows(c)), group: c.type === 'group',
+    const [span, rows] = panelSize(c, cols, g);
+    boxes.push({ k, col: Math.min(c.col, cols - span + 1), row: c.row, span, rows, group: c.type === 'group',
       titled: c.type === 'group' && c.showTitle !== false && !!c.text });
   });
   const parent = panelParents(boxes), memo = new Map();
@@ -244,20 +284,30 @@ function panelGroupMargins(controls, cols) {
   return out;
 }
 
+// A page's own background colour (pg.bg) instead of the theme's.
+const panelPageBg = (pg) => (/^#[0-9a-f]{6}$/i.test(pg?.bg || '') ? `;--p-bg:${pg.bg}` : '');
+
 // preview: the editor's copy - divs instead of buttons and a resize grip on each control.
 function panelPageHtml(pg, st, preview, theme) {
-  const cols = pg.columns || 3, inGroup = panelGroupMargins(pg.controls, cols);
+  const g = panelFine(pg), cols = panelCols(pg), inGroup = panelGroupMargins(pg.controls, cols, g);
   const grip = preview ? '<span class="pgrip" title="Drag to resize"></span>' : '';
-  return `<div class="pgrid${preview ? ' preview' : ''}" style="${panelThemeVars(theme)};grid-template-columns:repeat(${cols},minmax(0,1fr))">${pg.controls.map((c, i) => {
-    const at = `data-i="${i}" style="${panelPlace(c, cols)}${inGroup[i]}"`;
+  return `<div class="pgrid${preview ? ' preview' : ''}${g > 1 ? ' pfine' : ''}" style="${panelThemeVars(theme)}${panelPageBg(pg)};--p-cell:${panelCellPx(theme, g)}px;grid-template-columns:repeat(${cols},minmax(0,1fr))">${pg.controls.map((c, i) => {
+    const at = `data-i="${i}" style="${panelPlace(c, cols, g)}${inGroup[i]}"`;
     switch (c.type) {
       case 'spacer': return `<div class="pspacer" ${at}>${grip}</div>`;
       // A frame with a title behind the controls placed inside it (only a look: the editor moves them together).
       case 'group': return `<div class="pgroup${c.showTitle === false ? ' p-notitle' : ''}" ${at}><span class="ptitle"></span>${grip}</div>`;
       case 'clock': return `<div class="plabel pclock" data-clock ${at}>${panelTime()}${grip}</div>`;
       case 'label': return `<div class="plabel" ${at}><span class="ptitle"></span>${grip}</div>`;
-      case 'slider': return `<div class="pctl pslider${c.vertical ? ' pvert' : ''}" ${at}><div class="phead"><span class="ptitle"></span><span class="pval"></span></div><div class="ptrack"><div class="pfill"></div></div>${grip}</div>`;
-      case 'dial': return `<div class="pctl pdial" ${at}><div class="ptitle"></div><div class="pknob"><svg viewBox="0 0 100 100"><path class="parc0" d="${P_ARC}"/><path class="parc" d="${P_ARC}" pathLength="100"/></svg><span class="pval"></span></div>${grip}</div>`;
+      case 'slider': return `<div class="${panelSliderClass(c)}" ${at}><div class="phead"><span class="ptitle"></span><span class="pval"></span></div><div class="ptrack"><div class="pfill"></div><div class="pthumb"></div></div>${grip}</div>`;
+      // One of several: the lit one is the value (its text). Touching one sends "change" with it.
+      case 'radio': return `<div class="pctl pradio${c.vertical ? ' pvert' : ''}${c.plain ? ' p-plain' : ''}" ${at}><div class="ptitle"></div><div class="popts">${panelOptions(c).map((o) => `<div class="popt" data-o="${pEsc(o)}">${pEsc(o)}</div>`).join('')
+        || (preview ? '<div class="popt">no options yet</div>' : '')}</div>${grip}</div>`;
+      case 'led': return `<div class="pled" ${at}><span class="plamp"></span><span class="ptitle"></span>${grip}</div>`;
+      case 'number': return `<div class="pctl pnumber${c.plain ? ' p-plain' : ''}" ${at}><div class="ptitle"></div><div class="pbigbox"><div class="pbig"><span class="pval"></span><span class="punit">${pEsc(c.unit || '')}</span></div></div>${grip}</div>`;
+      // A picture from the show's media folder (a logo): contain = all of it, cover = fills its box.
+      case 'image': return `<div class="pimage${c.fit === 'cover' ? ' p-cover' : ''}" ${at}>${c.image ? `<img src="/media/${encodeURIComponent(c.image)}" alt="" draggable="false">` : preview ? '<span class="pnoimg">no image yet</span>' : ''}${grip}</div>`;
+      case 'dial': return `<div class="pctl pdial${c.plain ? ' p-plain' : ''}" ${at}><div class="ptitle"></div><div class="pknob"><svg viewBox="0 0 100 100"><path class="parc0" d="${P_ARC}"/><path class="parc" d="${P_ARC}" pathLength="100"/></svg><span class="pval"></span></div>${grip}</div>`;
       case 'xy': return `<div class="pctl pxy" ${at}><div class="phead"><span class="ptitle"></span><span class="pval"></span></div><div class="pxybox"><div class="pxypad"><div class="pxyh"></div><div class="pxyv"></div><div class="pdot"></div></div></div>${grip}</div>`;
       case 'color': return `<div class="pctl pcolor" ${at}><div class="ptitle"></div><div class="pwbox"><div class="pwheel"><div class="pdot"></div></div></div><div class="pbright"><div class="pbknob"></div></div>${grip}</div>`;
       default: {
@@ -272,7 +322,7 @@ function panelPageHtml(pg, st, preview, theme) {
 function panelUpdate(root, pg, st) {
   for (const el of root.querySelectorAll('[data-i]')) {
     const c = pg.controls[+el.dataset.i];
-    if (!c || c.type === 'spacer') continue;
+    if (!c || c.type === 'spacer' || c.type === 'image') continue;
     if (c.type === 'clock') { el.style.color = c.color || ''; continue; }
     const s = panelCtlState(c, st), fcol = s.flash && s.flash !== 'on';
     el.classList.toggle('p-dis', s.disabled);
@@ -299,12 +349,41 @@ function panelPaint(el, c, s) {
     }
     case 'slider': case 'dial': {
       // Following a timeline: smooth (no step), and without a unit the time "1:23 / 5:00".
-      const { min, max } = panelRange(c), v = s.follow ? pNum(s.value, min) : panelSnap(c, pNum(s.value, min)), f = (v - min) / (max - min);
+      const { min, max, step } = panelRange(c), v = s.follow ? pNum(s.value, min) : panelSnap(c, pNum(s.value, min)), f = (v - min) / (max - min);
       el.style.setProperty('--v', f);
+      if (c.type === 'slider') {
+        // "From the middle": the fill runs from zero (or the middle of a range without zero) to the value.
+        if (c.mid) {
+          const o = min < 0 && max > 0 || max < 0 && min > 0 ? -min / (max - min) : 0.5;
+          el.style.setProperty('--a', Math.min(o, f));
+          el.style.setProperty('--b', Math.abs(f - o));
+        }
+        // Segments: one per step when that gives 2-24 blocks, else 10.
+        if (c.look === 'segments') { const n = step ? Math.round(Math.abs(max - min) / step) : 0; el.style.setProperty('--n', n >= 2 && n <= 24 ? n : 10); }
+      }
       if (s.color) el.style.setProperty('--c', s.color); else el.style.removeProperty('--c');
       if (c.type === 'dial') q('.parc').style.strokeDasharray = `${f * 100} 100`;
       q('.pval').textContent = s.follow && !c.unit ? panelTimeText(c, s.follow)
         : panelFmt(c, s.follow ? panelSnap(c, v) : v) + (c.unit || '');
+      break;
+    }
+    case 'radio': {
+      if (s.color) el.style.setProperty('--c', s.color); else el.style.removeProperty('--c');
+      for (const o of el.querySelectorAll('.popt')) o.classList.toggle('p-on', o.dataset.o != null && panelSame(o.dataset.o, s.value));
+      break;
+    }
+    case 'led': {
+      el.classList.toggle('p-on', panelLit(c, s.value));
+      if (s.color) el.style.setProperty('--c', s.color); else el.style.removeProperty('--c');
+      break;
+    }
+    case 'number': {
+      // A number with the decimals asked for; anything else (a text variable) as it is.
+      const raw = String(s.value ?? '').trim(), isNum = raw !== '' && !isNaN(+raw);
+      const txt = !isNum ? raw || '–' : c.decimals != null && c.decimals !== '' ? (+raw).toFixed(Math.max(0, Math.min(6, +c.decimals || 0))) : raw;
+      q('.pval').textContent = txt;
+      q('.pbig').style.color = s.color;
+      el.style.setProperty('--n', Math.max(3, txt.length + String(c.unit || '').length * 0.6));
       break;
     }
     case 'xy': {
@@ -349,8 +428,8 @@ function panelDrag(root, getPage, getStatus, send) {
     const rect = (sel) => el.querySelector(sel).getBoundingClientRect();
     const at = (ev) => {
       if (c.type === 'slider') {
-        const r = rect('.ptrack');
-        const f = c.vertical ? 1 - (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width;
+        const r = rect('.ptrack'), pad = panelTrackPad(c);
+        const f = c.vertical ? 1 - (ev.clientY - r.top - pad) / (r.height - 2 * pad) : (ev.clientX - r.left - pad) / (r.width - 2 * pad);
         return panelSnap(c, min + pClamp(f) * (max - min));
       }
       if (c.type === 'dial') return panelSnap(c, start.v + ((ev.clientX - start.x) - (ev.clientY - start.y)) / 200 * (max - min));

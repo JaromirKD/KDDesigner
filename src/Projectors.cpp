@@ -287,6 +287,14 @@ int find(const String& ref) {
   return found;
 }
 
+std::vector<String> names() {
+  std::vector<String> v;
+  mtx.lock();
+  for (auto& p : list) v.push_back(p.name.length() ? p.name : String(p.id));
+  mtx.unlock();
+  return v;
+}
+
 bool queue(int idx, const String& body, String& msg) {
   mtx.lock();
   if (idx >= (int)list.size()) { mtx.unlock(); msg = "unknown projector"; return false; }

@@ -199,7 +199,7 @@ views.panel = () => {
   <div class="row ptabs">${p.panel.panels.map((x, k) => `<button class="btn small${k === si ? ' primary' : ''}" data-sel="panel:${k}">${esc(x.name || 'Panel ' + x.id)}</button>`).join('')}
     <button class="btn small ghost" data-add="panelset" title="Another panel, e.g. one for the operator and one for the technician">+ Panel</button></div>
   <p class="muted">A full-screen control page for a tablet or touchscreen at <code>http://&lt;controller&gt;${panelUrl(pn)}</code>${si === 0 ? ' (or just <code>/panel</code>)' : ''}.
-    Buttons, toggles, sliders, dials, colour wheels and XY pads fire <b>Panel button</b> triggers (sliders and co. with <code>{value}</code>); they can also set variables directly (a colour wheel or XY pad one per part).
+    Buttons, toggles, radio groups, sliders, dials, colour wheels and XY pads fire <b>Panel button</b> triggers (sliders and co. with <code>{value}</code>); they can also set variables directly (a colour wheel or XY pad one per part).
     Actions change any control by its name: <code>panel &lt;name&gt; flash on</code>, <code>panel &lt;name&gt; text …</code>, <code>color</code>, <code>value</code>, <code>disable</code>, <code>lock</code> / <code>unlock</code> (can't be touched, still looks normal), <code>reset</code>.</p>
   <div class="form" style="margin-bottom:12px">
     <label>Panel name</label><div class="row"><input data-p="panel.panels.${si}.name" value="${esc(pn.name || '')}" placeholder="Panel ${pn.id}" data-r>
@@ -207,6 +207,8 @@ views.panel = () => {
       ${p.panel.panels.length > 1 ? `<button class="btn small ghost" data-pdel="${si}" title="Delete this panel and its pages">Delete panel</button>` : ''}</div>
     <label>Title</label><input data-p="panel.panels.${si}.title" value="${esc(pn.title || '')}" placeholder="${esc(p.name)}" title="Shown at the top of the panel">
     <label>Start page</label><select data-p="panel.panels.${si}.start" data-t="num">${pageOpts(pn.start)}</select>
+    <label title="Saves the screen: nobody touched the panel for this long = a black screen. The first touch only brings the panel back, it presses nothing">Go black after</label>
+    <div class="row"><input type="number" min="0" style="width:90px" data-p="panel.panels.${si}.sleep" data-t="num" value="${pn.sleep || ''}" placeholder="never"><span class="muted">seconds without a touch (empty = never)</span></div>
   </div>
   ${panelThemeHtml(p.panel.theme)}
   <div class="split">
@@ -217,6 +219,9 @@ views.panel = () => {
         <button class="btn small ghost" data-del="${base}">Delete page</button></div>
       <div class="row" style="margin-top:10px">
         <label class="muted">Columns</label><input type="number" min="1" max="12" style="width:70px" data-p="${base}.columns" data-t="num" value="${pg.columns || 3}" data-r>
+        <label class="muted" title="Split every cell into smaller ones, for smaller buttons. What is on the page keeps its size; sizes and places are then counted in the small cells">Grid</label><select data-pfine>${PANEL_GRIDS.map(([v, t]) => `<option value="${v}"${v === panelFine(pg) ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        <label class="muted" title="This page's own background colour; none = the theme's Background">Background</label><input type="color" data-p="${base}.bg" value="${esc(pg.bg || panelTheme(p.panel.theme).bg)}" data-r>${pg.bg
+          ? '<button class="btn small ghost" data-pbgclr title="Use the theme background again">✕</button>' : '<span class="muted" style="font-size:11px">theme</span>'}
         <label class="muted" title="Ask for this PIN before showing the page">PIN</label><input style="width:110px" data-p="${base}.pin" value="${esc(pg.pin || '')}" placeholder="none" inputmode="numeric">
         ${p.panel.panels.length > 1 ? `<label class="muted" title="Move this page to another panel">Panel</label><select data-p="${base}.panel" data-t="num" data-r>${p.panel.panels.map((x) => `<option value="${x.id}"${x.id === pg.panel ? ' selected' : ''}>${esc(x.name || 'Panel ' + x.id)}</option>`).join('')}</select>` : ''}
         ${pg.controls.some((c) => c.col) ? '<button class="btn small ghost" data-pauto title="Forget where controls were dragged to: they fill the page in list order again">Auto layout</button>' : ''}
@@ -224,8 +229,8 @@ views.panel = () => {
       <table class="ptable" style="margin-top:10px"><tr><th class="psel" title="Click a number to select (Ctrl+click: add one, Shift+click: a range)">#</th><th style="width:96px">Type</th><th>Name (for triggers/labels)</th><th>Text</th><th class="narrow" title="Empty = the theme colour">Colour</th><th>Confirm question</th><th class="narrow">Go to page</th><th class="narrow" title="Columns wide × rows high">Size</th><th></th></tr>
       ${pg.controls.map((c, i) => {
         const cb = `${base}.controls.${i}`;
-        const btn = c.type === 'button' || c.type === 'toggle', named = c.type !== 'spacer' && c.type !== 'clock';
-        const own = c.type !== 'spacer' && c.type !== 'color', picked = pSel().has(c) ? ' class="p-row"' : '';
+        const btn = c.type === 'button' || c.type === 'toggle', named = !['spacer', 'clock', 'image'].includes(c.type);
+        const own = !['spacer', 'color', 'image'].includes(c.type), picked = pSel().has(c) ? ' class="p-row"' : '';
         return `<tr data-ci="${i}"${picked}>
         <td class="psel" title="Click to select (Ctrl+click: add one, Shift+click: a range)">${i + 1}</td>
         <td><select data-p="${cb}.type" data-r>${PANEL_TYPES.map((t) => `<option${c.type === t ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
@@ -235,13 +240,13 @@ views.panel = () => {
           ? `<button class="btn small ghost" data-pclr="${i}" title="Use the theme colour again">✕</button>` : '<span class="muted" style="font-size:11px" title="Comes from the theme; pick a colour to override it">theme</span>'}</div>` : ''}</td>
         <td>${btn ? `<input data-p="${cb}.confirm" value="${esc(c.confirm || '')}" placeholder="none" data-r>` : ''}</td>
         <td>${btn ? `<select data-p="${cb}.goto" data-t="num" data-r>${pageOpts(c.goto)}</select>` : ''}</td>
-        <td><div class="row nowrap psize"><input type="number" min="1" max="12" data-p="${cb}.span" data-t="num" value="${c.span || 1}" title="Columns wide" data-r><span class="muted">×</span><input type="number" min="1" max="20" data-p="${cb}.rows" data-t="num" value="${c.rows || ''}" placeholder="${panelRows(c)}" title="Rows high" data-r></div></td>
+        <td><div class="row nowrap psize"><input type="number" min="1" max="${panelCols(pg)}" data-p="${cb}.span" data-t="num" value="${c.span || panelFine(pg)}" title="Columns wide${panelFine(pg) > 1 ? ' (small cells)' : ''}" data-r><span class="muted">×</span><input type="number" min="1" max="${20 * panelFine(pg)}" data-p="${cb}.rows" data-t="num" value="${c.rows || ''}" placeholder="${panelRows(c) * panelFine(pg)}" title="Rows high${panelFine(pg) > 1 ? ' (small cells)' : ''}" data-r></div></td>
         <td><div class="row nowrap"><button class="btn small ghost" data-pmove="${i}:-1">▲</button><button class="btn small ghost" data-pmove="${i}:1">▼</button><button class="btn small ghost" data-del="${cb}">✕</button></div></td></tr>
-        ${named || c.col ? `<tr class="psub${picked ? ' p-row' : ''}"><td></td><td></td><td colspan="7">${panelCtlDetails(c, cb, i)}</td></tr>` : ''}`;
+        ${named || c.col || c.type === 'image' ? `<tr class="psub${picked ? ' p-row' : ''}"><td></td><td></td><td colspan="7">${panelCtlDetails(c, cb, i)}</td></tr>` : ''}`;
       }).join('')}</table>
-      <div class="row" style="margin-top:8px">${PANEL_TYPES.map((t) => `<button class="btn small" data-add="pc-${t}">+ ${t === 'color' ? 'colour wheel' : t === 'xy' ? 'XY pad' : t}</button>`).join('')}</div>
+      <div class="row" style="margin-top:8px">${PANEL_TYPES.map((t) => `<button class="btn small" data-add="pc-${t}">+ ${{ color: 'colour wheel', xy: 'XY pad', radio: 'radio group', led: 'LED' }[t] || t}</button>`).join('')}</div>
       <h3>Preview <span class="muted" style="font-weight:normal;font-size:12px;text-transform:none">live (shows what actions set) · drag a control to move it, its corner to resize it · drag a group to move it with everything in it · click to select, Ctrl+click for more, then drag them together (Delete removes, Esc deselects, Ctrl+A all)</span></h3>
-      <div class="panel-preview" style="${panelThemeVars(p.panel.theme)}">${panelPageHtml(pg, S.status, true, p.panel.theme)}</div>`
+      <div class="panel-preview" style="${panelThemeVars(p.panel.theme)}${panelPageBg(pg)}">${panelPageHtml(pg, S.status, true, p.panel.theme)}</div>`
     : '<span class="muted">Add a page to start.</span>'}</div></div>`;
 };
 // Selected panel controls: the control objects themselves, so they stay selected when the list
@@ -322,6 +327,33 @@ views.panel.after = () => {
     markDirty();
     render();
   });
+  $('[data-pbgclr]')?.addEventListener('click', () => { delete pg.bg; markDirty(); render(); });
+  $('[data-pfine]')?.addEventListener('change', (e) => { panelSetFine(pg, +e.target.value); markDirty(); render(); });
+  // An image control's picture: uploaded to the stick (/media/) like a map background; the one it
+  // replaces is deleted once the project is saved.
+  $$('[data-pimg]').forEach((inp) => inp.addEventListener('change', async () => {
+    const c = pg.controls[+inp.dataset.pimg], file = inp.files[0];
+    if (!c || !file) return;
+    if (file.size > 4 * 1048576) return toast('Image too big (max 4 MB)', true);
+    const ext = (file.name.match(/\.(png|jpe?g|webp|gif|svg)$/i)?.[1] || 'png').toLowerCase();
+    const name = `panel-${Date.now().toString(36)}.${ext}`;
+    try {
+      const j = await (await fetch(`/api/media?name=${encodeURIComponent(name)}`, { method: 'PUT', body: file })).json();
+      if (!j.ok) throw new Error(j.reply);
+      if (c.image) S.mediaTrash.add(c.image);
+      c.image = name;
+      markDirty();
+      render();
+      toast('Image uploaded - save the project to keep it on the panel');
+    } catch (err) { toast('Upload failed: ' + err.message, true); }
+  }));
+  $$('[data-pimgdel]').forEach((b) => b.addEventListener('click', () => {
+    const c = pg.controls[+b.dataset.pimgdel];
+    S.mediaTrash.add(c.image);
+    c.image = '';
+    markDirty();
+    render();
+  }));
   $('[data-pauto]')?.addEventListener('click', () => { pg.controls.forEach((c) => { delete c.col; delete c.row; }); markDirty(); render(); });
 };
 // The panel theme: what every control looks like unless it has its own colour.
@@ -346,10 +378,10 @@ function panelEditor(box, pg) {
     const el = e.target.closest('[data-i]');
     if (!el || e.button !== 0) return;
     e.preventDefault();
-    const i = +el.dataset.i, c = pg.controls[i], cols = pg.columns || 3, resize = !!e.target.closest('.pgrip');
+    const i = +el.dataset.i, c = pg.controls[i], g = panelFine(pg), cols = panelCols(pg), resize = !!e.target.closest('.pgrip');
     const cs = getComputedStyle(grid), gx = parseFloat(cs.columnGap) || 0, gy = parseFloat(cs.rowGap) || 0;
     const colW = cs.gridTemplateColumns.split(' ').map(parseFloat), rowH = cs.gridTemplateRows.split(' ').map(parseFloat);
-    const rowDef = +panelTheme(P().panel.theme).row || 84;
+    const rowDef = panelCellPx(P().panel.theme, g);
     // Track number (1-based) at a position in CSS px; below the last row the rows go on.
     const track = (sizes, gap, pos, more) => {
       let x = 0;
@@ -363,7 +395,7 @@ function panelEditor(box, pg) {
     // Where everything is now, pinned so moving one control doesn't shuffle the rest.
     const pos = [...grid.querySelectorAll('[data-i]')].map((x) => {
       const k = +x.dataset.i, cc = pg.controls[k];
-      const p = { k, el: x, col: track(colW, gx, x.offsetLeft + 1), row: track(rowH, gy, x.offsetTop + 1), span: Math.min(cc.span || 1, cols), rows: Math.max(1, cc.rows || panelRows(cc)),
+      const p = { k, el: x, col: track(colW, gx, x.offsetLeft + 1), row: track(rowH, gy, x.offsetTop + 1), span: panelSize(cc, cols, g)[0], rows: panelSize(cc, cols, g)[1],
         was: [x.style.gridColumn, x.style.gridRow] };
       x.style.gridColumn = `${p.col} / span ${p.span}`;
       x.style.gridRow = `${p.row} / span ${p.rows}`;
@@ -462,15 +494,40 @@ function panelCtlDetails(c, cb, i) {
     <select data-p="${cb}.${path}" data-r><option value="">—</option>${p.variables.map((v) => `<option${val === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`;
   const step = `<span class="muted">step</span>${num('step', 1, 'Steps the value moves in, e.g. 0.1 or 0.01 for decimals (0 = smooth)')}
       <span class="muted">unit</span><input data-p="${cb}.unit" value="${esc(c.unit || '')}" placeholder="%" style="width:44px" data-r>`;
+  const chk = (k, label, title) => `<label class="chk" style="white-space:nowrap"${title ? ` title="${esc(title)}"` : ''}><input type="checkbox" data-p="${cb}.${k}" data-t="bool"${c[k] ? ' checked' : ''} data-r> ${label}</label>`;
   const followSel = (title) => `<span class="muted" title="${esc(title)}">Follow timeline</span>
       <select data-p="${cb}.follow" data-t="num" data-r><option value="">—</option>${p.timelines.map((t) => `<option value="${t.id}"${+c.follow === t.id ? ' selected' : ''}>${t.id} ${esc(t.name || '')}</option>`).join('')}</select>`;
   const timeSel = () => `<select data-p="${cb}.timeShow" data-r title="How the time is shown">${[['', '1:23 / 5:00'], ['elapsed', '1:23 (played)'], ['left', '-3:37 (left)']]
     .map(([v, t]) => `<option value="${v}"${(c.timeShow || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
   if (c.type === 'slider' || c.type === 'dial') {
     parts.push(`<span class="muted">Range</span>${num('min', 0, 'Lowest value')}<span class="muted">to</span>${num('max', 100, 'Highest value')} ${step}`);
-    if (c.type === 'slider') parts.push(`<label class="chk"><input type="checkbox" data-p="${cb}.vertical" data-t="bool"${c.vertical ? ' checked' : ''} data-r> vertical</label>`);
+    if (c.type === 'slider') {
+      parts.push(`<span class="muted" title="How the slider is drawn">Look</span><select data-p="${cb}.look" data-r>${PANEL_SLIDER_LOOKS.map(([v, t]) => `<option value="${v}"${(c.look || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        ${chk('vertical', 'vertical')} ${chk('mid', 'from the middle', 'The fill starts at zero (or the middle of the range) and runs to the value, e.g. for a balance of -100 to 100')}
+        ${chk('noValue', 'no value', 'Hide the number next to the title')}`);
+    }
+    parts.push(chk('plain', 'no frame', 'Without the card around it'));
     parts.push(followSel("Show how far this timeline is: start of the range at its start, end of the range at its end. Without a unit it shows the time (1:23 / 5:00). It can't be touched then.")
       + (c.follow && !c.unit ? ' ' + timeSel() : ''));
+  }
+  if (c.type === 'radio') {
+    parts.push(`<span class="muted" title="The choices, with commas between them. The text of a choice is also the value it sends ({value} in its trigger) and puts in the variable">Choices</span><input data-p="${cb}.options" value="${esc(c.options || '')}" placeholder="Walk-in, Lecture, Film, Off" style="width:260px" data-r>
+      ${chk('vertical', 'vertical')} ${chk('plain', 'no frame', 'Without the card around it')}`);
+    parts.push(varSel('var', c.var, 'Variable', 'Touching a choice puts its text in this variable; when the variable changes, that choice lights up. Give a mode group the same variable (Modes page) and the radio group switches and shows the mode'));
+  }
+  if (c.type === 'led') {
+    parts.push(varSel('var', c.var, 'Variable', 'The LED follows this variable. Without one a trigger switches it: panel <name> value on / off'));
+    parts.push(`<span class="muted" title="Empty: lit for anything but 0, off, false, no or nothing. With a text: lit only when the value is exactly that, e.g. Show">Lit when it is</span><input data-p="${cb}.is" value="${esc(c.is || '')}" placeholder="on / not 0" style="width:110px" data-r>`);
+  }
+  if (c.type === 'number') {
+    parts.push(varSel('var', c.var, 'Variable', 'Shows the value of this variable. Without one a trigger sets it: panel <name> value 42'));
+    parts.push(`<span class="muted">decimals</span>${num('decimals', 'as is', 'Decimals shown, e.g. 1 for 21.5')}<span class="muted">unit</span><input data-p="${cb}.unit" value="${esc(c.unit || '')}" placeholder="°C" style="width:54px" data-r> ${chk('plain', 'no frame', 'Without the card around it')}`);
+  }
+  if (c.type === 'image') {
+    parts.push(`<span class="muted" title="PNG, JPG, WebP, GIF or SVG up to 4 MB, kept on the stick with the show. A PNG or SVG with a transparent background looks best">Image</span>
+      <label class="btn small" style="cursor:pointer">${c.image ? 'Replace…' : 'Choose image…'}<input type="file" accept=".png,.jpg,.jpeg,.webp,.gif,.svg,image/*" data-pimg="${i}" hidden></label>
+      ${c.image ? `<button class="btn small ghost" data-pimgdel="${i}">Remove</button>` : ''}`);
+    parts.push(`<select data-p="${cb}.fit" data-r title="How the image fills its place"><option value="">show all of it</option><option value="cover"${c.fit === 'cover' ? ' selected' : ''}>fill the box (crops)</option></select>`);
   }
   if (c.type === 'group') {
     parts.push(`<label class="chk" style="white-space:nowrap" title="Show the group's text as a title in the top of its frame"><input type="checkbox" data-p="${cb}.showTitle" data-t="bool"${c.showTitle !== false ? ' checked' : ''} data-r> title</label>`);
@@ -486,6 +543,7 @@ function panelCtlDetails(c, cb, i) {
   }
   const following = c.follow && (c.type === 'slider' || c.type === 'dial');   // then no variable and always display only (labels: above)
   if ((c.type === 'toggle' || c.type === 'slider' || c.type === 'dial') && !following) parts.push(varSel('var', c.var, 'Variable'));
+  if (c.type === 'led') parts.push(chk('disabled', 'disabled', 'Greyed out. Triggers switch this with panel … enable / disable'));
   if (c.type === 'color') {
     const L = c.links;
     parts.push(`${varSel('links.r', L.r, 'Red')} ${varSel('links.g', L.g, 'Green')} ${varSel('links.b', L.b, 'Blue')}
@@ -546,6 +604,7 @@ views.variables = () => {
     <td>${v.type === 'bool' ? `<select data-p="${base}.initial" data-t="bool-sel"><option value="0"${v.initial ? '' : ' selected'}>off</option><option value="1"${v.initial ? ' selected' : ''}>on</option></select>`
       : `<input data-p="${base}.initial"${v.type === 'number' ? ' type="number" data-t="num"' : ''} value="${esc(v.initial ?? '')}">`}</td>
     <td style="text-align:center"><input type="checkbox" data-p="${base}.persist" data-t="bool"${v.persist ? ' checked' : ''}></td>
+    <td style="text-align:center"><input type="checkbox" data-p="${base}.live" data-t="bool"${v.live ? ' checked' : ''} title="Show this variable on the Live page"></td>
     <td><div class="row nowrap"><select data-mb="${i}" data-k="device">${mbOpts(v.modbus?.device)}</select>
       ${v.modbus?.device ? `<select data-mb="${i}" data-k="table">${['coil', 'discrete', 'holding', 'input'].map((t) => `<option${v.modbus.table === t ? ' selected' : ''}>${t}</option>`).join('')}</select>
         <input type="number" min="0" max="65535" data-mb="${i}" data-k="address" value="${v.modbus.address ?? 0}" style="width:80px">` : ''}</div></td>
@@ -554,7 +613,7 @@ views.variables = () => {
   };
   const rowsOf = (g) => p.variables.map((v, i) => [v, i]).filter(([v]) => (v.group || '') === g).map(([v, i]) => row(v, i)).join('');
   // "All": the variables without a group, then a heading per group (click it to open its tab).
-  const section = (g) => `<tr class="vgroup" style="--tc:${trigColor(g.color) || 'var(--border2)'}"><td colspan="8" class="vcol">
+  const section = (g) => `<tr class="vgroup" style="--tc:${trigColor(g.color) || 'var(--border2)'}"><td colspan="9" class="vcol">
       <a href="#" data-vtab="${esc(g.name)}" title="Open this group's tab">${esc(g.name)}</a> <span class="muted">${count(g.name)}</span></td></tr>${rowsOf(g.name)}`;
   const tabBtn = (key, label, n, color, extra) => `<button class="trig-tab${tab === key ? ' on' : ''}${extra || ''}" data-vtab="${esc(key)}" style="${color ? `--tc:${color}` : ''}">
       <span class="tab-name">${esc(label)}</span><span class="tab-n">${n}</span></button>`;
@@ -577,7 +636,7 @@ views.variables = () => {
       <button class="btn small ghost" data-vgmove="-1" title="Move this tab to the left"${gi <= 0 ? ' disabled' : ''}>◀</button>
       <button class="btn small ghost" data-vgmove="1" title="Move this tab to the right"${gi >= groups.length - 1 ? ' disabled' : ''}>▶</button>
       <button class="btn small ghost" id="varGroupDel" title="Remove this group; its variables stay, without a group">Delete group</button></div>` : ''}
-  <table class="vars"><tr><th>Name</th>${groups.length ? '<th style="width:140px">Group</th>' : ''}<th class="narrow">Type</th><th>Initial</th><th class="narrow" title="Keep the value across reboots">Keep</th>
+  <table class="vars"><tr><th>Name</th>${groups.length ? '<th style="width:140px">Group</th>' : ''}<th class="narrow">Type</th><th>Initial</th><th class="narrow" title="Keep the value across reboots">Keep</th><th class="narrow" title="Show on the Live page">Live</th>
     <th>Modbus link (device · table · address)</th><th>Live value</th><th></th></tr>
   ${tab === 'all' ? rowsOf('') + groups.map(section).join('') : rowsOf(tab)}</table>
   ${tab !== 'all' && !count(tab) ? `<p class="muted">No variables ${tab ? 'in this group yet' : 'without a group'}.</p>` : ''}
@@ -2344,8 +2403,9 @@ async function restoreBackup(name) {
 
 // ---- Show files (.kdshow): "Save as" / "Open" between the controller and a PC --------
 // One JSON file: { kdshow: 1, exported, project, media: { 'map1-x.jpg': '<base64>' } }.
-// Only map backgrounds live outside project.json, so those are the media that go along.
-const showMediaNames = (p) => [...new Set((p.maps || []).map((m) => m.background).filter(Boolean))];
+// Only map backgrounds and touch-panel images live outside project.json, so those are the media that go along
+// (the same list as mediaNames in tools/launcher.js).
+const showMediaNames = (p) => [...new Set([...(p.maps || []).map((m) => m.background), ...(p.panel?.pages || []).flatMap((pg) => (pg.controls || []).map((c) => c.type === 'image' && c.image))].filter(Boolean))];
 // Put another project in the editor as unsaved changes (Undo goes back to the old one).
 function replaceProject(p) {
   // Images only the old project used: deleted on the next save (save() keeps ones still in use).

@@ -70,6 +70,7 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 #define KD_TRIGGER_PAUSE_MS 10000
 #define KD_TRIGGER_LOG_PER_S 10    // "fired" log lines per trigger per second; more fires than that are counted, not logged
 #define KD_MAX_SCHEDULED 100      // waiting "sleep"s, "wait until"s, loops, delayed fires and repeats together
+#define KD_MAX_DELAYED 128        // waiting steps of "... interval <s>" commands (pc all wake interval 1), all together
 #define KD_TRIGGER_HISTORY 512    // last fires kept for the history strip on the Triggers page (8 bytes each)
 #define KD_MAX_DMX_IN 4           // Art-Net / sACN universes received for "DMX input" triggers (512 bytes each)
 #define KD_LATEST_MS 25           // udp/osc trigger with "latest value only" (faders): runs at most this often

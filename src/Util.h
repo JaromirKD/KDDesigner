@@ -26,6 +26,9 @@ int findRef(const String& ref, int count, Id idOf, Name nameOf) {
   return -1;
 }
 
+// "a, b,c" -> {"a","b","c"} (trimmed, empty pieces dropped): lists in commands.
+std::vector<String> splitList(const String& s);
+
 // "\r", "\n", "\t" and "\xHH" in command text become the real characters.
 String unescape(const String& s);
 

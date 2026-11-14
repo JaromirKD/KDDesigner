@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <vector>
 #include "Vars.h"
 
@@ -32,6 +33,10 @@
 //   projector <pj|all> on|off      projector <pj|all> mute on|off
 //   projector <pj|all> input <code>   projector <pj|all> send <raw pjlink body>
 //   pc <pc|all> wake|startup|shutdown|reboot   (Wake-on-LAN / UDP text command)
+//   ... interval <s>               pc / projector / io / show-device commands for several devices or outputs
+//                                  (all, a group, a list a,b,c; Kiss-Box <slot>.all or all; KNX addresses a,b;
+//                                  NETIO outputs 1,3 or all): one after another, <s> apart (the first now)
+//   cancel intervals               drops the waiting steps of every "... interval <s>"
 //   monitor check                  monitor interval <seconds>
 //   var <name> = <value>           var <name> + <n>   var <name> - <n>   var <name> toggle
 //   if <condition> then <command> [else <command>]
@@ -49,4 +54,9 @@ std::vector<String> tokenize(const String& line);
 // A "reload" asked by a trigger's actions waits for the run to end: call from the main loop
 // (holding g_engine). True if it reloaded.
 bool reloadDue();
+// Runs the steps of "... interval <s>" commands that are due: main loop, holding g_engine.
+void poll();
+// /api/status "intervals": [{trigger, left, in}] = a trigger's interval steps still waiting and
+// ms until its last one (the UI keeps the row lit). Caller holds g_engine.
+void statusJson(JsonObject o);
 }

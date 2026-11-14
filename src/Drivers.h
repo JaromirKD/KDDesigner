@@ -31,6 +31,11 @@ void begin();                                             // starts the worker t
 void load();                                              // caller holds g_engine
 bool isCommand(const String& word);                       // kissbox|knx|brightsign|digidot|netio|pharos
 bool command(const std::vector<String>& t, String& msg);  // t[0] is the device type
+// A command for several things as one command each, in order (Cmd.cpp runs them, "interval <s>" apart):
+// a list or group of devices ("kissbox a,b ..."), Kiss-Box channels ("1.1,1.2", "<slot>.all", "all"
+// = every output card), KNX addresses ("write 1/1/1,1/1/2 on"), NETIO outputs ("output 1,3 on", with an
+// interval also "all"). 1 = out filled, 0 = error (msg), -1 = nothing to split (a text form, or one thing).
+int split(const std::vector<String>& t, bool delayed, std::vector<std::vector<String>>& out, String& msg);
 void statusJson(JsonArray arr);
 void pollNow();
 // A UDP message arrived on a trigger port: from a BrightSign it becomes its "Player says"

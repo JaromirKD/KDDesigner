@@ -37,7 +37,7 @@ const GRAMMAR = [
   ['panel {pctl} text {text...}', 'Change the text of a panel control (button, label, slider…)'],
   ['panel {pctl} color {color}', 'Change the colour of a panel control'],
   ['panel {pctl} flash {flash}', 'Make a panel control flash (on, or a colour to flash in) or stop (off)'],
-  ['panel {pctl} value {pval}', 'Move a slider or dial, switch a toggle (1/0), set a colour wheel (#rrggbb) or an XY pad (x,y)'],
+  ['panel {pctl} value {pval}', 'Move a slider or dial, switch a toggle (1/0), set a colour wheel (#rrggbb) or an XY pad (x,y), pick a radio choice, light a LED (on/off), set a number display'],
   ['panel {pctl} disable', 'Grey out a panel control so it can’t be used'],
   ['panel {pctl} enable', 'Make a disabled panel control usable again (also one ticked "disabled" on the Panel page)'],
   ['panel {pctl} lock', 'Panel control shows as normal but can’t be touched (e.g. a slider used as a progress bar)'],
@@ -46,6 +46,7 @@ const GRAMMAR = [
   ['fire trigger {trig}', 'Run another trigger now (nested task list)'],
   ['fire trigger {trig} after {sec}', 'Run another trigger after a delay (Wait)'],
   ['cancel trigger {trig}', 'Cancel delayed fires of a trigger'],
+  ['cancel intervals', 'Stop the steps still waiting of every "… interval <s>" command (e.g. pc all wake interval 10)'],
   ['repeat trigger {trig} every {sec}', 'Fire a trigger now and then repeatedly'],
   ['repeat trigger {trig} every {sec} times {count}', 'Fire a trigger a number of times'],
   ['stop repeat {trig}', 'Stop a repeating trigger'],
@@ -261,10 +262,14 @@ const panelButtons = () => [...new Set(P().panel.pages.flatMap((pg) => pg.contro
 // Every named control, for "panel <name> …" actions.
 const panelControls = () => [...new Set(P().panel.pages.flatMap((pg) => pg.controls).filter((c) => c.name && c.type !== 'clock' && c.type !== 'spacer').map((c) => c.name))];
 const panelControlType = (name) => P().panel.pages.flatMap((pg) => pg.controls).find((c) => (c.name || '').toLowerCase() === String(name || '').toLowerCase())?.type;
+// Parts that take a list in commands ("pc a,b wake", "kissbox box 1.1,2.all on"): spread in Cmd.cpp.
+const LIST_PARTS = new Set(['{pc}', '{pj}', '{iopoint}', '{kiss}', '{knx}', '{bsign}', '{digi}', '{netio}', '{pharos}', '{kisspoint}', '{knxga}', '{netioout}']);
+let LISTS_OK = true;   // false while checking a condition (io a,b is on means nothing)
 function matchPart(part, tok) {
   const p = P();
   // {var} / {=expr} are filled in when the trigger fires, so accept them anywhere.
   if (part.startsWith('{') && /\{[^}]+\}/.test(tok)) return true;
+  if (LISTS_OK && LIST_PARTS.has(part) && tok.includes(',')) return tok.split(',').every((x) => x.trim() && matchPart(part, x.trim()));
   switch (part) {
     case '{mode}': return !!findMode(tok);
     case '{mgroup}': return !!findGroup(tok);
@@ -274,7 +279,8 @@ function matchPart(part, tok) {
     case '{label}': return tok.length > 0;
     case '{pctl}': return panelControls().some((n) => n.toLowerCase() === tok.toLowerCase());
     case '{flash}': return tok.length > 0;
-    case '{pval}': return /^-?\d+(\.\d+)?(,-?\d+(\.\d+)?)?$/.test(tok) || /^#[0-9a-f]{6}$/i.test(tok);
+    // A radio group takes one of its choices, a LED or number display any word (on, off, a text).
+    case '{pval}': { const ty = panelControlType(CTX[1] ?? ''); return /^-?\d+(\.\d+)?(,-?\d+(\.\d+)?)?$/.test(tok) || /^#[0-9a-f]{6}$/i.test(tok) || (ty === 'radio' || ty === 'led' || ty === 'number') && tok.length > 0; }
     case '{color}': return tok.length > 0;
     case '{trig}': return findTrigs(tok).length === 1;
     case '{count}': return /^\d+$/.test(tok) && +tok > 0;
@@ -317,7 +323,7 @@ function matchPart(part, tok) {
       return !!m && !!p.universes.find((u) => u.id === +m[1]) && +m[2] >= 1 && +(m[3] || m[2]) <= 512 && +(m[3] || m[2]) >= +m[2];
     }
     case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': return !!findRef(drvList(DRV_PART[part]), tok) || !!findKindGroup(DRV_PART[part], tok);
-    case '{kisspoint}': return /^[1-8]\.[1-8]$/.test(tok);
+    case '{kisspoint}': return /^[1-8]\.([1-8]|all|\*)$/i.test(tok) || tok.toLowerCase() === 'all';
     case '{kissval}': return /^(on|off|toggle)$/i.test(tok) || (/^\d+$/.test(tok) && +tok <= 255);
     case '{slot}': return /^[1-8]$/.test(tok);
     case '{knxga}': return /^\d+\/\d+(\/\d+)?$/.test(tok) || !!knxAddr(tok);
@@ -336,6 +342,11 @@ function matchPart(part, tok) {
   }
 }
 function candidates(part, partial) {
+  if (LISTS_OK && LIST_PARTS.has(part) && partial.includes(',')) {
+    const cut = partial.lastIndexOf(',') + 1, pre = partial.slice(0, cut), q = pre.startsWith('"');
+    return candidates(part, partial.slice(cut)).filter((c) => !c.hint)
+      .map((c) => ({ ...c, insert: pre + (q ? c.insert.replace(/^"|"$/g, '') : c.insert), key: 'l' + c.key }));
+  }
   const p = P();
   const pl = partial.replace(/^"/, '').toLowerCase();
   const hint = (label) => [{ hint: true, label, key: 'h' + label }];
@@ -374,6 +385,8 @@ function candidates(part, partial) {
       .map(([v, d]) => ({ insert: v, label: v, desc: d, key: 'fl' + v })), ...hint('or #rrggbb')];
     case '{pval}': {
       const ty = panelControlType(CTX[1]);
+      if (ty === 'radio') return names(panelOptions(P().panel.pages.flatMap((pg) => pg.controls).find((c) => panelSame(c.name, CTX[1])) || {}), 'choice', 'po');
+      if (ty === 'led') return presets(['on', 'off'], 'on / off, or the text it lights up for');
       return ty === 'color' ? presets(['#ff0000', '#00ff00', '#0000ff', '#ffffff', '#000000'], '#rrggbb') : ty === 'xy' ? presets(['50,50', '0,0'], 'x,y') : ty === 'toggle' ? presets(['1', '0'], '1 = on, 0 = off') : presets(['0', '50', '100'], '<value>');
     }
     case '{color}': return [...names(['green', 'red', 'orange', 'yellow', 'white', 'grey'], 'colour', 'co'), ...hint('or #rrggbb')];
@@ -434,7 +447,11 @@ function candidates(part, partial) {
         const [, , n, kind] = kissCard(code);
         return kind === 'out' || kind === 'aout' ? Array.from({ length: n }, (_, c) => [`${i + 1}.${c + 1}`, d.names?.[`${i + 1}.${c + 1}`] || `slot ${i + 1} ${code} ${c + 1}`]) : [];
       });
-      return [...pts.filter(([v]) => v.startsWith(pl)).slice(0, 24).map(([v, n]) => ({ insert: v, label: v, desc: n, key: 'kp' + v })), ...hint('<slot>.<channel>')];
+      // Whole cards (<slot>.all) and every output card (all): one write each, or one after another with "interval <s>".
+      const cards = (d?.cards || []).map((code, i) => [code, i + 1]).filter(([code]) => ['out', 'aout'].includes(kissCard(code)[3]))
+        .map(([code, s]) => [`${s}.all`, `every channel of slot ${s} (${code})`]);
+      const all = cards.length > 1 ? [['all', 'every channel of every output card']] : [];
+      return [...[...all, ...cards, ...pts].filter(([v]) => v.startsWith(pl)).slice(0, 28).map(([v, n]) => ({ insert: v, label: v, desc: n, key: 'kp' + v })), ...hint('<slot>.<channel>, <slot>.all or a list 1.1,1.3')];
     }
     case '{kissval}': return presets(['on', 'off', 'toggle', '0', '128', '255'], 'on|off|toggle|0-255');
     case '{slot}': return presets(['1', '2', '3'], '<slot 1-8>');
@@ -517,6 +534,7 @@ function completeBase(text, grammar = GRAMMAR) {
   const partial = inToken ? last.raw : '';
   const done = (inToken ? toks.slice(0, -1) : toks).map((t) => t.v);
   CTX = done;
+  LISTS_OK = grammar === GRAMMAR;
   const items = [], seen = new Set(), sigs = [];
   for (const g of grammar) {
     if (g.hidden) continue;  // still valid, just not suggested
@@ -544,6 +562,7 @@ function validateBase(line, grammar = GRAMMAR) {
   if (!t || t.startsWith('#')) return { ok: true };
   const toks = tokenize(t).map((x) => x.v);
   CTX = toks;
+  LISTS_OK = grammar === GRAMMAR;
   for (const g of grammar) {
     const parts = g.parts;
     const text = parts[parts.length - 1] === '{text...}';
@@ -653,6 +672,108 @@ function splitHead(text) {
   }
   return null;
 }
+// "<command> interval <s>" (spread in Cmd.cpp): a pc / projector / io / show-device line for several
+// devices or outputs, one after another. {base, kw, sec} or null (also for a text form: there
+// "interval 2" is part of the text).
+const INTERVAL_HEADS = /^(pc|projector|io|kissbox|knx|brightsign|digidot|netio|pharos)$/i;
+const INTERVAL_G = { pattern: '<command> interval {sec}', parts: ['<command>', 'interval', '{sec}'],
+  doc: 'One after another, this many seconds apart (the first at once): every PC / projector / device of "all", a group or a list (a,b,c), the channels of a Kiss-Box card (1.all) or of every output card (all), KNX addresses (1/1/1,1/1/2), NETIO outputs (all or 1,3)' };
+function splitInterval(line) {
+  const toks = tokenize(line), n = toks.length;
+  if (n < 3 || toks[0].quoted || !INTERVAL_HEADS.test(toks[0].v)) return null;
+  const at = !toks[n - 1].quoted && toks[n - 1].v.toLowerCase() === 'interval' ? n - 1 : n >= 4 && !toks[n - 2].quoted && toks[n - 2].v.toLowerCase() === 'interval' ? n - 2 : -1;
+  if (at < 2) return null;
+  const base = line.slice(0, toks[at].start).trimEnd(), vb = validateBase(base);
+  if (vb.ok && vb.g?.parts.includes('{text...}')) return null;
+  return { base, vb, kw: toks[at], sec: toks[at + 1] || null };
+}
+function validateInterval(d) {
+  if (!d.vb.ok) return d.vb;
+  if (!d.sec) return { ok: false, error: 'missing seconds after interval, e.g. interval 1', g: INTERVAL_G };
+  if (!matchPart('{sec}', d.sec.v) || +d.sec.v > 3600) return { ok: false, error: `'${d.sec.v}' is not a number of seconds (0-3600)`, g: INTERVAL_G };
+  return { ok: true, g: d.vb.g };
+}
+// "pc all wake " or "… interval ": offer "interval", then the seconds. Null when it doesn't apply.
+function completeInterval(text) {
+  const toks = tokenize(text), last = toks[toks.length - 1];
+  if (!toks.length || !INTERVAL_HEADS.test(toks[0].v)) return null;
+  const inTok = !/\s$/.test(text), partial = inTok ? last.raw : '', done = inTok ? toks.slice(0, -1) : toks;
+  if (done.length >= 3 && done[done.length - 1].v.toLowerCase() === 'interval') {
+    const base = text.slice(0, done[done.length - 1].start).trimEnd(), vb = validateBase(base);
+    if (!vb.ok || vb.g?.parts.includes('{text...}')) return null;
+    return { items: candidates('{sec}', partial).map((c) => ({ ...c, doc: INTERVAL_G.doc })), partial, sigs: [INTERVAL_G] };
+  }
+  const base = done.length ? text.slice(0, done[done.length - 1].end) : '', vb = base && validateBase(base);
+  if (!vb || !vb.ok || vb.g?.parts.includes('{text...}') || !'interval'.startsWith(partial.toLowerCase())) return null;
+  return { item: { insert: 'interval', label: 'interval', desc: 'interval <seconds>: one device / output after another', key: 'kinterval', doc: INTERVAL_G.doc } };
+}
+
+// The devices a pc / projector / show-device word means: all, a group, a list (a,b) of names and
+// groups, or one (cmdTargets in the mock, targets in Cmd.cpp). Names as typed when unknown.
+const listOf = (s) => String(s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+function refTargets(kind, list, tok) {
+  if (String(tok).toLowerCase() === 'all') return list.map((x) => x.name || String(x.id));
+  const one = findRef(list, tok);
+  if (one) return [one.name || String(one.id)];
+  return listOf(tok).flatMap((x) => {
+    const d = findRef(list, x), g = !d && findKindGroup(kind, x);
+    return d ? [d.name || String(d.id)] : g ? g.devices : [x];
+  });
+}
+// The steps of a "… interval <s>" line in the order the controller runs them (spread in Cmd.cpp,
+// the mock's spread / drvSplit): {gap (s), base, steps: [{dev, item}], open}. open: NETIO "all",
+// whose outputs are only known when it runs. Null for any other line. For the trigger editor's
+// strip, the list's ⏱ tag and the flow.
+function intervalSteps(line) {
+  const d = splitInterval(line);
+  if (!d || !d.vb.ok || !d.sec) return null;
+  // "interval {delayTime}": the controller fills the variable in when it runs the line; shown with
+  // its value now (from the status) or its start value. gapVar = what was typed, known = has a number.
+  let gap = +d.sec.v, gapVar = '', known = true;
+  if (!/^\d+(\.\d+)?$/.test(d.sec.v)) {
+    if (!/^\{.+\}$/.test(d.sec.v)) return null;
+    gapVar = d.sec.v;
+    const name = d.sec.v.slice(1, -1), v = P().variables.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    const val = String(S.status?.vars?.[v?.name ?? name] ?? v?.initial ?? '').trim();
+    known = /^\d+(\.\d+)?$/.test(val);
+    gap = known ? +val : 1;
+  }
+  const t = tokenize(d.base).map((x) => x.v), w = t.map((x) => x.toLowerCase()), p = P(), type = w[0];
+  const steps = [];
+  let open = false;
+  if (type === 'io') for (const n of listOf(t[1])) steps.push({ dev: pmcCfg(pmcFind(n) || n).name || n, item: '' });
+  else if (type === 'pc' || type === 'projector') for (const n of refTargets(type, type === 'pc' ? p.pcs : p.projectors, t[1])) steps.push({ dev: n, item: '' });
+  else {
+    const list = drvList(type);
+    let at = 0;   // which word holds the outputs / addresses
+    if (type === 'kissbox' && (t.length === 4 || (t.length === 5 && w[3] === 'pulse')) && w[2] !== 'read') at = 2;
+    if (type === 'knx' && t.length >= 4 && (w[2] === 'write' || w[2] === 'read')) at = 3;
+    if (type === 'netio' && t.length >= 5 && w[2] === 'output') at = 3;
+    for (const dev of refTargets(type, list, t[1])) {
+      if (!at) { steps.push({ dev, item: '' }); continue; }
+      const dd = findRef(list, dev);
+      for (const x of listOf(t[at])) {
+        const m = /^(\d+)\.(all|\*)$/i.exec(x), every = x.toLowerCase() === 'all';
+        if (type === 'netio' && every) { open = true; steps.push({ dev, item: 'each output' }); continue; }
+        if (type !== 'kissbox' || (!m && !every)) { steps.push({ dev, item: x }); continue; }
+        (dd?.cards || []).forEach((code, s) => {
+          const c = kissCard(code);
+          if ((m && s + 1 !== +m[1]) || !['out', 'aout'].includes(c[3])) return;
+          for (let ch = 1; ch <= c[2]; ch++) steps.push({ dev, item: `${s + 1}.${ch}` });
+        });
+      }
+    }
+  }
+  return { gap, gapVar, known, base: d.base, steps, open };
+}
+// For showing them: how far apart ("2 s", "{delayTime} = 2 s", "{delayTime}"), when step i
+// starts and when the last one does.
+const ivlGap = (s) => (!s.gapVar ? secText(s.gap) : s.known ? `${s.gapVar} = ${secText(s.gap)}` : s.gapVar);
+const ivlAt = (s, i) => (s.known || !i ? secText(i * s.gap) : `${i}×${s.gapVar}`);
+const ivlDone = (s) => ivlAt(s, s.steps.length - 1);
+// 0, 1.5, 90 -> "0 s", "1.5 s", "1:30"
+const secText = (s) => (s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : `${Math.round(s * 10) / 10} s`);
+
 // "repeat <trigger> <n> times …": the trigger token, else null.
 function trigLoopRef(line) {
   const toks = tokenize(line);
@@ -733,8 +854,11 @@ function complete(text, grammar = GRAMMAR) {
   if (h && h.body != null && text.length > h.body) return completeHead(text, h);
   const s = grammar === GRAMMAR && splitIfLine(text);
   // Still typing the first word: offer "if" next to the normal commands.
+  const cd = grammar === GRAMMAR && !s && completeInterval(text);
+  if (cd && cd.items) return cd;
   if (!s || text.length <= s.ifTok.end) {
     const res = completeBase(text, grammar);
+    if (cd && cd.item) res.items.push(cd.item);
     if (grammar === GRAMMAR && 'if'.startsWith(res.partial.toLowerCase()) && !tokenize(text.slice(0, text.length - res.partial.length)).length)
       res.items.unshift({ insert: 'if', label: 'if', desc: 'if <condition> then <command>', key: 'kif', doc: IF_G.doc });
     return res;
@@ -761,6 +885,8 @@ function complete(text, grammar = GRAMMAR) {
 function validate(line, grammar = GRAMMAR) {
   const hv = grammar === GRAMMAR && validateHead(line);
   if (hv) return hv;
+  const dl = grammar === GRAMMAR && splitInterval(line);
+  if (dl) return validateInterval(dl);
   const lr = grammar === GRAMMAR && trigLoopRef(line);
   if (lr && !/\{/.test(lr.v) && findTrigs(lr.v).length !== 1) {
     const n = findTrigs(lr.v).length, g = GRAMMAR.find((x) => x.pattern === 'repeat {trig} {count} times every {sec}');
@@ -793,6 +919,13 @@ function validate(line, grammar = GRAMMAR) {
 function classify(line, grammar) {
   const h = grammar === GRAMMAR && splitHead(line);
   if (h) return classifyHead(line, h);
+  const dl = grammar === GRAMMAR && splitInterval(line);
+  if (dl) {
+    const v = validateInterval(dl), out = classifyBase(dl.base, GRAMMAR);
+    out.push({ start: dl.kw.start, end: dl.kw.end, cls: 'kw', tip: `${INTERVAL_G.doc}.\nStop the ones still waiting with: cancel intervals` });
+    if (dl.sec) out.push({ start: dl.sec.start, end: dl.sec.end, cls: v.ok ? 'num' : 'err', tip: v.ok ? `${dl.sec.v} seconds between them` : v.error });
+    return out;
+  }
   const s = grammar === GRAMMAR && splitIfLine(line);
   if (!s) return classifyBase(line, grammar);
   const shift = (ranges, off) => ranges.map((r) => ({ ...r, start: r.start + off, end: r.end + off }));
@@ -1073,7 +1206,12 @@ function partHelp(part, tok, g) {
       const st = drvStatusOf(d);
       return `${DRIVERS[ty].label} ${d.name} → ${d.ip}${d.port ? ':' + d.port : ''}${st ? ` · ${!st.seen ? 'not checked yet' : st.online ? 'online' : 'offline'}` : ''}`;
     }
-    case '{kisspoint}': { const [s, c] = tok.split('.'); return `Slot ${s}, channel ${c}`; }
+    case '{kisspoint}': {
+      if (tok.includes(',')) return `These outputs: ${tok.split(',').join(', ')} (add "interval <s>" to switch them one after another)`;
+      if (tok.toLowerCase() === 'all') return 'Every channel of every output card (add "interval <s>" to switch them one after another)';
+      const [s, c] = tok.split('.');
+      return /^(all|\*)$/i.test(c) ? `Every channel of slot ${s} (add "interval <s>" to switch them one after another)` : `Slot ${s}, channel ${c}`;
+    }
     case '{kissval}': return /^\d+$/.test(tok) ? `Value ${tok} (analog cards; digital: 0 = off, 1+ = on)` : `Switch ${tok}`;
     case '{knxga}': {
       const a = knxAddr(tok);
@@ -1138,6 +1276,7 @@ function classifyBase(line, grammar) {
   const vals = toks.map((x) => x.v);
   const v = validate(line, grammar);
   CTX = vals;
+  LISTS_OK = grammar === GRAMMAR;
   let g = v.g, n = 0;
   if (v.ok && g) n = toks.length;
   else {
@@ -1239,6 +1378,7 @@ function attachHighlight(input, grammar) {
 function category(g) {
   const p = g.pattern;
   if (/^(start|stop timeline|pause|resume|master|scene|release)/.test(p)) return 'Playback';
+  if (/^(sleep|wait|repeat \{)/.test(p)) return 'Scripting';
   if (/^(mode |label|fire|cancel|repeat|stop repeat)/.test(p)) return 'Show control';
   if (/^(send|reply|email)/.test(p)) return 'Network & messages';
   if (/^(projector|output|pc )/.test(p)) return 'Devices & outputs';
@@ -1252,10 +1392,16 @@ function category(g) {
   if (/^monitor/.test(p)) return 'Devices & outputs';
   return 'System';
 }
-const DEFAULTS = { '{dur}': '10m', '{sec}': '2', '{pct}': '100', '{dmx}': '255', '{port}': '7000', '{count}': '3', '{ip}': '192.168.1.20', '{oscaddr}': '/cue/1/start', '{hhmm}': '08:00' };
+const DEFAULTS = { '{netioout}': '1', '{kisspoint}': '1.1', '{dur}': '10m', '{sec}': '2', '{pct}': '100', '{dmx}': '255', '{port}': '7000', '{count}': '3', '{ip}': '192.168.1.20', '{oscaddr}': '/cue/1/start', '{hhmm}': '08:00' };
 function builderField(part, val, i) {
   const p = P();
-  const sel = (list) => `<select data-bi="${i}">${list.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  // A {variable} / {=maths} value (filled in when the trigger fires) or a list (a,b) that no menu
+  // choice matches stays as an extra choice.
+  const sel = (list) => {
+    const vs = String(val ?? ''), odd = /\{[^}]+\}/.test(vs) || (LIST_PARTS.has(part) && vs.includes(','));
+    const keep = odd && !list.some(([v]) => String(v) === vs) ? [[val, `${vs} (${vs.includes('{') ? 'filled in when it runs' : 'list'})`]] : [];
+    return `<select data-bi="${i}">${[...keep, ...list].map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  };
   // Projector/PC by name (by number when the name is ambiguous); an existing number or name selects the same one.
   const groupOpts = (kind) => kindGroups(kind).map((g) => [quote(g.name), `group ${g.name} (${g.devices.length} devices)`]);
   const refSel = (list, all, kind) => {
@@ -1298,14 +1444,25 @@ function builderField(part, val, i) {
     case '{updown}': return sel([['online', 'online'], ['offline', 'offline']]);
     case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}':
       return sel([...drvList(DRV_PART[part]).map((d) => [quote(d.name), `${d.name} (${d.ip})`]), ...groupOpts(DRV_PART[part])]);
-    case '{kissval}': return sel([['on', 'on'], ['off', 'off'], ['0', '0'], ['128', '128'], ['255', '255']]);
+    case '{kisspoint}': {
+      const d = drvList('kissbox').find((x) => quote(x.name) === String(CTX[1] ?? '')) || drvList('kissbox')[0];
+      const opts = (d?.cards || []).flatMap((code, s) => (['out', 'aout'].includes(kissCard(code)[3]) ? [`${s + 1}.all`, ...Array.from({ length: kissCard(code)[2] }, (_, c) => `${s + 1}.${c + 1}`)] : []));
+      return `<input data-bi="${i}" value="${esc(val)}" list="bKissPts" placeholder="1.1, 1.all, all or 1.1,1.3" style="width:150px"><datalist id="bKissPts">${['all', ...opts].map((v) => `<option value="${v}">`).join('')}</datalist>`;
+    }
+    case '{kissval}': return sel([['on', 'on'], ['off', 'off'], ['toggle', 'toggle'], ['0', '0'], ['128', '128'], ['255', '255']]);
     case '{slot}': return num(1, 8);
     case '{netioact}': return sel([['on', 'on'], ['off', 'off'], ['toggle', 'toggle'], ['restart', 'restart (short off)'], ['pulse', 'pulse (short on)']]);
     case '{pharostl}': return sel(['start', 'release', 'toggle', 'pause', 'resume'].map((v) => [v, v]));
     case '{pharossc}': return sel(['start', 'release', 'toggle'].map((v) => [v, v]));
     case '{fixgrp}': return sel([['fixture', 'fixture'], ['group', 'group']]);
     case '{pharosproto}': return sel(PHAROS_PROTOCOLS.map((v) => [v, v]));
-    case '{iopoint}': return sel(pmcKeys().map((k) => [k, `${k} · ${pmcIsOut(k) ? 'out' : 'in'}${pmcCfg(k).name ? ' · ' + pmcCfg(k).name : ''}`]));
+    case '{iopoint}': {
+      // By its name when it has one (as typed lines usually are), else by its key (out3).
+      const opt = (k) => (pmcCfg(k).name ? quote(pmcCfg(k).name) : k);
+      const k0 = pmcFind(String(val ?? '').replace(/^"|"$/g, ''));
+      if (k0) val = opt(k0);
+      return sel(pmcKeys().map((k) => [opt(k), `${k} · ${pmcIsOut(k) ? 'out' : 'in'}${pmcCfg(k).name ? ' · ' + pmcCfg(k).name : ''}`]));
+    }
     case '{ioval}': return `<input data-bi="${i}" value="${esc(val)}" list="bIoVals" placeholder="on|off|toggle|volts" style="width:110px"><datalist id="bIoVals">${['on', 'off', 'toggle', '5', '10'].map((v) => `<option value="${v}">`).join('')}</datalist>`;
     case '{dpt}': return sel([['1', '1 on/off'], ['3', '3 dim'], ['5.001', '5.001 percent'], ['5.010', '5.010 0-255'], ['7', '7 0-65535'], ['9', '9 float'], ['14', '14 float'], ['17', '17 scene'], ['232', '232 RGB']]);
     case '{label}': return `<input data-bi="${i}" value="${esc(val)}" list="bLabels" placeholder="label name" style="width:140px"><datalist id="bLabels">${panelLabels().map((l) => `<option value="${esc(l)}">`).join('')}</datalist>`;
@@ -1319,7 +1476,183 @@ function builderField(part, val, i) {
     default: return `<input data-bi="${i}" value="${esc(val)}" placeholder="${esc(PLACEHOLDER[part] || '')}" style="${part === '{text...}' ? 'flex:1;min-width:200px' : 'width:150px'}">`;
   }
 }
-let builderGroup = null;   // mode group picked in the builder, for the {mstate} list
+let builderGroup = null;   // mode group picked in a builder form, for the {mstate} list
+// Script lines with a condition or a command inside them get a form of their own, with a builder for
+// each part ([key, signature, help]); the plain patterns only have a text box there.
+const SCRIPT_FORMS = [
+  ['if', 'if <condition> then <command> [else <command>]', 'Run a command only when a condition holds; with else, another command when it doesn’t'],
+  ['wait', 'wait until <condition> [timeout <seconds>]', 'Wait: the actions below run as soon as the condition is true; with a timeout they are skipped when it takes longer'],
+  ['loop', 'repeat <n> times [every <seconds>] <command>', 'Run a command several times; {i} in it counts 1, 2, 3… With every: a pause in between, and the lines below run after the last one'],
+  ['comment', '# comment', 'A note for whoever reads the trigger: the line is skipped'],
+];
+// Their plain patterns (a text box for the condition / command): not offered, the forms above are.
+const SCRIPT_PATTERNS = new Set(['wait until {text...}', 'repeat {count} times {text...}', 'repeat {count} times every {sec} {text...}']);
+// The key a part's value is kept under: "{date}", then "{date}#2" for the second one in the same
+// pattern (date between <date> <date>), so values carry over to another command by part.
+const partKey = (g, i) => { const n = g.parts.slice(0, i).filter((x) => x === g.parts[i]).length; return n ? `${g.parts[i]}#${n + 1}` : g.parts[i]; };
+
+// One line built from menus inside el: a command or a condition, or (commands) an if / wait until /
+// repeat … times line with a form of its own for each condition and command inside it.
+// onInput() runs after every change. Returns { line() }.
+function builderForm(el, grammar, text, onInput, depth = 0) {
+  const cmd = grammar === GRAMMAR;
+  // sleep, wait and repeat … times only work as a line of their own, an if also after then / else (two deep).
+  const forms = !cmd ? [] : SCRIPT_FORMS.filter(([k]) => (k === 'if' ? depth < 2 : depth === 0));
+  const skip = (g) => g.hidden || SCRIPT_PATTERNS.has(g.pattern) || (depth > 0 && (g.parts[0] === 'sleep' || (g.parts[0] === 'repeat' && g.parts[1] !== 'trigger')));
+  const st = { mode: 'plain', gi: 0, values: {}, gap: '', cond: '', a: '', b: null, timeout: '', count: '3', every: '', body: '', comment: '' };
+  const subs = {};   // the inner forms: cond, a, b (if), cond (wait), body (repeat)
+  // Commands that can switch several devices / outputs one after another.
+  const canGap = (g) => cmd && INTERVAL_HEADS.test(g.parts[0]) && !g.parts.includes('{text...}');
+
+  // A plain command / condition: the pattern and the value of each part. "… interval <s>" goes
+  // in its own field (gap): the command patterns don't have it.
+  function setPlain(src) {
+    st.mode = 'plain';
+    st.values = {};
+    const dl = cmd && splitInterval(src);
+    const body = dl ? dl.base : src;
+    st.gap = dl?.sec?.v ?? '';
+    const v = validate(body, grammar);
+    let gi = v.ok && v.g ? grammar.indexOf(v.g) : -1;
+    if (gi >= 0) {
+      const toks = tokenize(body.trim()).map((t) => t.raw);
+      const textAt = v.g.parts.indexOf('{text...}');
+      v.g.parts.forEach((part, i) => { if (part.startsWith('{')) st.values[partKey(v.g, i)] = part === '{text...}' ? toks.slice(textAt).join(' ') : toks[i]; });
+    }
+    if (grammar[gi]?.hidden) {
+      // Old "mode Show" / "mode is Show": open it in the group + state form.
+      const m = st.values['{mode}'] && findMode(String(st.values['{mode}']).replace(/^"|"$/g, ''));
+      if (m) { st.values['{mgroup}'] = quote(m.group); st.values['{mstate}'] = quote(m.state); }
+      const wantNot = grammar[gi].parts[1] === 'not', head = grammar[gi].parts[0];
+      gi = grammar.findIndex((g) => !g.hidden && g.parts[0] === head && (g.parts.length < 4 || (g.parts[2] === 'not') === wantNot));
+    }
+    st.gi = gi >= 0 && !skip(grammar[gi]) ? gi : grammar.findIndex((g) => !skip(g));
+  }
+  const t = String(text || '').trim();
+  const s = forms.some(([k]) => k === 'if') && splitIfLine(t), h = depth === 0 && cmd && splitHead(t);
+  if (cmd && depth === 0 && t.startsWith('#')) { st.mode = 'comment'; st.comment = t.replace(/^#\s?/, ''); }
+  else if (s && s.thenTok) {
+    st.mode = 'if';
+    st.cond = t.slice(s.ifTok.end, s.thenTok.start).trim();
+    st.a = t.slice(s.thenTok.end, s.elseTok ? s.elseTok.start : t.length).trim();
+    st.b = s.elseTok ? t.slice(s.elseTok.end).trim() : null;
+  } else if (h && h.kind === 'wait' && h.body != null) {
+    st.mode = 'wait';
+    st.cond = t.slice(h.body, h.bodyEnd).trim();
+    st.timeout = h.timeout?.[1]?.v ?? '';
+  } else if (h && h.kind === 'loop') {
+    st.mode = 'loop';
+    st.count = h.head[1]?.v || '3';
+    st.every = h.every ? h.head[4]?.v ?? '' : '';
+    st.body = h.body != null ? t.slice(h.body).trim() : '';
+  } else setPlain(t);
+
+  const trimmed = (v) => String(v ?? '').trim();
+  const sub = (k) => subs[k]?.line() ?? st[k] ?? '';
+  function line() {
+    switch (st.mode) {
+      case 'comment': return '# ' + st.comment;
+      case 'if': return `if ${sub('cond')} then ${sub('a')}${st.b != null ? ' else ' + sub('b') : ''}`;
+      case 'wait': return `wait until ${sub('cond')}${trimmed(st.timeout) ? ' timeout ' + trimmed(st.timeout) : ''}`;
+      case 'loop': return `repeat ${trimmed(st.count) || '3'} times${trimmed(st.every) ? ' every ' + trimmed(st.every) : ''} ${sub('body')}`;
+    }
+    const g = grammar[st.gi];
+    const base = g.parts.map((part, i) => (!part.startsWith('{') ? part : trimmed(st.values[partKey(g, i)]) || PLACEHOLDER[part])).join(' ');
+    return canGap(g) && trimmed(st.gap) !== '' ? `${base} interval ${trimmed(st.gap)}` : base;
+  }
+  // What the inner forms hold, kept when this form is drawn again or switches to another kind of line.
+  function saveSubs() {
+    for (const k of Object.keys(subs)) { if (k !== 'b' || st.b != null) st[k] = subs[k].line(); delete subs[k]; }
+  }
+
+  function draw() {
+    saveSubs();
+    const g = st.mode === 'plain' ? grammar[st.gi] : null;
+    if (g) {
+      // Fill defaults for selects/numbers so the preview is valid straight away.
+      // The group comes first, so the state list can depend on it.
+      g.parts.forEach((part, i) => {
+        if (part === '{mgroup}') builderGroup = st.values['{mgroup}'] ?? (P().modes[0] ? quote(P().modes[0].name) : '');
+        const key = partKey(g, i);
+        if (!part.startsWith('{') || st.values[key] != null) return;
+        const tmp = document.createElement('div');
+        tmp.innerHTML = builderField(part, '', 0);
+        const s1 = tmp.querySelector('select');
+        st.values[key] = s1 ? s1.options[0]?.value ?? '' : DEFAULTS[part] ?? '';
+      });
+      if (g.parts.includes('{mgroup}')) builderGroup = st.values['{mgroup}'];
+    }
+    const groups = forms.length ? { Scripting: [] } : {};
+    grammar.forEach((x, i) => { if (!skip(x)) (groups[category(x)] ||= []).push([x, i]); });
+    const cur = g ? 'g' + st.gi : 's' + st.mode;
+    const opt = (v, label) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(label)}</option>`;
+    const options = Object.entries(groups).map(([cat, list]) => `<optgroup label="${cat}">${cat === 'Scripting' ? forms.map(([k, sig]) => opt('s' + k, sig)).join('') : ''}${list.map(([x, i]) => opt('g' + i, sigText(x))).join('')}</optgroup>`).join('');
+    const subRow = (kw, k, cls = 'kw') => `<div class="bsub"><span class="${cls === 'note' ? 'muted' : 'hl-' + cls + ' mono'} bsubkw">${kw}</span><div class="bsubbox" data-k="${k}"></div></div>`;
+    const numIn = (cls, val, min, max, step, ph, w = 90) => `<input type="number" class="${cls}" min="${min}" max="${max}" step="${step}" value="${esc(val)}" placeholder="${ph}" style="width:${w}px">`;
+    let body = '';
+    if (g) {
+      body = `<div class="row bfields">${g.parts.map((part, i) => (part.startsWith('{') ? builderField(part, st.values[partKey(g, i)] ?? '', i) : `<span class="hl-${i ? 'kw' : 'cmd'} mono">${esc(part)}</span>`)).join('')}</div>`;
+      if (canGap(g)) body += `<div class="row bfields"><span class="hl-kw mono">interval</span>${numIn('bgap', st.gap, 0, 3600, 0.1, 'off')}
+        <span class="muted">seconds between them: for all, a group, a list (a,b), a Kiss-Box card (1.all) or every card (all), one after another. Empty = all at once.</span></div>`;
+    } else if (st.mode === 'comment') {
+      body = `<div class="row bfields"><span class="hl-comment mono">#</span><input class="bcomment" value="${esc(st.comment)}" placeholder="a note, e.g. wait for the projector before switching its input" style="flex:1;min-width:200px"></div>`;
+    } else if (st.mode === 'if') {
+      body = subRow('if', 'cond', 'cmd') + subRow('then', 'a') + (st.b != null ? subRow('else', 'b') : '')
+        + `<div class="row"><label class="muted"><input type="checkbox" class="belse"${st.b != null ? ' checked' : ''}> else: another command when the condition is false</label></div>`;
+    } else if (st.mode === 'wait') {
+      body = subRow('until', 'cond', 'cmd') + `<div class="row bfields"><span class="hl-kw mono">timeout</span>${numIn('btimeout', st.timeout, 1, 86400, 1, 'none')}
+        <span class="muted">seconds: give up after that long (the lines below are then skipped). Empty = wait as long as it takes.</span></div>`;
+    } else if (st.mode === 'loop') {
+      body = `<div class="row bfields"><span class="hl-cmd mono">repeat</span>${numIn('bcount', st.count, 1, 1000, 1, '3', 80)}<span class="hl-kw mono">times every</span>${numIn('bevery', st.every, 0, 3600, 0.1, '-')}
+        <span class="muted">seconds (empty = straight after each other)</span></div>` + subRow('command', 'body', 'note')
+        + `<div class="row"><span class="muted">Type {i} in a field of the command for the round: 1, 2, 3… (e.g. kissbox io 1.{i} on, or 1.{i} in the output field)</span></div>`;
+    }
+    const doc = g ? g.doc : SCRIPT_FORMS.find(([k]) => k === st.mode)[2];
+    el.innerHTML = `<div class="row" style="align-items:flex-start"><select class="bcmd" style="max-width:340px">${options}</select><span class="muted" style="padding-top:5px">${esc(doc)}</span></div>${body}`;
+
+    const own = (sel) => [...el.querySelectorAll(`:scope > .row ${sel}, :scope > .bfields ${sel}`)];
+    own('.bcmd')[0].addEventListener('change', (e) => {
+      const v = e.target.value, was = st.mode, wasLine = line();
+      saveSubs();
+      if (v[0] === 'g') {
+        // Back to a plain command: start from the one inside the if / repeat, else keep the values.
+        if (was === 'if' || was === 'loop') setPlain(was === 'if' ? st.a : st.body);
+        else if (was !== 'plain') setPlain('');
+        st.gi = +v.slice(1);
+      } else {
+        const k = v.slice(1);
+        // The command so far goes inside the if / repeat.
+        if (k === 'if') st.a = was === 'plain' ? wasLine : was === 'loop' ? st.body : st.a;
+        if (k === 'loop') st.body = was === 'plain' ? wasLine : was === 'if' ? st.a : st.body;
+        st.mode = k;
+      }
+      draw();
+      onInput();
+    });
+    own('[data-bi]').forEach((f) => f.addEventListener('input', () => {
+      const part = grammar[st.gi].parts[+f.dataset.bi];
+      st.values[partKey(grammar[st.gi], +f.dataset.bi)] = part === '{label}' ? quote(f.value) : f.value;
+      if (part === '{mgroup}' && f.value !== builderGroup) {
+        // A different group has different states: rebuild the state list.
+        builderGroup = f.value;
+        st.values['{mstate}'] = null;
+        draw();
+      }
+      onInput();
+    }));
+    for (const [cls, key] of [['.bgap', 'gap'], ['.bcomment', 'comment'], ['.btimeout', 'timeout'], ['.bcount', 'count'], ['.bevery', 'every']])
+      own(cls).forEach((f) => f.addEventListener('input', () => { st[key] = f.value; onInput(); }));
+    own('.belse').forEach((f) => f.addEventListener('change', () => { saveSubs(); st.b = f.checked ? st.b ?? '' : null; draw(); onInput(); }));
+    el.querySelectorAll(':scope > .bsub > .bsubbox').forEach((box) => {
+      const k = box.dataset.k;
+      subs[k] = builderForm(box, k === 'cond' ? COND_GRAMMAR : GRAMMAR, st[k] ?? '', onInput, depth + 1);
+    });
+    own('select[data-bi]').forEach((f) => f.dispatchEvent(new Event('input')));
+  }
+  draw();
+  return { line };
+}
+
 function openBuilder(path, grammar) {
   const existing = $('.builder');
   const same = existing?.dataset.path === path;
@@ -1331,79 +1664,26 @@ function openBuilder(path, grammar) {
   box.className = 'builder';
   box.dataset.path = path;
   input.closest('.row').after(box);
-  // Start from the current line if it parses, else from the first command.
-  const v = validate(input.value, grammar);
-  let gi = v.ok && v.g ? grammar.indexOf(v.g) : 0;
-  const values = {};   // part-index -> value, carried over when switching commands where possible
-  if (v.ok && v.g) {
-    const toks = tokenize(input.value.trim()).map((t) => t.raw);
-    const textAt = v.g.parts.indexOf('{text...}');
-    v.g.parts.forEach((part, i) => { if (part.startsWith('{')) values[part] = part === '{text...}' ? toks.slice(textAt).join(' ') : toks[i]; });
-  }
-  const groups = {};
-  grammar.forEach((g, i) => { if (!g.hidden) (groups[category(g)] ||= []).push([g, i]); });
-  if (grammar[gi]?.hidden) {
-    // Old "mode Show" / "mode is Show": open it in the group + state form.
-    const m = values['{mode}'] && findMode(String(values['{mode}']).replace(/^"|"$/g, ''));
-    if (m) { values['{mgroup}'] = quote(m.group); values['{mstate}'] = quote(m.state); }
-    const wantNot = grammar[gi].parts[1] === 'not';
-    gi = grammar.findIndex((g) => !g.hidden && g.parts[0] === grammar[gi].parts[0] && (g.parts.length < 4 || (g.parts[2] === 'not') === wantNot));
-  }
-  function line() {
-    const g = grammar[gi];
-    return g.parts.map((part) => {
-      if (!part.startsWith('{')) return part;
-      const val = String(values[part] ?? '').trim();
-      return val || PLACEHOLDER[part];
-    }).join(' ');
-  }
-  function draw() {
-    const g = grammar[gi];
-    // Fill defaults for selects/numbers so the preview is valid straight away.
-    // The group comes first, so the state list can depend on it.
-    g.parts.forEach((part) => {
-      if (part === '{mgroup}') builderGroup = values['{mgroup}'] ?? (P().modes[0] ? quote(P().modes[0].name) : '');
-      if (!part.startsWith('{') || values[part] != null) return;
-      const tmp = document.createElement('div');
-      tmp.innerHTML = builderField(part, '', 0);
-      const s = tmp.querySelector('select');
-      values[part] = s ? s.options[0]?.value ?? '' : DEFAULTS[part] ?? '';
-    });
-    const l = line(), ok = validate(l, grammar);
-    box.innerHTML = `<div class="row" style="align-items:flex-start">
-      <select id="bCmd" style="max-width:340px">${Object.entries(groups).map(([cat, list]) =>
-        `<optgroup label="${cat}">${list.map(([x, i]) => `<option value="${i}"${i === gi ? ' selected' : ''}>${esc(sigText(x))}</option>`).join('')}</optgroup>`).join('')}</select>
-      <span class="muted" style="padding-top:5px">${esc(g.doc)}</span></div>
-      <div class="row bfields">${g.parts.map((part, i) => (part.startsWith('{') ? builderField(part, values[part] ?? '', i) : `<span class="hl-${i ? 'kw' : 'cmd'} mono">${esc(part)}</span>`)).join('')}</div>
-      <div class="row" style="flex-wrap:nowrap"><code class="bprev" title="${esc(ok.ok ? 'Valid' : ok.error)}">${esc(l)}</code>
-        <span class="${ok.ok ? 'ok' : 'bad'}">${ok.ok ? '✓' : '✕ ' + esc(ok.error)}</span>
-        <span class="spacer" style="flex:1"></span>
-        <button class="btn small primary" id="bApply">Apply</button><button class="btn small" id="bCancel">Cancel</button></div>`;
-    $('#bCmd', box).addEventListener('change', (e) => { gi = +e.target.value; draw(); });
-    $$('[data-bi]', box).forEach((el) => el.addEventListener('input', () => {
-      const part = grammar[gi].parts[+el.dataset.bi];
-      values[part] = part === '{label}' ? quote(el.value) : el.value;
-      if (part === '{mgroup}' && el.value !== builderGroup) {
-        // A different group has different states: rebuild the state list.
-        builderGroup = el.value;
-        values['{mstate}'] = null;
-        draw();
-        return;
-      }
-      const l2 = line(), ok2 = validate(l2, grammar);
-      $('.bprev', box).textContent = l2;
-      const st = $('.bprev', box).nextElementSibling;
-      st.className = ok2.ok ? 'ok' : 'bad';
-      st.textContent = ok2.ok ? '✓' : '✕ ' + ok2.error;
-    }));
-    $$('select[data-bi]', box).forEach((el) => el.dispatchEvent(new Event('input')));
-    $('#bApply', box).addEventListener('click', () => {
-      input.value = line();
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-      input._ac?.update();
-      box.remove();
-    });
-    $('#bCancel', box).addEventListener('click', () => box.remove());
-  }
-  draw();
+  box.innerHTML = `<div class="bform"></div>
+    <div class="row" style="flex-wrap:nowrap"><code class="bprev"></code><span></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn small primary" id="bApply">Apply</button><button class="btn small" id="bCancel">Cancel</button></div>`;
+  let form = null;
+  const preview = () => {
+    if (!form) return;
+    const l = form.line(), ok = validate(l, grammar), pv = $('.bprev', box);
+    pv.textContent = l;
+    pv.title = ok.ok ? 'Valid' : ok.error;
+    pv.nextElementSibling.className = ok.ok ? 'ok' : 'bad';
+    pv.nextElementSibling.textContent = ok.ok ? '✓' : '✕ ' + ok.error;
+  };
+  form = builderForm($('.bform', box), grammar, input.value, preview);
+  preview();
+  $('#bApply', box).addEventListener('click', () => {
+    input.value = form.line();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input._ac?.update();
+    box.remove();
+  });
+  $('#bCancel', box).addEventListener('click', () => box.remove());
 }

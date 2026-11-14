@@ -55,6 +55,7 @@ struct Drv {
   // works before the box's read-back has come in.
   uint8_t kissSet[8] = {}, kissSetMask[8] = {};
   uint32_t kissSetAt[8] = {};
+  uint8_t kissCh[8] = {8, 8, 8, 8, 8, 8, 8, 8};   // channels per card (DO4PR has 4): "<slot>.all" and "all"
   std::vector<Trig> triggers;                       // Pharos
   int outputs = 0;                                  // NETIO: number of outputs of the model (for "output all")
   // live state
@@ -1983,9 +1984,12 @@ void load() {
     // Kiss-Box cards per slot (DO4PR, DI8DC...) decide what each slot is.
     if (o["cards"].is<JsonArrayConst>()) {
       d.slots = "";
+      int si = 0;
       for (JsonVariantConst cv : o["cards"].as<JsonArrayConst>()) {
         String card = cv | "";
         card.toUpperCase();
+        // The digit in the code is the channel count: DO4PR 4, DO8SK 8.
+        if (si < 8) d.kissCh[si++] = card.length() > 2 && isDigit(card[2]) ? card[2] - '0' : 8;
         const char* kind = card.startsWith("DO") ? "out" : card.startsWith("DI") ? "in" : card.startsWith("AO") ? "aout" : card.startsWith("AI") ? "ain" : "-";
         d.slots += (d.slots.length() ? "," : "") + String(kind);
       }
@@ -2065,6 +2069,104 @@ static int findDrv(int ty, const String& ref) {
 }
 
 static bool runCmd(int ty, const String& ref, const std::vector<String>& t, String& msg);
+
+// Forms that end in free text: an "interval" there is part of the text.
+static bool textForm(const std::vector<String>& t) {
+  static const char* const kText[] = {"send", "api", "event", "var", "serial", "test", "trigger", "text"};
+  for (const char* w : kText) if (t.size() > 2 && !strcasecmp(t[2].c_str(), w)) return true;
+  return false;
+}
+
+int split(const std::vector<String>& t, bool delayed, std::vector<std::vector<String>>& out, String& msg) {
+  int ty = typeOf(t[0]);
+  if (ty < 0 || t.size() < 3 || textForm(t)) return -1;
+  bool listed = false;
+  // The devices: one, a group of this type, or a list of either.
+  std::vector<String> devs;
+  mtx.lock();
+  bool single = findDrv(ty, t[1]) >= 0;
+  mtx.unlock();
+  std::vector<String> pieces = single ? std::vector<String>{t[1]} : splitList(t[1]);
+  if (pieces.size() > 1) listed = true;
+  for (auto& p : pieces) {
+    std::vector<String> g;
+    mtx.lock();
+    bool one = findDrv(ty, p) >= 0;
+    mtx.unlock();
+    if (!one && State::groupMembers(kTypes[ty], p, g)) {
+      if (g.empty()) { msg = "group '" + p + "' has no devices"; return 0; }
+      devs.insert(devs.end(), g.begin(), g.end());
+    } else devs.push_back(p);
+  }
+  // Inside each device: Kiss-Box channels, KNX addresses, NETIO outputs.
+  size_t at = 0;   // which word holds the list
+  if (ty == Kiss && (t.size() == 4 || (t.size() == 5 && t[3].equalsIgnoreCase("pulse"))) && !t[2].equalsIgnoreCase("read")) at = 2;
+  if (ty == Knx && t.size() >= 4 && (t[2].equalsIgnoreCase("write") || t[2].equalsIgnoreCase("read"))) at = 3;
+  if (ty == Netio && t.size() >= 5 && t[2].equalsIgnoreCase("output")) at = 3;
+  for (auto& dev : devs) {
+    std::vector<String> items;
+    if (at) {
+      for (auto& p : splitList(t[at])) {
+        int dot = p.indexOf('.');
+        String chs = dot > 0 ? p.substring(dot + 1) : String("");
+        bool wholeCard = ty == Kiss && dot > 0 && (chs.equalsIgnoreCase("all") || chs == "*");
+        bool everyCard = ty == Kiss && p.equalsIgnoreCase("all");
+        bool everyOut = ty == Netio && p.equalsIgnoreCase("all") && delayed;
+        if (!wholeCard && !everyCard && !everyOut) { items.push_back(p); continue; }
+        listed = true;
+        mtx.lock();
+        int k = findDrv(ty, dev);
+        if (k < 0) { mtx.unlock(); msg = "unknown " + String(kTypeNames[ty]) + " device '" + dev + "'"; return 0; }
+        Drv& d = list[k];
+        if (ty == Netio) {
+          std::vector<int> ids;
+          for (auto& pt : d.points) if (pt.key.startsWith("out") && isNumber(pt.key.substring(3))) ids.push_back(pt.key.substring(3).toInt());
+          for (int n = 1; ids.empty() && n <= d.outputs; n++) ids.push_back(n);
+          std::sort(ids.begin(), ids.end());
+          mtx.unlock();
+          if (ids.empty()) { msg = "outputs not read yet - wait for the first status poll"; return 0; }
+          for (int id : ids) items.push_back(String(id));
+          continue;
+        }
+        // Kiss-Box: the on/off and analog output cards (every slot when the cards aren't set).
+        int from = 1, to = 8;
+        if (wholeCard) {
+          from = to = p.substring(0, dot).toInt();
+          if (!isNumber(p.substring(0, dot)) || from < 1 || from > 8) { mtx.unlock(); msg = "expected <slot>.all, slot 1-8"; return 0; }
+        }
+        bool val = ty == Kiss && t.size() == 4 && !t[3].equalsIgnoreCase("toggle");
+        for (int s = from; s <= to; s++) {
+          String kind = d.slots.length() ? kissSlotType(d.slots, s - 1) : String("out");
+          if (kind != "out" && kind != "aout") {
+            if (wholeCard) { mtx.unlock(); msg = "slot " + String(s) + " is not an output card"; return 0; }
+            continue;
+          }
+          // All at once: one write for the whole card (8 channels each would fill the send queue).
+          if (!delayed && val) { items.push_back("card:" + String(s)); continue; }
+          for (int c = 1; c <= d.kissCh[s - 1]; c++) items.push_back(String(s) + "." + String(c));
+        }
+        mtx.unlock();
+        if (everyCard && items.empty()) { msg = "Kiss-Box " + dev + " has no output cards"; return 0; }
+      }
+      if (items.size() > 1) listed = true;
+    }
+    if (items.empty()) items.push_back("");
+    for (auto& it : items) {
+      std::vector<String> c = t;
+      c[1] = dev;
+      if (it.startsWith("card:")) {   // a whole Kiss-Box card: "<slot> all v v v v v v v v"
+        String v = t[3];
+        c.resize(4);
+        c[2] = it.substring(5);
+        c[3] = "all";
+        for (int k = 0; k < 8; k++) c.push_back(v);
+      } else if (at) c[at] = it;
+      out.push_back(c);
+    }
+  }
+  // Without "interval" only lists need splitting: a group alone goes through command() as before.
+  return delayed || listed ? 1 : -1;
+}
 
 bool command(const std::vector<String>& t, String& msg) {
   int ty = typeOf(t[0]);

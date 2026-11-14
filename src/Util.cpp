@@ -6,6 +6,20 @@ String rest(const std::vector<String>& t, size_t from) {
   return s;
 }
 
+std::vector<String> splitList(const String& s) {
+  std::vector<String> out;
+  int at = 0, n = s.length();
+  while (at <= n) {
+    int end = s.indexOf(',', at);
+    if (end < 0) end = n;
+    String p = s.substring(at, end);
+    p.trim();
+    if (p.length()) out.push_back(p);
+    at = end + 1;
+  }
+  return out;
+}
+
 bool httpMethod(const String& word, String& method, String& err) {
   method = word;
   method.toUpperCase();

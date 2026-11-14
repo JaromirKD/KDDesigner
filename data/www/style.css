@@ -438,6 +438,19 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .fl-node.src text { fill: var(--muted); font-size: 11.5px; }
 .fl-node.fb rect { fill: color-mix(in srgb, var(--ok) 12%, var(--panel2)); stroke: color-mix(in srgb, var(--ok) 50%, transparent); }
 .fl-node.fb text { font-size: 11.5px; }
+.fl-node.seq { cursor: default; }
+.fl-node.seq rect { fill: color-mix(in srgb, var(--warn) 10%, var(--panel)); stroke: color-mix(in srgb, var(--warn) 45%, transparent); stroke-dasharray: 4 2; }
+.fl-node.seq text { font-size: 11.5px; }
+/* "… interval <s>" under an action line: its steps one after another */
+.ivl-strip:empty { display: none; }
+.ivl-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 4px; margin: -2px 0 8px 22px; font-size: 11.5px; }
+.ivl-head { color: var(--warn); }
+.ivl-step { display: inline-flex; gap: 4px; align-items: baseline; padding: 1px 6px; border-radius: 9px; background: var(--panel2); border: 1px solid var(--border2); white-space: nowrap; }
+.ivl-step b { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ivl-step.hot { animation: ivlHot 1.4s ease-out; }
+@keyframes ivlHot { 0% { background: color-mix(in srgb, var(--accent) 55%, var(--panel2)); border-color: var(--accent); } 100% { background: var(--panel2); } }
+.ivl-arr, .ivl-more { color: var(--muted); }
+.ivl-sum { color: var(--muted); margin-left: 6px; }
 .fl-node .fl-if { fill: var(--warn); font-weight: 600; }
 .fl-node.looping rect:not(.fl-col) { stroke: var(--err); stroke-width: 1.6; }
 .fl-node.disabled { opacity: .45; }
@@ -690,7 +703,6 @@ input[type=range].cw-grad::-moz-range-track { background: transparent; }
 .list-fire { flex: none; border: 1px solid var(--border); background: var(--panel); color: var(--muted); border-radius: 4px; padding: 0 7px; font-size: 11px; line-height: 18px; cursor: pointer; opacity: .35; }
 .list .item:hover .list-fire, .list .item.sel .list-fire { opacity: 1; }
 .list-fire:hover { color: var(--text, inherit); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--panel)); }
-.link-mark { font-weight: 700; width: 14px; text-align: center; }
 /* Device icons (DEVICE_ICONS); in the trigger list: what sets it off (blue box) → what it controls (green box). */
 .dev-ico { width: 15px; height: 15px; vertical-align: -3px; flex: none; }
 .devtabs .dev-ico { margin-right: 5px; }
@@ -705,7 +717,14 @@ input[type=range].cw-grad::-moz-range-track { background: transparent; }
 .io-ic .dev-ico { width: 14px; height: 14px; }
 .chip-link.dev .dev-ico { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
 .chip-link.in.dev .dev-ico { color: var(--blue); } .chip-link.out.dev .dev-ico { color: var(--ok); }
-.link-mark.out { color: var(--ok); } .link-mark.in { color: var(--blue); }
+/* the selected trigger's connections, as lines in a gutter left of the rows (trigLinkLines) */
+.trig-list { padding-left: 24px; background: linear-gradient(to right, var(--bg) 24px, var(--panel) 24px); }
+.trig-gutter { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 2; }
+.trig-gutter path { fill: none; stroke-width: 1.6; stroke-linecap: round; }
+.trig-gutter path.out { stroke: var(--ok); } .trig-gutter path.in { stroke: var(--blue); }
+.trig-gutter path.h { stroke: none; } .trig-gutter path.h.out { fill: var(--ok); } .trig-gutter path.h.in { fill: var(--blue); }
+.trig-gutter .dot { fill: var(--accent); }
+.trig-gutter .hit { fill: transparent; pointer-events: auto; cursor: help; }
 .links { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
 .links .link-head { min-width: 76px; font-size: 12px; }
 .chip-link { font-size: 12px; padding: 2px 8px; border-radius: 10px; text-decoration: none; color: var(--text); border: 1px solid var(--border); }
@@ -898,6 +917,11 @@ span.mem-ok { color: var(--ok); } span.mem-warn { color: var(--warn); } span.mem
 .builder .bfields { align-items: center; }
 .builder .bprev { font-family: var(--mono); font-size: 13px; background: var(--bg); padding: 4px 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .builder .ok { color: var(--ok); } .builder .bad { color: var(--err); font-size: 12px; }
+/* if / wait until / repeat: a form of its own for each condition and command inside the line */
+.builder .bform, .builder .bsubbox { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.builder .bsub { display: flex; gap: 10px; align-items: flex-start; }
+.builder .bsubkw { min-width: 52px; padding-top: 5px; text-align: right; }
+.builder .bsubbox { flex: 1; border-left: 2px solid var(--border); padding-left: 10px; }
 .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
 .swatch.on { border-color: var(--text); }
 .swatch input { display: none; }
@@ -1191,3 +1215,7 @@ tr.vgroup a:hover { text-decoration: underline; }
 .lv-devs { display: flex; flex-wrap: wrap; gap: 6px; }
 .lv-dev { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); cursor: pointer; white-space: nowrap; }
 .lv-dev.off { color: var(--err); }
+.lv-devgroups .lv-group { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.lv-devgroups .lv-group:first-child { margin-top: 0; }
+.lv-devgroups .lv-devs { margin-top: 5px; }
+.lv-off { color: var(--err); text-transform: none; letter-spacing: 0; }

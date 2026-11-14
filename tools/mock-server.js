@@ -526,6 +526,104 @@ function forMembers(g, one) {
   if (err) throw new Error(msg);
   return msg;
 }
+// ---- "<command> interval <s>" and lists (spread in Cmd.cpp, Drivers::split) ----
+// "pc all wake interval 1": one command per device / output, <s> apart (the first now); lists
+// (pc a,b wake, kissbox box 1.all on, knx gw write 1/1/1,1/1/2 on) also without an interval, all at once.
+let delayedSteps = [];   // {due, t, src}
+const MAX_DELAYED = 128;
+const splitList = (s) => String(s).split(',').map((x) => x.trim()).filter(Boolean);
+const quoteTok = (x) => (/\s/.test(x) || x === '' ? `"${x}"` : x);
+// The devices of "pc|projector <ref>": all, a group, a list of names / groups, or one.
+function cmdTargets(kind, list, refTok) {
+  if (refTok.toLowerCase() === 'all') {
+    if (!list.length) throw new Error(kind === 'pc' ? 'no PCs configured' : 'no projectors configured');
+    return { names: list.map((x) => x.name || String(x.id)), listed: false };
+  }
+  const pieces = ref(list, refTok) ? [refTok] : splitList(refTok), names = [];
+  for (const p of pieces) {
+    const g = !ref(list, p) && kindGroup(kind, p);
+    if (g && !g.devices.length) throw new Error(`group '${g.name}' has no devices`);
+    names.push(...(g ? g.devices : [p]));
+  }
+  return { names, listed: pieces.length > 1 };
+}
+// null = not one of these (or nothing to split without an interval), else the commands as token arrays.
+function spread(t, delay) {
+  const w = t.map((x) => x.toLowerCase()), each = (names) => names.map((n) => [t[0], n, ...t.slice(2)]);
+  if ((w[0] === 'pc' && t.length === 3) || (w[0] === 'projector' && t.length >= 3 && w[2] !== 'send')) {
+    const { names, listed } = cmdTargets(w[0], (w[0] === 'pc' ? project.pcs : project.projectors) || [], t[1]);
+    return delay || listed ? each(names) : null;
+  }
+  if (w[0] === 'io' && t.length >= 3) { const n = splitList(t[1]); return delay || n.length > 1 ? each(n) : null; }
+  if (DRV_NAMES[w[0]]) return drvSplit(t, delay);
+  return null;
+}
+function drvSplit(t, delay) {
+  const w = t.map((x) => x.toLowerCase()), type = w[0];
+  if (t.length < 3 || ['send', 'api', 'event', 'var', 'serial', 'test', 'trigger', 'text'].includes(w[2])) return null;
+  const list = (project.drivers || []).filter((d) => d.type === type);
+  let listed = false;
+  const pieces = ref(list, t[1]) ? [t[1]] : splitList(t[1]), devs = [];
+  if (pieces.length > 1) listed = true;
+  for (const p of pieces) {
+    const g = !ref(list, p) && kindGroup(type, p);
+    if (g && !g.devices.length) throw new Error(`group '${g.name}' has no devices`);
+    devs.push(...(g ? g.devices : [p]));
+  }
+  let at = 0;   // which word holds the list
+  if (type === 'kissbox' && (t.length === 4 || (t.length === 5 && w[3] === 'pulse')) && w[2] !== 'read') at = 2;
+  if (type === 'knx' && t.length >= 4 && (w[2] === 'write' || w[2] === 'read')) at = 3;
+  if (type === 'netio' && t.length >= 5 && w[2] === 'output') at = 3;
+  const out = [];
+  for (const dev of devs) {
+    let items = [];
+    if (at) {
+      for (const p of splitList(t[at])) {
+        const m = /^(\d+)\.(all|\*)$/i.exec(p), whole = type === 'kissbox' && m, every = type === 'kissbox' && p.toLowerCase() === 'all';
+        const everyOut = type === 'netio' && p.toLowerCase() === 'all' && delay;
+        if (!whole && !every && !everyOut) { items.push(p); continue; }
+        listed = true;
+        const d = ref(list, dev);
+        if (!d) throw new Error(`unknown ${DRV_NAMES[type]} device '${dev}'`);
+        if (type === 'netio') {
+          const ids = (drv(d).points || []).filter((x) => /^out\d+$/.test(x.k)).map((x) => +x.k.slice(3)).sort((a, b) => a - b);
+          if (!ids.length) throw new Error('outputs not read yet - wait for the first status poll');
+          items.push(...ids.map(String));
+          continue;
+        }
+        // Kiss-Box: the on/off and analog output cards; the digit in the card code is its channel count (DO4PR 4).
+        if (whole && !(+m[1] >= 1 && +m[1] <= 8)) throw new Error('expected <slot>.all, slot 1-8');
+        const kinds = kissKinds(d), val = t.length === 4 && w[3] !== 'toggle';
+        for (let s = whole ? +m[1] : 1; s <= (whole ? +m[1] : 8); s++) {
+          if (!['out', 'aout'].includes(kinds[s - 1] || '-')) { if (whole) throw new Error(`slot ${s} is not an output card`); continue; }
+          if (!delay && val) { items.push({ card: s }); continue; }   // one write for the whole card
+          const n = +(/^..(\d)/.exec(d.cards?.[s - 1] || '')?.[1] || 8);
+          for (let c = 1; c <= n; c++) items.push(`${s}.${c}`);
+        }
+        if (every && !items.length) throw new Error(`Kiss-Box ${dev} has no output cards`);
+      }
+      if (items.length > 1) listed = true;
+    }
+    if (!items.length) items = [''];
+    for (const it of items) {
+      const c = [...t];
+      c[1] = dev;
+      if (it && it.card) out.push([t[0], dev, String(it.card), 'all', ...Array(8).fill(t[3])]);
+      else { if (at) c[at] = it; out.push(c); }
+    }
+  }
+  return delay || listed ? out : null;
+}
+setInterval(() => {   // the later steps (Cmd::poll)
+  const now = Date.now();
+  for (const s of delayedSteps.filter((x) => x.due <= now)) {
+    delayedSteps = delayedSteps.filter((x) => x !== s);
+    const line = s.t.map(quoteTok).join(' ');
+    try { log(1, 'CMD', `[${s.src}] ${line} (delayed) -> ${exec(line, s.src)}`); }
+    catch (e) { log(2, 'CMD', `[${s.src}] '${line}' (delayed) failed: ${e.message}`); }
+  }
+}, 50);
+
 // "kissbox|knx|brightsign|digidot|netio|pharos <device|group> ..." like Drivers::command.
 function drvCommand(t) {
   const type = t[0].toLowerCase(), g = t.length >= 3 && !ref((project.drivers || []).filter((d) => d.type === type), t[1]) && kindGroup(type, t[1]);
@@ -1554,6 +1652,30 @@ function execLine(line, src, vars) {
   }
   const t = tokenize(line);
   const w = t.map((x) => x.toLowerCase());
+  {
+    const n = t.length, delay = n >= 4 && w[n - 2] === 'interval' && /^\d*\.?\d+$/.test(t[n - 1]) && +t[n - 1] <= 3600;
+    const base = delay ? t.slice(0, -2) : t, parts = spread(base, delay);
+    if (parts) {
+      const gap = delay ? Math.round(parseFloat(t[n - 1]) * 1000) : 0;
+      if (gap && delayedSteps.length + parts.length - 1 > MAX_DELAYED) throw new Error(`too many delayed steps waiting (max ${MAX_DELAYED})`);
+      let ok = 0, err = '', r1 = '';
+      parts.forEach((p, i) => {
+        if (gap && i) { delayedSteps.push({ due: Date.now() + gap * i, t: p, src }); return; }
+        try { r1 = execLine(p.map(quoteTok).join(' '), src); ok++; } catch (e) { err = err || `${p.slice(1).join(' ')}: ${e.message}`; if (parts.length === 1) throw e; }
+      });
+      if (parts.length === 1) return r1;
+      const r = `${base.join(' ')}: ${gap ? `${ok} now, ${parts.length - 1} more ${t[n - 1]} s apart` : `${ok} of ${parts.length} done`}${err ? ` (${err})` : ''}`;
+      if (gap ? !ok : ok < parts.length) throw new Error(r);
+      log(0, 'CMD', `[${src}] ${line} -> ${r}`);
+      return r;
+    }
+  }
+  if (w[0] === 'cancel' && w[1] === 'intervals' && t.length === 2) {
+    const r = `${delayedSteps.length} waiting step(s) cancelled`;
+    delayedSteps = [];
+    log(0, 'CMD', `[${src}] ${line} -> ${r}`);
+    return r;
+  }
   const tl = (i) => { const x = ref(project.timelines, t[i]); if (!x) throw new Error(`unknown timeline '${t[i] || ''}'`); return x; };
   const sc = (i) => { const x = ref(project.scenes, t[i]); if (!x) throw new Error(`unknown scene '${t[i] || ''}'`); return x; };
   const running = (kind, id) => { const p = pbs.find((p) => p.kind === kind && p.id === id); if (!p) throw new Error(`${kind} ${id} is not running`); return p; };
@@ -2558,6 +2680,18 @@ function status() {
       ...(s.kind === 'loop' ? { loop: s.remaining } : s.every ? { every: s.every, count: s.count, remaining: s.remaining } : {}),
       ...(s.kind === 'wait' ? { wait: s.text } : {}), ...(s.line != null ? { sleep: true } : {}) })),
     paused: [...rates].filter(([, r]) => r.pausedUntil > now).map(([id, r]) => ({ trigger: id, in: r.pausedUntil - now })),
+    // a trigger's interval steps still waiting (Cmd::statusJson)
+    intervals: (() => {
+      const m = new Map();
+      for (const s of delayedSteps) {
+        const id = /^trigger (\d+)$/.exec(s.src)?.[1];
+        if (!id) continue;
+        const x = m.get(id) || m.set(id, { trigger: +id, left: 0, in: 0 }).get(id);
+        x.left++;
+        x.in = Math.max(x.in, s.due - now);
+      }
+      return [...m.values()];
+    })(),
     ...(safeMode ? { safeMode: true } : {}),
     projectors: (project.projectors || []).map((x) => {
       const st = pj(x.id);

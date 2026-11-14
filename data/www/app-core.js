@@ -131,7 +131,7 @@ function setTrigColorName(c, name) {
 const CURVES = [['linear', 'Linear'], ['square', 'Square law'], ['nondim', 'Non-dim (switch)'], ['preheat5', '5% preheat'], ['preheat10', '10% preheat']];
 const PATHS = [['linear', 'Linear'], ['accelerated', 'Accelerated'], ['braked', 'Braked'], ['damped', 'Damped (S-curve)'], ['overshoot', 'Overshoot']];
 const TL_GROUPS = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
-const PANEL_TYPES = ['button', 'toggle', 'slider', 'dial', 'color', 'xy', 'label', 'clock', 'spacer', 'group'];
+const PANEL_TYPES = ['button', 'toggle', 'radio', 'slider', 'dial', 'color', 'xy', 'label', 'number', 'led', 'image', 'clock', 'spacer', 'group'];
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 // Dates in the UI are European: DD-MM-YYYY, weeks start on Monday (stored dates: KDModel.dateStore).
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -407,7 +407,7 @@ async function save() {
     // Map images that were replaced or removed: only now that the saved project no longer
     // uses them (unsaved changes must never point at a deleted image).
     for (const name of S.mediaTrash)
-      if (!P().maps.some((m) => m.background === name)) fetch(`/api/media?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (!showMediaNames(P()).includes(name)) fetch(`/api/media?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
     S.mediaTrash.clear();
     updateHeader();
     toast(r.reply || 'Saved');

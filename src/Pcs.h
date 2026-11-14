@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <vector>
 
 // Show PCs: Wake-on-LAN plus text commands over UDP (default port 7).
 // Project JSON:
@@ -10,6 +11,7 @@
 namespace Pcs {
 void load();                                   // caller holds g_engine
 int find(const String& ref);                   // id or name, -1 if unknown
+std::vector<String> names();                   // every PC, in list order ("pc all ... interval")
 // action: wake | startup | shutdown | reboot. idx < 0 = all PCs.
 bool run(int idx, const String& action, String& msg);
 void statusJson(JsonArray arr);

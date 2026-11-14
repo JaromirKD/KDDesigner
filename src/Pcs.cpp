@@ -101,6 +101,12 @@ int find(const String& ref) {
   return findRef(ref, pcs.size(), [](int i) { return pcs[i].id; }, [](int i) -> const String& { return pcs[i].name; });
 }
 
+std::vector<String> names() {
+  std::vector<String> v;
+  for (auto& pc : pcs) v.push_back(pc.name.length() ? pc.name : String(pc.id));
+  return v;
+}
+
 bool run(int idx, const String& action, String& msg) {
   String a = action;
   a.toLowerCase();

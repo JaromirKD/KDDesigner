@@ -35,11 +35,16 @@
   .shake { animation: shake .3s; }
   @keyframes shake { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
   .empty { color: var(--muted); text-align: center; margin-top: 20vh; }
+  /* "Go black after": over everything, fades in; the touch that wakes it does nothing else */
+  #black { position: fixed; inset: 0; z-index: 1000; background: #000; cursor: none; opacity: 0; pointer-events: none; transition: opacity .4s; }
+  #black.on { opacity: 1; pointer-events: auto; transition-duration: 1.5s; }
+  #black.waking { pointer-events: auto; }
 </style>
 </head>
 <body>
 <header><h1 id="title">KD Panel</h1><span id="mode" hidden></span><span class="dot" id="conn" title="connection"></span></header>
 <main id="main"><p class="empty">Loading…</p></main>
+<div id="black"></div>
 <script src="panel-ui.js"></script>
 <script>
 'use strict';
@@ -85,7 +90,7 @@ async function pump() {
 
 function render() {
   const pg = page();
-  document.body.style.cssText = panelThemeVars(project?.panel?.theme);
+  document.body.style.cssText = panelThemeVars(project?.panel?.theme) + panelPageBg(pg);
   if (!pg) { $('#main').innerHTML = '<p class="empty">No panel pages yet - add them on the Panel page of KD Designer.</p>'; return; }
   if (pg.pin && !unlocked.has(pg.id)) return askPin(pg);
   $('#main').innerHTML = panelPageHtml(pg, status, false, project.panel.theme);
@@ -169,6 +174,37 @@ $('#main').addEventListener('pointerdown', (e) => {
   b.addEventListener('pointercancel', up, { once: true });
 });
 panelDrag($('#main'), () => (showing() ? page() : null), () => status, send);
+// Radio group: touching a choice lights it and sends "change" with its text (again too, when it is lit already).
+$('#main').addEventListener('click', (e) => {
+  const o = e.target.closest('.popt[data-o]'), el = o?.closest('.pradio[data-i]');
+  if (!el || !showing() || el.classList.contains('p-dis') || el.classList.contains('p-lock')) return;
+  const c = page().controls[+el.dataset.i];
+  panelLocal[String(c.name || '').toLowerCase()] = { value: o.dataset.o, until: Date.now() + 1500 };
+  panelUpdate($('#main'), page(), status);
+  send(c, 'change', o.dataset.o);
+});
+
+// "Go black after" (this panel's setting, seconds; none = never): nobody touched the panel for
+// that long -> a black screen. The first touch only brings the panel back: the black stays in
+// front until that touch is over, so it can't press the button under it.
+let lastTouch = Date.now(), wakeTimer = 0;
+const blackEl = $('#black');
+function touched() {
+  lastTouch = Date.now();
+  if (!blackEl.classList.contains('on')) return;
+  blackEl.classList.remove('on');
+  blackEl.classList.add('waking');
+  clearTimeout(wakeTimer);
+  wakeTimer = setTimeout(() => blackEl.classList.remove('waking'), 500);
+}
+for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel']) window.addEventListener(ev, touched, { capture: true, passive: true });
+setInterval(() => {
+  const s = project ? +panelNow().sleep || 0 : 0;
+  if (!(s > 0 && Date.now() - lastTouch > s * 1000) || blackEl.classList.contains('on')) return;
+  blackEl.classList.add('on');
+  // Going black also locks the PIN pages: whoever wakes the panel on one types the PIN again.
+  if (unlocked.size) { unlocked.clear(); if (page()?.pin) render(); }
+}, 500);
 
 function tickClock() {
   const t = panelTime();

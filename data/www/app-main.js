@@ -83,7 +83,8 @@ function addItem(kind) {
       S.sel.panel = p.panel.panels.length - 1;
       break;
     }
-    case 'pc-button': case 'pc-toggle': case 'pc-slider': case 'pc-dial': case 'pc-color': case 'pc-xy': case 'pc-label': case 'pc-clock': case 'pc-spacer': case 'pc-group': {
+    case 'pc-button': case 'pc-toggle': case 'pc-slider': case 'pc-dial': case 'pc-color': case 'pc-xy': case 'pc-label': case 'pc-clock': case 'pc-spacer': case 'pc-group':
+    case 'pc-radio': case 'pc-led': case 'pc-number': case 'pc-image': {
       const pg = p.panel.pages[S.sel.page || 0];
       const type = kind.slice(3), n = pg.controls.filter((c) => c.type === type).length + 1;
       pg.controls.push({
@@ -92,7 +93,12 @@ function addItem(kind) {
         color: { type, name: 'colour' + n, text: 'Colour', value: '#ffffff', links: {} },
         xy: { type, name: 'xy' + n, text: 'Pan / tilt', min: 0, max: 100, ymin: 0, ymax: 100, links: {}, span: 2 }, label: { type, name: 'label' + n, text: 'Status' },
         group: { type, name: 'group' + n, text: 'Group ' + n, span: 2 },
+        radio: { type, name: 'choice' + n, text: '', options: 'One, Two, Three', span: 2 }, led: { type, name: 'led' + n, text: 'Status' },
+        number: { type, name: 'number' + n, text: 'Visitors' }, image: { type, image: '', rows: 2 },
       }[type] || { type });
+      // On a finer grid a preset size (span 2) means normal cells, like a control without one.
+      const c = pg.controls[pg.controls.length - 1], g = panelFine(pg);
+      if (g > 1) { if (c.span) c.span *= g; if (c.rows) c.rows *= g; }
       break;
     }
     case 'separator': {

@@ -29,6 +29,64 @@ void waitForSave() {
 
 const char* cmdSource = "";   // who runs the command now (exec's source), for "mode" in the log
 
+// The later steps of "... interval <s>" (pc all wake interval 1): one command each, run by Cmd::poll().
+struct Delayed {
+  uint32_t due;
+  std::vector<String> t;
+  String src;
+};
+std::vector<Delayed> delayed;
+
+// "1.5" / "2" / "0": an interval in seconds.
+bool isSeconds(const String& s) {
+  char* end;
+  double v = strtod(s.c_str(), &end);
+  return s.length() && !*end && v >= 0 && v <= 3600;
+}
+
+// The devices of "pc|projector <ref>": all, a group, a list of names / groups, or one.
+// listed = a list (several names), which plain commands don't know.
+bool targets(const char* kind, const String& ref, std::vector<String>& out, bool& listed, String& err) {
+  auto known = [&](const String& n) { return !strcmp(kind, "pc") ? Pcs::find(n) >= 0 : Projectors::find(n) >= 0; };
+  if (ref.equalsIgnoreCase("all")) {
+    out = !strcmp(kind, "pc") ? Pcs::names() : Projectors::names();
+    if (out.empty()) { err = !strcmp(kind, "pc") ? "no PCs configured" : "no projectors configured"; return false; }
+    return true;
+  }
+  std::vector<String> pieces = known(ref) ? std::vector<String>{ref} : splitList(ref);
+  listed = pieces.size() > 1;
+  for (auto& p : pieces) {
+    std::vector<String> g;
+    if (!known(p) && State::groupMembers(kind, p, g)) {
+      if (g.empty()) { err = "group '" + p + "' has no devices"; return false; }
+      out.insert(out.end(), g.begin(), g.end());
+    } else out.push_back(p);
+  }
+  return true;
+}
+
+// A command for several devices / outputs as one command each, in order. 1 = parts filled,
+// 0 = error (r), -1 = not one of these (or nothing to split without an interval: run it as it is).
+int spread(const std::vector<String>& t, bool delay, std::vector<std::vector<String>>& parts, String& r) {
+  auto is = [&](size_t i, const char* w) { return t.size() > i && !strcasecmp(t[i].c_str(), w); };
+  bool listed = false;
+  std::vector<String> names;
+  if ((is(0, "pc") && t.size() == 3) || (is(0, "projector") && t.size() >= 3 && !is(2, "send"))) {
+    if (!targets(t[0].c_str(), t[1], names, listed, r)) return 0;
+    if (!delay && !listed) return -1;
+    for (auto& n : names) { parts.push_back(t); parts.back()[1] = n; }
+    return 1;
+  }
+  if (is(0, "io") && t.size() >= 3) {
+    names = splitList(t[1]);
+    if (!delay && names.size() < 2) return -1;
+    for (auto& n : names) { parts.push_back(t); parts.back()[1] = n; }
+    return 1;
+  }
+  if (!t.empty() && Drivers::isCommand(t[0])) return Drivers::split(t, delay, parts, r);
+  return -1;
+}
+
 uint32_t seconds(const String& s) { return (uint32_t)(s.toFloat() * 1000); }
 
 // Parses an optional trailing "fade <seconds>" at position i.
@@ -115,6 +173,41 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
   auto is = [&](size_t i, const char* w) { return t.size() > i && !strcasecmp(t[i].c_str(), w); };
   int idx;
   uint32_t fade;
+
+  // "<command> interval <s>": the devices / outputs it names one after another, <s> apart; lists
+  // ("pc a,b wake", "kissbox box 1.all on") also without an interval, all at once.
+  {
+    size_t n = t.size();
+    bool delay = n >= 4 && is(n - 2, "interval") && isSeconds(t[n - 1]);
+    std::vector<String> base(t.begin(), t.end() - (delay ? 2 : 0));
+    std::vector<std::vector<String>> parts;
+    int k = spread(base, delay, parts, r);
+    if (k == 0) return false;
+    if (k > 0) {
+      uint32_t gap = delay ? seconds(t[n - 1]) : 0;
+      if (gap && delayed.size() + parts.size() - 1 > KD_MAX_DELAYED) { r = "too many delayed steps waiting (max " + String(KD_MAX_DELAYED) + ")"; return false; }
+      int ok = 0, total = parts.size();
+      String err;
+      for (int i = 0; i < total; i++) {
+        if (gap && i) { delayed.push_back({millis() + gap * i, parts[i], cmdSource}); continue; }
+        String m;
+        if (run(parts[i], m, nullptr)) ok++;
+        else if (!err.length()) err = rest(parts[i], 1) + ": " + m;
+        if (total == 1) r = m;
+      }
+      if (total > 1) {
+        r = rest(base, 0) + ": " + (gap ? String(ok) + " now, " + String(total - 1) + " more " + t[n - 1] + " s apart" : String(ok) + " of " + String(total) + " done");
+        if (err.length()) r += " (" + err + ")";
+      }
+      return gap ? ok == 1 : ok == total;
+    }
+  }
+  // cancel intervals: drop the waiting steps of every "... interval <s>"
+  if (is(0, "cancel") && is(1, "intervals") && t.size() == 2) {
+    r = String((int)delayed.size()) + " waiting step(s) cancelled";
+    delayed.clear();
+    return true;
+  }
 
   if (is(0, "start") && is(1, "timeline")) {
     if (!needTimeline(t, 2, idx, r)) return false;
@@ -398,6 +491,48 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
 }  // namespace
 
 namespace Cmd {
+
+void statusJson(JsonObject o) {
+  JsonArray arr = o["intervals"].to<JsonArray>();
+  uint32_t now = millis();
+  for (size_t i = 0; i < delayed.size(); i++) {
+    // src is "trigger <id>" for a trigger's actions; other sources (console, UDP) are not shown.
+    if (strncmp(delayed[i].src.c_str(), "trigger ", 8)) continue;
+    int id = atoi(delayed[i].src.c_str() + 8);
+    bool seen = false;
+    for (size_t k = 0; k < i && !seen; k++) seen = delayed[k].src == delayed[i].src;
+    if (seen) continue;
+    int left = 0;
+    int32_t last = 0;
+    for (size_t k = i; k < delayed.size(); k++)
+      if (delayed[k].src == delayed[i].src) { left++; last = max(last, (int32_t)(delayed[k].due - now)); }
+    JsonObject j = arr.add<JsonObject>();
+    j["trigger"] = id;
+    j["left"] = left;
+    j["in"] = last;
+  }
+}
+
+void poll() {
+  if (delayed.empty()) return;
+  uint32_t now = millis();
+  for (size_t i = 0; i < delayed.size();) {
+    if ((int32_t)(now - delayed[i].due) < 0) { i++; continue; }
+    Delayed d = std::move(delayed[i]);
+    delayed.erase(delayed.begin() + i);
+    String reply;
+    const char* was = cmdSource;
+    cmdSource = d.src.c_str();
+    bool ok = run(d.t, reply, nullptr);
+    cmdSource = was;
+    String line = rest(d.t, 0);
+    if (ok) { State::changed(); LOGI(Cmd, "[%s] %s (delayed) -> %s", d.src.c_str(), line.c_str(), reply.c_str()); }
+    else LOGW(Cmd, "[%s] '%s' (delayed) failed: %s", d.src.c_str(), line.c_str(), reply.c_str());
+    // run() may have queued more (a step that is itself an interval command): look again from the start.
+    i = 0;
+    now = millis();
+  }
+}
 
 bool reloadDue() {
   if (!reloadPending || Triggers::inRun()) return false;
