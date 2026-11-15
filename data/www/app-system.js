@@ -222,7 +222,7 @@ views.panel = () => {
       ${pages.map(({ x, i }) => `<div class="item${i === pi ? ' sel' : ''}" data-sel="page:${i}"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span>${x.pin ? '<span class="tag">PIN</span>' : ''}${sh && x.noShared ? '<span class="tag" title="Without the shared part">no ★</span>' : ''}</div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="page">+ Page</button>${sh ? '' : '<button class="btn small" data-pshared title="A band on top (or at the bottom) of every page of this panel: a logo, the clock, a Home button… Add them once instead of on every page">+ Shared part</button>'}</div></div>
     <div>${pg ? `
-      <div class="row"><input data-p="${base}.name" value="${esc(pg.name)}" data-orig="${esc(pg.name || '')}" style="font-size:16px;flex:1">
+      <div class="row"><input data-p="${base}.name" value="${esc(pg.name)}" data-orig="${esc(pg.name || '')}" style="font-size:16px;flex:1 1 180px">
         <button class="btn small ghost" data-del="${base}">Delete page</button></div>
       <div class="row" style="margin-top:10px">
         <label class="muted">Columns</label><input type="number" min="1" max="12" style="width:70px" data-p="${base}.columns" data-t="num" value="${pg.columns || 3}" data-r>

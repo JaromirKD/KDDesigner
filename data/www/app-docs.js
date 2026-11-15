@@ -46,7 +46,7 @@ const docSelIdx = (m) => {
 function mapDocPinsHtml(m, editing) {
   const sel = editing ? docSelIdx(m) : -1;
   return (m.docs || []).map((d, i) => (d?.file && docPinned(d)
-    ? `<div class="mdoc${i === sel ? ' sel' : ''}" data-mdoc="${i}" style="left:${d.x * 100}%;top:${d.y * 100}%" title="${esc(d.name)} · ${docType(d.file)[1]}${editing ? '\nDouble-click to open' : '\nClick to open'}">
+    ? `<div class="mdoc${i === sel ? ' sel' : ''}${mapEdge(d.x)}" data-mdoc="${i}" style="left:${d.x * 100}%;top:${d.y * 100}%" title="${esc(d.name)} · ${docType(d.file)[1]}${editing ? '\nDouble-click to open' : '\nClick to open'}">
       <span class="box">${docIcon(d.file)}</span>${m.labels !== false ? `<span class="lbl">${esc(d.name)}</span>` : ''}</div>` : '')).join('');
 }
 // The left column's Documents list (S.mapSide 'docs').

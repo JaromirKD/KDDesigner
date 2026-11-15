@@ -170,6 +170,15 @@ th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; p
 td { padding: 3px 6px; border-bottom: 1px solid var(--border); }
 td input, td select { width: 100%; }
 td.narrow { width: 80px; }
+/* A table wider than its column (phone, tablet, a narrow split) scrolls sideways on its own
+   instead of pushing the whole page, and its fields keep a readable width instead of being
+   squeezed to a few letters. One <tbody> per table (no <thead> in this UI), so the columns stay
+   lined up. */
+main table { display: block; overflow-x: auto; max-width: 100%; }
+main table > tbody { display: table; width: 100%; }
+main td input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]) { min-width: 84px; }
+main td input[type=number] { min-width: 60px; }
+main td select { min-width: 72px; }
 .row.nowrap { flex-wrap: nowrap; }
 .uni td.off input:not([type=checkbox]), .uni td.off select { opacity: .35; }
 .uni th.off { text-decoration: line-through; }
@@ -213,6 +222,7 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .tl-lane.drop { background-color: color-mix(in srgb, var(--blue) 14%, var(--panel2)); }
 .tl-lane.ruler { height: 22px; cursor: text; background: var(--panel); background-image: none; }
 .tl-lane.ruler span { position: absolute; top: 4px; font-size: 10px; color: var(--muted); padding-left: 3px; border-left: 1px solid var(--border); pointer-events: none; transform: none; }
+.tl-lane.ruler span.end { transform: translateX(-100%); padding: 0 3px 0 0; border-left: 0; border-right: 1px solid var(--border); }
 .tl-lane.trig { height: 26px; }
 .tl-lane .head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; display: none; z-index: 3; }
 .tl-cur { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--text); opacity: .7; pointer-events: none; z-index: 3; }
@@ -236,7 +246,7 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .blk .ramp svg { width: 100%; height: 100%; display: block; }
 .blk .ramp polygon { fill: rgba(0, 0, 0, .38); }
 .blk .ramp polyline { fill: none; stroke: color-mix(in srgb, var(--bc) 60%, #fff); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.blk span { position: relative; padding: 0 5px; font-size: 11px; line-height: 34px; white-space: nowrap; color: #fff; text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
+.blk span { position: relative; display: block; overflow: hidden; text-overflow: ellipsis; padding: 0 5px; font-size: 11px; line-height: 34px; white-space: nowrap; color: #fff; text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
 /* timeline "Live editing" switch: green dot when on */
 .btn.tl-live { color: var(--muted); }
 .btn.tl-live.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 60%, var(--border)); background: color-mix(in srgb, var(--ok) 12%, var(--panel2)); }
@@ -272,8 +282,8 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .cue-prev { flex: 1 1 360px; min-width: 0; margin-top: 8px; }
 .cue-prev-head { margin-bottom: 6px; }
 .cue-ed .swatch { width: 18px; height: 18px; }
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
-.seg button { background: var(--panel2); color: var(--muted); border: 0; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.seg button { background: var(--panel2); color: var(--muted); border: 0; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 12px; white-space: nowrap; }
 .seg button.on { background: var(--blue); color: #fff; }
 .cue-list tr[data-cuerow] { cursor: pointer; }
 .cue-list tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -363,6 +373,8 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .sc-key.in::after { content: ''; position: absolute; top: -4px; right: -4px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); border: 1px solid var(--deep); }
 .sc-key.out { border-style: dashed; opacity: .4; margin-left: 8px; }
 .mfx .lbl { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 10px; white-space: nowrap; color: var(--text); text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
+.lbl-l > .lbl { left: 0 !important; transform: none !important; }
+.lbl-r > .lbl { left: auto !important; right: 0; transform: none !important; }
 .mfx.sel .dot { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
 /* Selected wins over "not in the scene": full strength, orange ring and name, so a fixture
    you picked but haven't set yet is still clearly picked (only the dashed edge says "not in it"). */
@@ -624,7 +636,7 @@ body.dragging-item, body.dragging-item * { cursor: grabbing !important; user-sel
 .tag.tt { font-weight: 600; letter-spacing: .02em; color: var(--ttc, var(--muted)); background: color-mix(in srgb, var(--ttc, var(--muted)) 16%, transparent); }
 .tt-startup { --ttc: #9ca3af; } .tt-time { --ttc: #3ecf8e; } .tt-interval { --ttc: #2dd4bf; }
 .tt-udp { --ttc: #4aa3ff; } .tt-osc { --ttc: #818cf8; } .tt-tcp { --ttc: #38bdf8; } .tt-http { --ttc: #a3e635; }
-.tt-input { --ttc: #ffb020; } .tt-timeline, .tt-timeline_end { --ttc: #b07cff; } .tt-mode { --ttc: #e879f9; } .tt-panel { --ttc: #3ad1e0; }
+.tt-input { --ttc: #ffb020; } .tt-timeline { --ttc: #b07cff; } .tt-mode { --ttc: #e879f9; } .tt-panel { --ttc: #3ad1e0; }
 .tt-dmx_change { --ttc: #ff9f43; } .tt-device { --ttc: #ff5c5c; } .tt-projector { --ttc: #ffb020; } .tt-variable { --ttc: #f472b6; } .tt-manual { --ttc: #d8dbe2; }
 .tt-if { --ttc: #ffd23f; } .tt-calendar { --ttc: #34d399; }
 
@@ -731,7 +743,6 @@ input[type=range].cw-grad::-moz-range-track { background: transparent; }
 .col-filter .swatch { width: 18px; height: 18px; padding: 0; background-color: transparent; }
 .col-filter .swatch.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
 .col-filter.some .swatch:not(.on) { opacity: .45; }
-.col-filter .swatch.unused:not(.on) { opacity: .25; transform: scale(.8); }
 .col-filter { flex-wrap: wrap; }
 /* trigger colour tabs: the name above a bar in the colour */
 .trig-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
@@ -1184,15 +1195,16 @@ textarea.json { width: 100%; height: 360px; font-family: var(--mono); font-size:
 #toast div { background: var(--panel2); border: 1px solid var(--border); border-left: 3px solid var(--ok); padding: 8px 14px; border-radius: 4px; box-shadow: 0 4px 16px var(--shadow); max-width: 360px; }
 #toast div.err { border-left-color: var(--err); }
 
-/* Compact layout for phones and small windows: set by applyUi() (app-core.js) from the width the
-   page has after zooming, which a media query can't see. */
-body.narrow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; }
-.narrow .side { display: flex; overflow-x: auto; padding: 0; border-right: 0; border-bottom: 1px solid var(--border); }
-.narrow .side button { flex: none; width: auto; white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; padding: 8px 12px; }
+/* Compact layouts, set by applyUi() (app-core.js) from the width the page has after zooming,
+   which a media query can't see: .topnav (tablets, small windows) puts the menu along the top,
+   .narrow (phones) also stacks the columns. */
+body.topnav { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; }
+.topnav .side { display: flex; overflow-x: auto; padding: 0; border-right: 0; border-bottom: 1px solid var(--border); }
+.topnav .side button { flex: none; width: auto; white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; padding: 8px 12px; }
 /* status chips on one line of their own that scrolls sideways, instead of wrapping into three */
-.narrow .chips { order: 10; flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-.narrow .top { gap: 6px 10px; padding: 6px 10px; }
-.narrow .side button.on { border-bottom-color: var(--accent); }
+.topnav .chips { order: 10; flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.topnav .top { gap: 6px 10px; padding: 6px 10px; }
+.topnav .side button.on { border-bottom-color: var(--accent); }
 .narrow main { padding: 14px 16px; }
 .narrow .split { grid-template-columns: minmax(0, 1fr); row-gap: 16px; }
 .narrow .mode-group > b { flex-basis: 100%; }
@@ -1283,9 +1295,10 @@ body.narrow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto au
 /* ---- Live page (app-live.js) ---- */
 .live:fullscreen { background: var(--bg); padding: 14px 18px; overflow: auto; }
 .lv-top { margin-bottom: 12px; gap: 10px; }
-.lv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; align-items: start; }
-.narrow .lv-grid { grid-template-columns: minmax(0, 1fr); }
-.lv-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.lv-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+/* stage and side by side while the stage keeps ~380 px; below that the side goes under it, full width */
+.lv-stage { flex: 1000 1 380px; }
+.lv-side { flex: 1 1 360px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .lv-side h3 { margin: 0 0 8px; }
 .lv-stage { min-width: 0; }
 .lv-head { margin-bottom: 8px; }

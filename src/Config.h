@@ -61,7 +61,6 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 // ---- Triggers / devices ----------------------------------------------------
 #define KD_MAX_UDP_PORTS 6        // distinct UDP/OSC listen ports (global + per trigger)
 #define KD_MAX_PROJECTORS 16
-#define KD_PJLINK_POLL_MS 30000   // power-state poll interval per projector
 #define KD_PJLINK_TIMEOUT_MS 3000
 // Feedback guard: a trigger that fires more often than this in one second is
 // caught in a loop (it fires itself through a variable, an echo, a timeline...)

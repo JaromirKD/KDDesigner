@@ -270,3 +270,36 @@ file is ~720 KB) and a show saved with colour themes loads (the key is dropped l
 Not done: the StringPool hash index of 5d (loading is 0.6 s; measured on a PC that a 390 KB
 stress show does ~1.4 million string compares while parsing, so that index is the first thing
 to try if a bigger show ever loads slowly).
+
+## 8. Third tidy-up - 15 Nov 2026 (before the next hardware day)
+
+Checked the whole code base; it was already in good shape after the first two tidy-ups, so this
+one is small. The firmware binary is **byte for byte the same size** as before (the linker had
+already left the unused functions out), so nothing on the board behaves differently.
+
+- **Checked, nothing to fix**: repeated code (a script comparing every 4-6 line run in the
+  firmware, web UI, mock and tools: only small look-alikes left, e.g. the TCP and Modbus
+  reconnect in Io.cpp, which differ in their types and log texts); the API paths the UI uses all
+  exist in the firmware and the mock; every word in the UI command / condition grammar exists in
+  the firmware and the mock; no JavaScript function is defined without being used; our own
+  firmware code builds without warnings with `-Wall -Wextra`.
+- **Removed**: unused `Show::universeCount`, `Show::timelineCount`, `State::stateCount`,
+  `KD_PJLINK_POLL_MS` (the poll time comes from Monitoring's interval), `pickFolder` in the
+  launcher, and two CSS rules nothing uses (`.tt-timeline_end`, `.swatch.unused`).
+- `Fx.cpp`'s `BIN` macro is now `BINOP`: it replaced Arduino's own `BIN` (the only warning).
+- Docs: size figures brought up to date, `KD_MAX_UNIVERSES` is 8 (not 4) in CLAUDE.md,
+  `tools/bs-probe.js` listed.
+
+**Watch out on the board**: the Machine Control `firmware.bin` is now **783,928 bytes**, only
+~2.5 KB under the 768 KB (786,432) that 0.2.0 accepts by network update. If the board still runs
+0.2.0, install 0.3.0 first and check the file size after the last build; if it is over, install
+over USB once (after that the full 1.75 MB is allowed).
+
+Left as it is (works, but could be one place some day):
+- The device state is worked out twice in the UI: `mapDevStatus` (app-rig.js, map markers) and
+  `deviceChipsHtml` (app-live.js, Live / dashboard chips). One could be built on the other, but
+  the Live chips would then group "not saved yet" devices differently.
+- The drag code for map documents (app-docs.js) and map devices / shapes (app-rig.js) follows the
+  same pattern with small differences.
+- Unused show file: `data/show/media/map1-mvw2o056.png` (600 KB, a copy of the floor plan) is
+  still there; delete it in the UI or by hand if you agree.

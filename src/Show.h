@@ -59,14 +59,12 @@ JsonDocument& projectDoc();                        // raw project (used by trigg
 void tick(uint32_t nowMs);
 void sendOutputs(uint32_t nowMs);                  // DMX / Art-Net / sACN
 const uint8_t* output(int uIndex);
-int universeCount();
 int universeIndex(int id);                         // -1 if unknown
 
 int findTimeline(const String& ref);               // by id or name, -1 if not found
 int findScene(const String& ref);
 const Timeline& timeline(int idx);
 const Scene& scene(int idx);
-int timelineCount();
 bool timelineRunning(int idx);                     // active and not releasing
 
 bool startTimeline(int idx, String& msg, uint32_t atMs = 0);   // atMs: start part-way

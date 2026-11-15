@@ -30,7 +30,6 @@ bool findAnyState(const String& ref, int& g, int& s, String& err);
 bool findMode(const String* group, const String& state, int& g, int& s, String& err);
 const String& current(int g);                  // "" when none set
 const String& stateName(int g, int s);
-int stateCount(int g);
 const String& groupVar(int g);                 // the linked variable, "" = none
 // by: who set it, for the log ("trigger 5", "web"...). false if already in that state.
 bool setMode(int g, int s, String& msg, const char* by = nullptr);

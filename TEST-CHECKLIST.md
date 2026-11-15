@@ -104,7 +104,7 @@ In the mock:
 - [ ] **T8** Effects page: a colour parameter has the theme's swatches next to it; clicking one changes the preview.
 
 On the board:
-- [ ] **T9** Install `updates/KD-Designer-0.3.0-machine_control.kdupdate` from 0.2.0 (it must be under 768 KB; it is ~720 KB): Settings shows 0.3.0.
+- [ ] **T9** Install `updates/KD-Designer-0.3.0-machine_control.kdupdate` from 0.2.0 (it must be under 768 KB = 786,432 bytes; on 15 Nov it is 783,928, so check `.pio/build/machine_control/firmware.bin` after the last build, or use USB): Settings shows 0.3.0.
 - [ ] **T10** Save a show with own colour themes: it loads (the log says "Project saved"), the themes are still in the editor after a reload.
 
 On a Mac:

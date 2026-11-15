@@ -591,7 +591,6 @@ bool setFps(Output o, int fps, String& msg) {
 }
 
 const uint8_t* output(int u) { return out[u]; }
-int universeCount() { return universes.size(); }
 int universeIndex(int id) { return indexOfUniverse(universes, id); }
 
 int findTimeline(const String& ref) {
@@ -602,7 +601,6 @@ int findScene(const String& ref) {
 }
 const Timeline& timeline(int idx) { return timelines[idx]; }
 const Scene& scene(int idx) { return scenes[idx]; }
-int timelineCount() { return timelines.size(); }
 bool timelineRunning(int idx) {
   Playback* p = findPlayback(false, idx);
   return p && !p->releasing;

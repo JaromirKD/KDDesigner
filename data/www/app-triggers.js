@@ -414,7 +414,7 @@ function trigEditorHtml(p, ti, t, multi, links) {
   return multi && S.trigSel.size > 1 ? multiEditHtml(p.triggers.filter((x) => S.trigSel.has(x))) : t ? `
       <div class="row nowrap">${t.type === 'comment' ? '' : `<label class="muted" title="The trigger's number = its place in the list. Type a number to move it there.">#</label>
         <input type="number" id="trigNum" min="1" value="${t.id}" style="width:70px;font-size:16px" title="Type a number to move this trigger there">`}
-        <input data-p="${base}.name" value="${esc(t.name)}" style="font-size:16px;flex:1" placeholder="${t.type === 'comment' ? '== SECTION NAME' : ''}" class="${dupName(t) ? 'invalid' : ''}" data-r>
+        <input data-p="${base}.name" value="${esc(t.name)}" style="font-size:16px;flex:1 1 180px" placeholder="${t.type === 'comment' ? '== SECTION NAME' : ''}" class="${dupName(t) ? 'invalid' : ''}" data-r>
         ${t.type === 'comment' ? '' : `<button class="btn" data-fire="${t.id}" title="Run the saved version of this trigger on the controller">Fire now</button>
           <button class="btn" id="trigTest" title="Fire it now (the saved version) and show, line by line, which conditions were true and what each action did">Test</button>`}
         <button class="btn small ghost" data-del="${base}">Delete</button></div>

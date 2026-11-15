@@ -390,14 +390,14 @@ views.fixtures = () => {
   else if (S.fxPanel === 'types') editor = fixtureTypesHtml();
   else if (grp) {
     const gi = p.groups.indexOf(grp);
-    editor = `<div class="row"><span class="muted">Group</span><input data-p="groups.${gi}.name" value="${esc(grp.name)}" style="font-size:16px;flex:1" data-r>
+    editor = `<div class="row"><span class="muted">Group</span><input data-p="groups.${gi}.name" value="${esc(grp.name)}" style="font-size:16px;flex:1 1 180px" data-r>
         <button class="btn small ghost" data-del="groups.${gi}">Delete group</button></div>
       <p class="muted">${grp.fixtures.length} fixture(s), highlighted in the list. Groups can fill timeline tracks and scenes.</p>
       <div class="list">${grp.fixtures.map(fixture).filter(Boolean).map((x) => `<div class="item"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span><span class="tag mono">${x.universe}.${x.address}</span><button class="btn small ghost" data-grprm="${x.id}" title="Remove from group">✕</button></div>`).join('') || '<span class="muted">Empty - select fixtures in the list and use "Add to group".</span>'}</div>
       <div class="row" style="margin-top:8px">${sel.length ? `<button class="btn small" id="grpAddSel">Add the ${sel.length} selected fixture(s)</button>` : ''}<button class="btn small" id="grpSelect">Select these fixtures</button></div>`;
   } else if (sel.length === 1) {
     const x = sel[0], i = p.fixtures.indexOf(x), use = fixtureUse(x.id);
-    editor = `<div class="row"><span class="id muted">#${x.id}</span><input data-p="fixtures.${i}.name" value="${esc(x.name)}" style="font-size:16px;flex:1" data-r>
+    editor = `<div class="row"><span class="id muted">#${x.id}</span><input data-p="fixtures.${i}.name" value="${esc(x.name)}" style="font-size:16px;flex:1 1 180px" data-r>
         <button class="btn small" id="fxLocate" title="Flash it white for 5 s to find it in the room (L)">Locate</button>
         <button class="btn small ghost" id="fxDelSel">Delete</button></div>
       <div class="form" style="margin-top:10px">
@@ -603,9 +603,11 @@ function fixtureLook(f, dmx) {
 // A fixture on a map: a round dot with its icon, coloured by paintDot().
 // it.s = how much smaller it is drawn: a fixture of a room on a floor (mapView) is as much smaller
 // as the room is there; small ones drop their name.
+// Names of items near the left / right edge run inwards instead of being cut off by the map.
+const mapEdge = (x) => (x < 0.12 ? ' lbl-l' : x > 0.88 ? ' lbl-r' : '');
 const mapScale = (s) => (s && s < 1 ? `;--s:${+Math.max(0.25, s).toFixed(3)}` : '');
 const mapDotHtml = (f, it, cls, labels, data = 'data-mfx') =>
-  `<div class="mfx${cls}${it.from != null ? (it.d ? ' rdense' : ' rfull') : ''}" ${data}="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%${mapScale(it.s)}" title="${esc(f.name)} · ${f.universe}.${f.address} (${esc((f.channels || []).join(', '))})">
+  `<div class="mfx${cls}${mapEdge(it.x)}${it.from != null ? (it.d ? ' rdense' : ' rfull') : ''}" ${data}="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%${mapScale(it.s)}" title="${esc(f.name)} · ${f.universe}.${f.address} (${esc((f.channels || []).join(', '))})">
     <span class="dot">${fxIcon(f)}</span>${labels && !(it.s < 0.6) ? `<span class="lbl">${esc(f.name)}</span>` : ''}</div>`;
 // glow = false for maps with many fixtures (the glow is costly to draw).
 function paintDot(dot, look, glow = true) {
@@ -651,7 +653,7 @@ function mapDevStatus(list, x, st = S.status) {
   return { state: s(j?.state), extra: j ? '' : 'not connected yet', tab: 'tcp', card: `${list}:${x.name}` };
 }
 const mapDevHtml = (d, x, labels, cls = '') =>
-  `<div class="mdev${cls}" data-mdev="${esc(mapDevKey(d))}" style="left:${d.x * 100}%;top:${d.y * 100}%${mapScale(d.s)}">
+  `<div class="mdev${cls}${mapEdge(d.x)}" data-mdev="${esc(mapDevKey(d))}" style="left:${d.x * 100}%;top:${d.y * 100}%${mapScale(d.s)}">
     <span class="box">${devIcon(mapDevIcon(d.list, x), '')}<i class="st"></i></span>${labels && !(d.s < 0.6) ? `<span class="lbl">${esc(d.name)}</span>` : ''}<span class="ext"></span></div>`;
 // Colours every device marker under root by its state, with the details in its tooltip.
 function paintMapDevs(root = document) {
@@ -1505,7 +1507,7 @@ views.map = () => {
         || '<span class="muted">No devices yet (Devices page).</span>'}</div>`}
     </div>
     <div>
-      <div class="row"><input data-p="${base}.name" value="${esc(m.name)}" style="font-size:16px;flex:1" data-r>
+      <div class="row"><input data-p="${base}.name" value="${esc(m.name)}" style="font-size:16px;flex:1 1 180px" data-r>
         <select id="mapKind" title="What this map is: a room, a floor (rooms put together) or the building (floors put together). Only for the lists; any map can hold other maps.">${MAP_KINDS.map(([k, n, ic]) => `<option value="${k}"${mapKind(m)[0] === k ? ' selected' : ''}>${ic} ${n}</option>`).join('')}</select>
         <button class="btn small ghost" data-del="${base}">Delete map</button></div>
       <div class="row map-tools">

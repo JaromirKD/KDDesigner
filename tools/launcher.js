@@ -232,12 +232,6 @@ function pickFile(title, filter, start) {
   return ps(DIALOG + '$d = New-Object System.Windows.Forms.OpenFileDialog -Property @{Title=$env:KD_T; Filter=$env:KD_F; InitialDirectory=$env:KD_S};'
     + 'if ($d.ShowDialog($o) -eq "OK") { $d.FileName }', { KD_T: title, KD_F: filter, KD_S: start }, 600000);
 }
-function pickFolder(title, start) {
-  if (MAC) return osa('POSIX path of (choose folder with prompt (system attribute "KD_T") default location (POSIX file (system attribute "KD_S") as alias))', { KD_T: title, KD_S: start }, 600000);
-  if (!WIN) return onlyWinMac();
-  return ps(DIALOG + '$d = New-Object System.Windows.Forms.FolderBrowserDialog -Property @{Description=$env:KD_T; SelectedPath=$env:KD_S};'
-    + 'if ($d.ShowDialog($o) -eq "OK") { $d.SelectedPath }', { KD_T: title, KD_S: start }, 600000);
-}
 const toRecycleBin = (dir) => (MAC
   ? osa('tell application "Finder" to delete (POSIX file (system attribute "KD_P") as alias)', { KD_P: dir })
   : !WIN ? onlyWinMac()

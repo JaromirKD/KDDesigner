@@ -139,7 +139,7 @@ views.effects = () => {
     <div>${list}
       <div class="row" style="margin-top:8px">${newMenu}<button class="btn small" id="fxDup">Duplicate</button></div></div>
     <div>
-      <div class="row"><input data-p="effects.${S.sel.effect}.name" value="${esc(e.name)}" style="font-size:16px;flex:1" data-r>
+      <div class="row"><input data-p="effects.${S.sel.effect}.name" value="${esc(e.name)}" style="font-size:16px;flex:1 1 180px" data-r>
         <select id="fxBase" title="Swap this effect's code for a base effect. Timeline cues that use it keep using it; Ctrl+Z undoes."><option value="">Change to base effect…</option>${fxTplOptions()}</select>
         <button class="btn small ghost" data-del="effects.${S.sel.effect}">Delete</button></div>
       <div class="used-row">${usedHtml('effects', e)}</div>
@@ -386,7 +386,7 @@ views.scenes = () => {
     <div><div class="list">${p.scenes.map((s, i) => `<div class="item${i === S.sel.scene ? ' sel' : ''}" data-sel="scene:${i}"><span class="id">${s.id}</span>${esc(s.name)}<span class="spacer"></span><span class="muted" title="Fixtures in this scene">${sceneFixtures(s).size}</span></div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="scene">+ Scene</button></div></div>
     <div>${sc ? `
-      <div class="row"><input data-p="scenes.${S.sel.scene}.name" value="${esc(sc.name)}" style="font-size:16px;flex:1">
+      <div class="row"><input data-p="scenes.${S.sel.scene}.name" value="${esc(sc.name)}" style="font-size:16px;flex:1 1 180px">
         <button class="btn" data-cmd="scene ${sc.id} fade 0">Play</button>
         <button class="btn" data-cmd="release scene ${sc.id}">Release</button>
         <label class="row muted" title="Send changes as live channel overrides while editing"><input type="checkbox" id="preview"${S.preview ? ' checked' : ''}> Live preview</label>
@@ -583,7 +583,7 @@ views.timelines = () => {
     <div><div class="list">${p.timelines.map((x, i) => `<div class="item${i === ti ? ' sel' : ''}" data-sel="timeline:${i}"><span class="id">${x.id}</span>${esc(x.name)}</div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn small" data-add="timeline">+ Timeline</button></div></div>
     <div>${t ? `
-      <div class="row"><input data-p="timelines.${ti}.name" value="${esc(t.name)}" data-orig="${esc(t.name)}" style="font-size:16px;flex:1">
+      <div class="row"><input data-p="timelines.${ti}.name" value="${esc(t.name)}" data-orig="${esc(t.name)}" style="font-size:16px;flex:1 1 180px">
         <button class="btn" data-cmd="start timeline ${t.id}">▶ Start</button>
         ${S.tlCursor ? `<button class="btn" data-tlplay title="Play from the cursor (Space)">▶ from ${(S.tlCursor / 1000).toFixed(1)} s</button>` : ''}
         <button class="btn" data-tlpause title="Pause / carry on (Space, Shift+Space)">❚❚</button>
@@ -856,7 +856,7 @@ function tlGridHtml(t) {
   const L = tlLayout(t), len = L.len, sel = tlSelection(t);
   const rstep = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((s) => s * L.pxs >= 64) || 1200;
   let ruler = '';
-  for (let s = 0; s * 1000 <= len; s += rstep) ruler += `<span style="left:${(s * 1000 / len) * 100}%">${fmtS(s * 1000)}</span>`;
+  for (let s = 0; s * 1000 <= len; s += rstep) ruler += `<span${(s * 1000) / len > 0.97 ? ' class="end"' : ''} style="left:${(s * 1000 / len) * 100}%">${fmtS(s * 1000)}</span>`;   // the last one reads leftwards, inside the lane
   const pct = (ms) => (ms / len) * 100;
   const after = t.length ? `<div class="tl-after" style="left:${pct(t.length)}%"></div>` : '';
   const cur = S.tlCursor != null ? `<div class="tl-cur" style="left:${pct(S.tlCursor)}%"></div>` : '';

@@ -218,7 +218,6 @@ bool findMode(const String* group, const String& state, int& g, int& s, String& 
 
 const String& current(int g) { return g >= 0 && g < (int)groups.size() ? groups[g].current : kEmpty; }
 const String& stateName(int g, int s) { return groups[g].states[s]; }
-int stateCount(int g) { return groups[g].states.size(); }
 const String& groupVar(int g) { return groups[g].var; }
 
 bool setMode(int g, int s, String& msg, const char* by) {

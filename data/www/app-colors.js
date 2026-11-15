@@ -80,7 +80,7 @@ views.colors = () => {
   if (t) {
     const sw = t.colors.map((c, k) => `<div class="theme-sw${own && k === S.themeSwatch ? ' on' : ''}" data-themesw="${k}" title="${c}${k < 10 ? ` · key ${(k + 1) % 10} on a colour wheel` : ''}">
         <span class="theme-swc" style="background:${c}"></span><span class="mono muted">${c}</span>${own ? `<span class="theme-swb"><button class="btn small ghost" data-swmove="-1" title="Move left">◀</button><button class="btn small ghost" data-swmove="1" title="Move right">▶</button><button class="btn small ghost" data-swdel title="Remove this colour">✕</button></span>` : ''}</div>`).join('');
-    editor = `<div class="row">${own ? `<input data-p="${base}.name" value="${esc(t.name)}" style="font-size:16px;flex:1" data-r>` : `<b style="font-size:16px;flex:1">${esc(t.name)} <span class="muted">(built-in)</span></b>`}
+    editor = `<div class="row">${own ? `<input data-p="${base}.name" value="${esc(t.name)}" style="font-size:16px;flex:1 1 180px" data-r>` : `<b style="font-size:16px;flex:1 1 180px">${esc(t.name)} <span class="muted">(built-in)</span></b>`}
         ${t.name === wheel.name ? '<span class="tag ok" title="The colour wheels show this theme">✓ in the colour wheels</span>' : `<button class="btn" id="themeUse" title="Show this theme's colours in every colour wheel (keys 1-9, 0)">Use in the colour wheels</button>`}
         <button class="btn small" id="themeDup" title="${own ? 'A copy to change' : 'Built-in themes can’t be changed: a copy of your own can'}">${own ? 'Duplicate' : 'Copy to my themes'}</button>
         ${own ? `<button class="btn small ghost" data-del="${base}">Delete</button>` : ''}</div>

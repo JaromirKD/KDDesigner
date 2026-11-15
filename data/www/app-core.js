@@ -1099,9 +1099,12 @@ function applyUi() {
   html.style.setProperty('--pc-fg', pcColor()[2]);
   document.body.classList.toggle('live-frame', uiPref('kd.liveFrame', '1') === '1');
   applyWhere(true);
-  // The compact (phone) layout follows the width the page really has after zooming;
-  // a media query would only see the window.
-  document.body.classList.toggle('narrow', innerWidth / uiZoomNow < 760);
+  // The compact layouts follow the width the page really has after zooming (a media query
+  // would only see the window): below ~960 px the menu moves to the top so the page gets the
+  // whole width; below ~760 px (phones) columns also go under each other.
+  const w = innerWidth / uiZoomNow;
+  document.body.classList.toggle('topnav', w < 960);
+  document.body.classList.toggle('narrow', w < 760);
 }
 applyUi();
 window.addEventListener('resize', applyUi);

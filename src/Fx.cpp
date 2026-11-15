@@ -474,7 +474,7 @@ KD_FAST void exec(const Ins* ip, double* s) {
 #undef K1
 #define NEXT goto* L[(++ip)->op]
 // y = the right-hand operand: below the top (mode 0), the folded number (1) or slot (2).
-#define BIN(name, expr)                                                   \
+#define BINOP(name, expr)                                               \
   name##0 : { double y = top, x = st[--sp]; top = (expr); NEXT; }       \
   name##1 : { double y = ip->a, x = top; top = (expr); NEXT; }          \
   name##2 : { double y = s[ip->slot], x = top; top = (expr); NEXT; }
@@ -485,20 +485,20 @@ STORE_: s[ip->slot] = top; top = st[--sp]; NEXT;
 NEG_: top = -top; NEXT;
 NOT_: top = top ? 0 : 1; NEXT;
 SEL_: { double z = top, y = st[--sp], x = st[--sp]; top = x ? y : z; NEXT; }
-  BIN(ADD_, x + y)
-  BIN(SUB_, x - y)
-  BIN(MUL_, x * y)
-  BIN(DIV_, y ? x / y : 0)
-  BIN(MOD_, y ? x - y * floor(x / y) : 0)
-  BIN(LT_, x < y)
-  BIN(GT_, x > y)
-  BIN(LE_, x <= y)
-  BIN(GE_, x >= y)
-  BIN(EQ_, x == y)
-  BIN(NE_, x != y)
-  BIN(AND_, x && y)
-  BIN(OR_, x || y)
-#undef BIN
+  BINOP(ADD_, x + y)
+  BINOP(SUB_, x - y)
+  BINOP(MUL_, x * y)
+  BINOP(DIV_, y ? x / y : 0)
+  BINOP(MOD_, y ? x - y * floor(x / y) : 0)
+  BINOP(LT_, x < y)
+  BINOP(GT_, x > y)
+  BINOP(LE_, x <= y)
+  BINOP(GE_, x >= y)
+  BINOP(EQ_, x == y)
+  BINOP(NE_, x != y)
+  BINOP(AND_, x && y)
+  BINOP(OR_, x || y)
+#undef BINOP
 CALL_: {
     st[sp++] = top;
     double* v = &st[sp - ip->na];
