@@ -563,6 +563,8 @@ const CTX_MENUS = [
       k === 'timeline' && { label: '▶ Start', run: () => ctxCmd(`start timeline ${x.id}`) },
       k === 'timeline' && { label: 'Stop', run: () => ctxCmd(`stop timeline ${x.id}`) },
       null,
+      k === 'map' && { label: 'Move up', off: i === 0, run: () => moveMap(i, -1) },
+      k === 'map' && { label: 'Move down', off: i === P().maps.length - 1, run: () => moveMap(i, 1) },
       k !== 'page' && { label: 'Duplicate', run: dup },
       x.name && { label: 'Copy name', run: () => copyText(x.name) },
       USE_KINDS[listPath[k]] && { label: 'Where used…', run: () => showWhereUsed(listPath[k], x) },

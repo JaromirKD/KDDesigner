@@ -42,6 +42,7 @@ const GRAMMAR = [
   ['panel {pctl} enable', 'Make a disabled panel control usable again (also one ticked "disabled" on the Panel page)'],
   ['panel {pctl} lock', 'Panel control shows as normal but can’t be touched (e.g. a slider used as a progress bar)'],
   ['panel {pctl} unlock', 'Panel control can be touched again (also one set to "display only" on the Panel page)'],
+  ['panel {pnl} page {ppage}', 'Show another page on a touch panel (all = every panel that has a page of that name; start = its start page)'],
   ['panel {pctl} reset', 'Back to the text, colour, "display only" and "disabled" set on the Panel page, flashing off'],
   ['fire trigger {trig}', 'Run another trigger now (nested task list)'],
   ['fire trigger {trig} after {sec}', 'Run another trigger after a delay (Wait)'],
@@ -262,6 +263,14 @@ const knxAddr = (tok) => (ctxDrv('knx')?.addresses || []).find((a) => a.ga === t
 const panelButtons = () => [...new Set(P().panel.pages.flatMap((pg) => pg.controls).filter((c) => c.name && ['button', ...PANEL_VALUE_TYPES].includes(c.type)).map((c) => c.name))];
 // Every named control, for "panel <name> …" actions.
 const panelControls = () => [...new Set(P().panel.pages.flatMap((pg) => pg.controls).filter((c) => c.name && c.type !== 'clock' && c.type !== 'spacer').map((c) => c.name))];
+// Touch panels and their pages, for "panel <panel|all> page <page|start>".
+const panelSets = () => panelList(P());
+const panelPagesFor = (name) => {
+  const n = String(name || '').toLowerCase(), p = P();
+  if (n === 'all') return p.panel.pages || [];
+  const pn = panelSets().find((x) => String(x.id) === n || (x.name || '').toLowerCase() === n);
+  return pn ? panelPagesOf(p, pn.id) : [];
+};
 const panelControlType = (name) => P().panel.pages.flatMap((pg) => pg.controls).find((c) => (c.name || '').toLowerCase() === String(name || '').toLowerCase())?.type;
 // Parts that take a list in commands ("pc a,b wake", "kissbox box 1.1,2.all on"): spread in Cmd.cpp.
 const LIST_PARTS = new Set(['{pc}', '{pj}', '{iopoint}', '{kiss}', '{knx}', '{bsign}', '{digi}', '{netio}', '{pharos}', '{netgear}', '{kisspoint}', '{knxga}', '{netioout}']);
@@ -279,6 +288,8 @@ function matchPart(part, tok) {
     case '{dur}': return /^\d+(\.\d+)?[smh]?$/i.test(tok);
     case '{label}': return tok.length > 0;
     case '{pctl}': return panelControls().some((n) => n.toLowerCase() === tok.toLowerCase());
+    case '{pnl}': return tok.toLowerCase() === 'all' || panelSets().some((x) => String(x.id) === tok || (x.name || '').toLowerCase() === tok.toLowerCase());
+    case '{ppage}': return /^start$/i.test(tok) || panelPagesFor(CTX[1] ?? '').some((pg) => String(pg.id) === tok || (pg.name || '').toLowerCase() === tok.toLowerCase());
     case '{flash}': return tok.length > 0;
     // A radio group takes one of its choices, a LED or number display any word (on, off, a text).
     case '{pval}': { const ty = panelControlType(CTX[1] ?? ''); return /^-?\d+(\.\d+)?(,-?\d+(\.\d+)?)?$/.test(tok) || /^#[0-9a-f]{6}$/i.test(tok) || (ty === 'radio' || ty === 'led' || ty === 'number') && tok.length > 0; }
@@ -382,6 +393,10 @@ function candidates(part, partial) {
     case '{dur}': return presets(['30s', '5m', '10m', '1h'], '90 = seconds, 10m, 2h');
     case '{label}': return [...names(panelLabels(), 'panel label', 'lb'), ...hint('<label name>')];
     case '{pctl}': return names(panelControls(), 'panel control', 'pc').map((x) => ({ ...x, desc: panelControlType(x.label) }));
+    case '{pnl}': return [...names(panelSets().map((x) => x.name || 'Panel ' + x.id), 'touch panel', 'pn'),
+      ...(panelSets().length > 1 && 'all'.startsWith(pl) ? [{ insert: 'all', label: 'all', desc: 'every panel', key: 'pnall' }] : [])];
+    case '{ppage}': return [...names([...new Set(panelPagesFor(CTX[1]).map((pg) => pg.name).filter(Boolean))], 'panel page', 'pp'),
+      ...('start'.startsWith(pl) ? [{ insert: 'start', label: 'start', desc: 'the panel’s start page', key: 'ppstart' }] : [])];
     case '{flash}': return [...[['on', 'flash'], ['off', 'stop flashing'], ['red', 'flash red'], ['orange', 'flash orange']].filter(([v]) => v.startsWith(pl))
       .map(([v, d]) => ({ insert: v, label: v, desc: d, key: 'fl' + v })), ...hint('or #rrggbb')];
     case '{pval}': {
@@ -390,7 +405,8 @@ function candidates(part, partial) {
       if (ty === 'led') return presets(['on', 'off'], 'on / off, or the text it lights up for');
       return ty === 'color' ? presets(['#ff0000', '#00ff00', '#0000ff', '#ffffff', '#000000'], '#rrggbb') : ty === 'xy' ? presets(['50,50', '0,0'], 'x,y') : ty === 'toggle' ? presets(['1', '0'], '1 = on, 0 = off') : presets(['0', '50', '100'], '<value>');
     }
-    case '{color}': return [...names(['green', 'red', 'orange', 'yellow', 'white', 'grey'], 'colour', 'co'), ...hint('or #rrggbb')];
+    case '{color}': return [...names(panelPresets(P()).map((x) => x.name).filter(Boolean), 'preset colour', 'cp'),
+      ...names(['green', 'red', 'orange', 'yellow', 'white', 'grey'], 'colour', 'co'), ...hint('or #rrggbb')];
     case '{trig}': {
       // By name (keeps working when triggers move); typing digits refers by number instead.
       const byNumber = /^\d+$/.test(pl);
@@ -1131,7 +1147,7 @@ const KEYWORD_HELP = {
   io: 'An input or output of the Portenta Machine Control (Devices → Machine Control): in0-7, out0-7, io0-11, ai0-2, ao0-3 or the name you gave it.',
 };
 const PART_CLASS = {
-  '{tl}': 'ref', '{sc}': 'ref', '{trig}': 'ref', '{mode}': 'ref', '{mgroup}': 'ref', '{mstate}': 'ref', '{mstep}': 'kw', '{dur}': 'num', '{device}': 'ref', '{pj}': 'ref', '{label}': 'ref', '{pctl}': 'ref', '{flash}': 'kw', '{pval}': 'num', '{logcat}': 'ref', '{proto}': 'kw',
+  '{tl}': 'ref', '{sc}': 'ref', '{trig}': 'ref', '{mode}': 'ref', '{mgroup}': 'ref', '{mstate}': 'ref', '{mstep}': 'kw', '{dur}': 'num', '{device}': 'ref', '{pj}': 'ref', '{label}': 'ref', '{pctl}': 'ref', '{pnl}': 'ref', '{ppage}': 'ref', '{flash}': 'kw', '{pval}': 'num', '{logcat}': 'ref', '{proto}': 'kw',
   '{sec}': 'num', '{pct}': 'num', '{dmx}': 'num', '{port}': 'num', '{count}': 'num', '{pjinput}': 'num',
   '{ip}': 'addr', '{chan}': 'addr', '{fixlist}': 'addr', '{oscaddr}': 'addr', '{email}': 'addr', '{hhmm}': 'addr', '{days}': 'addr', '{color}': 'addr',
   '{onoff}': 'kw', '{loglvl}': 'kw', '{text...}': 'str', '{pc}': 'ref', '{pcaction}': 'kw', '{devname}': 'ref', '{updown}': 'kw',
@@ -1175,6 +1191,8 @@ function partHelp(part, tok, g) {
     }
     case '{pj}': return tok.toLowerCase() === 'all' ? 'All projectors' : findRef(p.projectors, tok) || !findKindGroup('projector', tok) ? ref(p.projectors, 'Projector', (o) => ` · ${o.ip}`) : groupTip(findKindGroup('projector', tok), 'Projector');
     case '{label}': return `Panel label “${tok}”`;
+    case '{pnl}': return tok.toLowerCase() === 'all' ? 'Every touch panel' : `Touch panel “${tok}”`;
+    case '{ppage}': return /^start$/i.test(tok) ? 'The panel’s start page' : `Panel page “${tok}”`;
     case '{pctl}': { const ty = panelControlType(tok); return ty ? `Panel ${{ color: 'colour wheel', xy: 'XY pad' }[ty] || ty} “${tok}”` : `No panel control named '${tok}' (Panel page)`; }
     case '{var}': {
       const v = p.variables.find((x) => x.name.toLowerCase() === tok.toLowerCase());
@@ -1469,6 +1487,8 @@ function builderField(part, val, i) {
     case '{ioval}': return `<input data-bi="${i}" value="${esc(val)}" list="bIoVals" placeholder="on|off|toggle|volts" style="width:110px"><datalist id="bIoVals">${['on', 'off', 'toggle', '5', '10'].map((v) => `<option value="${v}">`).join('')}</datalist>`;
     case '{dpt}': return sel([['1', '1 on/off'], ['3', '3 dim'], ['5.001', '5.001 percent'], ['5.010', '5.010 0-255'], ['7', '7 0-65535'], ['9', '9 float'], ['14', '14 float'], ['17', '17 scene'], ['232', '232 RGB']]);
     case '{label}': return `<input data-bi="${i}" value="${esc(val)}" list="bLabels" placeholder="label name" style="width:140px"><datalist id="bLabels">${panelLabels().map((l) => `<option value="${esc(l)}">`).join('')}</datalist>`;
+    case '{pnl}': return sel([...panelSets().map((x) => [quote(x.name || String(x.id)), x.name || 'Panel ' + x.id]), ...(panelSets().length > 1 ? [['all', 'all panels']] : [])]);
+    case '{ppage}': return sel([['start', 'start page'], ...[...new Set(panelPagesFor(String(builderPanel ?? panelSets()[0]?.name ?? '').replace(/^"|"$/g, '')).map((pg) => pg.name).filter(Boolean))].map((n) => [quote(n), n])]);
     case '{pctl}': return sel([['', '— control —'], ...panelControls().map((n) => [quote(n), `${n} (${panelControlType(n)})`])]);
     case '{flash}': return `<input data-bi="${i}" value="${esc(val)}" list="bFlash" placeholder="on|off|colour" style="width:110px"><datalist id="bFlash">${['on', 'off', 'red', '#ff8800'].map((v) => `<option value="${v}">`).join('')}</datalist>`;
     case '{sec}': return num(0, 3600, 0.1);
@@ -1480,6 +1500,7 @@ function builderField(part, val, i) {
   }
 }
 let builderGroup = null;   // mode group picked in a builder form, for the {mstate} list
+let builderPanel = null;   // touch panel picked in a builder form, for the {ppage} list
 // Script lines with a condition or a command inside them get a form of their own, with a builder for
 // each part ([key, signature, help]); the plain patterns only have a text box there.
 const SCRIPT_FORMS = [
@@ -1576,6 +1597,7 @@ function builderForm(el, grammar, text, onInput, depth = 0) {
       // The group comes first, so the state list can depend on it.
       g.parts.forEach((part, i) => {
         if (part === '{mgroup}') builderGroup = st.values['{mgroup}'] ?? (P().modes[0] ? quote(P().modes[0].name) : '');
+        if (part === '{pnl}') builderPanel = st.values['{pnl}'] ?? null;
         const key = partKey(g, i);
         if (!part.startsWith('{') || st.values[key] != null) return;
         const tmp = document.createElement('div');
@@ -1584,6 +1606,7 @@ function builderForm(el, grammar, text, onInput, depth = 0) {
         st.values[key] = s1 ? s1.options[0]?.value ?? '' : DEFAULTS[part] ?? '';
       });
       if (g.parts.includes('{mgroup}')) builderGroup = st.values['{mgroup}'];
+      if (g.parts.includes('{pnl}')) builderPanel = st.values['{pnl}'];
     }
     const groups = forms.length ? { Scripting: [] } : {};
     grammar.forEach((x, i) => { if (!skip(x)) (groups[category(x)] ||= []).push([x, i]); });
@@ -1639,6 +1662,11 @@ function builderForm(el, grammar, text, onInput, depth = 0) {
         // A different group has different states: rebuild the state list.
         builderGroup = f.value;
         st.values['{mstate}'] = null;
+        draw();
+      }
+      if (part === '{pnl}' && f.value !== builderPanel) {
+        builderPanel = f.value;
+        st.values['{ppage}'] = null;
         draw();
       }
       onInput();

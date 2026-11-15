@@ -205,6 +205,10 @@ const char* mimeType(const String& p) {
   if (p.endsWith(".webp")) return "image/webp";
   if (p.endsWith(".gif")) return "image/gif";
   if (p.endsWith(".ico")) return "image/x-icon";
+  if (p.endsWith(".pdf")) return "application/pdf";
+  // Map documents read as text by the viewer (never shown by the browser as a page of their own).
+  if (p.endsWith(".txt") || p.endsWith(".md") || p.endsWith(".csv") || p.endsWith(".drawio") || p.endsWith(".dio") || p.endsWith(".xml"))
+    return "text/plain; charset=utf-8";
   return "application/octet-stream";
 }
 
@@ -390,20 +394,24 @@ void sendLatest(const char* data, size_t len, void* ctx) {
   sendText(*(EthernetClient*)ctx, 200, "application/json", data, len);
 }
 
-// Media file name: letters, digits, '.', '-', '_' only, and an image extension.
+// Media file name: letters, digits, '.', '-', '_' only, and an image extension - or one of the
+// documents a map can carry (draw.io schematics, PDFs, text, Office files: app-docs.js).
 bool mediaName(const String& n) {
   if (!n.length() || n.length() > 64 || n[0] == '.') return false;
   for (size_t i = 0; i < n.length(); i++)
     if (!isalnum(n[i]) && n[i] != '.' && n[i] != '-' && n[i] != '_') return false;
   String l = n;
   l.toLowerCase();
-  return l.endsWith(".png") || l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".webp") || l.endsWith(".gif") || l.endsWith(".svg");
+  static const char* const kExt[] = { ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".pdf", ".drawio", ".dio", ".xml",
+                                      ".txt", ".md", ".csv", ".docx", ".xlsx", ".pptx" };
+  for (const char* e : kExt) if (l.endsWith(e)) return true;
+  return false;
 }
 
 // PUT /api/media?name=plan.jpg - streamed straight to the stick (images can be MBs).
 void handleMediaPut(EthernetClient& c, const String& name, size_t len) {
   if (!Storage::mounted()) { sendResult(c, false, "No storage device"); return; }
-  if (!mediaName(name)) { sendResult(c, false, "Bad file name (letters, digits, . - _ and an image extension)"); return; }
+  if (!mediaName(name)) { sendResult(c, false, "Bad file name (letters, digits, . - _ and an image or document extension)"); return; }
   if (!len || len > KD_MAX_UPLOAD) { sendResult(c, false, "File too big (max " + String(KD_MAX_UPLOAD / 1048576) + " MB)"); return; }
   String path = String(KD_MEDIA_DIR) + "/" + name;
   String tmp = path + ".part";

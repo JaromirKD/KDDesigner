@@ -21,7 +21,19 @@ function panelList(proj) {
 }
 function panelPagesOf(proj, id) {
   const first = panelList(proj)[0].id;
-  return (proj?.panel?.pages || []).filter((pg) => (pg.panel ?? first) === id);
+  return (proj?.panel?.pages || []).filter((pg) => (pg.panel ?? first) === id && !pg.shared);
+}
+// A panel's shared part (a page with shared: true, at most one per panel): its controls (a logo,
+// the clock, a Home button) show on every page of that panel, in a band at the top or, with
+// sharedAt "bottom", at the bottom. A page with noShared leaves it out. Not a page you can go to.
+// Where it goes (sharedAt): '' top, bottom, left, right; a side column is sharedWidth px wide.
+// Its bg (like a page's) colours only the band / column.
+const PANEL_SHARED_AT = [['', 'top'], ['bottom', 'bottom'], ['left', 'left column'], ['right', 'right column']];
+const panelSharedSide = (sh) => sh?.sharedAt === 'left' || sh?.sharedAt === 'right';
+const panelSharedWidth = (sh) => Math.max(80, +sh?.sharedWidth || 240);
+function panelSharedOf(proj, id) {
+  const first = panelList(proj)[0].id;
+  return (proj?.panel?.pages || []).find((pg) => (pg.panel ?? first) === id && pg.shared) || null;
 }
 const panelUrl = (pn) => `/panel?p=${encodeURIComponent(pn.id)}`;
 // The panel theme (project.panel.theme holds only what differs). Colours of controls come from
@@ -38,6 +50,21 @@ const PANEL_THEMES = {
 };
 // The theme setting a control type takes its colour from.
 const PANEL_TYPE_COLOR = { button: 'button', toggle: 'toggle', slider: 'accent', dial: 'accent', xy: 'accent', label: 'label', clock: 'label', group: 'border', radio: 'accent', led: 'toggle', number: 'label' };
+// Preset colours (project.panel.colors [{name, color}]; none = PANEL_PRESETS): swatches next to every
+// control's colour on the Panel page, and names that "panel X color <name>" / "flash <name>" take.
+const PANEL_PRESETS = [
+  { name: 'Go', color: '#3a7d44' }, { name: 'Stop', color: '#b3261e' }, { name: 'Warning', color: '#d9822b' }, { name: 'Yellow', color: '#c9a400' },
+  { name: 'Blue', color: '#2f6fd6' }, { name: 'Purple', color: '#7b4bc4' }, { name: 'Grey', color: '#555c69' }, { name: 'Dark', color: '#22262e' },
+];
+// Where the presets come from: panel.html sets it to its project, the editor (app-system.js) to P().
+let panelPresetSource = () => null;
+const panelPresets = (proj = panelPresetSource()) => (Array.isArray(proj?.panel?.colors) ? proj.panel.colors : PANEL_PRESETS);
+// A colour as an action gave it: a preset's name becomes its colour, anything else (red, #rrggbb) stays.
+function panelColorOf(v) {
+  if (!v || v[0] === '#') return v;
+  const n = String(v).toLowerCase();
+  return panelPresets().find((x) => (x.name || '').toLowerCase() === n)?.color || v;
+}
 const panelTheme = (t) => ({ ...PANEL_THEME, ...(t || {}) });
 const panelThemeColor = (t, type) => panelTheme(t)[PANEL_TYPE_COLOR[type]] || '';
 function panelThemeVars(t) {
@@ -146,8 +173,8 @@ function panelCtlState(c, st) {
     text = text ? `${text} ${v}` : String(v);
   }
   return {
-    text, color: l.color || c.color || '',
-    flash: l.flash || '', disabled: l.disabled ?? !!c.disabled, locked: follow ? true : l.locked ?? !!c.readonly, follow,
+    text, color: panelColorOf(l.color) || c.color || '',
+    flash: l.flash && l.flash !== 'on' ? panelColorOf(l.flash) : l.flash || '', disabled: l.disabled ?? !!c.disabled, locked: follow ? true : l.locked ?? !!c.readonly, follow,
     value: follow ? min + follow.f * (max - min) : mine ? loc.value : panelLinkedValue(c, st?.vars || {}, l.value ?? c.value), hsv: mine ? loc.hsv : null,
   };
 }

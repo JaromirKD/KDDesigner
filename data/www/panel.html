@@ -21,6 +21,17 @@
   header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
   header .dot.ok { background: var(--ok); }
   main { flex: 1; overflow: auto; padding: 16px; }
+  /* The panel's shared part (logo, clock, Home button): a band above or below every page. */
+  .shared { padding: 16px 16px 0; }
+  .shared.bot { padding: 0 16px 16px; }
+  .shared[hidden] { display: none; }
+  /* A shared part as a column: the page scrolls next to it. A band/column with its own
+     background gets the same padding all round, so its controls don't touch its edge. */
+  #mid { flex: 1; display: flex; min-height: 0; }
+  #mid > main { min-width: 0; }
+  .shared.side { flex: 0 0 auto; overflow: auto; padding: 16px 0 16px 16px; }
+  .shared.side.right { padding: 16px 16px 16px 0; }
+  .shared.own { padding: 16px; }
   /* The panel theme (--p-*, set on body by render) wins over these defaults. */
   body { background: var(--p-bg, var(--bg)); color: var(--p-text, var(--text)); }
   header { border-color: var(--p-border, var(--border)); }
@@ -43,7 +54,9 @@
 </head>
 <body>
 <header><h1 id="title">KD Panel</h1><span id="mode" hidden></span><span class="dot" id="conn" title="connection"></span></header>
-<main id="main"><p class="empty">Loading…</p></main>
+<section id="sharedTop" class="shared" hidden></section>
+<div id="mid"><section id="sharedLeft" class="shared side" hidden></section><main id="main"><p class="empty">Loading…</p></main><section id="sharedRight" class="shared side right" hidden></section></div>
+<section id="sharedBot" class="shared bot" hidden></section>
 <div id="black"></div>
 <script src="panel-ui.js"></script>
 <script>
@@ -57,6 +70,7 @@ let project = null, status = null, pageId = null, unlocked = new Set(), lastStat
 let cameFrom = null;
 const $ = (s) => document.querySelector(s);
 const esc = pEsc;
+panelPresetSource = () => project;
 // Which panel this is: ?p=<id or name>, else the first.
 const wanted = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
 const panelNow = () => { const l = panelList(project); return l.find((x) => String(x.id) === wanted || (x.name || '').toLowerCase() === wanted) || l[0]; };
@@ -65,6 +79,17 @@ const page = () => pages().find((p) => p.id === pageId) || pages()[0];
 const isOpen = (pg) => !pg.pin || unlocked.has(String(pg.pin));
 const showing = () => page() && isOpen(page());
 const startId = () => panelNow().start ?? pages()[0]?.id;
+const shared = () => (project ? panelSharedOf(project, panelNow().id) : null);
+// Where the shared part shows now (null: none, or this page leaves it out).
+const SHARED_EL = { '': '#sharedTop', bottom: '#sharedBot', left: '#sharedLeft', right: '#sharedRight' };
+const sharedEls = () => Object.values(SHARED_EL).map((s) => $(s));
+const sharedRoot = () => { const sh = shared(), pg = page(); return sh && pg && !pg.noShared ? $(SHARED_EL[sh.sharedAt || ''] || SHARED_EL['']) : null; };
+// Live state into everything shown: the page and the shared part.
+function updateAll() {
+  if (showing()) panelUpdate($('#main'), page(), status);
+  const r = sharedRoot();
+  if (r) panelUpdate(r, shared(), status);
+}
 
 // Events go out one at a time, in order. A change still waiting is replaced by a newer one
 // of the same control, so a slow network never queues up old slider positions.
@@ -91,9 +116,33 @@ async function pump() {
   sending = false;
 }
 
+// The page this browser showed last, per panel, so a refresh (or the tablet's browser restarting)
+// comes back on it. Per browser: two tablets on the same panel each keep their own. A PIN page
+// still asks for its PIN after a refresh (unlocked is not kept).
+const lastKey = () => `kd.panelPage.${panelNow().id}`;
+function rememberPage(id) { try { localStorage.setItem(lastKey(), String(id)); } catch { /* private mode */ } }
+function rememberedPage() {
+  let v = null;
+  try { v = localStorage.getItem(lastKey()); } catch { /* private mode */ }
+  return pages().find((p) => String(p.id) === v)?.id ?? startId();
+}
+
 function render() {
   const pg = page();
+  if (pg) rememberPage(pg.id);
   document.body.style.cssText = panelThemeVars(project?.panel?.theme) + panelPageBg(pg);
+  // The shared part: also above a PIN question (it is on every page anyway).
+  const sr = sharedRoot();
+  const sh = shared();
+  for (const el of sharedEls()) {
+    const on = el === sr, bg = on && /^#[0-9a-f]{6}$/i.test(sh.bg || '') ? sh.bg : '';
+    el.hidden = !on;
+    el.classList.toggle('own', !!bg);
+    el.style.background = bg;
+    el.style.width = on && panelSharedSide(sh) ? panelSharedWidth(sh) + 'px' : '';
+    el.innerHTML = on ? panelPageHtml(sh, status, false, project.panel.theme) : '';
+  }
+  if (sr) panelUpdate(sr, shared(), status);
   if (!pg) { $('#main').innerHTML = '<p class="empty">No panel pages yet - add them on the Panel page of KD Designer.</p>'; return; }
   if (!isOpen(pg)) return askPin(pg);
   $('#main').innerHTML = panelPageHtml(pg, status, false, project.panel.theme);
@@ -142,10 +191,13 @@ function askPin(pg) {
 
 // press / release fire immediately; click fires on release over the button,
 // after the confirm question (if any) is answered "Ja". A toggle then flips and sends "change".
-$('#main').addEventListener('pointerdown', (e) => {
+// The same on the page (#main) and the shared part: getPg gives the controls of each.
+function wire(root, getPg) {
+root.addEventListener('pointerdown', (e) => {
   const b = e.target.closest('.pbtn[data-i]');
   if (!b || b.classList.contains('p-dis') || b.classList.contains('p-lock')) return;
-  const c = page().controls[+b.dataset.i];
+  const c = getPg()?.controls[+b.dataset.i];
+  if (!c) return;
   b.classList.add('down');
   b.setPointerCapture(e.pointerId);
   send(c, 'press');
@@ -160,10 +212,10 @@ $('#main').addEventListener('pointerdown', (e) => {
     if (c.type === 'toggle') {
       const v = +panelCtlState(c, status).value > 0 ? 0 : 1;
       panelLocal[String(c.name || '').toLowerCase()] = { value: v, until: Date.now() + 1500 };
-      panelUpdate($('#main'), page(), status);
+      updateAll();
       send(c, 'change', v);
     }
-    if (c.goto) {
+    if (c.goto && c.goto !== page()?.id) {
       // Going back to the start page "logs out" of the PIN pages, so the next visitor needs
       // the PIN again. Moving between pages with the same PIN (Technician -> Groups -> back)
       // keeps them unlocked.
@@ -176,16 +228,19 @@ $('#main').addEventListener('pointerdown', (e) => {
   b.addEventListener('pointerup', up, { once: true });
   b.addEventListener('pointercancel', up, { once: true });
 });
-panelDrag($('#main'), () => (showing() ? page() : null), () => status, send);
+panelDrag(root, getPg, () => status, send);
 // Radio group: touching a choice lights it and sends "change" with its text (again too, when it is lit already).
-$('#main').addEventListener('click', (e) => {
+root.addEventListener('click', (e) => {
   const o = e.target.closest('.popt[data-o]'), el = o?.closest('.pradio[data-i]');
-  if (!el || !showing() || el.classList.contains('p-dis') || el.classList.contains('p-lock')) return;
-  const c = page().controls[+el.dataset.i];
+  const c = el && getPg()?.controls[+el.dataset.i];
+  if (!c || el.classList.contains('p-dis') || el.classList.contains('p-lock')) return;
   panelLocal[String(c.name || '').toLowerCase()] = { value: o.dataset.o, until: Date.now() + 1500 };
-  panelUpdate($('#main'), page(), status);
+  updateAll();
   send(c, 'change', o.dataset.o);
 });
+}
+wire($('#main'), () => (showing() ? page() : null));
+for (const el of sharedEls()) wire(el, () => (sharedRoot() === el ? shared() : null));
 
 // "Go black after" (this panel's setting, seconds; none = never): nobody touched the panel for
 // that long -> a black screen. The first touch only brings the panel back: the black stays in
@@ -215,7 +270,7 @@ function tickClock() {
 }
 setInterval(tickClock, 1000);
 // Controls that follow a timeline move between statuses too.
-setInterval(() => { if (showing() && status && page().controls.some((c) => c.follow)) panelUpdate($('#main'), page(), status); }, 200);
+setInterval(() => { if (status && [page(), shared()].some((x) => x?.controls.some((c) => c.follow))) updateAll(); }, 200);
 setInterval(() => $('#conn').classList.toggle('ok', Date.now() - lastStatusAt < 4000), 1000);
 
 // The project was saved/reloaded on the controller: fetch the new pages, PINs and
@@ -232,6 +287,30 @@ async function reloadProject() {
   } catch { projectVersion = -1; /* mismatch: retried on the next status */ }
 }
 
+// "panel <panel|all> page <page|start>" actions (status panelGo: {page, n} per panel name or "all"):
+// the newest one for this panel switches pages. The first status only notes where they stand, so
+// opening or reloading the panel doesn't jump to a page an older action asked for.
+let goSeen = null;
+function followGo() {
+  const me = panelNow(), names = new Set([String(me.id), (me.name || '').toLowerCase(), 'all']);
+  let best = null;
+  for (const [k, v] of Object.entries(status.panelGo || {})) if (names.has(k.toLowerCase()) && (!best || v.n > best.n)) best = v;
+  if (goSeen === null || !best || best.n <= goSeen) { goSeen = Math.max(goSeen ?? 0, best?.n ?? 0); return; }
+  goSeen = best.n;
+  const want = String(best.page || '').toLowerCase();
+  const to = want === 'start' ? pages().find((p) => p.id === startId()) : pages().find((p) => String(p.id) === want || (p.name || '').toLowerCase() === want);
+  if (!to) return;
+  // The start page locks the PIN pages again, like a go-to button. But the controller sent it
+  // there (a trigger), so the page itself opens without its PIN (also when already showing it);
+  // other pages with the same PIN open too, until the panel goes black or back to the start.
+  if (to.id === startId()) unlocked.clear();
+  const pin = to.pin ? String(to.pin) : '', wasOpen = !pin || unlocked.has(pin);
+  if (pin) unlocked.add(pin);
+  if (to.id === page()?.id && wasOpen) return;
+  if (to.id !== page()?.id) { cameFrom = page()?.id; pageId = to.id; }
+  render();
+}
+
 function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('status', (e) => {
@@ -242,15 +321,17 @@ function connect() {
       projectVersion = status.projectVersion;
       if (!first) { reloadProject(); return; }
     }
+    followGo();
     // One pill per mode group ("Curtains: Open"), in the state's colour and icon (Modes page).
-    const modes = Object.entries(status.modes || {}).filter(([, v]) => v);
+    const want = new Set((panelNow().modes || []).map((m) => String(m).toLowerCase()));
+    const modes = Object.entries(status.modes || {}).filter(([g, v]) => v && want.has(g.toLowerCase()));
     $('#mode').hidden = !modes.length;
     $('#mode').innerHTML = modes.map(([g, v]) => {
       const info = (project.modes || []).find((x) => x?.name === g)?.stateInfo?.[v] || {};
       return `<span class="mode${info.color ? ' mcol' : ''}"${info.color ? ` style="--mc:${esc(info.color)}"` : ''}>${info.icon ? esc(info.icon) + ' ' : ''}${esc(modes.length > 1 ? `${g}: ${v}` : v)}</span>`;
     }).join('');
     // Patched in place, so a slider being dragged or an open confirm question stays.
-    if (showing()) panelUpdate($('#main'), page(), status);
+    updateAll();
   });
   es.onerror = () => { es.close(); setTimeout(connect, 2000); };
 }
@@ -259,7 +340,7 @@ function connect() {
   try {
     project = await (await fetch('/api/project')).json();
     document.title = $('#title').textContent = panelNow().title || project.name || 'KD Panel';
-    pageId = startId();
+    pageId = rememberedPage();
   } catch {
     $('#main').innerHTML = '<p class="empty">Cannot load the project.</p>';
     return;

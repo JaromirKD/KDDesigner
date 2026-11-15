@@ -42,6 +42,9 @@ uint32_t secondsIn(int g);                      // how long the group has been i
 // what: text | color | flash ("" off, "on", or a colour) | value | disabled / locked ("1" / "0", "" = as the
 // Panel page sets it) | reset (back to the project).
 void setControl(const String& name, const String& what, const String& value);
+// panel <panel|all> page <page|start>: the touch panels switch pages when they see it in the
+// status ("panelGo", one entry per panel name with a counter, so the same page again also switches).
+void panelGo(const String& panel, const String& page);
 
 bool findDevice(const String& name, IPAddress& ip, uint16_t& port);
 // Device group by name: the address of each of its devices (send udp/osc <group> ...).

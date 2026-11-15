@@ -323,6 +323,11 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .map-part.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .map-part-lbl { position: absolute; left: 4px; top: 3px; font-size: 12px; color: var(--text); text-shadow: 0 0 3px var(--deep); pointer-events: none; white-space: nowrap; }
 .part-h { position: absolute; right: -7px; bottom: -7px; width: 13px; height: 13px; border-radius: 3px; background: var(--accent); border: 1px solid var(--deep); cursor: nwse-resize; }
+/* the map list: drag a map up or down; the line shows where it goes */
+.map-tree { position: relative; }
+.map-tree .item { user-select: none; }
+.map-tree .item.dragging { opacity: .45; }
+.map-drop { position: absolute; left: 0; right: 0; height: 2px; background: var(--accent); pointer-events: none; z-index: 2; }
 .map-tree .item .kind { width: 16px; text-align: center; color: var(--muted); }
 /* A marker's box is only its dot (the name hangs under it), so the dot's centre is the position. */
 .mfx { position: absolute; transform: translate(-50%, -50%) scale(var(--s, 1)); display: flex; flex-direction: column; align-items: center; cursor: grab; z-index: 1; }
@@ -1024,6 +1029,10 @@ span.mem-ok { color: var(--ok); } span.mem-warn { color: var(--warn); } span.mem
 
 /* touch panel preview (the controls are in panel.css; the panel is always dark, in any theme) */
 .panel-preview { background: var(--p-bg, #0b0c10); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.panel-pv-row { display: flex; gap: 6px; align-items: flex-start; }
+.panel-pv-row > .panel-preview { flex: 1; min-width: 0; }
+.panel-ghost.side { flex: 0 0 auto; margin: 0; }
+.panel-ghost { background: var(--p-bg, #0b0c10); border: 1px dashed var(--border); border-radius: 8px; padding: 12px; margin: 6px 0; opacity: .5; pointer-events: none; }
 .panel-preview .pctl * { pointer-events: none; }
 .panel-preview .pgrip { pointer-events: auto; }
 .psize input { width: 52px; }
@@ -1077,6 +1086,9 @@ details.ptheme summary .muted { font-weight: normal; font-size: 12px; }
 .ptheme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 14px; font-size: 13px; }
 .ptheme-grid label { display: flex; align-items: center; gap: 6px; }
 .ptheme-grid input[type=number] { width: 70px; }
+.ppre { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 3px; max-width: 120px; }
+.ppre button { width: 13px; height: 13px; padding: 0; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
+.ppre button.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 tr.psub td { border-top: 0; padding-top: 0; }
 .psub .row { gap: 6px 10px; font-size: 12px; }
 .psub input[type=number] { width: 64px; }
@@ -1316,3 +1328,31 @@ tr.vgroup a:hover { text-decoration: underline; }
 .lv-devgroups .lv-group:first-child { margin-top: 0; }
 .lv-devgroups .lv-devs { margin-top: 5px; }
 .lv-off { color: var(--err); text-transform: none; letter-spacing: 0; }
+
+/* Documents on maps (app-docs.js): pins like device markers, and the viewer. */
+.mdoc { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; cursor: grab; z-index: 2; }
+.mdoc .box { width: 26px; height: 28px; box-sizing: border-box; border-radius: 6px; display: grid; place-items: center; border: 1.5px solid var(--border); background: var(--panel); box-shadow: 0 1px 4px var(--shadow); }
+.mdoc .lbl { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 10px; white-space: nowrap; color: var(--text); text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
+:root[data-theme=light] .mdoc .lbl { text-shadow: 0 0 3px #fff, 0 0 2px #fff; }
+.mdoc.sel .box { outline: 2px solid var(--accent); outline-offset: 3px; }
+.mdoc.sel .lbl { color: var(--accent); font-weight: 600; }
+.live-map .mdoc { cursor: pointer; }
+.live-map .mdoc:hover .box, .map-canvas .mdoc:hover .box { border-color: var(--accent); }
+.map-canvas.shape-mode .mdoc, .map-canvas.part-mode .mdoc { pointer-events: none; opacity: .45; }
+.doc-ic { flex: none; vertical-align: middle; }
+.map-docs .item { gap: 6px; cursor: grab; }
+.doc-ov { position: fixed; inset: 0; z-index: 1500; background: rgba(0, 0, 0, .6); display: flex; padding: 24px; }
+.doc-win { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 40px #0008; overflow: hidden; }
+.doc-head { padding: 8px 10px; gap: 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.doc-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+.doc-pages:empty { display: none; }
+.doc-zoom { display: inline-flex; gap: 4px; }
+.doc-zoom[hidden] { display: none; }
+.doc-body { flex: 1; min-height: 0; position: relative; background: var(--deep); }
+.doc-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.doc-svg.paper { background: #fff; }
+.doc-svg.panning { cursor: grabbing; }
+.doc-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+.doc-text { position: absolute; inset: 0; margin: 0; padding: 12px 16px; overflow: auto; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; color: var(--text); }
+.doc-msg { padding: 24px; }
+.doc-head a.btn, .map-selbar a.btn { text-decoration: none; color: var(--text); }

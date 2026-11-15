@@ -47,6 +47,8 @@ const DEVICE_ICONS = {
   // A finger tapping (shape after the Lucide "pointer" icon).
   panel: ['Touch panel', '<path d="M22 14a8 8 0 0 1-8 8M18 11v-1a2 2 0 0 0-4 0M14 10V9a2 2 0 0 0-4 0v1M10 9.5V4a2 2 0 0 0-4 0v10"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>', ''],
   trigger: ['Another trigger (fire / repeat trigger)', '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>', ''],
+  // Three stage lights.
+  scene: ['Scene', '<path d="M3 20h18"/><path d="M6 6h3l1 6H5zM10.5 4h3l1 6h-5zM15 6h3l1 6h-5z"/><path d="M7.5 12v8M12 10v10M16.5 12v8"/>', ''],
   timeline: ['Timeline', '<path d="M2 12h20"/><path d="M8 8.5 11.5 12 8 15.5 4.5 12zM16 9.5l2.5 2.5-2.5 2.5-2.5-2.5z"/>', ''],
   dmx: ['DMX input', '<circle cx="12" cy="12" r="8.5"/><path d="M8 10.5h.01M16 10.5h.01M12 8h.01M9.5 15h.01M14.5 15h.01"/>', ''],
   device: ['Device', '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 15h.01M12 15h.01"/>', ''],
@@ -150,7 +152,7 @@ function dateWords(s) {
   return `${d} ${MONTHS[m - 1] || '?'}${y ? ' ' + y : ''}`;
 }
 const PLACEHOLDER = {
-  '{mode}': '<mode>', '{mgroup}': '<mode group>', '{mstate}': '<state>', '{mstep}': 'next|previous|toggle|back', '{dur}': '<time: 90, 30s, 10m, 2h>','{label}': '<label>', '{pctl}': '<panel control>', '{flash}': 'on|off|<colour>', '{pval}': '<value | #rrggbb | x,y>', '{color}': '<colour>', '{trig}': '<trigger name or #>', '{count}': '<count>',
+  '{mode}': '<mode>', '{mgroup}': '<mode group>', '{mstate}': '<state>', '{mstep}': 'next|previous|toggle|back', '{dur}': '<time: 90, 30s, 10m, 2h>','{label}': '<label>', '{pctl}': '<panel control>', '{pnl}': '<touch panel>', '{ppage}': '<panel page>', '{flash}': 'on|off|<colour>', '{pval}': '<value | #rrggbb | x,y>', '{color}': '<colour>', '{trig}': '<trigger name or #>', '{count}': '<count>',
   '{email}': '<to address>', '{device}': '<device>', '{oscaddr}': '</osc/address>', '{hhmm}': '<HH:MM>', '{days}': '<mon,tue,…>',
   '{tl}': '<timeline>', '{sc}': '<scene>', '{sec}': '<seconds>', '{pct}': '<0-100>', '{dmx}': '<0-255>',
   '{chan}': '<universe>.<ch>[-<ch>]', '{fixlist}': '<fixture numbers, e.g. 3,5,8-12>', '{ip}': '<ip address>', '{port}': '<port>', '{text...}': '<text>',
@@ -210,12 +212,16 @@ function normalize(p) {
   p.maps.forEach((m) => { m.items = m.items || []; m.aspect = m.aspect || 1.6; m.shapes = m.shapes || []; delete m.square; });
   // Device markers (app-rig.js m.devices, by name): a device that is gone takes its marker along.
   p.maps.forEach((m) => { if (m.devices) m.devices = m.devices.filter((d) => (p[d.list] || []).some((x) => x.name === d.name)); });
+  // Map documents (app-docs.js m.docs): an entry without a file is dropped.
+  p.maps.forEach((m) => { if (m.docs) { m.docs = m.docs.filter((d) => d?.file); if (!m.docs.length) delete m.docs; } });
   // Rooms on a floor (m.parts): drop the ones whose map is gone.
   p.maps.forEach((m) => { if (m.parts) { m.parts = m.parts.filter((pt) => pt.map !== m.id && p.maps.some((x) => x.id === pt.map)); if (!m.parts.length) delete m.parts; } });
   p.panel = p.panel || { pages: [] };
   p.panel.pages = p.panel.pages || [];
   p.panel.pages.forEach((pg) => (pg.controls = pg.controls || []));
   p.panel.theme = p.panel.theme || {};   // panel-ui.js PANEL_THEME: only what differs from the default
+  // Preset colours (panel-ui.js PANEL_PRESETS until the show has its own), editable on the Panel page.
+  if (!Array.isArray(p.panel.colors)) p.panel.colors = PANEL_PRESETS.map((x) => ({ ...x }));
   // Several panels (panelList in panel-ui.js): an old project's title / start page become its
   // first panel, and every page gets the panel it belongs to.
   if (!p.panel.panels?.length) {
@@ -675,6 +681,15 @@ function onBound(e) {
       const n = renameTimelineRefs(old, el.value);
       if (n) toast(`Updated ${n} reference${n > 1 ? 's' : ''} to the new name`);
     }
+  }
+  // Renaming a touch panel, page or control (app-system.js): trigger lines and twins follow.
+  const pnRename = /^panel\.(panels\.\d+|pages\.(\d+)|pages\.(\d+)\.controls\.\d+)\.name$/.exec(el.dataset.p);
+  if (pnRename && e.type === 'change' && el.dataset.orig != null) {
+    const old = el.dataset.orig;
+    el.dataset.orig = el.value;
+    const what = pnRename[1].startsWith('panels') ? 'panel' : pnRename[3] != null ? 'control' : 'page';
+    const n = renamePanelRefs(what, old, el.value, what === 'page' ? P().panel.pages[+pnRename[2]] : null);
+    if (n > 0) toast(`Updated ${n} reference${n > 1 ? 's' : ''} to the new name`);
   }
   if (before && e.type === 'change') {
     const t = P().triggers[+rename[1]];

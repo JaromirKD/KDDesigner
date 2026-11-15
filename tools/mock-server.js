@@ -1640,6 +1640,8 @@ const pcLast = {};
 let projectVersion = 0;   // like Show::parse: bumps on every load
 const labels = {};   // live state of panel controls by name (State.cpp "labels"): text color flash value disabled locked
 // A control's state, by name in any case (the first spelling is kept, like State::label).
+const panelGo = {};   // panel <panel|all> page <page> (State::panelGo): {page, n} per panel name
+let panelGoN = 0;
 const ctl = (name) => labels[Object.keys(labels).find((k) => k.toLowerCase() === String(name).toLowerCase()) ?? name] ??= {};
 let scheduled = [];   // {id, due, every, remaining, count, vars}
 // Trigger by number or name (separators excluded), like Triggers::findId
@@ -1822,6 +1824,13 @@ function execLine(line, src, vars) {
     if (w[2] === 'color' && t.length === 4) { ctl(t[1]).color = t[3]; r = `Label ${t[1]} colour ${t[3]}`; }
     else { ctl(t[1]).text = t.slice(2).join(' '); r = `Label ${t[1]} = ${ctl(t[1]).text}`; }
     pushStatus();
+  } else if (w[0] === 'panel' && t.length >= 4 && w[2] === 'page') {
+    // Like State::panelGo: the panels switch when they see a newer n for their name (or "all").
+    if (w[1] === 'all') for (const k in panelGo) delete panelGo[k];
+    const k = Object.keys(panelGo).find((x) => x.toLowerCase() === w[1]) ?? t[1];
+    panelGo[k] = { page: t.slice(3).join(' '), n: ++panelGoN };
+    r = `Panel ${t[1]} to page ${panelGo[k].page}`;
+    pushStatus();
   } else if (w[0] === 'panel' && t.length >= 3) {
     // Like Cmd.cpp: panel <control> text|color|flash|value|enable|disable|lock|unlock|reset
     const c = ctl(t[1]), n = t[1];
@@ -1832,7 +1841,7 @@ function execLine(line, src, vars) {
     else if ((w[2] === 'enable' || w[2] === 'disable') && t.length === 3) { c.disabled = w[2] === 'disable'; r = `Panel ${n} ${w[2]}d`; }   // false: enable also frees one ticked "disabled"
     else if ((w[2] === 'lock' || w[2] === 'unlock') && t.length === 3) { c.locked = w[2] === 'lock'; r = `Panel ${n} ${w[2]}ed`; }
     else if (w[2] === 'reset' && t.length === 3) { for (const k of ['text', 'color', 'flash', 'disabled', 'locked']) delete c[k]; r = `Panel ${n} reset`; }
-    else throw new Error('expected: panel <control> text|color|flash|value|enable|disable|lock|unlock|reset');
+    else throw new Error('expected: panel <control> text|color|flash|value|enable|disable|lock|unlock|reset, or panel <panel> page <page>');
     pushStatus();
   } else if (w[0] === 'fire' && w[1] === 'trigger' && (t.length === 3 || (t.length === 5 && w[3] === 'after'))) {
     const tr = trigRef(t[2]);
@@ -2383,6 +2392,7 @@ function loadProject() {
   projectVersion++;
   watched.clear();
   for (const k in labels) delete labels[k];
+  for (const k in panelGo) delete panelGo[k];
   modeLoad();
   monInterval = project.settings?.monitor?.interval || 60;
   loadVars();
@@ -2584,8 +2594,8 @@ http.createServer(async (req, res) => {
     return u ? json(res, 200, [...u]) : json(res, 404, []);
   }
   if (p === '/api/time') { clock = +(await body(req)); log(1, 'SYS', 'Clock set from browser'); return json(res, 200, { ok: true, reply: 'Clock set' }); }
-  // Uploaded images (map backgrounds), like /api/media + /media/ on the controller.
-  const okName = (n) => /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$/.test(n || '') && /\.(png|jpe?g|webp|gif|svg)$/i.test(n);
+  // Uploaded images (map backgrounds) and map documents, like /api/media + /media/ on the controller.
+  const okName = (n) => /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$/.test(n || '') && /\.(png|jpe?g|webp|gif|svg|pdf|drawio|dio|xml|txt|md|csv|docx|xlsx|pptx)$/i.test(n);
   if (p === '/api/media' && req.method === 'DELETE') {
     const n = url.searchParams.get('name');
     const ok = okName(n) && fs.existsSync(path.join(MEDIA, n));
@@ -2594,11 +2604,11 @@ http.createServer(async (req, res) => {
   }
   if (p === '/api/media') {
     const n = url.searchParams.get('name');
-    if (!okName(n)) return json(res, 400, { ok: false, reply: 'Bad file name (letters, digits, . - _ and an image extension)' });
+    if (!okName(n)) return json(res, 400, { ok: false, reply: 'Bad file name (letters, digits, . - _ and an image or document extension)' });
     const chunks = [];
     for await (const ch of req) chunks.push(ch);
     const buf = Buffer.concat(chunks);
-    if (buf.length > 4 * 1048576) return json(res, 400, { ok: false, reply: 'File too big (max 4 MB)' });
+    if (buf.length > 16 * 1048576) return json(res, 400, { ok: false, reply: 'File too big (max 16 MB)' });
     fs.mkdirSync(MEDIA, { recursive: true });
     fs.writeFileSync(path.join(MEDIA, n), buf);
     log(1, 'WEB', `Media '${n}' saved (${buf.length} bytes)`);
@@ -2608,7 +2618,7 @@ http.createServer(async (req, res) => {
     const n = p.slice(7);
     if (!okName(n) || !fs.existsSync(path.join(MEDIA, n))) { res.writeHead(404); return res.end('Not found'); }
     const ext = path.extname(n).toLowerCase();
-    res.writeHead(200, { 'Content-Type': { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml' }[ext] });
+    res.writeHead(200, { 'Content-Type': { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.pdf': 'application/pdf' }[ext] || (/^\.(txt|md|csv|drawio|dio|xml)$/.test(ext) ? 'text/plain; charset=utf-8' : 'application/octet-stream') });
     return res.end(fs.readFileSync(path.join(MEDIA, n)));
   }
   if (p.startsWith('/api/')) return json(res, 404, { ok: false, reply: 'unknown endpoint' });
@@ -2716,7 +2726,7 @@ function status() {
     save: { seq: saveSt.seq, written: saveSt.written, busy: now < saveSt.busyUntil, ms: saveSt.ms,
             ...(saveSt.failed > saveSt.written ? { failed: saveSt.failed, error: saveSt.error } : {}) },   // = Storage::saveStatusJson
     stats: { engineFps: 40, ...mockSent(), artRx: 1, sacnRx: 0, udpRx: 0, tickUs: 180 + Math.floor(Math.random() * 40), loopUs: 900, http: httpCount, heap: sampleHeap() },
-    logSeq: seq, project: project.name, projectVersion, gm: Math.round(gm * 100), blackout, outputs, labels,
+    logSeq: seq, project: project.name, projectVersion, gm: Math.round(gm * 100), blackout, outputs, labels, ...(Object.keys(panelGo).length ? { panelGo } : {}),
     modes: Object.fromEntries(modeGroups().map((g) => [g.name, modeCur[g.name] || ''])), mode: modeCur[modeGroups()[0]?.name] || '',
     modeFor: Object.fromEntries(modeGroups().filter((g) => modeCur[g.name]).map((g) => [g.name, modeSecs(g.name)])),
     pcs: (project.pcs || []).map((x) => ({ id: x.id, last: pcLast[x.id] || '' })),

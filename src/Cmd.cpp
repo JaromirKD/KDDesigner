@@ -295,6 +295,13 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
     else { State::setControl(t[1], "text", rest(t, 2)); r = "Label " + t[1] + " = " + rest(t, 2); }
     return true;
   }
+  // panel <panel|all> page <page|start>: the touch panel(s) switch to that page (names are
+  // checked by the panel itself: the firmware keeps no panel pages).
+  if (is(0, "panel") && t.size() >= 4 && is(2, "page")) {
+    State::panelGo(t[1], rest(t, 3));
+    r = "Panel " + t[1] + " to page " + rest(t, 3);
+    return true;
+  }
   // panel <control> text <text> | color <c> | flash on|off|<colour> | value <v> | enable | disable | lock | unlock | reset
   if (is(0, "panel") && t.size() >= 3) {
     const String& n = t[1];
@@ -318,7 +325,7 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
       return true;
     }
     if (is(2, "reset") && t.size() == 3) { State::setControl(n, "reset", ""); r = "Panel " + n + " reset"; return true; }
-    r = "expected: panel <control> text|color|flash|value|enable|disable|lock|unlock|reset";
+    r = "expected: panel <control> text|color|flash|value|enable|disable|lock|unlock|reset, or panel <panel> page <page>";
     return false;
   }
   if (is(0, "fire") && is(1, "trigger") && (t.size() == 3 || (t.size() == 5 && is(3, "after")))) {

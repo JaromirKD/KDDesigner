@@ -34,7 +34,7 @@ views.live = () => {
     // Devices on the map (optional per map): coloured by their state, click opens Monitoring.
     const devs = (m.showDevices !== false ? (m.devices || []).filter(mapDevOf) : []).map((d) => mapDevHtml(d, mapDevOf(d), m.labels !== false, mapDevKey(d) === S.liveDev ? ' sel' : '')).join('');
     body = `<div class="map-wrap"><div class="map-canvas live-map${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="liveCanvas" style="${mapSizeStyle('kd.mapH.live', m.aspect)}">
-      ${mapUnderHtml(m)}${items}${devs}${mapResizeHtml('kd.mapH.live')}</div></div>`;
+      ${mapUnderHtml(m)}${items}${devs}${mapDocPinsHtml(p.maps[stage], false)}${mapResizeHtml('kd.mapH.live')}</div></div>`;
   }
   return `<div class="live" id="live">
     <div class="row lv-top"><h2 style="margin:0">Live</h2><div class="row" id="lvTop" style="flex:1"></div>
@@ -42,7 +42,7 @@ views.live = () => {
     <div class="lv-grid">
       <div class="card lv-stage">
         <div class="row lv-head"><span class="seg">${tabs.map(([v, n]) => `<button data-lvstage="${v}" class="${String(stage) === v ? 'on' : ''}">${esc(n)}</button>`).join('')}</span>
-          <span class="spacer" style="flex:1"></span>${stage === 'all' ? '' : mapZoomHtml(`live:${p.maps[stage].id}`)}</div>
+          <span class="spacer" style="flex:1"></span>${stage === 'all' || !docsOf(p.maps[stage]).length ? '' : `<select id="lvDocs" title="Documents of this map (schematics, manuals…)"><option value="">📄 Documents (${docsOf(p.maps[stage]).length})</option>${p.maps[stage].docs.map((d, i) => (d?.file ? `<option value="${i}">${esc(d.name)} · ${esc(docType(d.file)[1])}</option>` : '')).join('')}</select>`}${stage === 'all' ? '' : mapZoomHtml(`live:${p.maps[stage].id}`)}</div>
         <div id="lvStage">${body}</div>
         <div class="muted mono lv-info" id="lvInfo">Hover a fixture to see its channels.</div>
         <div id="lvDevCard" class="lv-devcard"></div>
@@ -77,6 +77,9 @@ views.live.after = () => {
   // A device on the map: its Monitoring card (with the same buttons and sliders) under the map;
   // clicking it again closes it.
   $('#lvStage').addEventListener('click', (e) => {
+    // A document pin opens the document.
+    const doc = e.target.closest('[data-mdoc]'), dm = p.maps[stage];
+    if (doc) return dm?.docs?.[+doc.dataset.mdoc] && openDoc(dm.docs[+doc.dataset.mdoc]);
     const dv = e.target.closest('[data-mdev]');
     if (!dv) return;
     S.liveDev = S.liveDev === dv.dataset.mdev ? null : dv.dataset.mdev;
@@ -91,6 +94,7 @@ views.live.after = () => {
     if (e.target.closest('#lvDevClose')) { S.liveDev = null; $$('#lvStage .mdev.sel').forEach((n) => n.classList.remove('sel')); return liveDevCard(true); }
     if (e.target.closest('#lvDevMon')) { const [list, ...n] = S.liveDev.split(':'); return openDeviceMonitor(list, n.join(':')); }
   });
+  $('#lvDocs')?.addEventListener('change', (e) => { const d = p.maps[stage].docs?.[+e.target.value]; e.target.value = ''; if (d) openDoc(d); });
   paintMapDevs($('#lvStage'));
   liveDevCard(true);
   // The history strip: a row opens its trigger (on the Triggers page it selects it).

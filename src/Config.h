@@ -39,7 +39,7 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 #define KD_BACKUPS 10
 #define KD_WWW_ROOT "/usb/www"
 #define KD_MEDIA_DIR "/usb/show/media"     // uploaded images (map backgrounds), served at /media/
-#define KD_MAX_UPLOAD (4UL * 1024 * 1024)
+#define KD_MAX_UPLOAD (16UL * 1024 * 1024)
 #define KD_LOG_PATH "/usb/logs/system.log"   // older ones: system.1.log (newest) .. system.4.log
 #define KD_LOG_FILES 5                        // system.log + 4 older files
 #define KD_LOG_MAX_BYTES (8UL * 1024 * 1024)  // per file: ~90 000 lines, so ~450 000 kept in all

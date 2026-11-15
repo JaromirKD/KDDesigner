@@ -26,6 +26,9 @@ struct KindGroup { String kind, name; std::vector<String> members; };   // PCs, 
 
 std::vector<Group> groups;
 std::vector<Label> labels;
+struct PanelGo { String panel, page; uint32_t n; };
+std::vector<PanelGo> panelGos;
+uint32_t panelGoN = 0;   // never reset: a panel remembers the last one it followed
 std::vector<Device> devices;
 std::vector<DeviceGroup> deviceGroups;
 std::vector<KindGroup> kindGroups;
@@ -162,6 +165,7 @@ void load() {
   deviceGroups = std::move(ndg);
   kindGroups = std::move(nkg);
   labels.clear();
+  panelGos.clear();
   ver++;
   mtx.unlock();
   if (changed) persist();
@@ -277,6 +281,19 @@ void setControl(const String& name, const String& what, const String& value) {
   mtx.unlock();
 }
 
+void panelGo(const String& panel, const String& page) {
+  mtx.lock();
+  // "all" goes after the named ones are dropped: it replaces every earlier order.
+  if (panel.equalsIgnoreCase("all")) panelGos.clear();
+  PanelGo* g = nullptr;
+  for (auto& x : panelGos) if (x.panel.equalsIgnoreCase(panel)) g = &x;
+  if (!g) { panelGos.push_back({panel, "", 0}); g = &panelGos.back(); }
+  g->page = page;
+  g->n = ++panelGoN;
+  ver++;
+  mtx.unlock();
+}
+
 bool findDevice(const String& name, IPAddress& ip, uint16_t& port) {
   for (auto& d : devices)
     if (d.name.equalsIgnoreCase(name)) { ip = d.ip; port = d.port; return true; }
@@ -321,6 +338,14 @@ void statusJson(JsonObject o) {
     if (l.value.length()) x["value"] = l.value;
     if (l.disabled.length()) x["disabled"] = l.disabled == "1";
     if (l.locked.length()) x["locked"] = l.locked == "1";
+  }
+  if (!panelGos.empty()) {
+    JsonObject pg = o["panelGo"].to<JsonObject>();
+    for (auto& g : panelGos) {
+      JsonObject x = pg[g.panel].to<JsonObject>();
+      x["page"] = g.page;
+      x["n"] = g.n;
+    }
   }
   mtx.unlock();
 }

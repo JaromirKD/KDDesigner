@@ -122,7 +122,7 @@ function setProjectName(dir, name) {
   fs.writeFileSync(file, JSON.stringify(p, null, 1));
 }
 // .kdshow = { kdshow: 1, exported, project, media: { name: base64 } }, like exportShow() in app-system.js.
-const mediaNames = (p) => [...new Set([...(p.maps || []).map((m) => m.background), ...(p.panel?.pages || []).flatMap((pg) => (pg.controls || []).map((c) => c.type === 'image' && c.image))].filter(Boolean))];
+const mediaNames = (p) => [...new Set([...(p.maps || []).map((m) => m.background), ...(p.maps || []).flatMap((m) => (m.docs || []).map((d) => d.file)), ...(p.panel?.pages || []).flatMap((pg) => (pg.controls || []).map((c) => c.type === 'image' && c.image))].filter(Boolean))];
 function readKdshow(dir) {
   const project = JSON.parse(fs.readFileSync(path.join(dir, 'project.json'), 'utf8'));
   const media = {};

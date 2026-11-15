@@ -190,9 +190,11 @@ const curPanel = () => { const l = P().panel.panels; return l[Math.min(S.sel.pan
 views.panel = () => {
   const p = P(), all = p.panel.pages, pn = curPanel(), si = p.panel.panels.indexOf(pn);
   // Pages of this panel, with their index in panel.pages (paths and S.sel.page use that).
-  const pages = all.map((x, i) => ({ x, i })).filter(({ x }) => x.panel === pn.id);
-  if (!pages.some(({ i }) => i === S.sel.page)) S.sel.page = pages[0]?.i ?? 0;
-  const pi = S.sel.page, pg = pages.length ? all[pi] : null;
+  // The shared part (panelSharedOf) is listed apart: it is not a page to go to.
+  const mine = all.map((x, i) => ({ x, i })).filter(({ x }) => x.panel === pn.id);
+  const pages = mine.filter(({ x }) => !x.shared), sh = mine.find(({ x }) => x.shared);
+  if (!mine.some(({ i }) => i === S.sel.page)) S.sel.page = (pages[0] || sh)?.i ?? 0;
+  const pi = S.sel.page, pg = mine.length ? all[pi] : null, shPg = sh?.x;
   const base = `panel.pages.${pi}`;
   const pageOpts = (sel) => `<option value="">—</option>${pages.map(({ x }) => `<option value="${x.id}"${x.id === sel ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}`;
   return `<h2>Touch panels</h2>
@@ -200,30 +202,41 @@ views.panel = () => {
     <button class="btn small ghost" data-add="panelset" title="Another panel, e.g. one for the operator and one for the technician">+ Panel</button></div>
   <p class="muted">A full-screen control page for a tablet or touchscreen at <code>http://&lt;controller&gt;${panelUrl(pn)}</code>${si === 0 ? ' (or just <code>/panel</code>)' : ''}.
     Buttons, toggles, radio groups, sliders, dials, colour wheels and XY pads fire <b>Panel button</b> triggers (sliders and co. with <code>{value}</code>); they can also set variables directly (a colour wheel or XY pad one per part).
-    Actions change any control by its name: <code>panel &lt;name&gt; flash on</code>, <code>panel &lt;name&gt; text …</code>, <code>color</code>, <code>value</code>, <code>disable</code>, <code>lock</code> / <code>unlock</code> (can't be touched, still looks normal), <code>reset</code>.</p>
+    Actions change any control by its name: <code>panel &lt;name&gt; flash on</code>, <code>panel &lt;name&gt; text …</code>, <code>color</code>, <code>value</code>, <code>disable</code>, <code>lock</code> / <code>unlock</code> (can't be touched, still looks normal), <code>reset</code>;
+    <code>panel &lt;panel&gt; page &lt;page&gt;</code> shows another page (<code>all</code> = every panel, <code>start</code> = its start page).</p>
   <div class="form" style="margin-bottom:12px">
-    <label>Panel name</label><div class="row"><input data-p="panel.panels.${si}.name" value="${esc(pn.name || '')}" placeholder="Panel ${pn.id}" data-r>
+    <label>Panel name</label><div class="row"><input data-p="panel.panels.${si}.name" value="${esc(pn.name || '')}" data-orig="${esc(pn.name || '')}" placeholder="Panel ${pn.id}" data-r>
       <a class="btn small" href="${panelUrl(pn)}" target="_blank" style="text-decoration:none">Open panel ↗</a>
       ${p.panel.panels.length > 1 ? `<button class="btn small ghost" data-pdel="${si}" title="Delete this panel and its pages">Delete panel</button>` : ''}</div>
     <label>Title</label><input data-p="panel.panels.${si}.title" value="${esc(pn.title || '')}" placeholder="${esc(p.name)}" title="Shown at the top of the panel">
     <label>Start page</label><select data-p="panel.panels.${si}.start" data-t="num">${pageOpts(pn.start)}</select>
+    ${p.modes.length ? `<label title="Which mode groups this panel shows at the top right (e.g. Museum: Open). None ticked = none shown">Modes in the header</label>
+    <div class="row">${p.modes.map((g) => `<label class="chk"><input type="checkbox" data-pmode="${esc(g.name)}"${(pn.modes || []).some((m) => m.toLowerCase() === g.name.toLowerCase()) ? ' checked' : ''}> ${esc(g.name)}</label>`).join('')}</div>` : ''}
     <label title="Saves the screen: nobody touched the panel for this long = a black screen. The first touch only brings the panel back, it presses nothing">Go black after</label>
     <div class="row"><input type="number" min="0" style="width:90px" data-p="panel.panels.${si}.sleep" data-t="num" value="${pn.sleep || ''}" placeholder="never"><span class="muted">seconds without a touch (empty = never)</span></div>
   </div>
   ${panelThemeHtml(p.panel.theme)}
+  ${panelPresetsHtml()}
   <div class="split">
-    <div><div class="list">${pages.map(({ x, i }) => `<div class="item${i === pi ? ' sel' : ''}" data-sel="page:${i}"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span>${x.pin ? '<span class="tag">PIN</span>' : ''}</div>`).join('')}</div>
-    <div class="row" style="margin-top:8px"><button class="btn small" data-add="page">+ Page</button></div></div>
+    <div><div class="list">${sh ? `<div class="item${sh.i === pi ? ' sel' : ''}" data-sel="page:${sh.i}" title="Its controls show on every page of this panel"><span class="id">★</span><span style="flex:1">${esc(sh.x.name || 'Shared part')}</span><span class="tag">every page</span></div>` : ''}
+      ${pages.map(({ x, i }) => `<div class="item${i === pi ? ' sel' : ''}" data-sel="page:${i}"><span class="id">${x.id}</span><span style="flex:1">${esc(x.name)}</span>${x.pin ? '<span class="tag">PIN</span>' : ''}${sh && x.noShared ? '<span class="tag" title="Without the shared part">no ★</span>' : ''}</div>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn small" data-add="page">+ Page</button>${sh ? '' : '<button class="btn small" data-pshared title="A band on top (or at the bottom) of every page of this panel: a logo, the clock, a Home button… Add them once instead of on every page">+ Shared part</button>'}</div></div>
     <div>${pg ? `
-      <div class="row"><input data-p="${base}.name" value="${esc(pg.name)}" style="font-size:16px;flex:1">
+      <div class="row"><input data-p="${base}.name" value="${esc(pg.name)}" data-orig="${esc(pg.name || '')}" style="font-size:16px;flex:1">
         <button class="btn small ghost" data-del="${base}">Delete page</button></div>
       <div class="row" style="margin-top:10px">
         <label class="muted">Columns</label><input type="number" min="1" max="12" style="width:70px" data-p="${base}.columns" data-t="num" value="${pg.columns || 3}" data-r>
         <label class="muted" title="Split every cell into smaller ones, for smaller buttons. What is on the page keeps its size; sizes and places are then counted in the small cells">Grid</label><select data-pfine>${PANEL_GRIDS.map(([v, t]) => `<option value="${v}"${v === panelFine(pg) ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        ${pg.shared ? `<label class="muted" title="Where the shared part shows on every page: a band on top or at the bottom, or a column on the left or right">Where</label><select data-p="${base}.sharedAt" data-r>${PANEL_SHARED_AT.map(([v, t]) => `<option value="${v}"${(pg.sharedAt || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        ${panelSharedSide(pg) ? `<label class="muted" title="How wide the column is on the panel">Width</label><input type="number" min="80" max="800" step="10" style="width:80px" data-p="${base}.sharedWidth" data-t="num" value="${pg.sharedWidth || ''}" placeholder="240" data-r><span class="muted">px</span>` : ''}
+        <label class="muted" title="The band's (or column's) own background colour; none = the same as the page under it">Background</label><input type="color" data-p="${base}.bg" value="${esc(pg.bg || panelTheme(p.panel.theme).bg)}" data-r>${pg.bg
+          ? '<button class="btn small ghost" data-pbgclr title="No own colour: the page\'s background shows">✕</button>' : '<span class="muted" style="font-size:11px">page</span>'}
+        <span class="muted">shown on every page of this panel (a page can leave it out)</span>` : `
         <label class="muted" title="This page's own background colour; none = the theme's Background">Background</label><input type="color" data-p="${base}.bg" value="${esc(pg.bg || panelTheme(p.panel.theme).bg)}" data-r>${pg.bg
           ? '<button class="btn small ghost" data-pbgclr title="Use the theme background again">✕</button>' : '<span class="muted" style="font-size:11px">theme</span>'}
         <label class="muted" title="Ask for this PIN before showing the page. Pages with the same PIN open together: type it once, then move between them freely. Give a service page its own PIN to make it ask separately">PIN</label><input style="width:110px" data-p="${base}.pin" value="${esc(pg.pin || '')}" placeholder="none" inputmode="numeric">
-        ${p.panel.panels.length > 1 ? `<label class="muted" title="Move this page to another panel">Panel</label><select data-p="${base}.panel" data-t="num" data-r>${p.panel.panels.map((x) => `<option value="${x.id}"${x.id === pg.panel ? ' selected' : ''}>${esc(x.name || 'Panel ' + x.id)}</option>`).join('')}</select>` : ''}
+        ${shPg ? `<label class="chk" title="Show this panel's shared part (★) on this page"><input type="checkbox" data-pnoshared${pg.noShared ? '' : ' checked'}> shared part</label>` : ''}`}
+        ${p.panel.panels.length > 1 && !pg.shared ? `<label class="muted" title="Move this page to another panel">Panel</label><select data-p="${base}.panel" data-t="num" data-r>${p.panel.panels.map((x) => `<option value="${x.id}"${x.id === pg.panel ? ' selected' : ''}>${esc(x.name || 'Panel ' + x.id)}</option>`).join('')}</select>` : ''}
         ${pg.controls.some((c) => c.col) ? '<button class="btn small ghost" data-pauto title="Forget where controls were dragged to: they fill the page in list order again">Auto layout</button>' : ''}
       </div>
       <table class="ptable" style="margin-top:10px"><tr><th class="psel" title="Click a number to select (Ctrl+click: add one, Shift+click: a range)">#</th><th style="width:96px">Type</th><th>Name (for triggers/labels)</th><th>Text</th><th class="narrow" title="Empty = the theme colour">Colour</th><th>Confirm question</th><th class="narrow">Go to page</th><th class="narrow" title="Columns wide × rows high">Size</th><th></th></tr>
@@ -234,10 +247,10 @@ views.panel = () => {
         return `<tr data-ci="${i}"${picked}>
         <td class="psel" title="Click to select (Ctrl+click: add one, Shift+click: a range)">${i + 1}</td>
         <td><select data-p="${cb}.type" data-r>${PANEL_TYPES.map((t) => `<option${c.type === t ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
-        <td>${named ? `<input data-p="${cb}.name" value="${esc(c.name || '')}" data-r>` : ''}</td>
+        <td>${named ? `<input data-p="${cb}.name" value="${esc(c.name || '')}" data-orig="${esc(c.name || '')}" data-r>` : ''}</td>
         <td>${named ? `<input data-p="${cb}.text" value="${esc(c.text || '')}" data-r>` : ''}</td>
         <td>${own ? `<div class="row nowrap"><input type="color" data-p="${cb}.color" value="${esc(c.color || panelThemeColor(p.panel.theme, c.type))}" data-r>${c.color
-          ? `<button class="btn small ghost" data-pclr="${i}" title="Use the theme colour again">✕</button>` : '<span class="muted" style="font-size:11px" title="Comes from the theme; pick a colour to override it">theme</span>'}</div>` : ''}</td>
+          ? `<button class="btn small ghost" data-pclr="${i}" title="Use the theme colour again">✕</button>` : '<span class="muted" style="font-size:11px" title="Comes from the theme; pick a colour to override it">theme</span>'}</div>${presetSwatches(c, i)}` : ''}</td>
         <td>${btn ? `<input data-p="${cb}.confirm" value="${esc(c.confirm || '')}" placeholder="none" data-r>` : ''}</td>
         <td>${btn ? `<select data-p="${cb}.goto" data-t="num" data-r>${pageOpts(c.goto)}</select>` : ''}</td>
         <td><div class="row nowrap psize"><input type="number" min="1" max="${panelCols(pg)}" data-p="${cb}.span" data-t="num" value="${c.span || panelFine(pg)}" title="Columns wide${panelFine(pg) > 1 ? ' (small cells)' : ''}" data-r><span class="muted">×</span><input type="number" min="1" max="${20 * panelFine(pg)}" data-p="${cb}.rows" data-t="num" value="${c.rows || ''}" placeholder="${panelRows(c) * panelFine(pg)}" title="Rows high${panelFine(pg) > 1 ? ' (small cells)' : ''}" data-r></div></td>
@@ -246,7 +259,15 @@ views.panel = () => {
       }).join('')}</table>
       <div class="row" style="margin-top:8px">${PANEL_TYPES.map((t) => `<button class="btn small" data-add="pc-${t}">+ ${{ color: 'colour wheel', xy: 'XY pad', radio: 'radio group', led: 'LED' }[t] || t}</button>`).join('')}</div>
       <h3>Preview <span class="muted" style="font-weight:normal;font-size:12px;text-transform:none">live (shows what actions set) · drag a control to move it, its corner to resize it · drag a group to move it with everything in it · click to select, Ctrl+click for more, then drag them together (Delete removes, Esc deselects, Ctrl+A all)</span></h3>
-      <div class="panel-preview" style="${panelThemeVars(p.panel.theme)}${panelPageBg(pg)}">${panelPageHtml(pg, S.status, true, p.panel.theme)}</div>`
+      ${(() => {
+        // The shared part, faded, where it shows on the panel (edit it on its own ★ entry).
+        const side = panelSharedSide(shPg);
+        const ghost = shPg && !pg.shared && !pg.noShared ? `<div class="panel-ghost${side ? ' side' : ''}" style="${panelThemeVars(p.panel.theme)}${panelPageBg(shPg.bg ? shPg : pg)}${side ? `;width:${panelSharedWidth(shPg)}px` : ''}" title="The shared part: click ★ in the page list to change it">${panelPageHtml(shPg, S.status, false, p.panel.theme)}</div>` : '';
+        const prev = `<div class="panel-preview" style="${panelThemeVars(p.panel.theme)}${panelPageBg(pg)}">${panelPageHtml(pg, S.status, true, p.panel.theme)}</div>`;
+        if (!ghost) return prev;
+        if (side) return `<div class="panel-pv-row">${shPg.sharedAt === 'right' ? prev + ghost : ghost + prev}</div>`;
+        return shPg.sharedAt === 'bottom' ? prev + ghost : ghost + prev;
+      })()}`
     : '<span class="muted">Add a page to start.</span>'}</div></div>`;
 };
 // Selected panel controls: the control objects themselves, so they stay selected when the list
@@ -308,8 +329,10 @@ views.panel.after = () => {
     const tr = rowOf(e.target), c = tr?.dataset.ci && pg.controls[+tr.dataset.ci];
     if (c && !pSel().has(c)) { S.pSel = new Set([c]); S.pAnchor = +tr.dataset.ci; pSelShow(pg); }
   });
-  const det = $('details.ptheme');
+  const det = $('details.ptheme:not([data-ppopen])');
   det?.addEventListener('toggle', () => (S.panelThemeOpen = det.open));
+  const pdet = $('details[data-ppopen]');
+  pdet?.addEventListener('toggle', () => (S.panelPresetsOpen = pdet.open));
   $$('[data-ptheme]').forEach((b) => b.addEventListener('click', () => {
     // A preset sets the colours and keeps the sizes.
     const keep = Object.fromEntries(['radius', 'gap', 'row', 'font', 'width'].filter((k) => p.panel.theme[k] != null).map((k) => [k, p.panel.theme[k]]));
@@ -318,6 +341,17 @@ views.panel.after = () => {
     render();
   }));
   $$('[data-pclr]').forEach((b) => b.addEventListener('click', () => { delete pg.controls[+b.dataset.pclr].color; markDirty(); render(); }));
+  // A preset swatch colours that control, or every selected one when it is among them.
+  $$('[data-ppre]').forEach((b) => b.addEventListener('click', () => {
+    const [i, k] = b.dataset.ppre.split(':').map(Number), c = pg.controls[i], col = p.panel.colors[k]?.color;
+    if (!col) return;
+    for (const x of pSel().has(c) ? [...pSel()] : [c]) if (!['spacer', 'color', 'image'].includes(x.type)) x.color = col;
+    markDirty();
+    render();
+  }));
+  $$('[data-pcadd]').forEach((b) => b.addEventListener('click', () => { p.panel.colors.push({ name: '', color: '#888888' }); markDirty(); render(); }));
+  $$('[data-pcdel]').forEach((b) => b.addEventListener('click', () => { p.panel.colors.splice(+b.dataset.pcdel, 1); markDirty(); render(); }));
+  $$('[data-pcreset]').forEach((b) => b.addEventListener('click', () => { p.panel.colors = PANEL_PRESETS.map((x) => ({ ...x })); markDirty(); render(); }));
   $('[data-pdel]')?.addEventListener('click', (e) => {
     const k = +e.currentTarget.dataset.pdel, pn = p.panel.panels[k], n = p.panel.pages.filter((x) => x.panel === pn.id).length;
     if (!confirm(`Delete panel '${pn.name}'${n ? ` and its ${n} page(s)` : ''}?`)) return;
@@ -328,6 +362,36 @@ views.panel.after = () => {
     render();
   });
   $('[data-pbgclr]')?.addEventListener('click', () => { delete pg.bg; markDirty(); render(); });
+  $('[data-pshared]')?.addEventListener('click', () => {
+    const pn = curPanel();
+    p.panel.pages.push({ id: nextId(p.panel.pages), name: 'Shared part', panel: pn.id, shared: true, columns: 4, controls: [] });
+    S.sel.page = p.panel.pages.length - 1;
+    markDirty();
+    render();
+  });
+  // A shared part moved into a side column: one control per row (a band's 4+ columns are too narrow there).
+  $(`[data-p="panel.pages.${S.sel.page}.sharedAt"]`)?.addEventListener('change', (e) => {
+    if (/^(left|right)$/.test(e.target.value) && !panelSharedSide(pg) && (pg.columns || 3) > 2) {
+      pg.columns = 1;
+      pg.controls.forEach((c) => { delete c.col; delete c.row; delete c.span; });
+    }
+  });
+  $$('[data-pmode]').forEach((b) => b.addEventListener('change', () => {
+    const pn = curPanel(), n = b.dataset.pmode, l = (pn.modes || []).filter((m) => m.toLowerCase() !== n.toLowerCase());
+    if (b.checked) l.push(n);
+    if (l.length) pn.modes = l; else delete pn.modes;
+    markDirty();
+  }));
+  $('[data-pnoshared]')?.addEventListener('change', (e) => { if (e.target.checked) delete pg.noShared; else pg.noShared = true; markDirty(); render(); });
+  // An image control: use a picture already in the show (another image control's) instead of uploading it again.
+  $$('[data-pimgpick]').forEach((s) => s.addEventListener('change', () => {
+    const c = pg.controls[+s.dataset.pimgpick];
+    if (!c || !s.value) return;
+    if (c.image && c.image !== s.value) S.mediaTrash.add(c.image);   // deleted on save only if nothing uses it any more
+    c.image = s.value;
+    markDirty();
+    render();
+  }));
   $('[data-pfine]')?.addEventListener('change', (e) => { panelSetFine(pg, +e.target.value); markDirty(); render(); });
   // An image control's picture: uploaded to the stick (/media/) like a map background; the one it
   // replaces is deleted once the project is saved.
@@ -356,6 +420,75 @@ views.panel.after = () => {
   }));
   $('[data-pauto]')?.addEventListener('click', () => { pg.controls.forEach((c) => { delete c.col; delete c.row; }); markDirty(); render(); });
 };
+// Renaming a touch panel, a page or a control: trigger actions (and a mode's enter/leave actions)
+// that name it follow, and so do Panel button triggers and same-named controls on other pages
+// (same name = same live state, so they stay one control). what: 'panel' | 'page' | 'control';
+// pg = the renamed page (its panel decides which "panel X page …" lines mean it).
+// Returns how many places changed.
+function renamePanelRefs(what, oldName, newName, pg) {
+  const p = P(), lo = String(oldName || '').toLowerCase();
+  if (!lo || !newName || lo === newName.toLowerCase()) return 0;
+  const same = (a, b) => String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase();
+  const VERBS = ['text', 'color', 'flash', 'value', 'enable', 'disable', 'lock', 'unlock', 'reset', 'page'];
+  // "panel X page Y" names Y on panel X: the renamed page's panel (by name or number) or all.
+  const pnOfPage = pg && p.panel.panels.find((x) => x.id === pg.panel);
+  const meansPanel = (t) => same(t, 'all') || (pnOfPage && (same(t, pnOfPage.name) || same(t, pnOfPage.id)));
+  // "all": only when no other page keeps the old name.
+  const otherHasOld = () => p.panel.pages.some((x) => x !== pg && !x.shared && same(x.name, oldName));
+  let n = 0;
+  const fix = (line) => {
+    const toks = tokenize(String(line));
+    let out = String(line);
+    for (let i = toks.length - 1; i >= 0; i--) {
+      const w = (k) => (toks[k] ? toks[k].v.toLowerCase() : '');
+      let hit = null;
+      // Commands start the line or follow then / else (inside if … then …, repeat …).
+      const atStart = i === 0 || ['then', 'else'].includes(w(i - 1));
+      if (w(i) === 'panel' && toks[i + 2] && VERBS.includes(w(i + 2))) {
+        const isPage = w(i + 2) === 'page';
+        if (what === 'panel' && isPage && same(toks[i + 1].v, oldName)) hit = toks[i + 1];
+        if (what === 'control' && !isPage && same(toks[i + 1].v, oldName)) hit = toks[i + 1];
+        if (what === 'page' && isPage && toks[i + 3] && same(toks[i + 3].v, oldName) && meansPanel(toks[i + 1].v)
+          && !(same(toks[i + 1].v, 'all') && otherHasOld())) hit = toks[i + 3];
+      } else if (what === 'control' && w(i) === 'label' && atStart && toks[i + 1] && same(toks[i + 1].v, oldName)) hit = toks[i + 1];
+      if (hit) { out = out.slice(0, hit.start) + quote(newName) + out.slice(hit.end); n++; }
+    }
+    return out;
+  };
+  for (const t of p.triggers) {
+    t.actions = (t.actions || []).map(fix);
+    if (what === 'control' && t.type === 'panel' && same(t.control, oldName)) { t.control = newName; n++; }
+  }
+  for (const g of p.modes || []) for (const info of Object.values(g.stateInfo || {}))
+    for (const k of ['enter', 'leave']) if (Array.isArray(info?.[k])) info[k] = info[k].map(fix);
+  if (what === 'control')
+    for (const x of p.panel.pages) for (const c of x.controls) if (same(c.name, oldName)) { c.name = newName; n++; }
+  return n;
+}
+// Pictures other image controls already use (any page, any panel): picking one reuses the file.
+function panelImagePick(c, i) {
+  const used = new Map();
+  for (const pg of P().panel.pages) for (const x of pg.controls) if (x.type === 'image' && x.image && x.image !== c.image && !used.has(x.image)) used.set(x.image, `${pg.name || 'page ' + pg.id}${x.name ? ' · ' + x.name : ''}`);
+  if (!used.size) return '';
+  return `<select data-pimgpick="${i}" title="Use the same picture as another image control: one file on the stick, no second upload"><option value="">${c.image ? 'or use another one…' : 'or use one already in the show…'}</option>${[...used].map(([f, where]) => `<option value="${esc(f)}">${esc(where)}</option>`).join('')}</select>`;
+}
+// The preset colours as small swatches under a control's colour (the one it has is ringed).
+panelPresetSource = () => P();
+function presetSwatches(c, i) {
+  const cols = P().panel.colors || [];
+  if (!cols.length) return '';
+  return `<div class="ppre">${cols.map((x, k) => `<button type="button" data-ppre="${i}:${k}" style="background:${esc(x.color)}"${(c.color || '').toLowerCase() === (x.color || '').toLowerCase() ? ' class="on"' : ''}
+    title="${esc(x.name || x.color)}${x.name ? ` (${x.color})` : ''}"></button>`).join('')}</div>`;
+}
+// Editing the preset colours: a name (for "panel X color <name>") and a colour each.
+function panelPresetsHtml() {
+  const cols = P().panel.colors || [];
+  return `<details class="ptheme"${S.panelPresetsOpen ? ' open' : ''} data-ppopen><summary>Preset colours <span class="muted">· ${cols.length} · one click colours a control (or all selected ones); actions can use the name: <code>panel &lt;name&gt; color ${esc(cols.find((x) => x.name)?.name || 'Go')}</code></span></summary>
+    <div class="ptheme-grid" style="margin-top:8px">${cols.map((x, k) => `<label><input type="color" data-p="panel.colors.${k}.color" value="${esc(x.color || '#888888')}" data-r>
+      <input data-p="panel.colors.${k}.name" value="${esc(x.name || '')}" placeholder="name" style="width:110px" data-r><button class="btn small ghost" data-pcdel="${k}" title="Remove this preset">✕</button></label>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn small" data-pcadd>+ Colour</button><button class="btn small ghost" data-pcreset title="Back to the standard presets">Reset</button></div>
+  </details>`;
+}
 // The panel theme: what every control looks like unless it has its own colour.
 function panelThemeHtml(theme) {
   const th = panelTheme(theme);
@@ -526,7 +659,7 @@ function panelCtlDetails(c, cb, i) {
   if (c.type === 'image') {
     parts.push(`<span class="muted" title="PNG, JPG, WebP, GIF or SVG up to 4 MB, kept on the stick with the show. A PNG or SVG with a transparent background looks best">Image</span>
       <label class="btn small" style="cursor:pointer">${c.image ? 'Replace…' : 'Choose image…'}<input type="file" accept=".png,.jpg,.jpeg,.webp,.gif,.svg,image/*" data-pimg="${i}" hidden></label>
-      ${c.image ? `<button class="btn small ghost" data-pimgdel="${i}">Remove</button>` : ''}`);
+      ${c.image ? `<button class="btn small ghost" data-pimgdel="${i}">Remove</button>` : ''}${panelImagePick(c, i)}`);
     parts.push(`<select data-p="${cb}.fit" data-r title="How the image fills its place"><option value="">show all of it</option><option value="cover"${c.fit === 'cover' ? ' selected' : ''}>fill the box (crops)</option></select>`);
   }
   if (c.type === 'group') {
@@ -1982,6 +2115,8 @@ function renameModeRefs(g, oldState, newName) {
       if (t.onlyIn?.group === g.name) t.onlyIn.group = newName;
       if (t.type === 'mode' && t.group === g.name) t.group = newName;
     });
+    // Touch panels showing this group in their header keep showing it.
+    for (const pn of p.panel.panels) if (pn.modes) pn.modes = pn.modes.map((m) => (m.toLowerCase() === g.name.toLowerCase() ? newName : m));
     return;
   }
   if (g.stateInfo[oldState]) { g.stateInfo[newName] = g.stateInfo[oldState]; delete g.stateInfo[oldState]; }
@@ -2422,9 +2557,9 @@ async function restoreBackup(name) {
 
 // ---- Show files (.kdshow): "Save as" / "Open" between the controller and a PC --------
 // One JSON file: { kdshow: 1, exported, project, media: { 'map1-x.jpg': '<base64>' } }.
-// Only map backgrounds and touch-panel images live outside project.json, so those are the media that go along
+// Only map backgrounds, map documents and touch-panel images live outside project.json, so those are the media that go along
 // (the same list as mediaNames in tools/launcher.js).
-const showMediaNames = (p) => [...new Set([...(p.maps || []).map((m) => m.background), ...(p.panel?.pages || []).flatMap((pg) => (pg.controls || []).map((c) => c.type === 'image' && c.image))].filter(Boolean))];
+const showMediaNames = (p) => [...new Set([...(p.maps || []).map((m) => m.background), ...(p.maps || []).flatMap((m) => (m.docs || []).map((d) => d.file)), ...(p.panel?.pages || []).flatMap((pg) => (pg.controls || []).map((c) => c.type === 'image' && c.image))].filter(Boolean))];
 // Put another project in the editor as unsaved changes (Undo goes back to the old one).
 function replaceProject(p) {
   // Images only the old project used: deleted on the next save (save() keeps ones still in use).

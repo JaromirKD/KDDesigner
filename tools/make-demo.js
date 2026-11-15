@@ -75,6 +75,8 @@ Object.assign(maps[0], {
     { list: 'drivers', name: 'io', x: 0.27, y: 0.8 }, { list: 'drivers', name: 'rack', x: 0.73, y: 0.8 },
     { list: 'tcp', name: 'watchout', x: 0.3, y: 0.94 },
   ],
+  // Documents (files in media/, written below): a pinned draw.io schematic and one in the list only.
+  docs: [{ name: 'FOH rack schematic', file: 'demo-rack.drawio', x: 0.62, y: 0.76 }, { name: 'Show notes', file: 'demo-notes.txt' }],
 });
 // The pixel grid (2:1) gets a text label too: a floor plan can be only text.
 maps[1].shapes = [{ type: 'text', x: 0.5, y: 0.04, text: 'LED wall (wired as a snake)', size: 2, color: '#d0d8e2' }];
@@ -196,7 +198,7 @@ sec('== START & SAFETY', 'red', 'What happens at power-on and in an emergency. P
 trig('Startup', 'startup', {}, ['mode System Idle', 'panel "Start show" reset', 'panel "Show progress" reset', 'panel "Show progress" value 0', 'fire trigger "Start inloop" after 5'], [], { notes: 'Runs at every start (power on, restart, after saving). Starts the inloop after 5 s.' });
 trig('Emergency stop (in0)', 'input', { io: 'in0', edge: 'falling' }, ['mode System Emergency'], [], { notes: 'Machine Control input 0: the emergency-stop loop opens (24 V drops).' });
 trig('Mode -> Emergency', 'mode', { group: 'System', mode: 'Emergency' },
-  ['start timeline "Emergency"', 'send osc qlab /cue/*/stop', 'panel lbl_status text EMERGENCY STOP', 'panel lbl_status color #ff5c5c', 'io Beacon on', 'email tech@example.com "Emergency stop" The emergency stop was pressed']);
+  ['start timeline "Emergency"', 'send osc qlab /cue/*/stop', 'panel lbl_status text EMERGENCY STOP', 'panel lbl_status color #ff5c5c', 'panel Operator page Show', 'io Beacon on', 'email tech@example.com "Emergency stop" The emergency stop was pressed']);
 trig('Mode changed -> label', 'mode', {}, ['panel lbl_mode text {group}: {mode}']);
 trig('Emergency released', 'input', { io: 'in0', edge: 'rising' }, ['stop timeline "Emergency" fade 3', 'io Beacon off', 'mode System Idle', 'fire trigger "Start inloop"'], ['mode System is Emergency']);
 
@@ -234,7 +236,7 @@ trig('Main show finished', 'timeline', { timeline: 2, on: 'end' }, ['var show_co
 trig('Main show stopped early', 'timeline', { timeline: 2, on: 'release' }, ['send osc qlab /cue/*/stop', 'log Main show released ({reason})'], [],
   { notes: 'Timeline trigger "is released": fires on stop timeline, the ■ button, release all or another group-A timeline starting ({reason} says which), not when it reaches its end.' });
 trig('Any timeline paused', 'timeline', { timeline: 0, on: 'pause' }, ['log Timeline {timeline} paused'], [], { notes: 'Timeline 0 = any timeline; {timeline} is its number.' });
-trig('Stop all', 'manual', {}, ['mode System Idle', 'release all fade 3', 'send osc qlab /cue/*/stop', 'send udp screens "STOP\\r"', 'panel "Start show" reset', 'panel led_show value off', 'panel lbl_status text Stopped', 'panel lbl_status color #ff9f43']);
+trig('Stop all', 'manual', {}, ['mode System Idle', 'release all fade 3', 'send osc qlab /cue/*/stop', 'send udp screens "STOP\\r"', 'panel "Start show" reset', 'panel led_show value off', 'panel lbl_status text Stopped', 'panel lbl_status color Warning', 'panel all page start']);
 trig('Flash walls once', 'manual', {}, ['set 1.10-29 255', 'sleep 0.2', 'clear override 1.10-29'], [], { notes: 'Used by "Flash walls 6x": {count} is the round.' });
 trig('Flash walls 6x', 'manual', {}, ['repeat "Flash walls once" 6 times every 0.5', 'log Walls flashed 6 times']);
 trig('Find the first fixtures', 'manual', {}, ['locate 1-4 for 8'], [], { notes: 'Locate: fixtures 1-4 blink white for 8 s to find them in the room (also Fixtures / Map: Locate, or the L key). "locate off" stops it.' });
@@ -308,7 +310,7 @@ for (const t of triggers) if (t.type !== 'comment') t.id = ++n;
 // Two panels: the operator's (pages 1-3, /panel) and a front desk one (page 4, /panel?p=2) whose
 // controls share names with the operator's, so they share their live state.
 const panel = { theme: {}, panels: [
-  { id: 1, name: 'Operator', title: 'KD Feature demo', start: 1, sleep: 300 },   // black after 5 minutes without a touch
+  { id: 1, name: 'Operator', title: 'KD Feature demo', start: 1, sleep: 300, modes: ['System', 'Museum'] },   // black after 5 minutes without a touch; these mode groups in its header
   { id: 2, name: 'Front desk', title: 'Front desk', start: 4 },
 ], pages: [
   { id: 1, name: 'Show', columns: 4, controls: [
@@ -375,6 +377,14 @@ const panel = { theme: {}, panels: [
     { type: 'button', name: 'Stop', text: 'STOP', color: '#b71c1c', confirm: 'Stop everything?' },
     { type: 'led', name: 'led_show', text: 'Show', span: 1, rows: 1 },
     { type: 'led', name: 'led_fog', text: 'Fog', var: 'fog_on', color: '#4c8dff', span: 1, rows: 1 },
+  ] },
+  // The operator panel's shared part: on top of every page of it (the Technician page too): the
+  // logo (the same file as on the Show page: one file on the stick), the clock and a Home button.
+  { id: 5, name: 'Shared part', shared: true, columns: 6, bg: '#141821', controls: [
+    { type: 'image', image: 'demo-logo.svg' },
+    { type: 'label', name: 'lbl_house', text: 'KD Feature demo', span: 3 },
+    { type: 'clock' },
+    { type: 'button', name: 'Home', text: '⌂ Home', goto: 1 },
   ] },
 ] };
 for (const pg of panel.pages) pg.panel = pg.panel || 1;
@@ -508,4 +518,17 @@ fs.writeFileSync(path.join(path.dirname(out), 'media', 'demo-logo.svg'), `<svg x
 <path d="M22 20v40M22 42l22-22M30 36l18 24" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="92" y="38" font-family="system-ui,Segoe UI,sans-serif" font-size="26" font-weight="700" fill="#e6e8ee">Demo</text>
 <text x="92" y="64" font-family="system-ui,Segoe UI,sans-serif" font-size="20" fill="#8a90a0">Museum</text></svg>\n`);
+// The stage plan's documents: a small draw.io schematic (written out, not compressed) and a text file.
+const cell = (id, value, style, x, y, w, h) => `<mxCell id="${id}" value="${value}" style="${style}" vertex="1" parent="1"><mxGeometry x="${x}" y="${y}" width="${w}" height="${h}" as="geometry"/></mxCell>`;
+const wire = (id, from, to, value = '') => `<mxCell id="${id}" value="${value}" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="${from}" target="${to}"><mxGeometry relative="1" as="geometry"/></mxCell>`;
+fs.writeFileSync(path.join(path.dirname(out), 'media', 'demo-rack.drawio'), `<mxfile host="KD Designer demo"><diagram name="FOH rack" id="rack"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>
+${cell('t', 'FOH rack', 'text;html=1;align=left;fontSize=18;fontStyle=1', 20, 0, 200, 30)}
+${cell('kd', 'KD Designer controller', 'rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;', 40, 60, 160, 60)}
+${cell('sw', 'Network switch', 'rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;', 280, 60, 160, 60)}
+${cell('pc', 'Media PC', 'whiteSpace=wrap;html=1;', 520, 20, 120, 50)}
+${cell('pj', 'PJ left / right', 'ellipse;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;', 520, 110, 120, 60)}
+${cell('dmx', 'Pixel driver', 'whiteSpace=wrap;html=1;', 280, 200, 160, 50)}
+${wire('e1', 'kd', 'sw', 'Art-Net')}${wire('e2', 'sw', 'pc')}${wire('e3', 'sw', 'pj', 'PJLink')}${wire('e4', 'sw', 'dmx')}
+</root></mxGraphModel></diagram></mxfile>\n`);
+fs.writeFileSync(path.join(path.dirname(out), 'media', 'demo-notes.txt'), 'Show notes\n\nPJ lamps changed 01-11-2026.\nSpare pixel driver in the FOH rack, bottom drawer.\n');
 console.log(`wrote ${out}: ${fixtures.length} fixtures, ${effects.length} effects, ${triggers.length} triggers`);

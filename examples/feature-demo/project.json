@@ -2446,7 +2446,11 @@
         "name": "Operator",
         "title": "KD Feature demo",
         "start": 1,
-        "sleep": 300
+        "sleep": 300,
+        "modes": [
+          "System",
+          "Museum"
+        ]
       },
       {
         "id": 2,
@@ -2898,6 +2902,35 @@
             "rows": 1
           }
         ]
+      },
+      {
+        "id": 5,
+        "name": "Shared part",
+        "shared": true,
+        "columns": 6,
+        "bg": "#141821",
+        "controls": [
+          {
+            "type": "image",
+            "image": "demo-logo.svg"
+          },
+          {
+            "type": "label",
+            "name": "lbl_house",
+            "text": "KD Feature demo",
+            "span": 3
+          },
+          {
+            "type": "clock"
+          },
+          {
+            "type": "button",
+            "name": "Home",
+            "text": "⌂ Home",
+            "goto": 1
+          }
+        ],
+        "panel": 1
       }
     ]
   },
@@ -2951,6 +2984,7 @@
         "send osc qlab /cue/*/stop",
         "panel lbl_status text EMERGENCY STOP",
         "panel lbl_status color #ff5c5c",
+        "panel Operator page Show",
         "io Beacon on",
         "email tech@example.com \"Emergency stop\" The emergency stop was pressed"
       ],
@@ -3346,7 +3380,8 @@
         "panel \"Start show\" reset",
         "panel led_show value off",
         "panel lbl_status text Stopped",
-        "panel lbl_status color #ff9f43"
+        "panel lbl_status color Warning",
+        "panel all page start"
       ],
       "conditions": []
     },
@@ -4544,6 +4579,18 @@
           "name": "watchout",
           "x": 0.3,
           "y": 0.94
+        }
+      ],
+      "docs": [
+        {
+          "name": "FOH rack schematic",
+          "file": "demo-rack.drawio",
+          "x": 0.62,
+          "y": 0.76
+        },
+        {
+          "name": "Show notes",
+          "file": "demo-notes.txt"
         }
       ],
       "widthM": 24,

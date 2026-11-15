@@ -1230,18 +1230,95 @@ document.addEventListener('click', (e) => {
   else { S.view = 'map'; S.sel.map = i; S.mapParts = false; }
   render();
 });
-// The map list as a tree: maps on no other map at the top, each with what is on it under it.
+// The map list as a tree: maps on no other map at the top (in list order), each with what is on
+// it under it (in its parts' order). Rows: [map, depth, id of the map it is listed under or null].
 function mapTreeRows() {
   const p = P(), inSome = new Set(p.maps.flatMap((m) => (m.parts || []).map((pt) => pt.map)));
-  const rows = [], walk = (m, depth, path) => {
-    rows.push([m, depth]);
+  const rows = [], walk = (m, depth, path, parent) => {
+    rows.push([m, depth, parent]);
     if (depth > 4) return;
-    for (const pt of m.parts || []) { const c = mapById(pt.map); if (c && !path.has(c.id)) walk(c, depth + 1, new Set([...path, c.id])); }
+    for (const pt of m.parts || []) { const c = mapById(pt.map); if (c && !path.has(c.id)) walk(c, depth + 1, new Set([...path, c.id]), m.id); }
   };
-  p.maps.filter((m) => !inSome.has(m.id)).forEach((m) => walk(m, 0, new Set([m.id])));
+  p.maps.filter((m) => !inSome.has(m.id)).forEach((m) => walk(m, 0, new Set([m.id]), null));
   // A loop of maps that are all on each other (shouldn't happen) still gets listed.
-  p.maps.filter((m) => !rows.some(([x]) => x === m)).forEach((m) => rows.push([m, 0]));
+  p.maps.filter((m) => !rows.some(([x]) => x === m)).forEach((m) => rows.push([m, 0, null]));
   return rows;
+}
+// A new order of the maps (p.maps). Pages that remember a map by its place in the list (the
+// selected map, the Scenes / track / Live / Effects-preview choice) keep showing the same map.
+// The order counts: the Live page's tabs follow it, and effects use a fixture's place on the first
+// map in the list that has it.
+function setMapOrder(list) {
+  const p = P(), old = [...p.maps], at = (i) => (Number.isInteger(i) && old[i] ? list.indexOf(old[i]) : i);
+  const live = liveStage();
+  p.maps.splice(0, p.maps.length, ...list);
+  S.sel.map = at(S.sel.map);
+  S.mapShapeOf = at(S.mapShapeOf);
+  S.scMap = at(S.scMap);
+  if (S.trackMap >= 0) S.trackMap = at(S.trackMap);
+  if (live !== 'all') setLiveStage(at(live));
+  if (/^map:\d+$/.test(S.fxSrc || '')) S.fxSrc = 'map:' + at(+S.fxSrc.slice(4));
+  markDirty();
+  render();
+}
+// Move map i one place up (d = -1) or down in the list.
+function moveMap(i, d) {
+  const list = [...P().maps], j = i + d;
+  if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  setMapOrder(list);
+}
+// Dropped in the map list: the dragged map goes before / after the one dropped on. Two rooms of
+// the same floor (rows under the same map) also change their order on that floor, which is the
+// order they are listed and drawn in (a later one on top).
+function dropMap(fromI, toI, after, parentId) {
+  const p = P(), from = p.maps[fromI], to = p.maps[toI];
+  if (!from || !to || from === to) return;
+  const pm = parentId != null && mapById(parentId);
+  if (pm?.parts?.some((pt) => pt.map === from.id) && pm.parts.some((pt) => pt.map === to.id)) {
+    const [moved] = pm.parts.splice(pm.parts.findIndex((pt) => pt.map === from.id), 1);
+    pm.parts.splice(pm.parts.findIndex((pt) => pt.map === to.id) + (after ? 1 : 0), 0, moved);
+  }
+  const list = p.maps.filter((x) => x !== from);
+  list.splice(list.indexOf(to) + (after ? 1 : 0), 0, from);
+  setMapOrder(list);
+}
+// The map list on the Map page: drag a row up or down (a line shows where it goes); a click
+// without dragging still selects the map.
+function wireMapTree() {
+  const tree = $('.map-tree');
+  if (!tree) return;
+  tree.addEventListener('pointerdown', (e) => {
+    const row = e.target.closest('.item');
+    if (!row || e.button !== 0) return;
+    const y0 = e.clientY;
+    let drag = false, target = null, after = false;
+    const line = document.createElement('div');
+    line.className = 'map-drop';
+    const move = (ev) => {
+      if (!drag && Math.abs(ev.clientY - y0) < 5) return;
+      if (!drag) { drag = true; row.classList.add('dragging'); tree.appendChild(line); }
+      const t = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.map-tree .item');
+      if (!t) return;
+      const r = t.getBoundingClientRect(), tr = tree.getBoundingClientRect();
+      target = t;
+      after = ev.clientY > r.top + r.height / 2;
+      line.style.top = ((after ? r.bottom : r.top) - tr.top) / uiZoom() + tree.scrollTop - 1 + 'px';
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      if (!drag) return;
+      line.remove();
+      row.classList.remove('dragging');
+      // The click that ends a drag doesn't also select the row.
+      const eat = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      document.addEventListener('click', eat, true);
+      setTimeout(() => document.removeEventListener('click', eat, true), 0);
+      if (target && target !== row) dropMap(+row.dataset.sel.slice(4), +target.dataset.sel.slice(4), after, row.dataset.mparent === target.dataset.mparent && row.dataset.mparent ? +row.dataset.mparent : null);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up, { once: true });
+  });
 }
 // Align / distribute / snap the selected fixtures (the selection bar).
 function arrangeSel(m, how) {
@@ -1383,8 +1460,8 @@ views.map = () => {
   const devItems = (m.showDevices !== false ? (v.devices || []).filter((d) => d.from != null && mapDevOf(d)) : []).map((d) => mapDevHtml(d, mapDevOf(d), m.labels !== false, ' inroom')).join('')
     + devs.map((d) => mapDevHtml(d, mapDevOf(d), m.labels !== false, mapDevKey(d) === S.mapDevSel ? ' sel' : '')).join('');
   const devList = allMapDevs();
-  // The left column shows fixtures & groups or the devices (S.mapSide), so neither list is far down.
-  const side = S.mapSide === 'devices' ? 'devices' : 'fixtures';
+  // The left column shows fixtures & groups, the devices or the documents (S.mapSide), so no list is far down.
+  const side = S.mapSide === 'devices' || S.mapSide === 'docs' ? S.mapSide : 'fixtures', nDocs = docsOf(m).length;
   const tracks = p.timelines.flatMap((tl, ti) => tl.tracks.map((tr, ri) => `<option value="${ti}:${ri}">${esc(tl.name)} › ${esc(tr.name)}</option>`)).join('');
   // Several selected: a frame around them with a rotate handle (above) and a size handle (corner).
   const sits = m.items.filter((it) => S.mapSel.has(it.fixture)), onV = new Set(v.items.map((it) => it.fixture));
@@ -1399,12 +1476,12 @@ views.map = () => {
   }
   return `<h2>Map</h2><div class="split">
     <div>
-      <div class="list map-tree">${mapTreeRows().map(([x, d]) => {
+      <div class="list map-tree" title="Drag a map up or down to change the order">${mapTreeRows().map(([x, d, par]) => {
         const i = p.maps.indexOf(x), k = mapKind(x);
-        return `<div class="item${i === S.sel.map ? ' sel' : ''}" data-sel="map:${i}" style="padding-left:${8 + d * 16}px"><span class="kind" title="${k[1]}">${k[2]}</span><span class="id">${x.id}</span>${esc(x.name)}<span class="muted" style="margin-left:auto" title="Fixtures on it${x.parts?.length ? ' (with the maps on it)' : ''}">${mapView(x).items.length}</span></div>`;
+        return `<div class="item${i === S.sel.map ? ' sel' : ''}" data-sel="map:${i}"${par != null ? ` data-mparent="${par}"` : ''} style="padding-left:${8 + d * 16}px"><span class="kind" title="${k[1]}">${k[2]}</span><span class="id">${x.id}</span>${esc(x.name)}<span class="muted" style="margin-left:auto" title="Fixtures on it${x.parts?.length ? ' (with the maps on it)' : ''}">${mapView(x).items.length}</span></div>`;
       }).join('')}</div>
       <div class="row" style="margin-top:8px"><button class="btn small" data-add="map">+ Map</button></div>
-      <div class="seg map-side" title="What the list below shows: fixtures and groups, or devices to put on the map">${[['fixtures', 'Fixtures & groups'], ['devices', `Devices${onMap.size ? ` (${onMap.size} on map)` : ''}`]]
+      <div class="seg map-side" title="What the list below shows: fixtures and groups, or devices to put on the map">${[['fixtures', 'Fixtures & groups'], ['devices', `Devices${onMap.size ? ` (${onMap.size} on map)` : ''}`], ['docs', `Documents${nDocs ? ` (${nDocs})` : ''}`]]
         .map(([v, n]) => `<button data-mapside="${v}" class="${side === v ? 'on' : ''}">${n}</button>`).join('')}</div>
       ${side === 'fixtures' ? `      <p class="muted" style="margin:0 0 6px">Drag onto the map. Click, then Shift+click (a range) or Ctrl+click (one more) to pick several and drag them on together. ● = on this map.</p>
       <div class="list map-fx">${p.fixtures.map((f) => `<div class="item${S.mapSel.has(f.id) ? ' sel' : ''}" data-mapfx="${f.id}">
@@ -1421,7 +1498,7 @@ views.map = () => {
         return `<div class="item${all ? ' sel' : ''}" data-mapgrp="${g.id}" title="${on.length} of ${g.fixtures.length} on this map"><span class="id">${g.id}</span><span style="flex:1">${esc(g.name)}</span>
           <span class="tag${on.length < g.fixtures.length ? ' muted' : ''}">${on.length < g.fixtures.length ? `${on.length}/${g.fixtures.length}` : g.fixtures.length}</span></div>`;
       }).join('') || '<span class="muted">No groups yet - select fixtures on the map and use "Make group".</span>'}</div>
-` : m.showDevices === false ? `<p class="muted" style="margin:0 0 6px">Devices are hidden on this map. <button class="btn small" id="mapDevShow">Show devices</button></p>`
+` : side === 'docs' ? mapDocsSideHtml(m) : m.showDevices === false ? `<p class="muted" style="margin:0 0 6px">Devices are hidden on this map. <button class="btn small" id="mapDevShow">Show devices</button></p>`
         : `<p class="muted" style="margin:0 0 6px">Drag a projector, PC or other device onto the map: on the Live page it shows whether the device is online. ● = on this map.</p>
       <div class="list map-devs">${devList.map((d) => `<div class="item${mapDevKey(d) === S.mapDevSel ? ' sel' : ''}" data-mapdev="${esc(mapDevKey(d))}" title="${esc(d.label)}${d.x.ip ? ' · ' + esc(d.x.ip) : ''}">
         <span class="placed${onMap.has(mapDevKey(d)) ? ' on' : ''}">${onMap.has(mapDevKey(d)) ? '●' : '○'}</span>${devIcon(mapDevIcon(d.list, d.x))}<span style="flex:1">${esc(d.name)}</span><span class="muted">${esc(d.label)}</span></div>`).join('')
@@ -1454,7 +1531,7 @@ views.map = () => {
         ${mapImgsHtml(v)}
         ${mapGridHtml(m)}${v !== m ? mapShapesHtml({ aspect: m.aspect, shapes: v.shapes.filter((x) => x.from != null) }) : ''}${mapShapesHtml(m, shapeMode)}
         ${partMode ? partsHtml : mapRoomsHtml(v)}
-        ${items}${devItems}${shapeMode ? '' : selFrame}<div class="band" id="mapBand" hidden></div>${mapResizeHtml('kd.mapH.map')}</div></div>
+        ${items}${devItems}${mapDocPinsHtml(m, !shapeMode && !partMode)}${shapeMode ? '' : selFrame}<div class="band" id="mapBand" hidden></div>${mapResizeHtml('kd.mapH.map')}</div></div>
       ${shapeMode ? `<p class="muted keys">Click a shape to select · Shift/Ctrl+click adds · drag on empty space (or Shift+drag anywhere) selects an area · Ctrl+A all · drag to move · handles resize (corners: width and height, Shift = keep proportions; sides: one of them) · own shape: drag a round point, double-click a point to remove it, double-click its outline to add one · ⟳ handle or [ ] turns (Shift = 15° steps / 1°) · arrows nudge (Shift = more) · PgUp/PgDn one step forward/back (Shift = to the front/back) · Del removes · Ctrl+D duplicates · Esc deselects</p>
       ${shape ? `<div class="map-selbar"><b>${SHAPE_NAMES[shape.type]}</b>
         ${shape.type === 'text' ? `<input id="shText" value="${esc(shape.text || '')}" placeholder="Text" style="width:180px">
@@ -1492,6 +1569,7 @@ views.map = () => {
         <label class="muted nowrap" title="How wide it is, in % of this map">Width <input type="number" id="mapPartW" min="1" max="400" step="0.5" value="${+(partSel.w * 100).toFixed(2)}" style="width:70px"> %</label>
         <button class="btn small ghost" id="mapPartRemove" title="Del">Take off this map</button></div>` : ''}`
       : `<p class="muted keys">Click to select · Ctrl+click adds one · Shift+click adds the range from the last one clicked (fixture order) · drag on empty space selects an area (Shift/Ctrl adds, Alt removes) · drag to move · arrows nudge (Shift = more) · ⟳ handle or [ ] rotates, ⤡ handle stretches (Shift = keep proportions), - + spread out (Shift = more) · Del removes from the map · Ctrl+A selects all</p>`}
+      ${!shapeMode && !partMode ? mapDocSelBar(m) : ''}
       ${devSel ? `<div class="map-selbar"><span class="dev-sel">${devIcon(mapDevIcon(devSel.list, mapDevOf(devSel)))}</span><b>${esc(devSel.name)}</b>
         <span class="muted">${esc(devList.find((d) => mapDevKey(d) === S.mapDevSel)?.label || '')}${mapDevOf(devSel).ip ? ' · ' + ipLink(mapDevOf(devSel).ip) : ''} · <span id="mapDevState"></span></span>
         <button class="btn small" id="mapDevMon" title="Its card on the Monitoring page, with history and log">Open in Monitoring</button>
@@ -1530,6 +1608,7 @@ views.map.after = () => {
   const canvas = $('#mapCanvas');
   attachMapResize(canvas, m.aspect);
   attachMapZoom(canvas, `map:${m.id}`);
+  wireMapTree();
   const snap = (v) => (m.snap !== false ? snapTo(m, v) : v);
   const snapY = (v) => (m.snap !== false ? snapToY(m, v) : v);
   $('#mapGridN')?.addEventListener('change', (e) => {
@@ -1575,6 +1654,7 @@ views.map.after = () => {
     const id = +el.dataset.mfx;
     if (e.button !== 0) return;
     if (S.mapDevSel) { S.mapDevSel = null; $$('.mdev.sel', canvas).forEach((n) => n.classList.remove('sel')); }
+    if (S.mapDocSel) { S.mapDocSel = null; $$('.mdoc.sel', canvas).forEach((n) => n.classList.remove('sel')); $('#mapDocName')?.closest('.map-selbar')?.remove(); }
     // Shift+drag: add an area, also when it starts on a fixture; Shift+click: the range.
     if (e.shiftKey) return bandBegin(e, () => rangeTo(id));
     if (e.ctrlKey || e.metaKey) { S.mapSel.has(id) ? S.mapSel.delete(id) : S.mapSel.add(id); S.mapAnchor = id; paintSel(); return render(); }
@@ -1607,6 +1687,7 @@ views.map.after = () => {
   if (S.mapShapes) wireMapShapes(canvas, m, snap, snapY);
   else if (partMode) wireMapParts(canvas, m, snap, snapY);
   else wireMapDevices(canvas, m, snap, snapY, at);
+  wireMapDocs(canvas, m, snap, snapY, at, !S.mapShapes && !partMode);
   $('#mapShapeMode').addEventListener('click', () => { S.mapShapes = !S.mapShapes; S.mapParts = false; S.mapTool = 'select'; S.mapDraft = null; render(); });
   $('#mapPartMode').addEventListener('click', () => { S.mapParts = !partMode; S.mapShapes = false; S.mapDraft = null; render(); });
   $('#mapKind').addEventListener('change', (e) => { if (e.target.value === 'room') delete m.kind; else m.kind = e.target.value; markDirty(); render(); });
@@ -2355,6 +2436,7 @@ function wireMapDevices(canvas, m, snap, snapY, at) {
     const d = find(el.dataset.mdev);
     if (!d) return;
     S.mapSel.clear();
+    S.mapDocSel = null;
     S.mapDevSel = el.dataset.mdev;
     el.setPointerCapture(e.pointerId);
     const start = at(e), o = { x: d.x, y: d.y };
@@ -2401,6 +2483,7 @@ function wireMapDevices(canvas, m, snap, snapY, at) {
       }
       // A click selects the marker when it is on the map already.
       S.mapSel.clear();
+      S.mapDocSel = null;
       S.mapDevSel = find(key) ? key : null;
       render();
     };
@@ -2439,6 +2522,7 @@ views.map.keys = (e) => {
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return mapPartRemove(m); }
     return;
   }
+  if (!S.mapShapes && mapDocKeys(e, m)) return;
   // A selected device: arrows nudge it, Del removes it from the map, Esc lets go.
   const dv = !S.mapShapes && S.mapDevSel && (m.devices || []).find((d) => mapDevKey(d) === S.mapDevSel);
   if (dv) {

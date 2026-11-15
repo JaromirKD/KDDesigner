@@ -1303,10 +1303,26 @@ function trigOutputs(t) {
   const out = [];
   for (const line of t.actions || []) {
     if (!line.trim() || line.trim().startsWith('#')) continue;
-    for (const part of commandParts(line))
+    for (const part of commandParts(line)) {
       for (const o of cmdOutputs(part)) out.push({ kind: o.kind === 'udp' || o.kind === 'osc' ? deviceKind(o.name) || 'network' : o.kind === 'drv' ? o.type : o.kind, name: o.name, act: o.act });
+      out.push(...showOutputs(part));
+    }
   }
   return out;
+}
+// The show parts a command drives (timelines, scenes, touch panels), for the row icons and the
+// "Sets off" chips only: the flow draws timelines its own way, so this stays out of cmdOutputs.
+function showOutputs(cmd) {
+  const p = P(), w = tokenize(cmd).map((x) => x.v), l = w.map((x) => x.toLowerCase());
+  const tl = (tok) => { const x = findRef(p.timelines, tok); return x ? { name: `${x.id} ${x.name || ''}`.trim(), goto: `data-goto-timeline="${x.id}"` } : { name: tok || '?' }; };
+  if (/^(start|stop|seek|pause|resume|master)$/.test(l[0]) && l[1] === 'timeline' && w[2])
+    return [{ kind: 'timeline', ...tl(w[2]), act: l[0] === 'stop' ? 'release' : l[0] }];
+  if (l[0] === 'scene' && w[1]) return [{ kind: 'scene', name: findRef(p.scenes, w[1])?.name || w[1], act: 'play' }];
+  if (l[0] === 'release' && l[1] === 'scene' && w[2]) return [{ kind: 'scene', name: findRef(p.scenes, w[2])?.name || w[2], act: 'release' }];
+  if (l[0] === 'release' && l[1] === 'all') return [{ kind: 'timeline', name: 'all timelines and scenes', act: 'release' }];
+  if (l[0] === 'panel' && w[1]) return [{ kind: 'panel', name: w[1], act: l[2] === 'page' ? `page ${w[3] || ''}`.trim() : l[2] || '' }];
+  if (l[0] === 'label' && w[1]) return [{ kind: 'panel', name: w[1], act: l[2] === 'color' ? 'colour' : 'text' }];
+  return [];
 }
 // Where a trigger's events come from: [{kind (DEVICE_ICONS key), name, why}] - its own
 // event source, show devices / Modbus feeding its variable, and timeline cues.
@@ -1414,7 +1430,7 @@ function ioIcons(list, dir) {
 // A chip in the "Set off by" / "Sets off" rows; device kinds with a Devices tab link to it.
 function ioChip(x, dir) {
   const tab = DEVICE_ICONS[x.kind]?.[2];
-  return `<a href="#" class="chip-link ${dir} dev"${tab ? ` data-goto-devices="${tab}"` : ''} title="${esc(`${DEVICE_ICONS[x.kind]?.[0] || x.kind}: ${x.name}${tab ? ' (click to open it on the Devices page)' : ''}`)}">${devIcon(x.kind)}${esc(x.name)}${x.why || x.act ? ` <small>${esc(x.why || x.act)}</small>` : ''}</a>`;
+  return `<a href="#" class="chip-link ${dir} dev"${x.goto ? ` ${x.goto}` : tab ? ` data-goto-devices="${tab}"` : ''} title="${esc(`${DEVICE_ICONS[x.kind]?.[0] || x.kind}: ${x.name}${x.goto ? ' (click to open it)' : tab ? ' (click to open it on the Devices page)' : ''}`)}">${devIcon(x.kind)}${esc(x.name)}${x.why || x.act ? ` <small>${esc(x.why || x.act)}</small>` : ''}</a>`;
 }
 // What a trigger's actions do that can set off other triggers.
 function triggerEffects(t) {
