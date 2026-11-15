@@ -208,6 +208,10 @@ function normalize(p) {
   // setting goes, so the show looks the same.
   p.effects.forEach((x) => { if (x.round == null) x.round = KDModel.effectRound(p, x); });
   p.maps.forEach((m) => { m.items = m.items || []; m.aspect = m.aspect || 1.6; m.shapes = m.shapes || []; delete m.square; });
+  // Device markers (app-rig.js m.devices, by name): a device that is gone takes its marker along.
+  p.maps.forEach((m) => { if (m.devices) m.devices = m.devices.filter((d) => (p[d.list] || []).some((x) => x.name === d.name)); });
+  // Rooms on a floor (m.parts): drop the ones whose map is gone.
+  p.maps.forEach((m) => { if (m.parts) { m.parts = m.parts.filter((pt) => pt.map !== m.id && p.maps.some((x) => x.id === pt.map)); if (!m.parts.length) delete m.parts; } });
   p.panel = p.panel || { pages: [] };
   p.panel.pages = p.panel.pages || [];
   p.panel.pages.forEach((pg) => (pg.controls = pg.controls || []));
@@ -654,9 +658,14 @@ function onBound(e) {
   const devItem = devRename && P()[devRename[1]][+devRename[2]];
   const devOld = devItem?.name;
   const devKind = devRename && ({ devices: 'network', tcp: 'tcp', pcs: 'pc', projectors: 'projector' }[devRename[1]] || devItem?.type);
+  // ...and on the maps (any list with names, Modbus too).
+  const mapRename = /^(devices|tcp|pcs|projectors|drivers|modbus)\.(\d+)\.name$/.exec(el.dataset.p);
+  const mapOld = mapRename && P()[mapRename[1]][+mapRename[2]]?.name;
   setPath(P(), el.dataset.p, readInput(el));
   if (devOld && devOld !== el.value)
     P().deviceGroups.filter((g) => (g.kind || 'network') === devKind).forEach((g) => (g.devices = g.devices.map((n) => (n === devOld ? el.value : n))));
+  if (mapOld && mapOld !== el.value)
+    P().maps.forEach((m) => (m.devices || []).forEach((d) => { if (d.list === mapRename[1] && d.name === mapOld) d.name = el.value; }));
   // Renaming a timeline: references by name follow (the name before editing is on the field).
   const tlRename = /^timelines\.(\d+)\.name$/.exec(el.dataset.p);
   if (tlRename && e.type === 'change' && el.dataset.orig != null) {
@@ -820,6 +829,7 @@ function onStatus(st) {
   updateHeader();
   if (S.view === 'dashboard') renderPlaybacks();
   if (S.view === 'live') liveStatus();
+  if (S.view === 'live' || S.view === 'map') { paintMapDevs($('#main')); mapDevSelState(); }
   if (S.view === 'modes') renderModes();
   if (S.view === 'devices') renderProjectorStates();
   if (S.view === 'monitor') renderMonitor();

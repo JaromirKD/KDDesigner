@@ -1216,8 +1216,41 @@ function cmdEffects(cmd) {
     fx.push({ kind: 'http', url: w[2] });
   } else if ((l[0] === 'panel' || l[0] === 'label') && w[1] && w.length > 2) {
     fx.push({ kind: 'panel', name: w[1], why: `${l[0]} ${w.slice(2).join(' ')}` });
+  } else {
+    fx.push(...drvVarWrites(w, l));
   }
   return fx;
+}
+// A show-device write to a point linked to a variable (`vars`, a KNX address's `var`) changes
+// that variable: the controller reads the point back (KNX: its own confirmation; Kiss-Box /
+// NETIO: the next read) and sets the variable, which sets off its variable triggers.
+function drvVarWrites(w, l) {
+  const at = { kissbox: 2, knx: 3, netio: 3 }[l[0]];
+  if (!at || !w[at] || (l[0] === 'knx' && l[2] !== 'write') || (l[0] === 'netio' && l[2] !== 'output')) return [];
+  const act = l[at + 1] || '', op = act === 'toggle' ? 'toggle' : '=';
+  const drvs = (P().drivers || []).filter((d) => d.type === l[0]);
+  const out = [];
+  for (const name of refTargets(l[0], drvs, w[1])) {
+    const d = drvs.find((x) => x.name === name);
+    if (!d) continue;
+    const links = Object.entries(d.vars || {});
+    for (const pt of listOf(w[at])) {
+      const p = pt.toLowerCase();
+      let names = [];
+      if (l[0] === 'knx') {
+        const a = (d.addresses || []).find((x) => x.ga === pt || (x.name || '').toLowerCase() === p);
+        const ga = a ? a.ga : pt;
+        names = [a?.var, d.vars?.[ga]];
+      } else {
+        // Kiss-Box 1.3 / 1.all / all; NETIO 2 / all (points out<n>)
+        const hit = l[0] === 'kissbox' ? (k) => p === 'all' || k === p || (p.endsWith('.all') && k.startsWith(p.slice(0, -3)))
+          : (k) => /^out\d+$/.test(k) && (p === 'all' || k === `out${p}`);
+        names = links.filter(([k]) => hit(k.toLowerCase())).map(([, v]) => v);
+      }
+      for (const v of names) if (v && !out.some((f) => f.name.toLowerCase() === String(v).toLowerCase())) out.push({ kind: 'var', name: String(v), op, why: `${d.name} ${pt} ${act}` });
+    }
+  }
+  return out;
 }
 // The devices one command controls (flow view): [{kind, name, act}]. "all" becomes every
 // projector / PC (up to 6, more are one box).

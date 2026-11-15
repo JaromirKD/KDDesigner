@@ -61,7 +61,7 @@
 .pslider.ps-fader .pthumb { display: block; position: absolute; top: 0; bottom: 0; left: calc(var(--pad) + var(--v) * (100% - 2 * var(--pad))); width: 28px; margin-left: -14px; border-radius: 6px;
   background: linear-gradient(90deg, #e3e6ec 0 calc(50% - 1.5px), #20242c calc(50% - 1.5px) calc(50% + 1.5px), #c9cdd6 calc(50% + 1.5px)); box-shadow: 0 0 0 1px #000a, 0 2px 6px #000a; }
 .pslider.pvert.ps-line .ptrack::before, .pslider.pvert.ps-fader .ptrack::before { left: calc(50% - 4px); right: auto; top: 0; bottom: 0; width: 8px; height: auto; }
-.pslider.pvert.ps-line .pfill, .pslider.pvert.ps-fader .pfill { left: calc(50% - 4px); right: auto; top: auto; width: 8px; height: var(--len); }
+.pslider.pvert.ps-line .pfill, .pslider.pvert.ps-fader .pfill { left: calc(50% - 4px); right: auto; top: auto; bottom: var(--from); width: 8px; height: var(--len); }
 .pslider.pvert.ps-line .pthumb { left: 50%; top: auto; bottom: calc(var(--pad) + var(--v) * (100% - 2 * var(--pad))); margin: 0 0 -14px -14px; }
 .pslider.pvert.ps-fader .pthumb { left: 0; right: 0; top: auto; bottom: calc(var(--pad) + var(--v) * (100% - 2 * var(--pad))); width: auto; height: 28px; margin: 0 0 -14px;
   background: linear-gradient(0deg, #c9cdd6 0 calc(50% - 1.5px), #20242c calc(50% - 1.5px) calc(50% + 1.5px), #e3e6ec calc(50% + 1.5px)); }

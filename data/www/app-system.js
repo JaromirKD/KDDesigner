@@ -1406,6 +1406,54 @@ function histGraph(lanes, logs, from, to, now, legend) {
     ${legend != null ? `<div class="row muted md-legend">${legend}</div>` : `<div class="row muted md-legend"><span><i class="h-up"></i>online</span><span><i class="h-down"></i>offline</span>${lanes.some((l) => l.name === 'Power') ? '<span><i class="h-on"></i>power on</span><span><i class="h-off"></i>power off / standby</span>' : ''}${lanes.some((l) => l.small) ? '<span><i class="h-pon"></i>reading on</span><span><i class="h-poff"></i>off</span>' : ''}<span><i class="h-unk"></i>unknown (not checked yet, device offline or controller off)</span></div>`}`;
 }
 
+// The IP address in a card's sub line opens the device's own web page (http on port 80, in a
+// new tab): a port after it (OSC, PJLink, TCP…) is for the protocol, not for the browser.
+const ipLinks = (sub) => esc(sub).replace(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/, (ip) => ipLink(ip));
+const ipLink = (ip) => { const e = esc(ip); return `<a class="ip-link" href="http://${e}/" target="_blank" rel="noopener" title="Open http://${e}/ (the device's web page) in a new tab">${e}</a>`; };
+// ---- Monitoring cards: one per device, also shown under the map on the Live page -------
+// open = the key (monItem) that opens the card big with its history and log.
+const monCard = (state, title, sub, rows, extra, actions, open) => `<div class="card mon-card ${state}${open ? ' mon-open' : ''}"${open ? ` data-mon-open="${esc(open)}"` : ''}>
+  <div class="row nowrap"><span class="dot ${state === 'online' ? 'ok' : state === 'offline' ? 'bad' : ''}"></span><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(title)}</b>
+    <span class="tag mon-${state}">${state}</span>${open && !S.monOpen ? '<span class="mon-expand" title="Open: history and log">⤢</span>' : ''}</div>
+  <div class="muted mono" style="font-size:12px;margin:2px 0 8px 14px">${ipLinks(sub)}</div>
+  <div class="mon-rows">${rows.map(([k, v]) => `<span class="muted">${k}</span><span>${v}</span>`).join('')}</div>
+  ${extra || ''}${actions ? `<div class="row" style="margin-top:8px">${actions}</div>` : ''}</div>`;
+function monPjCard(x) {
+  const st = S.status, card = monCard;
+  const j = st?.projectors?.find((y) => y.id === x.id) || {};
+  const state = !j.seen ? 'unknown' : j.online ? 'online' : 'offline';
+  const errs = j.errors ? `<div class="row" style="gap:4px;margin-top:6px">${PJ_ERR_PARTS.map((n, k) => {
+    const v = j.errors[k];
+    return `<span class="tag ${v === '2' ? 'mon-offline' : v === '1' ? 'mon-warn' : 'mon-ok'}" title="${n}: ${v === '2' ? 'error' : v === '1' ? 'warning' : 'ok'}">${n}</span>`;
+  }).join('')}</div>` : '';
+  const inp = PJ_INPUTS.find(([v]) => v === j.input);
+  return card(state, x.name, `${x.ip} · ${j.model || 'projector'}${j.pjName && j.pjName !== x.name ? ' · "' + j.pjName + '"' : ''}`, [
+    ['Power', j.power || '—'], ['Lamp', j.lamp != null ? `${j.lamp} h` : '—'],
+    ['Input', j.input ? `${j.input}${inp ? ' · ' + inp[1] : ''}` : '—'], ['Mute', j.mute ? PJ_MUTE[j.mute] || j.mute : '—'],
+    ['Last seen', ago(j.lastSeen)], ['Last reply', esc(j.last || '—')],
+  ], errs + historyBar(j.history, j.checks), `<button class="btn small" data-cmd="projector ${x.id} on">On</button><button class="btn small" data-cmd="projector ${x.id} off">Off</button>`, `projector:${x.id}`);
+}
+function monHostCard(h, kind) {
+  const p = P(), card = monCard;
+  const x = (kind === 'pc' ? p.pcs : p.devices).find((y) => y.name === h.name) || {};
+  const rows = [['Ping', h.latency != null && h.state === 'online' ? `${h.latency} ms` : '—'], ['Last seen', ago(h.lastSeen)], ['Last check', ago(h.lastCheck)]];
+  if (kind === 'pc') rows.push(['MAC', x.mac || '—'], ['Last action', pcLast(x.id)]);
+  return card(h.state, h.name, kind === 'pc' ? h.ip : `${h.ip}${x.port ? ':' + x.port : ''}${x.notes ? ' · ' + x.notes : ''}`, rows,
+    historyBar(h.history, h.checks), kind === 'pc' ? pcButtons(x.id) : '', `${kind}:${h.name}`);
+}
+const monTcpCard = (x) => monCard(x.state, x.name, `TCP ${x.ip}:${x.port}`, [['Last received', x.lastLine ? esc(x.lastLine) : '—'], ['When', ago(x.lastRx)]]);
+const monModbusCard = (x) => monCard(x.state, x.name, `Modbus ${x.ip}`, [['Last good poll', ago(x.lastOk)], ['Errors', String(x.errors)],
+  ['Variables', esc(P().variables.filter((v) => v.modbus?.device === x.name).map((v) => `${v.name}=${S.status?.vars?.[v.name] ?? '?'}`).join(', ') || '—')]]);
+// A device by its card key (projector:<id>, drv:<id>, pc:<name>, device:<name>, tcp:<name>,
+// modbus:<name>): {name, ip, html(compact)}, or null when it is not in the project / status.
+function monItem(key) {
+  const p = P(), st = S.status, [k, ...rest] = String(key || '').split(':'), ref = rest.join(':');
+  if (k === 'projector') { const x = p.projectors.find((y) => String(y.id) === ref); return x ? { name: x.name, ip: x.ip, power: true, html: () => monPjCard(x) } : null; }
+  if (k === 'drv') { const x = p.drivers.find((y) => String(y.id) === ref); return x ? { name: x.name, ip: x.ip, drv: x, html: (compact) => drvMonCard(x, monCard, !!compact) } : null; }
+  if (k === 'tcp' || k === 'modbus') { const x = st?.io?.[k]?.find((y) => y.name === ref); return x ? { name: x.name, ip: x.ip, html: () => (k === 'tcp' ? monTcpCard(x) : monModbusCard(x)) } : null; }
+  const h = st?.monitor?.hosts?.find((y) => y.kind === k && y.name === ref);
+  return h ? { name: h.name, ip: h.ip, html: () => monHostCard(h, k) } : null;
+}
 function renderMonitor() {
   const body = $('#monBody');
   if (!body || S.monHold) return;
@@ -1419,12 +1467,7 @@ function renderMonitor() {
     <span class="chip ${sum.offline ? 'bad' : ''}">${sum.offline} offline</span>
     ${sum.unknown ? `<span class="chip">${sum.unknown} not checked yet</span>` : ''}
     <span class="muted">Last check ${ago(mon?.lastRun)} · next in ${Math.max(0, mon?.nextIn ?? 0)} s · every ${mon?.interval ?? '?'} s</span>` : '<span class="muted">Waiting for controller…</span>';
-  const card = (state, title, sub, rows, extra, actions, open) => `<div class="card mon-card ${state}${open ? ' mon-open' : ''}"${open ? ` data-mon-open="${esc(open)}"` : ''}>
-    <div class="row nowrap"><span class="dot ${state === 'online' ? 'ok' : state === 'offline' ? 'bad' : ''}"></span><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(title)}</b>
-      <span class="tag mon-${state}">${state}</span>${open && !S.monOpen ? '<span class="mon-expand" title="Open: history and log">⤢</span>' : ''}</div>
-    <div class="muted mono" style="font-size:12px;margin:2px 0 8px 14px">${esc(sub)}</div>
-    <div class="mon-rows">${rows.map(([k, v]) => `<span class="muted">${k}</span><span>${v}</span>`).join('')}</div>
-    ${extra || ''}${actions ? `<div class="row" style="margin-top:8px">${actions}</div>` : ''}</div>`;
+  const card = monCard;
   const s = st?.stats;
   const controller = st ? card(Date.now() - S.statusAt < 4000 ? 'online' : 'offline', 'Controller', `${st.ip} · firmware ${st.version}`, [
     ['Uptime', fmtTime(st.uptime).replace(/\.\d$/, '')], ['Last start', startedText(st.started)], ['Storage device', st.usb ? 'mounted' : '<span class="bad">missing</span>'],
@@ -1432,36 +1475,13 @@ function renderMonitor() {
     ['Art-Net / sACN', `${s.artTx} / ${s.sacnTx} pkt/s`], ['Clock', st.time > 1600000000 ? euDateTime(new Date(st.time * 1000)) : 'not set'],
     ['Memory', memText(s.heap)], ['Lowest free', s.heap ? kb(s.heap.minFree) + ' (since boot)' : '—'],
   ], memBar(s.heap)) : '';
-  const pjCard = (x) => {
-    const j = st?.projectors?.find((y) => y.id === x.id) || {};
-    const state = !j.seen ? 'unknown' : j.online ? 'online' : 'offline';
-    const errs = j.errors ? `<div class="row" style="gap:4px;margin-top:6px">${PJ_ERR_PARTS.map((n, k) => {
-      const v = j.errors[k];
-      return `<span class="tag ${v === '2' ? 'mon-offline' : v === '1' ? 'mon-warn' : 'mon-ok'}" title="${n}: ${v === '2' ? 'error' : v === '1' ? 'warning' : 'ok'}">${n}</span>`;
-    }).join('')}</div>` : '';
-    const inp = PJ_INPUTS.find(([v]) => v === j.input);
-    return card(state, x.name, `${x.ip} · ${j.model || 'projector'}${j.pjName && j.pjName !== x.name ? ' · "' + j.pjName + '"' : ''}`, [
-      ['Power', j.power || '—'], ['Lamp', j.lamp != null ? `${j.lamp} h` : '—'],
-      ['Input', j.input ? `${j.input}${inp ? ' · ' + inp[1] : ''}` : '—'], ['Mute', j.mute ? PJ_MUTE[j.mute] || j.mute : '—'],
-      ['Last seen', ago(j.lastSeen)], ['Last reply', esc(j.last || '—')],
-    ], errs + historyBar(j.history, j.checks), `<button class="btn small" data-cmd="projector ${x.id} on">On</button><button class="btn small" data-cmd="projector ${x.id} off">Off</button>`, `projector:${x.id}`);
-  };
+  const pjCard = monPjCard;
   const pjCards = p.projectors.map(pjCard);
-  const hostCard = (h, kind) => {
-    const x = (kind === 'pc' ? p.pcs : p.devices).find((y) => y.name === h.name) || {};
-    const rows = [['Ping', h.latency != null && h.state === 'online' ? `${h.latency} ms` : '—'], ['Last seen', ago(h.lastSeen)], ['Last check', ago(h.lastCheck)]];
-    if (kind === 'pc') rows.push(['MAC', x.mac || '—'], ['Last action', pcLast(x.id)]);
-    return card(h.state, h.name, kind === 'pc' ? h.ip : `${h.ip}${x.port ? ':' + x.port : ''}${x.notes ? ' · ' + x.notes : ''}`, rows,
-      historyBar(h.history, h.checks), kind === 'pc' ? pcButtons(x.id) : '', `${kind}:${h.name}`);
-  };
+  const hostCard = monHostCard;
   const hosts = mon?.hosts || [];
   // One device opened: its card big, with history and log (see monDetail*).
   if (S.monOpen) {
-    const [k, ...rest] = S.monOpen.split(':'), ref = rest.join(':');
-    let it = null;
-    if (k === 'projector') { const x = p.projectors.find((y) => String(y.id) === ref); if (x) it = { name: x.name, ip: x.ip, power: true, html: () => pjCard(x) }; }
-    else if (k === 'drv') { const x = p.drivers.find((y) => String(y.id) === ref); if (x) it = { name: x.name, ip: x.ip, drv: x, html: () => drvMonCard(x, card, false) }; }
-    else { const h = hosts.find((y) => y.kind === k && y.name === ref); if (h) it = { name: h.name, ip: h.ip, html: () => hostCard(h, k) }; }
+    const it = monItem(S.monOpen);
     if (it) {
       if ($('#monDetail')?.dataset.key !== S.monOpen) { body.innerHTML = monDetailHtml(it); monDetailWire(it); }
       const dc = $('#monDetailCard');
@@ -1484,9 +1504,8 @@ function renderMonitor() {
   const netSec = () => section('Network devices', hosts.filter((h) => h.kind === 'device').map((h) => hostCard(h, 'device')), 'No monitored network devices (Devices page).') +
     (st?.mqtt?.enabled ? section('MQTT broker', [mqttCard(st.mqtt, card)], '') : '');
   const tcpSec = () => ((st?.io?.tcp?.length || st?.io?.modbus?.length) ? section('TCP & Modbus connections', [
-      ...(st.io.tcp || []).map((x) => card(x.state, x.name, `TCP ${x.ip}:${x.port}`, [['Last received', x.lastLine ? esc(x.lastLine) : '—'], ['When', ago(x.lastRx)]])),
-      ...(st.io.modbus || []).map((x) => card(x.state, x.name, `Modbus ${x.ip}`, [['Last good poll', ago(x.lastOk)], ['Errors', String(x.errors)],
-        ['Variables', esc(p.variables.filter((v) => v.modbus?.device === x.name).map((v) => `${v.name}=${st.vars?.[v.name] ?? '?'}`).join(', ') || '—')]])),
+      ...(st.io.tcp || []).map(monTcpCard),
+      ...(st.io.modbus || []).map(monModbusCard),
     ], '') : '<p class="muted">Not connected yet (save first).</p>');
   if (tab !== 'all') {
     body.innerHTML = tab === 'projectors' ? section('Projectors', pjCards, '') : tab === 'pcs' ? pcSec() : tab === 'tcp' ? tcpSec() : netSec();

@@ -305,13 +305,33 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .map-zoom-pct:empty { display: none; }
 .map-canvas, .mini-map { position: relative; width: 100%; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; user-select: none; touch-action: none;
   background-color: var(--deep); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 2.5% 4%, 2.5% 4%; }
+  background-size: 2.5% calc(2.5% * var(--asp, 1.6)), 2.5% calc(2.5% * var(--asp, 1.6)); }
 .map-canvas.has-bg { background-image: none; }
 .map-canvas img, .mini-map img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: .55; pointer-events: none; }
 .mini-map { max-width: 520px; }
-.mfx { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; cursor: grab; z-index: 1; }
+/* rooms on a floor (mapView): their images in their boxes, a thin frame, the name opens that map */
+.map-canvas img.part-bg, .mini-map img.part-bg { inset: auto; }
+.map-room { position: absolute; border: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent); pointer-events: none; box-sizing: border-box; }
+.map-room.sub { border-color: color-mix(in srgb, var(--muted) 22%, transparent); }
+.map-room-lbl { position: absolute; left: 3px; top: 2px; font-size: 11px; color: var(--muted); pointer-events: auto; cursor: pointer; white-space: nowrap; z-index: 1; }
+.map-room.sub .map-room-lbl { font-size: 9px; opacity: .8; }
+.map-room-lbl:hover { color: var(--accent); text-decoration: underline; }
+.mfx.inroom .dot { border-style: dashed; }
+/* Map page, rooms & floors mode: the maps on this one as boxes to move and size */
+.map-canvas.part-mode .mfx, .map-canvas.part-mode .mdev { pointer-events: none; opacity: .45; }
+.map-part { position: absolute; box-sizing: border-box; border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 6%, transparent); cursor: move; z-index: 2; touch-action: none; }
+.map-part.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.map-part-lbl { position: absolute; left: 4px; top: 3px; font-size: 12px; color: var(--text); text-shadow: 0 0 3px var(--deep); pointer-events: none; white-space: nowrap; }
+.part-h { position: absolute; right: -7px; bottom: -7px; width: 13px; height: 13px; border-radius: 3px; background: var(--accent); border: 1px solid var(--deep); cursor: nwse-resize; }
+.map-tree .item .kind { width: 16px; text-align: center; color: var(--muted); }
+/* A marker's box is only its dot (the name hangs under it), so the dot's centre is the position. */
+.mfx { position: absolute; transform: translate(-50%, -50%) scale(var(--s, 1)); display: flex; flex-direction: column; align-items: center; cursor: grab; z-index: 1; }
 .mfx .dot, .sc-chip .dot { width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--dot-edge); background: var(--dot-bg); color: var(--dot-fg);
   display: grid; place-items: center; transition: background .15s, box-shadow .15s, color .15s; }
+.mfx .dot { margin: 0; }   /* not the status dots' right margin: the dot's centre is the position */
+/* a room's fixture on a floor keeps the dot size it has in its room (then scaled with the room) */
+.map-canvas.dense .mfx.rfull .dot { width: 24px; height: 24px; border-width: 2px; }
+.map-canvas:not(.dense) .mfx.rdense .dot { width: 13px; height: 13px; border-width: 1.5px; }
 .mfx .dot svg, .sc-chip .dot svg { width: 15px; height: 15px; }
 .mfx .dot.lit, .sc-chip .dot.lit { color: #111; }
 /* maps with many fixtures (pixel grids): small dots without icons */
@@ -337,7 +357,7 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .sc-key { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--dot-edge); background: var(--dot-bg); position: relative; vertical-align: -2px; }
 .sc-key.in::after { content: ''; position: absolute; top: -4px; right: -4px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); border: 1px solid var(--deep); }
 .sc-key.out { border-style: dashed; opacity: .4; margin-left: 8px; }
-.mfx .lbl { margin-top: 2px; font-size: 10px; white-space: nowrap; color: var(--text); text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
+.mfx .lbl { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 10px; white-space: nowrap; color: var(--text); text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
 .mfx.sel .dot { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
 /* Selected wins over "not in the scene": full strength, orange ring and name, so a fixture
    you picked but haven't set yet is still clearly picked (only the dashed edge says "not in it"). */
@@ -349,8 +369,39 @@ tr.trig-cue td { background: color-mix(in srgb, #ffd23f 5%, transparent); }
 .mini-map .mfx:not(.sel) { opacity: .55; }
 .map-canvas .band, .mini-map .band { position: absolute; border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); pointer-events: none; z-index: 2; }
 .map-selbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; padding: 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); }
-.map-fx .placed { width: 14px; color: var(--muted); }
-.map-fx .placed.on { color: var(--accent); }
+.map-fx .placed, .map-devs .placed { width: 14px; color: var(--muted); }
+.map-fx .placed.on, .map-devs .placed.on { color: var(--accent); }
+/* Devices on a map: a rounded square with the device's icon and a status light in the corner
+   (green online, red offline and pulsing, grey not known yet); the whole square tints with it. */
+.map-devs { max-height: calc(60 * var(--vh)); overflow-y: auto; }
+.map-side { display: flex; margin: 14px 0 8px; } .map-side button { flex: 1; }
+.map-devs .item { cursor: grab; user-select: none; gap: 6px; }
+.map-devs .dev-ico, .dev-sel .dev-ico { width: 15px; height: 15px; flex: none; }
+.mdev { position: absolute; transform: translate(-50%, -50%) scale(var(--s, 1)); display: flex; flex-direction: column; align-items: center; cursor: grab; z-index: 2; --st: var(--muted); }
+.mdev.online { --st: var(--ok); } .mdev.offline { --st: var(--err); }
+.mdev .box { position: relative; width: 28px; height: 28px; box-sizing: border-box; border-radius: 7px; display: grid; place-items: center;
+  border: 2px solid var(--st); background: color-mix(in srgb, var(--st) 18%, var(--panel)); color: var(--text); transition: border-color .2s, background .2s; }
+.mdev .box svg { width: 17px; height: 17px; }
+.mdev .st { position: absolute; top: -5px; right: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--st); border: 1.5px solid var(--deep); }
+.mdev.offline .st { animation: mdev-pulse 1.2s ease-in-out infinite; }
+.mdev.offline .box { box-shadow: 0 0 10px color-mix(in srgb, var(--err) 60%, transparent); }
+@keyframes mdev-pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--err) 35%, transparent); } }
+.mdev .lbl { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 10px; white-space: nowrap; color: var(--text); text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; }
+:root[data-theme=light] .mdev .lbl { text-shadow: 0 0 3px #fff, 0 0 2px #fff; }
+.mdev.offline .lbl { color: var(--err); font-weight: 600; }
+.mdev .ext { position: absolute; top: calc(100% + 14px); left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--muted); white-space: nowrap; pointer-events: none; }
+.mdev .ext:empty { display: none; }
+.mdev.sel .box { outline: 2px solid var(--accent); outline-offset: 3px; }
+.mdev.sel .lbl { color: var(--accent); font-weight: 600; }
+.live-map .mdev { cursor: pointer; }
+.live-map .mdev:hover .box { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+.map-canvas.shape-mode .mdev { pointer-events: none; opacity: .45; }
+/* Live: the clicked device's Monitoring card under the map */
+.lv-devcard:empty { display: none; }
+.lv-devcard { margin-top: 10px; }
+.lv-devcard-h { margin-bottom: 6px; }
+.lv-devcard .mon-expand { display: none; }
+.lv-devcard .mon-card { margin: 0; }
 .map-fx { max-height: calc(50 * var(--vh)); overflow-y: auto; }
 .map-fx .item { cursor: grab; user-select: none; }
 .map-ghost { position: fixed; z-index: 90; transform: translate(-50%, -130%); padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #000; font-size: 12px; pointer-events: none; }
@@ -908,6 +959,8 @@ tr.cal-mark.now td { color: var(--accent); border-bottom: 1px solid var(--accent
 /* A card opens into the device view: history graph + its log lines */
 .mon-grid .mon-open { cursor: pointer; }
 .mon-grid .mon-open:hover { border-color: var(--accent); }
+.ip-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+.ip-link:hover { color: var(--accent); text-decoration-style: solid; }
 .mon-expand { color: var(--muted); font-size: 15px; line-height: 1; }
 .mon-open:hover .mon-expand { color: var(--accent); }
 #monDetailCard .mon-card { margin-bottom: 12px; }
@@ -996,10 +1049,9 @@ tr.p-row td { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 .tt-r { flex-basis: 100%; padding-left: 44px; font-size: 12px; word-break: break-word; }
 .tt-ok { color: var(--ok); } .tt-bad { color: var(--err); }
 /* Map snap grid (under the shapes and fixtures) */
-.map-grid { position: absolute; inset: 0; pointer-events: none; opacity: .5;
-  background-image: linear-gradient(to right, color-mix(in srgb, var(--muted) 35%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--muted) 35%, transparent) 1px, transparent 1px);
-  background-size: calc(100% / var(--gc)) calc(100% / var(--gc)); }
+.map-grid { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: .5; }
+.map-grid path { fill: none; stroke: color-mix(in srgb, var(--muted) 35%, transparent); stroke-width: 1; }
+.map-canvas.has-grid { background-image: none; }   /* the snap grid replaces the plain background squares */
 /* Where used (editors) and its window */
 .used-row { margin: 6px 0 2px; font-size: 13px; }
 details.used summary, #rawBox summary { cursor: pointer; color: var(--muted); }
@@ -1182,6 +1234,9 @@ body.narrow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto au
 .shape-h.pt { width: 9px; height: 9px; border-radius: 50%; background: var(--text, #fff); border: 2px solid var(--accent); cursor: move; z-index: 4; }
 .shape-h.draft-start { width: 9px; height: 9px; border-radius: 50%; opacity: .6; pointer-events: none; }
 .shape-h.draft-start.can { width: 13px; height: 13px; opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+/* several shapes selected: a dashed box round each, and the frame round all of them */
+.shape-mbox { position: absolute; border: 1px dashed var(--accent); pointer-events: none; z-index: 3; }
+.shape-mall { z-index: 3; border-radius: 2px; }
 .shape-sw { gap: 3px; flex-wrap: nowrap; }
 .shape-sw .swatch { width: 16px; height: 16px; border-width: 1px; }
 .shape-sw .swatch.on { border-width: 2px; box-shadow: 0 0 0 1px var(--accent); }

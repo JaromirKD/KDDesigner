@@ -30,8 +30,8 @@ function fxParamNote(q) {
 // the effect's "round on wide maps", KDModel.effectXY).
 function fxPreviewFixtures(src, round) {
   if (Array.isArray(src)) return src;
-  const p = P(), m = src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
-  if (m) return m.items.map((it) => ({ f: fixture(it.fixture), sx: it.x, sy: it.y, ...KDModel.effectXY(m, it.x, it.y, round) })).filter((o) => o.f);
+  const p = P(), m = src?.startsWith('map:') ? mapView(p.maps[+src.slice(4)]) : null;
+  if (m) return m.items.map((it) => ({ f: fixture(it.fixture), sx: it.x, sy: it.y, s: it.s, ...KDModel.effectXY(m, it.x, it.y, round) })).filter((o) => o.f);
   if (src?.startsWith('grid:')) {
     const g = +src.slice(5) || 10;
     return Array.from({ length: g * g }, (_, k) => ({ f: { channels: ['r', 'g', 'b'] }, x: (k % g) / (g - 1), y: Math.floor(k / g) / (g - 1) }));
@@ -57,9 +57,9 @@ function fxPreviewColor(prog, base, outs, i, n, x, y, t, level = 1) {
 }
 // Only the dots' places (sx / sy) are used here, so the effect's "round" doesn't matter.
 function fxPreviewHtml(src) {
-  const p = P(), fx = fxPreviewFixtures(src), m =src?.startsWith('map:') ? p.maps[+src.slice(4)] : null;
-  if (m) return `<div class="map-wrap"><div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, 'calc(50 * var(--vh))')}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
-    ${mapShapesHtml(m)}${fx.map((o, k) => `<div class="mfx" style="left:${o.sx * 100}%;top:${o.sy * 100}%" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div></div>`;
+  const p = P(), fx = fxPreviewFixtures(src), m = src?.startsWith('map:') ? mapView(p.maps[+src.slice(4)]) : null;
+  if (m) return `<div class="map-wrap"><div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, 'calc(50 * var(--vh))')}">${mapImgsHtml(m)}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
+    ${mapShapesHtml(m)}${fx.map((o, k) => `<div class="mfx" style="left:${o.sx * 100}%;top:${o.sy * 100}%${mapScale(o.s)}" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div></div>`;
   if (src?.startsWith('grid:')) return `<div class="fx-prev grid" style="grid-template-columns:repeat(${Math.round(Math.sqrt(fx.length))},1fr)">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
   return `<div class="fx-prev strip">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
 }
@@ -352,7 +352,7 @@ views.scenes = () => {
   if (sc) {
     for (const id of [...S.scSel]) if (!fixture(id)) S.scSel.delete(id);
     S.scMap = Math.min(S.scMap, p.maps.length - 1);
-    const m = p.maps[S.scMap], inScene = sceneFixtures(sc);
+    const m = mapView(p.maps[S.scMap]), inScene = sceneFixtures(sc);
     // "Only in this scene" hides the others (they can't be picked then, so it's off by default).
     const shown = (f) => !S.scOnly || inScene.has(f.id);
     const mark = (f) => (inScene.has(f.id) ? ' in' : ' out') + (S.scSel.has(f.id) ? ' sel' : '');
@@ -366,7 +366,7 @@ views.scenes = () => {
       const placed = new Set(m.items.map((it) => it.fixture)), rest = p.fixtures.filter((f) => !placed.has(f.id) && shown(f));
       // Not taller than ~60 % of the screen until you drag it bigger, so the controls stay in view.
       look = `<div class="map-wrap"><div class="map-canvas sc-map${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="scCanvas" style="${mapSizeStyle('kd.mapH.scenes', m.aspect, 'calc(60 * var(--vh))')}">
-        ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}${mapShapesHtml(m)}
+        ${mapUnderHtml(m)}
         ${m.items.map((it) => { const f = fixture(it.fixture); return f && shown(f) ? mapDotHtml(f, it, mark(f), m.labels !== false, 'data-scfx') : ''; }).join('')}<div class="band" hidden></div>${mapResizeHtml('kd.mapH.scenes')}</div></div>
         ${rest.length ? `<div class="sc-chips"><span class="muted">Not on this map:</span>${chips(rest)}</div>` : ''}`;
     } else look = `<div class="sc-chips sc-all">${chips(p.fixtures.filter(shown)) || `<span class="muted">${p.fixtures.length ? 'No fixtures in this scene yet.' : 'No fixtures yet - add them on the Fixtures page.'}</span>`}</div>`;
@@ -457,7 +457,7 @@ views.scenes.after = () => {
   }));
 };
 function wireSceneLook(sc) {
-  const p = P(), m = p.maps[S.scMap];
+  const p = P(), m = mapView(p.maps[S.scMap]);
   // Libraries types give the home values and icons.
   if (!LIB.list && p.fixtures.some((f) => f.type && !findType(f.type))) loadLibrary(() => S.view === 'scenes' && render());
   paintSceneLook(sc);
@@ -687,9 +687,9 @@ function cuePreviewMap(ids, key) {
   const pick = (S.cuePrevMap || {})[key];
   if (pick === 'strip') return null;
   const want = new Set(ids), chosen = pick != null && P().maps.find((m) => m.id === pick);
-  if (chosen) return chosen;
+  if (chosen) return mapView(chosen);
   let best = null, bn = 0;
-  for (const m of P().maps) { const n = m.items.filter((it) => want.has(it.fixture)).length; if (n > bn) { bn = n; best = m; } }
+  for (const m of P().maps.map((x) => mapView(x))) { const n = m.items.filter((it) => want.has(it.fixture)).length; if (n > bn) { bn = n; best = m; } }
   return best;
 }
 // Effect cue preview, like the Effects page: the whole map with every fixture on it; the
@@ -698,18 +698,18 @@ function cuePreviewMap(ids, key) {
 // (those with track fixtures on them) or the strip.
 function cuePreviewHtml(tr, key) {
   const ids = trackFxIds(tr), m = cuePreviewMap(ids, key), idx = new Map(ids.map((id, k) => [id, k]));
-  const want = new Set(ids), maps = P().maps.map((x) => [x, x.items.filter((it) => want.has(it.fixture)).length]).filter(([, n]) => n);
-  const picker = maps.length ? `<select data-cueprevmap title="Which map the preview shows (only here, not saved)">${maps.map(([x, n]) => `<option value="${x.id}"${m === x ? ' selected' : ''}>${esc(x.name)} (${n})</option>`).join('')}<option value="strip"${m ? '' : ' selected'}>Strip (track order)</option></select>` : '';
+  const want = new Set(ids), maps = P().maps.map((x) => mapView(x)).map((x) => [x, x.items.filter((it) => want.has(it.fixture)).length]).filter(([, n]) => n);
+  const picker = maps.length ? `<select data-cueprevmap title="Which map the preview shows (only here, not saved)">${maps.map(([x, n]) => `<option value="${x.id}"${m?.id === x.id ? ' selected' : ''}>${esc(x.name)} (${n})</option>`).join('')}<option value="strip"${m ? '' : ' selected'}>Strip (track order)</option></select>` : '';
   if (!m) return `<div class="row cue-prev-head"><b>Preview</b>${picker}</div><div class="fx-prev strip">${ids.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
   const items = m.items.filter((it) => fixture(it.fixture)), onMap = new Set(items.map((it) => it.fixture));
   const rest = ids.filter((id) => !onMap.has(id)), zkey = `cue:${m.id}`;
   // Effects use each fixture's place on the first map it is on (as the controller does):
   // on another map, the pattern over the map can differ from what those fixtures play.
-  const elsewhere = ids.filter((id) => onMap.has(id) && P().maps.find((x) => x.items.some((it) => it.fixture === id)) !== m).length;
+  const elsewhere = ids.filter((id) => onMap.has(id) && P().maps.find((x) => x.items.some((it) => it.fixture === id))?.id !== m.id).length;
   return `<div class="row cue-prev-head"><b>Preview</b>${picker}
       <label class="muted" title="Runs the effect over the whole map, not only where the fixtures are, so you can see the pattern between them"><input type="checkbox" data-cueovl${fxOverlayOn() ? ' checked' : ''}> whole map</label>${mapZoomHtml(zkey)}</div>
-    <div class="map-wrap"><div class="fx-prev map-canvas${items.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.cue', m.aspect, 'calc(40 * var(--vh))')}" data-aspect="${m.aspect}" data-zoomkey="${zkey}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="">` : ''}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
-    ${mapShapesHtml(m)}${items.map((it) => { const f = fixture(it.fixture), k = idx.get(it.fixture); return `<div class="mfx${k == null ? ' out' : ''}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)}${k == null ? ' (not in this track)' : ''}"><span class="dot"${k == null ? '' : ` data-pv="${k}"`}></span></div>`; }).join('')}${mapResizeHtml('kd.mapH.cue')}</div></div>
+    <div class="map-wrap"><div class="fx-prev map-canvas${items.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.cue', m.aspect, 'calc(40 * var(--vh))')}" data-aspect="${m.aspect}" data-zoomkey="${zkey}">${mapImgsHtml(m)}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
+    ${mapShapesHtml(m)}${items.map((it) => { const f = fixture(it.fixture), k = idx.get(it.fixture); return `<div class="mfx${k == null ? ' out' : ''}" style="left:${it.x * 100}%;top:${it.y * 100}%${mapScale(it.s)}" title="${esc(f.name)}${k == null ? ' (not in this track)' : ''}"><span class="dot"${k == null ? '' : ` data-pv="${k}"`}></span></div>`; }).join('')}${mapResizeHtml('kd.mapH.cue')}</div></div>
     ${elsewhere && fxOverlayOn() ? `<div class="muted" style="margin-top:6px">${elsewhere} of these fixture(s) take their place for effects from an earlier map, so the pattern over this map may not match them.</div>` : ''}
     ${rest.length ? `<div class="muted" style="margin-top:6px">Not on this map: ${rest.length} fixture(s)</div><div class="fx-prev strip">${rest.map((id) => `<span data-pv="${idx.get(id)}" title="${esc(fixture(id).name)}"></span>`).join('')}</div>` : ''}`;
 }
@@ -972,7 +972,7 @@ function trackFixturesHtml(t, r) {
   const p = P(), tr = t.tracks[r];
   const on = new Set(trackFxIds(tr)), viaGroup = new Set(trackFxIds({ ...tr, fixtures: [] }));
   // Where to pick: a map (the one chosen here, else the Map page's) or -1 = the list.
-  const mi = S.trackMap === -1 || !p.maps.length ? -1 : Math.min(S.trackMap ?? S.sel.map ?? 0, p.maps.length - 1), m = p.maps[mi];
+  const mi = S.trackMap === -1 || !p.maps.length ? -1 : Math.min(S.trackMap ?? S.sel.map ?? 0, p.maps.length - 1), m = mi >= 0 ? mapView(p.maps[mi]) : null;
   const q = (S.trackSearch || '').trim().toLowerCase(), hit = (f) => !q || f.name.toLowerCase().includes(q) || String(f.id) === q;
   const mark = (f) => (on.has(f.id) ? ' in' : ' out') + (viaGroup.has(f.id) && !tr.fixtures.includes(f.id) ? ' via' : '') + (hit(f) ? '' : ' nohit');
   let icons = true;
@@ -988,7 +988,7 @@ function trackFixturesHtml(t, r) {
   if (m) {
     const items = m.items.filter((it) => fixture(it.fixture)), placed = new Set(items.map((it) => it.fixture));
     const rest = p.fixtures.filter((f) => !placed.has(f.id));
-    pickArea = items.length ? `<div class="map-wrap"><div class="mini-map tk-map${items.length > 40 ? ' dense' : ''}" id="trackMap" style="aspect-ratio:${m.aspect}">${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}${mapShapesHtml(m)}
+    pickArea = items.length ? `<div class="map-wrap"><div class="mini-map tk-map${items.length > 40 ? ' dense' : ''}" id="trackMap" style="aspect-ratio:${m.aspect};--asp:${m.aspect}">${mapUnderHtml(m)}
       ${items.map((it) => { const f = fixture(it.fixture); return mapDotHtml(f, it, mark(f) + (on.has(f.id) ? ' sel' : ''), m.labels !== false, 'data-trackfx-map'); }).join('')}<div class="band" hidden></div></div></div>
       ${rest.length ? `<div class="sc-chips"><span class="muted">Not on this map:</span>${chips(rest)}</div>` : ''}`
       : `<p class="muted">Map '${esc(m.name)}' has no fixtures on it yet - place them on the Map page, or pick from the list.</p>`;
@@ -1458,7 +1458,7 @@ views.timelines.after = () => {
   // not on this map stay; fixtures it gets through a group aren't added a second time.
   const tmap = $('#trackMap');
   if (tmap && tr) {
-    const m = P().maps[Math.min(S.trackMap ?? S.sel.map ?? 0, P().maps.length - 1)];
+    const m = mapView(P().maps[Math.min(S.trackMap ?? S.sel.map ?? 0, P().maps.length - 1)]);
     attachMapZoom(tmap, `track:${m.id}`);
     const onMap = new Set(m.items.map((it) => it.fixture)), before = JSON.stringify(tr.fixtures);
     const viaGroup = () => new Set(trackFxIds({ ...tr, fixtures: [] }));

@@ -282,10 +282,17 @@ function wirePatchGrid() {
     const cell = e.target.closest('[data-f]');
     if (!cell || e.button !== 0) return;
     e.preventDefault();
-    const id = +cell.dataset.f;
-    // Shift/Ctrl+click adds or removes a fixture, like in the list.
-    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+    const id = +cell.dataset.f, li = p.fixtures.findIndex((f) => f.id === id);
+    // Like in the list: Ctrl+click adds or removes a fixture, Shift+click selects the range
+    // from the last one clicked (in list order, so also fixtures in other universes).
+    if (e.shiftKey) {
+      S.fxSel = new Set(p.fixtures.slice(Math.min(fxAnchor, li), Math.max(fxAnchor, li) + 1).map((f) => f.id));
+      S.fxGroup = null;
+      return render();
+    }
+    if (e.ctrlKey || e.metaKey) {
       S.fxSel.has(id) ? S.fxSel.delete(id) : S.fxSel.add(id);
+      fxAnchor = li;
       S.fxGroup = null;
       return render();
     }
@@ -325,6 +332,7 @@ function wirePatchGrid() {
       grid.classList.remove('dragging');
       if (!marked.length) {   // a click: select this fixture
         S.fxSel = new Set([id]);
+        fxAnchor = li;
         S.fxGroup = null;
         S.fxPanel = '';
         S.revealFx = true;
@@ -593,9 +601,12 @@ function fixtureLook(f, dmx) {
   return null;
 }
 // A fixture on a map: a round dot with its icon, coloured by paintDot().
+// it.s = how much smaller it is drawn: a fixture of a room on a floor (mapView) is as much smaller
+// as the room is there; small ones drop their name.
+const mapScale = (s) => (s && s < 1 ? `;--s:${+Math.max(0.25, s).toFixed(3)}` : '');
 const mapDotHtml = (f, it, cls, labels, data = 'data-mfx') =>
-  `<div class="mfx${cls}" ${data}="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%" title="${esc(f.name)} · ${f.universe}.${f.address} (${esc((f.channels || []).join(', '))})">
-    <span class="dot">${fxIcon(f)}</span>${labels ? `<span class="lbl">${esc(f.name)}</span>` : ''}</div>`;
+  `<div class="mfx${cls}${it.from != null ? (it.d ? ' rdense' : ' rfull') : ''}" ${data}="${f.id}" style="left:${it.x * 100}%;top:${it.y * 100}%${mapScale(it.s)}" title="${esc(f.name)} · ${f.universe}.${f.address} (${esc((f.channels || []).join(', '))})">
+    <span class="dot">${fxIcon(f)}</span>${labels && !(it.s < 0.6) ? `<span class="lbl">${esc(f.name)}</span>` : ''}</div>`;
 // glow = false for maps with many fixtures (the glow is costly to draw).
 function paintDot(dot, look, glow = true) {
   dot.style.background = look ? look.color : '';
@@ -603,6 +614,70 @@ function paintDot(dot, look, glow = true) {
   // A dark icon on a bright colour.
   const [r, g, b] = (look?.color.match(/[\d.]+/g) || [0, 0, 0]).map(Number);
   dot.classList.toggle('lit', !!look && look.level > 0.35 && 0.3 * r + 0.59 * g + 0.11 * b > 110);
+}
+// ---- Devices on a map (web UI only, like the shapes: the firmware drops maps after loading) --
+// m.devices = [{list, name, x, y}]: list = the project list the device is in (MAP_DEV_LISTS),
+// found by name (a rename follows in onBound, a deleted device's marker goes in normalize).
+// Optional per map: m.showDevices false hides them on the Map page and the Live page. They show
+// the device's state from /api/status (paintMapDevs, called from onStatus).
+const MAP_DEV_LISTS = [['projectors', 'projector', 'Projectors'], ['pcs', 'pc', 'PCs'], ['drivers', '', 'Show devices'],
+  ['devices', 'network', 'Network devices'], ['tcp', 'tcp', 'TCP'], ['modbus', 'modbus', 'Modbus']];
+const mapDevKey = (d) => `${d.list}:${d.name}`;
+const mapDevOf = (d) => (P()[d.list] || []).find((x) => x.name === d.name);
+const mapDevIcon = (list, x) => (list === 'drivers' ? x.type : MAP_DEV_LISTS.find(([l]) => l === list)?.[1] || 'device');
+const mapDevsShown = (m) => (m.showDevices !== false ? (m.devices || []).filter(mapDevOf) : []);
+// Every device in the project, in the order of MAP_DEV_LISTS: [{list, name, x (the device), label}].
+const allMapDevs = () => MAP_DEV_LISTS.flatMap(([list, , label]) => (P()[list] || []).filter((x) => x.name)
+  .map((x) => ({ list, name: x.name, x, label: list === 'drivers' ? DRIVERS[x.type]?.label || x.type : label })));
+// What the controller says about a device now: state online|offline|unknown, a short extra
+// (projector power, "not monitored"), and where its card is on the Monitoring page.
+function mapDevStatus(list, x, st = S.status) {
+  const s = (v) => v ?? 'unknown', seen = (j) => (!j ? 'unknown' : !j.seen ? 'unknown' : j.online ? 'online' : 'offline');
+  if (!st) return { state: 'unknown', extra: 'no contact with the controller' };
+  if (list === 'pcs' || list === 'devices') {
+    const kind = list === 'pcs' ? 'pc' : 'device', h = st.monitor?.hosts?.find((y) => y.kind === kind && y.name === x.name);
+    if (!h) return { state: 'unknown', extra: x.monitor === false ? 'not monitored' : 'not on the controller yet', tab: list === 'pcs' ? 'pcs' : 'network' };
+    return { state: s(h.state), extra: h.state === 'online' && h.latency != null ? `${h.latency} ms` : '', open: `${kind}:${x.name}` };
+  }
+  if (list === 'projectors') {
+    const j = st.projectors?.find((y) => y.id === x.id);
+    return { state: seen(j), extra: j?.online && j.power ? j.power : j ? '' : 'not on the controller yet', open: `projector:${x.id}` };
+  }
+  if (list === 'drivers') {
+    const j = st.drivers?.find((y) => y.id === x.id && y.type === x.type);
+    return { state: seen(j), extra: j ? '' : 'not on the controller yet', open: `drv:${x.id}` };
+  }
+  const j = (list === 'tcp' ? st.io?.tcp : st.io?.modbus)?.find((y) => y.name === x.name);
+  return { state: s(j?.state), extra: j ? '' : 'not connected yet', tab: 'tcp', card: `${list}:${x.name}` };
+}
+const mapDevHtml = (d, x, labels, cls = '') =>
+  `<div class="mdev${cls}" data-mdev="${esc(mapDevKey(d))}" style="left:${d.x * 100}%;top:${d.y * 100}%${mapScale(d.s)}">
+    <span class="box">${devIcon(mapDevIcon(d.list, x), '')}<i class="st"></i></span>${labels && !(d.s < 0.6) ? `<span class="lbl">${esc(d.name)}</span>` : ''}<span class="ext"></span></div>`;
+// Colours every device marker under root by its state, with the details in its tooltip.
+function paintMapDevs(root = document) {
+  for (const el of root.querySelectorAll('[data-mdev]')) {
+    const [list, ...n] = el.dataset.mdev.split(':'), name = n.join(':');
+    const x = (P()[list] || []).find((y) => y.name === name);
+    if (!x) continue;
+    const r = mapDevStatus(list, x);
+    el.classList.remove('online', 'offline', 'unknown');
+    el.classList.add(r.state);
+    const ext = el.querySelector('.ext'), short = list === 'projectors' && r.state === 'online' ? r.extra : '';
+    if (ext.textContent !== short) ext.textContent = short;
+    el.title = `${name} · ${allMapDevs().find((d) => d.x === x)?.label || ''}${x.ip ? ' · ' + x.ip : ''}\n${r.state}${r.extra ? ' · ' + r.extra : ''}`;
+  }
+}
+// Opens a device's card on the Monitoring page (its history and log where it has a view).
+function openDeviceMonitor(list, name) {
+  const x = (P()[list] || []).find((y) => y.name === name);
+  if (!x) return;
+  const r = mapDevStatus(list, x);
+  S.view = 'monitor';
+  S.monTab = 'all';
+  S.monOpen = r.open || null;
+  if (!r.open && r.tab) S.monTab = r.tab;
+  render();
+  $('#main').scrollTop = 0;
 }
 // ---- Floor-plan shapes on a map (web UI only: the firmware drops maps after loading) -----
 // m.shapes = [{type: 'rect'|'ellipse'|'line'|'poly'|'text', x, y, w, h, color, fill, alpha, width, text, size}],
@@ -613,8 +688,40 @@ function paintDot(dot, look, glow = true) {
 // closed = last point joins the first (and it can be filled). rot = degrees clockwise round the
 // box's centre (rect, ellipse, poly, text; a line just has its ends moved), turned in real
 // proportions so 45° looks like 45° on a wide map. Drawn under the fixtures on every map view.
-const SHAPE_TOOLS = [['select', '↖ Select'], ['rect', '▭ Rectangle'], ['ellipse', '◯ Ellipse'], ['line', '╱ Line'], ['poly', '✏ Draw'], ['text', 'T Text']];
-const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Ellipse', line: 'Line', poly: 'Own shape', text: 'Text' };
+const SHAPE_TOOLS = [['select', '↖ Select'], ['rect', '▭ Rectangle'], ['ellipse', '◯ Ellipse'], ['line', '╱ Line'], ['poly', '✏ Draw'], ['text', 'T Text'], ['door', '◜ Door'], ['stairs', '▤ Stairs']];
+const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Ellipse', line: 'Line', poly: 'Own shape', text: 'Text', door: 'Door', stairs: 'Stairs' };
+// Doors and stairs live in a box like a rectangle (so moving, resizing and turning are the same).
+// door: the opening is the bottom edge, hinged bottom-left (flip: bottom-right; double: both),
+//   the leaf drawn standing open and its swing as an arc. stairs: treads across the long side
+//   (steps of them, none = worked out from the shape), an arrow pointing up the stairs (flip: the
+//   other way). Arrow heads are worked out in real proportions (a = the map's aspect).
+function doorStairsSvg(s, a, pc, st, fill) {
+  const x = s.x, y = s.y, w = s.w, h = s.h, L = (px, py) => `${pc(px)},${pc(py)}`;
+  if (s.type === 'door') {
+    const leaf = (hx, ex, rw, sweep) => `M${L(hx, y + h)} L${L(hx, y)} M${L(hx, y)} A${pc(rw)} ${pc(h)} 0 0 ${sweep} ${L(ex, y + h)}`;
+    const d = s.double ? leaf(x, x + w / 2, w / 2, 1) + leaf(x + w, x + w / 2, w / 2, 0) : s.flip ? leaf(x + w, x, w, 0) : leaf(x, x + w, w, 1);
+    // The leaf solid, the swing thin and dashed (one path each, so both get the line colour).
+    const parts = d.split(/(?=M)/), leaves = parts.filter((_, k) => k % 2 === 0).join(''), arcs = parts.filter((_, k) => k % 2 === 1).join('');
+    return `<path d="${leaves}" ${st} fill="none" stroke-linecap="round"/><path d="${arcs}" ${st.replace(/stroke-width="([\d.]+)"/, (_, v) => `stroke-width="${Math.max(0.5, v / 2)}"`)} fill="none" stroke-dasharray="4 3"/>`;
+  }
+  const alongX = w * a >= h, n = stairSteps(s, a);
+  let treads = '', arrow;
+  for (let k = 1; k < n; k++) treads += alongX ? `M${L(x + (w * k) / n, y)} L${L(x + (w * k) / n, y + h)} ` : `M${L(x, y + (h * k) / n)} L${L(x + w, y + (h * k) / n)} `;
+  if (alongX) {
+    const cy = y + h / 2, hd = Math.min(h * 0.3, w * a * 0.12), [t0, t1] = s.flip ? [x + w * 0.92, x + w * 0.08] : [x + w * 0.08, x + w * 0.92], dir = s.flip ? -1 : 1;
+    arrow = `M${L(t0, cy)} L${L(t1, cy)} M${L(t1 - (dir * hd) / a, cy - hd * 0.6)} L${L(t1, cy)} L${L(t1 - (dir * hd) / a, cy + hd * 0.6)}`;
+  } else {
+    const cx = x + w / 2, hd = Math.min(w * a * 0.3, h * 0.12), [t0, t1] = s.flip ? [y + h * 0.08, y + h * 0.92] : [y + h * 0.92, y + h * 0.08], dir = s.flip ? 1 : -1;
+    arrow = `M${L(cx, t0)} L${L(cx, t1)} M${L(cx - (hd * 0.6) / a, t1 - dir * hd)} L${L(cx, t1)} L${L(cx + (hd * 0.6) / a, t1 - dir * hd)}`;
+  }
+  return `<rect x="${pc(x)}" y="${pc(y)}" width="${pc(w)}" height="${pc(h)}" ${st} ${fill}/><path d="${treads}" ${st.replace(/stroke-width="([\d.]+)"/, (_, v) => `stroke-width="${Math.max(0.5, v * 0.6)}"`)} fill="none"/>
+    <path d="${arrow}" ${st} fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+// Steps of a stair: its own number, or about one per ~quarter of its width along the long side.
+const stairSteps = (s, a) => {
+  const long = Math.max(s.w * a, s.h), short = Math.min(s.w * a, s.h) || 1e-3;
+  return Math.max(2, Math.min(60, Math.round(s.steps || Math.max(3, Math.min(30, (long / short) * 4)))));
+};
 // A poly's points on the map (0..1 of its width/height), and back: the box and the points in it.
 const polyAbs = (s) => (s.pts || []).map(([u, v]) => [s.x + u * s.w, s.y + v * s.h]);
 function polyFromAbs(abs) {
@@ -690,6 +797,50 @@ const SHAPE_SWATCHES = [['#8aa0b8', 'Blue grey'], ['#d0d8e2', 'Light grey'], ['#
 // Swatches after a colour picker: data-shsw = which setting (color / fill), cur = its colour now.
 const shapeSwatches = (key, cur) => `<span class="row shape-sw">${SHAPE_SWATCHES.map(([c, n]) => `<span class="swatch${(cur || '').toLowerCase() === c ? ' on' : ''}" data-shsw="${key}" data-c="${c}" title="${n}" style="background:${c}"></span>`).join('')}</span>`;
 let shapeUid = 0;   // pattern ids: unique in the page, also with two map views
+// Shapes selected on the Map page: S.mapShapeSel = the one selected (with handles and its own
+// settings), or S.mapShapeMulti = a Set of two or more indexes (moved, nudged, turned, coloured,
+// copied and deleted together; no handles). setShapeSel keeps the two in step.
+const shapeSelIdx = () => (S.mapShapeMulti?.size ? [...S.mapShapeMulti] : S.mapShapeSel != null ? [S.mapShapeSel] : []);
+function setShapeSel(list) {
+  list = [...new Set(list)].sort((a, b) => a - b);
+  S.mapShapeMulti = list.length > 1 ? new Set(list) : null;
+  S.mapShapeSel = list.length === 1 ? list[0] : null;
+}
+// A shape's centre (a text's x/y is its centre) and the box it covers on the map, turned.
+const shapeFillable = (x) => x.type === 'rect' || x.type === 'ellipse' || x.type === 'stairs' || (x.type === 'poly' && x.closed);
+const shapeMid = (s) => (s.type === 'text' ? [s.x, s.y] : shapeCenter(s));
+function shapeBBox(s, a) {
+  let P;
+  if (s.type === 'text') P = [[s.x, s.y]];
+  else if (s.type === 'line') P = [[s.x, s.y], [s.x + s.w, s.y + s.h]];
+  else if (s.type === 'poly') P = polyWorld(s, a);
+  else {
+    P = [[s.x, s.y], [s.x + s.w, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h]];
+    if (s.rot) P = P.map((p) => rotPt(p, shapeCenter(s), s.rot, a));
+  }
+  const xs = P.map((p) => p[0]), ys = P.map((p) => p[1]);
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+}
+const bboxAll = (bs) => ({ x0: Math.min(...bs.map((b) => b.x0)), y0: Math.min(...bs.map((b) => b.y0)), x1: Math.max(...bs.map((b) => b.x1)), y1: Math.max(...bs.map((b) => b.y1)) });
+// With Snap on: puts the top-left corner of what you see of the shapes on the grid. A turned shape
+// is stored as its unturned box turned round its centre, so snapping its stored corner put a turned
+// door or stairs off the grid. Only for straight angles (0, 90, 180°): other angles never line up.
+function snapShapesCorner(m, list) {
+  if (m.snap === false || !list.length || list.some((x) => (x.rot || 0) % 90)) return;
+  const b = bboxAll(list.map((x) => shapeBBox(x, m.aspect || 1))), dx = snapTo(m, b.x0) - b.x0, dy = snapToY(m, b.y0) - b.y0;
+  for (const x of list) { x.x = Math.round((x.x + dx) * 1e4) / 1e4; x.y = Math.round((x.y + dy) * 1e4) / 1e4; }
+}
+// Turns several shapes deg round their common centre (each also turns itself).
+function shapesRotate(list, deg, a) {
+  const b = bboxAll(list.map((s) => shapeBBox(s, a))), c = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+  for (const s of list) {
+    const o = shapeMid(s), n = rotPt(o, c, deg, a);
+    s.x += n[0] - o[0];
+    s.y += n[1] - o[1];
+    shapeRotate(s, deg, a);
+    for (const k of ['x', 'y', 'w', 'h']) if (s[k] != null) s[k] = Math.round(s[k] * 1e4) / 1e4;
+  }
+}
 // edit = the Map page's floor-plan mode: shapes can be clicked, the selected one has handles.
 const mapShapesHtml = (m, edit = false) => (m.shapes?.length || edit ? `<div class="shape-layer">${mapShapesInner(m, edit)}</div>` : '');
 function mapShapesInner(m, edit) {
@@ -713,12 +864,13 @@ function mapShapesInner(m, edit) {
       defs.push(`<pattern id="${id}" patternUnits="userSpaceOnUse" width="2" height="${+(2 * (m.aspect || 1)).toFixed(3)}" viewBox="0 0 10 10" preserveAspectRatio="none">${SHAPE_PATTERNS[s.pattern][1](esc(s.fill))}</pattern>`);
       fill = `fill="url(#${id})" fill-opacity="${s.alpha ?? 0.35}"`;
     } else if (s.fill) fill = `fill="${esc(s.fill)}" fill-opacity="${s.alpha ?? 0.35}"`;
+    if (s.type === 'door' || s.type === 'stairs') return `<g${d}>${doorStairsSvg(s, m.aspect || 1, pc, st, s.type === 'stairs' ? fill : 'fill="none"')}${edit ? `<rect class="hit" x="${pc(s.x)}" y="${pc(s.y)}" width="${pc(s.w)}" height="${pc(s.h)}" fill="transparent" stroke="none"/>` : ''}</g>`;
     if (s.type === 'poly') return `<polygon${d} points="${polyAbs(s).map(([x, y]) => `${pc(x)},${pc(y)}`).join(' ')}" ${st} ${fill} stroke-linejoin="round"/>`;
     return s.type === 'ellipse'
       ? `<ellipse${d} cx="${pc(s.x + s.w / 2)}" cy="${pc(s.y + s.h / 2)}" rx="${pc(s.w / 2)}" ry="${pc(s.h / 2)}" ${st} ${fill}/>`
       : `<rect${d} x="${pc(s.x)}" y="${pc(s.y)}" width="${pc(s.w)}" height="${pc(s.h)}" ${st} ${fill}/>`;
   }).join('');
-  const texts = sh.map((s, k) => (s.type === 'text' ? `<div class="map-text${edit && S.mapShapeSel === k ? ' sel' : ''}"${edit ? ` data-shape="${k}"` : ''} style="left:${pc(s.x)}%;top:${pc(s.y)}%;font-size:calc(${s.size || 3} * 1cqw);${s.rot ? `transform:translate(-50%,-50%) rotate(${s.rot}deg);` : ''}color:${esc(s.color || '#d0d8e2')}">${esc(s.text || '')}</div>` : '')).join('');
+  const texts = sh.map((s, k) => (s.type === 'text' ? `<div class="map-text${edit && (S.mapShapeSel === k || S.mapShapeMulti?.has(k)) ? ' sel' : ''}"${edit ? ` data-shape="${k}"` : ''} style="left:${pc(s.x)}%;top:${pc(s.y)}%;font-size:calc(${s.size || 3} * 1cqw);${s.rot ? `transform:translate(-50%,-50%) rotate(${s.rot}deg);` : ''}color:${esc(s.color || '#d0d8e2')}">${esc(s.text || '')}</div>` : '')).join('');
   // The shape being drawn (✏ Draw): its points so far, a dashed line to the mouse, the first point to close it.
   let dr = '';
   if (draft?.pts.length) {
@@ -726,7 +878,16 @@ function mapShapesInner(m, edit) {
     dr = `<polyline class="draft" points="${all.map(([x, y]) => `${pc(x)},${pc(y)}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>`;
   }
   const first = draft?.pts.length && !draft.free ? `<div class="shape-h draft-start${draft.pts.length >= 3 ? ' can' : ''}" title="Click to close the shape" style="left:${pc(draft.pts[0][0])}%;top:${pc(draft.pts[0][1])}%"></div>` : '';
-  return `<svg class="map-shapes${edit ? ' edit' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none">${defs.length ? `<defs>${defs.join('')}</defs>` : ''}${svg}${dr}</svg>${texts}${edit ? shapeHandlesHtml(sh[S.mapShapeSel]) : ''}${first}`;
+  return `<svg class="map-shapes${edit ? ' edit' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none">${defs.length ? `<defs>${defs.join('')}</defs>` : ''}${svg}${dr}</svg>${texts}${edit ? shapeHandlesHtml(sh[S.mapShapeSel]) + shapeMultiHtml(m) : ''}${first}`;
+}
+// Several shapes selected: a dashed box round each (a text has its own outline) and one round all.
+function shapeMultiHtml(m) {
+  if (!S.mapShapeMulti?.size) return '';
+  const pc = (v) => +(v * 100).toFixed(3), a = m.aspect || 1;
+  const bs = [...S.mapShapeMulti].map((k) => m.shapes[k]).filter(Boolean).map((s) => [s, shapeBBox(s, a)]);
+  if (!bs.length) return '';
+  const box = (b, cls, pad) => `<div class="${cls}" style="left:calc(${pc(b.x0)}% - ${pad}px);top:calc(${pc(b.y0)}% - ${pad}px);width:calc(${pc(b.x1 - b.x0)}% + ${2 * pad}px);height:calc(${pc(b.y1 - b.y0)}% + ${2 * pad}px)"></div>`;
+  return bs.filter(([s]) => s.type !== 'text').map(([, b]) => box(b, 'shape-mbox', 2)).join('') + box(bboxAll(bs.map(([, b]) => b)), 'map-selbox shape-mall', 8);
 }
 // The selected shape's frame and handles: 8 for a rectangle/ellipse (corners change width and
 // height together, the sides only one of them) and the ⟳ handle above it, the two ends of a
@@ -752,7 +913,7 @@ function shapeHandlesHtml(s) {
 // map's shape (never wider than the page); stored per page in this browser, like the pane widths.
 function mapSizeStyle(key, aspect, dflt = '') {
   const h = loadWidth(key) ? loadWidth(key) + 'px' : dflt;
-  return `aspect-ratio:${aspect};${h ? `width:min(100%, calc(${h} * ${aspect}))` : ''}`;
+  return `aspect-ratio:${aspect};--asp:${aspect};${h ? `width:min(100%, calc(${h} * ${aspect}))` : ''}`;
 }
 const mapResizeHtml = (key) => `<div class="map-resize" data-mapsize="${key}" title="Drag to make the map bigger or smaller · double-click to reset"></div>`;
 function attachMapResize(canvas, aspect) {
@@ -976,15 +1137,111 @@ function transformSel(m, deg, scale = 1) {
   markDirty();
   render();
 }
-// The snap grid: m.grid cells across and down (default 80), x and y each 0..1.
-const MAP_GRIDS = [10, 20, 40, 80];
-const mapGrid = (m) => (MAP_GRIDS.includes(+m.grid) ? +m.grid : 80);
+// The snap grid: square cells (also on a wide or tall map), m.grid of them across (2..400; a
+// fraction when the size was typed in metres), grid / aspect down. m.widthM (optional) = the map's
+// real width in metres: the grid is then typed in metres, and rooms go on a floor to scale.
+const mapGrid = (m) => { const n = +m.grid; return n >= 2 && n <= 400 ? n : 80; };
 const snapTo = (m, v) => Math.round(v * mapGrid(m)) / mapGrid(m);
-// Lines of the snap grid over the map (at most 40 each way, so a fine grid isn't a grey haze).
+const snapToY = (m, v) => { const k = mapGrid(m) / (m.aspect || 1); return Math.round(v * k) / k; };
+// Lines of the snap grid over the map, one per grid square (only every k-th above 100 across).
+// Drawn as SVG lines at exact places: a repeated CSS background is rounded to whole pixels per
+// square, so its lines drifted away from where things snap.
 function mapGridHtml(m) {
   if (m.snap === false) return '';
-  const n = mapGrid(m), step = n > 40 ? 2 : 1;
-  return `<div class="map-grid" style="--gc:${n / step}"></div>`;
+  const n = mapGrid(m), rows = n / (m.aspect || 1), k = Math.max(1, Math.ceil(n / 100)), q = (v) => +(v * 100).toFixed(3);
+  let d = '';
+  for (let i = k; i < n - 1e-6; i += k) d += `M${q(i / n)} 0V100`;
+  for (let j = k; j < rows - 1e-6; j += k) d += `M0 ${q(j / rows)}H100`;
+  return `<svg class="map-grid" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${d}" vector-effect="non-scaling-stroke"/></svg>`;
+}
+// The grid size field: metres when the map has a real width, cells across otherwise.
+const mapGridVal = (m) => (m.widthM ? +(m.widthM / mapGrid(m)).toFixed(3) : Math.round(mapGrid(m)));
+const fmtM = (v) => `${+(+v).toFixed(2)} m`;
+// ---- Rooms, floors and the building: a map can show other maps inside it -----------------------
+// m.parts = [{map: <id of another map>, x, y, w}]: that map drawn with its top-left corner at x/y
+// (0..1 of this map), w of this map's width wide; its height follows from both maps' shapes. A
+// floor puts its rooms together, a building its floors, so the museum can be looked at room by
+// room or as a whole. m.kind ('floor' | 'building', none = a room) only names it in the lists.
+// What a room holds stays on the room's own map: a floor shows it (mapView) but doesn't keep a
+// copy, so moving a fixture in its room moves it on the floor too. UI only, like the shapes: the
+// firmware reads each map's own fixtures (effects use a fixture's place on the first map that has
+// it), so a fixture in a room takes its place in that room for effects.
+const MAP_KINDS = [['room', 'Room', '▢'], ['floor', 'Floor', '▦'], ['building', 'Building', '⌂']];
+const mapKind = (m) => MAP_KINDS.find(([k]) => k === m.kind) || MAP_KINDS[0];
+const mapById = (id) => P().maps.find((x) => x.id === id);
+// Height of a part, as a fraction of the map it is on (it keeps its own shape).
+const partH = (m, pt, c) => (pt.w * (m.aspect || 1)) / (c.aspect || 1);
+// Does map m hold map id (itself, or through its parts)? Such a map can't be put on id (a loop).
+function mapHolds(m, id, depth = 0) {
+  if (!m || depth > 8) return !!m;
+  return (m.parts || []).some((pt) => pt.map === id || mapHolds(mapById(pt.map), id, depth + 1));
+}
+// A map with what its parts hold drawn in: {…m, items, shapes, devices, bgs, rooms}. Things from a
+// part get `from` (the id of the map they are on); this map's own come last, so they are drawn on
+// top and a fixture placed here itself wins over the same fixture in a room. bgs = the parts'
+// background images, rooms = each part's box and name (depth 0 = this map's own parts).
+function mapView(m, depth = 0) {
+  if (!m?.parts?.length || depth > 4) return m;
+  const out = { ...m, items: [], shapes: [], devices: [], bgs: [], rooms: [] };
+  const own = new Set(m.items.map((it) => it.fixture)), seen = new Set(own);
+  for (const pt of m.parts) {
+    const c = mapById(pt.map);
+    if (!c || c === m) continue;
+    const v = mapView(c, depth + 1), h = partH(m, pt, c), X = (x) => pt.x + x * pt.w, Y = (y) => pt.y + y * h;
+    if (c.background) out.bgs.push({ src: c.background, x: pt.x, y: pt.y, w: pt.w, h });
+    for (const b of v.bgs || []) out.bgs.push({ src: b.src, x: X(b.x), y: Y(b.y), w: b.w * pt.w, h: b.h * h });
+    for (const sh of v.shapes || []) {
+      const n = { ...sh, x: X(sh.x), y: Y(sh.y), from: sh.from ?? c.id };
+      if (sh.w != null) { n.w = sh.w * pt.w; n.h = sh.h * h; }
+      if (sh.type === 'text') n.size = (sh.size || 3) * pt.w;
+      out.shapes.push(n);
+    }
+    // s: drawn as much smaller as the room is here (times how small it already was).
+    // d: its room has more than 40 fixtures (small dots there, so here too, whatever this map has).
+    const cd = v.items.filter((it) => it.from == null).length > 40;
+    for (const it of v.items) if (!seen.has(it.fixture)) { seen.add(it.fixture); out.items.push({ fixture: it.fixture, x: X(it.x), y: Y(it.y), from: it.from ?? c.id, s: (it.s ?? 1) * pt.w, d: it.d ?? cd }); }
+    if (c.showDevices !== false) for (const d of v.devices || []) out.devices.push({ ...d, x: X(d.x), y: Y(d.y), from: d.from ?? c.id, s: (d.s ?? 1) * pt.w });
+    for (const r of v.rooms || []) out.rooms.push({ ...r, x: X(r.x), y: Y(r.y), w: r.w * pt.w, h: r.h * h, depth: r.depth + 1 });
+    out.rooms.push({ map: c.id, name: c.name, x: pt.x, y: pt.y, w: pt.w, h, depth: 0 });
+  }
+  out.items.push(...m.items);
+  out.shapes.push(...(m.shapes || []));
+  out.devices.push(...(m.devices || []));
+  return out;
+}
+// The images of a (viewed) map: its own background and its parts' backgrounds in their boxes.
+const pc4 = (v) => +(v * 100).toFixed(3);
+const mapImgsHtml = (v) => (v.background ? `<img src="/media/${encodeURIComponent(v.background)}" alt="" draggable="false">` : '')
+  + (v.bgs || []).map((b) => `<img class="part-bg" src="/media/${encodeURIComponent(b.src)}" alt="" draggable="false" style="left:${pc4(b.x)}%;top:${pc4(b.y)}%;width:${pc4(b.w)}%;height:${pc4(b.h)}%">`).join('');
+// The rooms of a floor (and a floor's rooms on a building): a thin frame and the name, which
+// opens that map (on the Live page: shows it there).
+const mapRoomsHtml = (v) => (v.rooms || []).filter((r) => r.depth < 2).map((r) => `<div class="map-room${r.depth ? ' sub' : ''}" style="left:${pc4(r.x)}%;top:${pc4(r.y)}%;width:${pc4(r.w)}%;height:${pc4(r.h)}%">
+  <span class="map-room-lbl" data-openmap="${r.map}" title="Open ${esc(r.name)}">${esc(r.name)}</span></div>`).join('');
+// Everything a viewing page draws under the fixtures of a map.
+const mapUnderHtml = (v) => mapImgsHtml(v) + mapShapesHtml(v) + mapRoomsHtml(v);
+// A room's name on a floor opens that map: on the Live page as the shown map, else on the Map page.
+document.addEventListener('pointerdown', (e) => { if (e.button === 0 && e.target.closest?.('[data-openmap]')) e.stopPropagation(); }, true);
+document.addEventListener('click', (e) => {
+  const el = e.target.closest?.('[data-openmap]');
+  if (!el) return;
+  const i = P().maps.findIndex((x) => x.id === +el.dataset.openmap);
+  if (i < 0) return;
+  if (S.view === 'live') setLiveStage(i);
+  else { S.view = 'map'; S.sel.map = i; S.mapParts = false; }
+  render();
+});
+// The map list as a tree: maps on no other map at the top, each with what is on it under it.
+function mapTreeRows() {
+  const p = P(), inSome = new Set(p.maps.flatMap((m) => (m.parts || []).map((pt) => pt.map)));
+  const rows = [], walk = (m, depth, path) => {
+    rows.push([m, depth]);
+    if (depth > 4) return;
+    for (const pt of m.parts || []) { const c = mapById(pt.map); if (c && !path.has(c.id)) walk(c, depth + 1, new Set([...path, c.id])); }
+  };
+  p.maps.filter((m) => !inSome.has(m.id)).forEach((m) => walk(m, 0, new Set([m.id])));
+  // A loop of maps that are all on each other (shouldn't happen) still gets listed.
+  p.maps.filter((m) => !rows.some(([x]) => x === m)).forEach((m) => rows.push([m, 0]));
+  return rows;
 }
 // Align / distribute / snap the selected fixtures (the selection bar).
 function arrangeSel(m, how) {
@@ -1002,7 +1259,7 @@ function arrangeSel(m, how) {
     case 'bottom': its.forEach((it) => (it.y = y1)); break;
     case 'hspace': spread('x', x0, x1); break;
     case 'vspace': spread('y', y0, y1); break;
-    case 'snap': its.forEach((it) => { it.x = snapTo(m, it.x); it.y = snapTo(m, it.y); }); break;
+    case 'snap': its.forEach((it) => { it.x = snapTo(m, it.x); it.y = snapToY(m, it.y); }); break;
   }
   its.forEach((it) => { it.x = Math.round(it.x * 1e4) / 1e4; it.y = Math.round(it.y * 1e4) / 1e4; });
   markDirty();
@@ -1071,7 +1328,8 @@ function bandSelect(canvas, items, getSel, setSel, paint, done, clearOnClick = t
     canvas.addEventListener('pointerup', () => {
       canvas.removeEventListener('pointermove', move);
       band.hidden = true;
-      if (!moved && toggleId != null) { const s = new Set(getSel()); s.has(toggleId) ? s.delete(toggleId) : s.add(toggleId); setSel(s); }
+      if (!moved && typeof toggleId === 'function') toggleId();
+      else if (!moved && toggleId != null) { const s = new Set(getSel()); s.has(toggleId) ? s.delete(toggleId) : s.add(toggleId); setSel(s); }
       else if (!moved && !add && clearOnClick) setSel(new Set());   // a click on empty space clears the selection
       done();
     }, { once: true });
@@ -1081,7 +1339,7 @@ function bandSelect(canvas, items, getSel, setSel, paint, done, clearOnClick = t
 }
 views.map = () => {
   const p = P();
-  if (S.mapShapeOf !== S.sel.map) { S.mapShapeSel = null; S.mapShapeOf = S.sel.map; }   // another map
+  if (S.mapShapeOf !== S.sel.map) { setShapeSel([]); S.mapShapeOf = S.sel.map; }   // another map
   if (!p.maps.length) return `<h2>Map</h2>
     <p class="muted">A map is a floor plan (an image of the venue, or an empty grid) with your fixtures placed on it, like the Layout in Pharos Designer.
       Select fixtures on it to make groups or fill timeline tracks, and see what they're doing live.</p>
@@ -1091,19 +1349,46 @@ views.map = () => {
   // Floor-plan mode: draw and edit shapes; S.mapShapeSel = index of the selected shape.
   const shapeMode = !!S.mapShapes;
   if (S.mapShapeSel != null && !m.shapes[S.mapShapeSel]) S.mapShapeSel = null;
+  if (S.mapShapeMulti) setShapeSel([...S.mapShapeMulti].filter((k) => m.shapes[k]));
+  const multi = shapeMode && S.mapShapeMulti ? [...S.mapShapeMulti].map((k) => m.shapes[k]) : null;
   const shape = shapeMode && S.mapShapeSel != null ? m.shapes[S.mapShapeSel] : null;
+  // Rooms & floors mode (S.mapParts): the maps on this one are boxes to move and size (S.mapPartSel).
+  // Otherwise what is in them is drawn in (mapView): their fixtures can be selected here but are
+  // moved on their own map.
+  const partMode = !!S.mapParts && !shapeMode, parts = m.parts || [];
+  if (S.mapPartSel != null && !parts[S.mapPartSel]) S.mapPartSel = null;
+  const v = mapView(m), roomItems = v === m ? [] : v.items.filter((it) => it.from != null);
+  const partSel = partMode && S.mapPartSel != null ? parts[S.mapPartSel] : null, partMap = partSel && mapById(partSel.map);
+  const partsHtml = parts.map((pt, k) => {
+    const c = mapById(pt.map);
+    return c ? `<div class="map-part${k === S.mapPartSel ? ' sel' : ''}" data-part="${k}" style="left:${pc4(pt.x)}%;top:${pc4(pt.y)}%;width:${pc4(pt.w)}%;height:${pc4(partH(m, pt, c))}%" title="${esc(c.name)}: drag to move${k === S.mapPartSel ? ', the corner to resize' : ''}">
+      <span class="map-part-lbl">${mapKind(c)[2]} ${esc(c.name)}</span>${k === S.mapPartSel ? '<div class="part-h" data-parth="1" title="Drag to make it bigger or smaller (it keeps its shape)"></div>' : ''}</div>` : '';
+  }).join('');
   const placed = new Set(m.items.map((it) => it.fixture));
   // The selection can hold fixtures that aren't on this map (picked in the list to drag on).
   for (const id of [...S.mapSel]) if (!fixture(id)) S.mapSel.delete(id);
   const sel = [...S.mapSel].map(fixture).filter(Boolean);
   const one = sel.length === 1 ? sel[0] : null, fi = one ? p.fixtures.indexOf(one) : -1;
-  const items = m.items.map((it) => {
+  const items = roomItems.map((it) => {
+    const f = fixture(it.fixture);
+    return f ? mapDotHtml(f, it, ' inroom' + (S.mapSel.has(f.id) ? ' sel' : ''), m.labels !== false) : '';
+  }).join('') + m.items.map((it) => {
     const f = fixture(it.fixture);
     return f ? mapDotHtml(f, it, S.mapSel.has(f.id) ? ' sel' : '', m.labels !== false) : '';
   }).join('');
+  // Devices: S.mapDevSel = the key (list:name) of the selected marker on this map.
+  const devs = mapDevsShown(m), onMap = new Set(devs.map(mapDevKey));
+  if (S.mapDevSel && !onMap.has(S.mapDevSel)) S.mapDevSel = null;
+  const devSel = S.mapDevSel && !shapeMode ? devs.find((d) => mapDevKey(d) === S.mapDevSel) : null;
+  const devItems = (m.showDevices !== false ? (v.devices || []).filter((d) => d.from != null && mapDevOf(d)) : []).map((d) => mapDevHtml(d, mapDevOf(d), m.labels !== false, ' inroom')).join('')
+    + devs.map((d) => mapDevHtml(d, mapDevOf(d), m.labels !== false, mapDevKey(d) === S.mapDevSel ? ' sel' : '')).join('');
+  const devList = allMapDevs();
+  // The left column shows fixtures & groups or the devices (S.mapSide), so neither list is far down.
+  const side = S.mapSide === 'devices' ? 'devices' : 'fixtures';
   const tracks = p.timelines.flatMap((tl, ti) => tl.tracks.map((tr, ri) => `<option value="${ti}:${ri}">${esc(tl.name)} › ${esc(tr.name)}</option>`)).join('');
   // Several selected: a frame around them with a rotate handle (above) and a size handle (corner).
-  const sits = m.items.filter((it) => S.mapSel.has(it.fixture));
+  const sits = m.items.filter((it) => S.mapSel.has(it.fixture)), onV = new Set(v.items.map((it) => it.fixture));
+  const notOn = sel.filter((f) => !onV.has(f.id)).length;
   let selFrame = '';
   if (sits.length > 1) {
     const x0 = Math.min(...sits.map((it) => it.x)), x1 = Math.max(...sits.map((it) => it.x)), y0 = Math.min(...sits.map((it) => it.y)), y1 = Math.max(...sits.map((it) => it.y));
@@ -1114,10 +1399,14 @@ views.map = () => {
   }
   return `<h2>Map</h2><div class="split">
     <div>
-      <div class="list">${p.maps.map((x, i) => `<div class="item${i === S.sel.map ? ' sel' : ''}" data-sel="map:${i}"><span class="id">${x.id}</span>${esc(x.name)}<span class="muted" style="margin-left:auto">${x.items.length}</span></div>`).join('')}</div>
+      <div class="list map-tree">${mapTreeRows().map(([x, d]) => {
+        const i = p.maps.indexOf(x), k = mapKind(x);
+        return `<div class="item${i === S.sel.map ? ' sel' : ''}" data-sel="map:${i}" style="padding-left:${8 + d * 16}px"><span class="kind" title="${k[1]}">${k[2]}</span><span class="id">${x.id}</span>${esc(x.name)}<span class="muted" style="margin-left:auto" title="Fixtures on it${x.parts?.length ? ' (with the maps on it)' : ''}">${mapView(x).items.length}</span></div>`;
+      }).join('')}</div>
       <div class="row" style="margin-top:8px"><button class="btn small" data-add="map">+ Map</button></div>
-      <h3>Fixtures</h3>
-      <p class="muted" style="margin:0 0 6px">Drag onto the map. Click, then Shift+click (a range) or Ctrl+click (one more) to pick several and drag them on together. ● = on this map.</p>
+      <div class="seg map-side" title="What the list below shows: fixtures and groups, or devices to put on the map">${[['fixtures', 'Fixtures & groups'], ['devices', `Devices${onMap.size ? ` (${onMap.size} on map)` : ''}`]]
+        .map(([v, n]) => `<button data-mapside="${v}" class="${side === v ? 'on' : ''}">${n}</button>`).join('')}</div>
+      ${side === 'fixtures' ? `      <p class="muted" style="margin:0 0 6px">Drag onto the map. Click, then Shift+click (a range) or Ctrl+click (one more) to pick several and drag them on together. ● = on this map.</p>
       <div class="list map-fx">${p.fixtures.map((f) => `<div class="item${S.mapSel.has(f.id) ? ' sel' : ''}" data-mapfx="${f.id}">
         <span class="placed${placed.has(f.id) ? ' on' : ''}">${placed.has(f.id) ? '●' : '○'}</span><span style="flex:1">${esc(f.name)}</span><span class="muted mono">${f.universe}.${f.address}</span></div>`).join('') || '<span class="muted">No fixtures yet.</span>'}</div>
       <div class="row" style="margin-top:8px">
@@ -1132,36 +1421,52 @@ views.map = () => {
         return `<div class="item${all ? ' sel' : ''}" data-mapgrp="${g.id}" title="${on.length} of ${g.fixtures.length} on this map"><span class="id">${g.id}</span><span style="flex:1">${esc(g.name)}</span>
           <span class="tag${on.length < g.fixtures.length ? ' muted' : ''}">${on.length < g.fixtures.length ? `${on.length}/${g.fixtures.length}` : g.fixtures.length}</span></div>`;
       }).join('') || '<span class="muted">No groups yet - select fixtures on the map and use "Make group".</span>'}</div>
+` : m.showDevices === false ? `<p class="muted" style="margin:0 0 6px">Devices are hidden on this map. <button class="btn small" id="mapDevShow">Show devices</button></p>`
+        : `<p class="muted" style="margin:0 0 6px">Drag a projector, PC or other device onto the map: on the Live page it shows whether the device is online. ● = on this map.</p>
+      <div class="list map-devs">${devList.map((d) => `<div class="item${mapDevKey(d) === S.mapDevSel ? ' sel' : ''}" data-mapdev="${esc(mapDevKey(d))}" title="${esc(d.label)}${d.x.ip ? ' · ' + esc(d.x.ip) : ''}">
+        <span class="placed${onMap.has(mapDevKey(d)) ? ' on' : ''}">${onMap.has(mapDevKey(d)) ? '●' : '○'}</span>${devIcon(mapDevIcon(d.list, d.x))}<span style="flex:1">${esc(d.name)}</span><span class="muted">${esc(d.label)}</span></div>`).join('')
+        || '<span class="muted">No devices yet (Devices page).</span>'}</div>`}
     </div>
     <div>
       <div class="row"><input data-p="${base}.name" value="${esc(m.name)}" style="font-size:16px;flex:1" data-r>
+        <select id="mapKind" title="What this map is: a room, a floor (rooms put together) or the building (floors put together). Only for the lists; any map can hold other maps.">${MAP_KINDS.map(([k, n, ic]) => `<option value="${k}"${mapKind(m)[0] === k ? ' selected' : ''}>${ic} ${n}</option>`).join('')}</select>
         <button class="btn small ghost" data-del="${base}">Delete map</button></div>
       <div class="row map-tools">
         <label class="btn small" title="JPG/PNG/WebP/SVG, max 4 MB, stored on the storage device">${m.background ? 'Replace image' : 'Background image…'}<input type="file" id="mapBg" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
         ${m.background ? '<button class="btn small ghost" id="mapBgDel">Remove image</button>' : ''}
         <select id="mapAspect" title="Shape of the map">${ASPECTS.map(([a, n]) => `<option value="${a}"${Math.abs(a - m.aspect) < 0.01 ? ' selected' : ''}>${n}</option>`).join('')}${ASPECTS.some(([a]) => Math.abs(a - m.aspect) < 0.01) ? '' : `<option selected value="${m.aspect}">image (${(+m.aspect).toFixed(2)})</option>`}</select>
         <label class="muted" title="Fixtures and shapes jump to the grid when moved (the lines show it)"><input type="checkbox" data-p="${base}.snap" data-t="bool"${m.snap !== false ? ' checked' : ''} data-r> Snap</label>
-        ${m.snap !== false ? `<select id="mapGridN" title="Grid: cells across and down">${MAP_GRIDS.map((n) => `<option value="${n}"${mapGrid(m) === n ? ' selected' : ''}>grid ${n}</option>`).join('')}</select>` : ''}
+        ${m.snap !== false ? `<label class="muted nowrap" title="${m.widthM ? 'Size of a grid square in metres' : 'How many grid squares across the map (the squares stay square)'}">Grid <input type="number" id="mapGridN" min="${m.widthM ? 0.01 : 2}" max="${m.widthM ? m.widthM / 2 : 400}" step="${m.widthM ? 0.05 : 1}" value="${mapGridVal(m)}" style="width:64px">${m.widthM ? ' m' : ' across'}</label>` : ''}
+        <label class="muted nowrap" title="The real width of what this map shows, in metres (optional). Then the grid is set in metres, and rooms go on a floor to scale.">Width <input type="number" id="mapWidthM" min="0" step="0.1" value="${m.widthM || ''}" placeholder="-" style="width:64px"> m${m.widthM ? ` <span class="muted">× ${fmtM(m.widthM / m.aspect)}</span>` : ''}</label>
         ${S.mapClip?.items.length && !shapeMode ? `<button class="btn small" id="mapPaste" title="Put the copied fixtures on this map at their copied positions (Ctrl+V)">Paste ${S.mapClip.items.length} position${S.mapClip.items.length > 1 ? 's' : ''}</button>` : ''}
         <label class="muted"><input type="checkbox" data-p="${base}.labels" data-t="bool"${m.labels !== false ? ' checked' : ''} data-r> Names</label>
+        <label class="muted" title="Show devices (projectors, PCs, show devices…) on this map, here and on the Live page"><input type="checkbox" data-p="${base}.showDevices" data-t="bool"${m.showDevices !== false ? ' checked' : ''} data-r> Devices</label>
         <label class="muted"><input type="checkbox" id="mapLive"${S.mapLive !== false ? ' checked' : ''}> Live</label>
         ${mapZoomHtml(`map:${m.id}`)}
-        <button class="btn small${shapeMode ? ' on' : ''}" id="mapShapeMode" title="Draw rectangles, ellipses, lines and text (a simple floor plan). While on, fixtures can't be moved.">✎ Floor plan${m.shapes.length ? ` (${m.shapes.length})` : ''}</button>
+        <button class="btn small${shapeMode ? ' on' : ''}" id="mapShapeMode" title="Draw walls, rooms, doors, stairs and text (a simple floor plan). While on, fixtures can't be moved.">✎ Floor plan${m.shapes.length ? ` (${m.shapes.length})` : ''}</button>
+        <button class="btn small${partMode ? ' on' : ''}" id="mapPartMode" title="Put other maps (rooms) on this one, to make a floor - or floors on a building. While on, fixtures can't be moved.">▦ Rooms on this map${parts.length ? ` (${parts.length})` : ''}</button>
       </div>
       ${shapeMode ? `<div class="row map-tools"><div class="seg">${SHAPE_TOOLS.map(([v, n]) => `<button class="${(S.mapTool || 'select') === v ? 'on' : ''}" data-maptool="${v}">${n}</button>`).join('')}</div>
-        <span class="muted">${(S.mapTool || 'select') === 'select' ? 'Click a shape to select it, drag to move, drag the handles to resize.' : S.mapTool === 'text' ? 'Click on the map to place a text.' : S.mapTool === 'poly' ? 'Click point by point (Shift = 45° steps); click the first point to close the shape, double-click or Enter to end it open. Or hold the mouse down and draw freehand. Backspace takes the last point back, Esc cancels.' : 'Drag on the map to draw.'}</span></div>` : ''}
-      <div class="map-wrap"><div class="map-canvas${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}${shapeMode ? ' shape-mode' : ''}${shapeMode && (S.mapTool || 'select') !== 'select' ? ' drawing' : ''}" id="mapCanvas" style="${mapSizeStyle('kd.mapH.map', m.aspect)}">
-        ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}
-        ${mapGridHtml(m)}${mapShapesHtml(m, shapeMode)}
-        ${items}${shapeMode ? '' : selFrame}<div class="band" id="mapBand" hidden></div>${mapResizeHtml('kd.mapH.map')}</div></div>
-      ${shapeMode ? `<p class="muted keys">Click a shape to select · drag to move · handles resize (corners: width and height, Shift = keep proportions; sides: one of them) · own shape: drag a round point, double-click a point to remove it, double-click its outline to add one · ⟳ handle or [ ] turns (Shift = 15° steps / 1°) · arrows nudge (Shift = more) · PgUp/PgDn one step forward/back (Shift = to the front/back) · Del removes · Ctrl+D duplicates · Esc deselects</p>
+        <span class="muted">${(S.mapTool || 'select') === 'select' ? 'Click a shape to select it (Shift/Ctrl+click: several), drag to move, drag the handles to resize; drag on empty space to select an area.' : S.mapTool === 'door' || S.mapTool === 'stairs' ? `Click to place ${S.mapTool === 'door' ? 'a door' : 'stairs'}, or drag its size (Shift = square). Turn it with [ ] or the ⟳ handle.` : S.mapTool === 'text' ? 'Click on the map to place a text.' : S.mapTool === 'poly' ? 'Click point by point (Shift = 45° steps); click the first point to close the shape, double-click or Enter to end it open. Or hold the mouse down and draw freehand. Backspace takes the last point back, Esc cancels.' : 'Drag on the map to draw.'}</span></div>` : ''}
+      ${partMode ? `<div class="row map-tools"><select id="mapPartAdd" title="Put another map on this one (a room on a floor, a floor on the building)"><option value="">+ Put a map on this one…</option>${p.maps.filter((x) => x !== m && !mapHolds(x, m.id)).map((x) => `<option value="${x.id}">${mapKind(x)[2]} ${esc(x.name)}${parts.some((pt) => pt.map === x.id) ? ' (on it already)' : ''}</option>`).join('')}</select>
+        <span class="muted">Drag a room to move it, its corner to size it. With a width in metres on both maps, rooms are put on to scale.</span></div>` : ''}
+      <div class="map-wrap"><div class="map-canvas${m.background ? ' has-bg' : ''}${m.snap !== false ? ' has-grid' : ''}${v.items.length > 40 ? ' dense' : ''}${shapeMode ? ' shape-mode' : ''}${partMode ? ' part-mode' : ''}${shapeMode && (S.mapTool || 'select') !== 'select' ? ' drawing' : ''}" id="mapCanvas" style="${mapSizeStyle('kd.mapH.map', m.aspect)}">
+        ${mapImgsHtml(v)}
+        ${mapGridHtml(m)}${v !== m ? mapShapesHtml({ aspect: m.aspect, shapes: v.shapes.filter((x) => x.from != null) }) : ''}${mapShapesHtml(m, shapeMode)}
+        ${partMode ? partsHtml : mapRoomsHtml(v)}
+        ${items}${devItems}${shapeMode ? '' : selFrame}<div class="band" id="mapBand" hidden></div>${mapResizeHtml('kd.mapH.map')}</div></div>
+      ${shapeMode ? `<p class="muted keys">Click a shape to select · Shift/Ctrl+click adds · drag on empty space (or Shift+drag anywhere) selects an area · Ctrl+A all · drag to move · handles resize (corners: width and height, Shift = keep proportions; sides: one of them) · own shape: drag a round point, double-click a point to remove it, double-click its outline to add one · ⟳ handle or [ ] turns (Shift = 15° steps / 1°) · arrows nudge (Shift = more) · PgUp/PgDn one step forward/back (Shift = to the front/back) · Del removes · Ctrl+D duplicates · Esc deselects</p>
       ${shape ? `<div class="map-selbar"><b>${SHAPE_NAMES[shape.type]}</b>
         ${shape.type === 'text' ? `<input id="shText" value="${esc(shape.text || '')}" placeholder="Text" style="width:180px">
           <label class="muted nowrap">Size <input type="number" id="shSize" min="0.5" max="30" step="0.5" value="${shape.size || 3}" style="width:64px"></label>` : ''}
         <label class="muted nowrap" title="${shape.type === 'text' ? 'Text colour' : 'Line colour'}">${shape.type === 'text' ? 'Colour' : 'Line'} <input type="color" id="shColor" value="${esc(shape.color || (shape.type === 'text' ? '#d0d8e2' : SHAPE_COLOR))}"></label>${shapeSwatches('color', shape.color || (shape.type === 'text' ? '#d0d8e2' : SHAPE_COLOR))}
         ${shape.type !== 'text' ? `<label class="muted nowrap">Width <input type="number" id="shWidth" min="0" max="20" step="0.5" value="${shape.width ?? 2}" style="width:56px"></label>` : ''}
         ${shape.type === 'poly' ? `<label class="muted nowrap" title="Join the last point to the first (a closed shape can be filled)"><input type="checkbox" id="shClosed"${shape.closed ? ' checked' : ''}> Closed</label>` : ''}
-        ${shape.type === 'rect' || shape.type === 'ellipse' || (shape.type === 'poly' && shape.closed) ? `<label class="muted nowrap"><input type="checkbox" id="shFillOn"${shape.fill ? ' checked' : ''}> Fill</label>
+        ${shape.type === 'door' ? `<button class="btn small" id="shFlip" title="Hinge on the other side">⇋ Flip</button>
+          <label class="muted nowrap" title="Two leaves, hinged on both sides"><input type="checkbox" id="shDouble"${shape.double ? ' checked' : ''}> Double</label>` : ''}
+        ${shape.type === 'stairs' ? `<label class="muted nowrap" title="Number of steps (empty = from its shape)">Steps <input type="number" id="shSteps" min="2" max="60" value="${shape.steps || ''}" placeholder="${stairSteps(shape, m.aspect)}" style="width:56px"></label>
+          <button class="btn small" id="shFlip" title="The arrow points up the stairs: turn it round">⇄ Other way up</button>` : ''}
+        ${shape.type === 'rect' || shape.type === 'ellipse' || shape.type === 'stairs' || (shape.type === 'poly' && shape.closed) ? `<label class="muted nowrap"><input type="checkbox" id="shFillOn"${shape.fill ? ' checked' : ''}> Fill</label>
           ${shape.fill ? `<input type="color" id="shFill" value="${esc(shape.fill)}" title="Fill colour">${shapeSwatches('fill', shape.fill)}
             <select id="shPattern" title="Fill pattern"><option value="">Solid</option>${Object.entries(SHAPE_PATTERNS).map(([v, [n]]) => `<option value="${v}"${shape.pattern === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
             <input type="range" id="shAlpha" min="0.05" max="1" step="0.05" value="${shape.alpha ?? 0.35}" title="How solid the fill is" style="width:90px">` : ''}` : ''}
@@ -1170,10 +1475,29 @@ views.map = () => {
         <span class="seg" title="Order of overlapping shapes (texts are always on top)">
           <button id="shBack" title="To the back, under all other shapes (Shift+PgDn)">⤓ Back</button><button data-shstep="-1" title="One step back (PgDn)">↓</button><button data-shstep="1" title="One step forward (PgUp)">↑</button><button id="shFront" title="To the front, over all other shapes (Shift+PgUp)">⤒ Front</button></span>
         <button class="btn small" id="shDup" title="Ctrl+D">Duplicate</button>
+        <button class="btn small ghost" id="shDel">Delete</button></div>` : ''}
+      ${multi ? `<div class="map-selbar"><b>${multi.length} shapes</b>
+        <label class="muted nowrap" title="Line / text colour of all of them">Line <input type="color" id="shmColor" value="${esc(multi.find((x) => x.type !== 'text')?.color || SHAPE_COLOR)}"></label>${shapeSwatches('color', '')}
+        ${multi.some((x) => x.type !== 'text') ? `<label class="muted nowrap">Width <input type="number" id="shmWidth" min="0" max="20" step="0.5" value="${multi.find((x) => x.type !== 'text')?.width ?? 2}" style="width:56px"></label>` : ''}
+        ${multi.some(shapeFillable) ? `<span class="muted nowrap" title="Fill of the ones that can be filled">Fill</span>${shapeSwatches('fill', '')}<button class="btn small ghost" id="shmNoFill" title="No fill">∅</button>` : ''}
+        <button class="btn small" data-shrot="-90" title="Turn them 90° anticlockwise round their middle">⟲ 90°</button><button class="btn small" data-shrot="90" title="Turn them 90° clockwise round their middle">⟳ 90°</button>
+        <button class="btn small" id="shBack" title="All to the back">⤓ Back</button><button class="btn small" id="shFront" title="All to the front">⤒ Front</button>
+        <button class="btn small" id="shDup" title="Ctrl+D">Duplicate</button>
         <button class="btn small ghost" id="shDel">Delete</button></div>` : ''}`
-      : `<p class="muted keys">Click to select · Shift/Ctrl+click adds · drag on empty space selects an area (Shift/Ctrl adds, Alt removes) · drag to move · arrows nudge (Shift = more) · ⟳ handle or [ ] rotates, ⤡ handle stretches (Shift = keep proportions), - + spread out (Shift = more) · Del removes from the map · Ctrl+A selects all</p>`}
+      : partMode ? `<p class="muted keys">Click a room to select · drag to move · corner handle sizes it · arrows nudge (Shift = more) · Del takes it off this map (the room's own map stays) · Esc deselects</p>
+      ${partSel && partMap ? `<div class="map-selbar"><b>${mapKind(partMap)[2]} ${esc(partMap.name)}</b>
+        <button class="btn small" data-openmap="${partMap.id}" title="Open this map, to place fixtures and draw in it">Open →</button>
+        ${m.widthM && partMap.widthM ? (Math.abs(partSel.w - partMap.widthM / m.widthM) < 1e-3 ? `<span class="muted" title="${fmtM(partMap.widthM)} wide on a ${fmtM(m.widthM)} map">✓ to scale</span>` : `<button class="btn small" id="mapPartScale" title="Its size from the widths in metres (${fmtM(partMap.widthM)} on ${fmtM(m.widthM)})">To scale</button>`)
+          : `<span class="muted">Give both maps a width in metres to put it on to scale</span>`}
+        <label class="muted nowrap" title="How wide it is, in % of this map">Width <input type="number" id="mapPartW" min="1" max="400" step="0.5" value="${+(partSel.w * 100).toFixed(2)}" style="width:70px"> %</label>
+        <button class="btn small ghost" id="mapPartRemove" title="Del">Take off this map</button></div>` : ''}`
+      : `<p class="muted keys">Click to select · Ctrl+click adds one · Shift+click adds the range from the last one clicked (fixture order) · drag on empty space selects an area (Shift/Ctrl adds, Alt removes) · drag to move · arrows nudge (Shift = more) · ⟳ handle or [ ] rotates, ⤡ handle stretches (Shift = keep proportions), - + spread out (Shift = more) · Del removes from the map · Ctrl+A selects all</p>`}
+      ${devSel ? `<div class="map-selbar"><span class="dev-sel">${devIcon(mapDevIcon(devSel.list, mapDevOf(devSel)))}</span><b>${esc(devSel.name)}</b>
+        <span class="muted">${esc(devList.find((d) => mapDevKey(d) === S.mapDevSel)?.label || '')}${mapDevOf(devSel).ip ? ' · ' + ipLink(mapDevOf(devSel).ip) : ''} · <span id="mapDevState"></span></span>
+        <button class="btn small" id="mapDevMon" title="Its card on the Monitoring page, with history and log">Open in Monitoring</button>
+        <button class="btn small ghost" id="mapDevRemove" title="Del">Remove from map</button></div>` : ''}
       ${sel.length && !shapeMode ? `<div class="map-selbar">
-        <b>${sel.length} selected</b>${sel.length > sits.length ? `<span class="muted">${sel.length - sits.length} not on this map yet - drag them on from the list</span>` : ''}
+        <b>${sel.length} selected</b>${notOn ? `<span class="muted">${notOn} not on this map yet - drag them on from the list</span>` : ''}
         <button class="btn small" id="mapGroup">Make group</button>
         ${p.groups.length ? `<select id="mapAddGroup"><option value="">Add to group…</option>${p.groups.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>` : ''}
         ${tracks ? `<select id="mapToTrack"><option value="">Add to timeline track…</option>${tracks}</select>` : ''}
@@ -1207,7 +1531,20 @@ views.map.after = () => {
   attachMapResize(canvas, m.aspect);
   attachMapZoom(canvas, `map:${m.id}`);
   const snap = (v) => (m.snap !== false ? snapTo(m, v) : v);
-  $('#mapGridN')?.addEventListener('change', (e) => { m.grid = +e.target.value; markDirty(); render(); });
+  const snapY = (v) => (m.snap !== false ? snapToY(m, v) : v);
+  $('#mapGridN')?.addEventListener('change', (e) => {
+    const v = +e.target.value;
+    if (v > 0) m.grid = +Math.max(2, Math.min(400, m.widthM ? m.widthM / v : Math.round(v))).toFixed(4);
+    markDirty();
+    render();
+  });
+  // A new width keeps the grid's size in metres when there was one (else the same squares across).
+  $('#mapWidthM')?.addEventListener('change', (e) => {
+    const w = Math.max(0, +e.target.value || 0), cell = m.widthM ? m.widthM / mapGrid(m) : 0;
+    if (w) { m.widthM = +w.toFixed(3); if (cell) m.grid = +Math.max(2, Math.min(400, w / cell)).toFixed(4); } else delete m.widthM;
+    markDirty();
+    render();
+  });
   $('#mapPaste')?.addEventListener('click', () => mapPaste(m));
   $('#mapCopy')?.addEventListener('click', () => mapCopy(m));
   $('#mapSnapSel')?.addEventListener('click', () => arrangeSel(m, 'snap'));
@@ -1219,6 +1556,16 @@ views.map.after = () => {
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const at = (e) => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
   const itemOf = (id) => m.items.find((it) => it.fixture === id);
+  const v = mapView(m), partMode = !!S.mapParts && !S.mapShapes;
+  // Shift+click on a fixture: the range from the last one clicked, in fixture order (fixture 1,
+  // then Shift+click fixture 200 = 1 to 200), of the fixtures on this map; added to the selection.
+  const rangeTo = (id) => {
+    const on = new Set(v.items.map((it) => it.fixture)), order = p.fixtures.filter((f) => on.has(f.id)).map((f) => f.id);
+    const a = order.indexOf(S.mapAnchor), b = order.indexOf(id);
+    if (a < 0 || b < 0) S.mapSel.has(id) ? S.mapSel.delete(id) : S.mapSel.add(id);
+    else S.mapSel = new Set([...S.mapSel, ...order.slice(Math.min(a, b), Math.max(a, b) + 1)]);
+    if (a < 0) S.mapAnchor = id;
+  };
   const paintSel = () => {
     $$('.mfx', canvas).forEach((el) => el.classList.toggle('sel', S.mapSel.has(+el.dataset.mfx)));
   };
@@ -1227,9 +1574,14 @@ views.map.after = () => {
     e.stopPropagation();
     const id = +el.dataset.mfx;
     if (e.button !== 0) return;
-    if (e.shiftKey) return bandBegin(e, id);   // Shift+drag: add an area, also when it starts on a fixture
-    if (e.ctrlKey || e.metaKey) { S.mapSel.has(id) ? S.mapSel.delete(id) : S.mapSel.add(id); paintSel(); return render(); }
+    if (S.mapDevSel) { S.mapDevSel = null; $$('.mdev.sel', canvas).forEach((n) => n.classList.remove('sel')); }
+    // Shift+drag: add an area, also when it starts on a fixture; Shift+click: the range.
+    if (e.shiftKey) return bandBegin(e, () => rangeTo(id));
+    if (e.ctrlKey || e.metaKey) { S.mapSel.has(id) ? S.mapSel.delete(id) : S.mapSel.add(id); S.mapAnchor = id; paintSel(); return render(); }
+    S.mapAnchor = id;
     if (!S.mapSel.has(id)) { S.mapSel = new Set([id]); paintSel(); }
+    // A fixture of a room on this map: selected here, moved on the room's own map.
+    if (el.classList.contains('inroom')) return render();
     el.setPointerCapture(e.pointerId);
     // Items and their dots looked up once, not on every mouse move (hundreds of fixtures).
     const nodes = new Map($$('.mfx', canvas).map((n) => [+n.dataset.mfx, n]));
@@ -1241,7 +1593,7 @@ views.map.after = () => {
       moved = true;
       for (const [it, o, node] of orig) {
         it.x = clamp01(snap(o.x + dx));
-        it.y = clamp01(snap(o.y + dy));
+        it.y = clamp01(snapY(o.y + dy));
         node.style.left = it.x * 100 + '%';
         node.style.top = it.y * 100 + '%';
       }
@@ -1251,18 +1603,25 @@ views.map.after = () => {
   }));
   // Drag on empty space: select an area.
   // (In floor-plan mode the map edits shapes instead; fixtures can't be clicked then.)
-  const bandBegin = S.mapShapes ? null : bandSelect(canvas, m.items, () => S.mapSel, (s) => (S.mapSel = s), paintSel, render);
-  if (S.mapShapes) wireMapShapes(canvas, m, snap);
-  $('#mapShapeMode').addEventListener('click', () => { S.mapShapes = !S.mapShapes; S.mapTool = 'select'; S.mapDraft = null; render(); });
-  $$('[data-maptool]').forEach((b) => b.addEventListener('click', () => { S.mapTool = b.dataset.maptool; S.mapShapeSel = null; S.mapDraft = null; render(); }));
+  const bandBegin = S.mapShapes || partMode ? null : bandSelect(canvas, v.items, () => S.mapSel, (s) => (S.mapSel = s), paintSel, render);
+  if (S.mapShapes) wireMapShapes(canvas, m, snap, snapY);
+  else if (partMode) wireMapParts(canvas, m, snap, snapY);
+  else wireMapDevices(canvas, m, snap, snapY, at);
+  $('#mapShapeMode').addEventListener('click', () => { S.mapShapes = !S.mapShapes; S.mapParts = false; S.mapTool = 'select'; S.mapDraft = null; render(); });
+  $('#mapPartMode').addEventListener('click', () => { S.mapParts = !partMode; S.mapShapes = false; S.mapDraft = null; render(); });
+  $('#mapKind').addEventListener('change', (e) => { if (e.target.value === 'room') delete m.kind; else m.kind = e.target.value; markDirty(); render(); });
+  $$('[data-maptool]').forEach((b) => b.addEventListener('click', () => { S.mapTool = b.dataset.maptool; setShapeSel([]); S.mapDraft = null; render(); }));
   // The fixture list: click selects, Ctrl+click adds/removes one, Shift+click selects the range
   // from the last click. The selection (S.mapSel, also fixtures not on this map) is the same
   // as on the map. Dragging a selected row drops all selected fixtures onto the map at once.
   const rows = $$('[data-mapfx]'), ids = rows.map((r) => +r.dataset.mapfx);
   // A long list keeps its scroll position when the page redraws (Shift+click far down).
   const fxList = $('.map-fx');
-  fxList.scrollTop = S.mapListScroll || 0;
-  fxList.addEventListener('scroll', () => (S.mapListScroll = fxList.scrollTop));
+  if (fxList) {
+    fxList.scrollTop = S.mapListScroll || 0;
+    fxList.addEventListener('scroll', () => (S.mapListScroll = fxList.scrollTop));
+  }
+  $$('[data-mapside]').forEach((b) => b.addEventListener('click', () => { S.mapSide = b.dataset.mapside; render(); }));
   const clickRow = (id, e) => {
     const i = ids.indexOf(id);
     if (e.shiftKey && S.mapAnchor != null && ids.includes(S.mapAnchor)) {
@@ -1283,7 +1642,7 @@ views.map.after = () => {
       const x = pt.x + (n > 1 ? ((k % cols) - (cols - 1) / 2) * gap / m.aspect : 0), y = pt.y + (n > 1 ? (Math.floor(k / cols) - (rowsN - 1) / 2) * gap : 0);
       let it = itemOf(id);
       if (!it) m.items.push((it = { fixture: id, x: 0, y: 0 }));
-      Object.assign(it, n > 1 ? { x, y } : { x: snap(clamp01(x)), y: snap(clamp01(y)) });
+      Object.assign(it, n > 1 ? { x, y } : { x: snap(clamp01(x)), y: snapY(clamp01(y)) });
       return it;
     });
     keepInside(placedNow);
@@ -1365,7 +1724,7 @@ views.map.after = () => {
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up, { once: true });
   }));
-  $('#mapAddFx').addEventListener('click', () => {
+  $('#mapAddFx')?.addEventListener('click', () => {
     S.view = 'fixtures';
     S.fxPanel = 'add';
     S.addFx.place = true;
@@ -1511,11 +1870,11 @@ views.map.after = () => {
   });
   // Live: colour each fixture with what it outputs now.
   if (S.mapLive !== false) {
-    const us = [...new Set(m.items.map((it) => fixture(it.fixture)?.universe).filter((u) => u != null))];
+    const us = [...new Set(v.items.map((it) => fixture(it.fixture)?.universe).filter((u) => u != null))];
     pagePoll('mapLive', async () => {
       const dmx = {};
       try { await Promise.all(us.map(async (u) => (dmx[u] = await api('/api/dmx?u=' + u)))); } catch { return; }
-      const glow = m.items.length <= 40;
+      const glow = v.items.length <= 40;
       for (const el of $$('.mfx', canvas)) paintDot(el.firstElementChild, fixtureLook(fixture(+el.dataset.mfx), dmx), glow);
     }, 300);
   }
@@ -1523,7 +1882,7 @@ views.map.after = () => {
 // Floor-plan mode on the Map page: draw shapes with the chosen tool, select / move / resize them.
 // One pointerdown on the canvas (the shape layer is redrawn while dragging, so no per-shape
 // listeners); snap = the map's 1/80 grid when Snap is on.
-function wireMapShapes(canvas, m, snap) {
+function wireMapShapes(canvas, m, snap, snapY) {
   const layer = canvas.querySelector('.shape-layer');
   const at = (e) => { const r = canvas.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; };
   const redraw = () => (layer.innerHTML = mapShapesInner(m, true));
@@ -1552,7 +1911,51 @@ function wireMapShapes(canvas, m, snap) {
   // Stored with 4 decimals (no 0.6000000000000001 in project.json).
   const r4 = (v) => Math.round(v * 1e4) / 1e4;
   const tidy = (s) => { for (const k of ['x', 'y', 'w', 'h']) if (s?.[k] != null) s[k] = r4(s[k]); if (s?.pts) s.pts = s.pts.map(([u, v]) => [r4(u), r4(v)]); };
-  const done = (moved) => { if (moved) { tidy(m.shapes[S.mapShapeSel]); markDirty(); } render(); };
+  const done = (moved) => { if (moved) { shapeSelIdx().forEach((k) => tidy(m.shapes[k])); markDirty(); } render(); };
+  // Drag on empty space (or Shift+drag anywhere): select the shapes wholly inside the area;
+  // Shift/Ctrl adds to the selection. Without dragging: Shift+click on a shape (toggleK) adds or
+  // removes it, a plain click on empty space selects nothing.
+  const band = (e, toggleK) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    const el = canvas.querySelector('.band'), a = at(e), r = canvas.getBoundingClientRect();
+    const add = e.shiftKey || e.ctrlKey || e.metaKey, before = add ? shapeSelIdx() : [];
+    const boxes = m.shapes.map((x) => shapeBBox(x, m.aspect));
+    let moved = false;
+    const move = (ev) => {
+      const b = at(ev);
+      if (!moved && Math.hypot((b.x - a.x) * r.width, (b.y - a.y) * r.height) < 4) return;
+      moved = true;
+      const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+      Object.assign(el.style, { left: x0 * 100 + '%', top: y0 * 100 + '%', width: (x1 - x0) * 100 + '%', height: (y1 - y0) * 100 + '%' });
+      el.hidden = false;
+      setShapeSel([...before, ...boxes.flatMap((bb, k) => (bb.x0 >= x0 && bb.x1 <= x1 && bb.y0 >= y0 && bb.y1 <= y1 ? [k] : []))]);
+      redraw();
+    };
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', () => {
+      canvas.removeEventListener('pointermove', move);
+      el.hidden = true;
+      if (!moved) {
+        const cur = shapeSelIdx();
+        if (toggleK != null) setShapeSel(cur.includes(toggleK) ? cur.filter((k) => k !== toggleK) : [...cur, toggleK]);
+        else if (!add) setShapeSel([]);
+      }
+      render();
+    }, { once: true });
+  };
+  // Several selected: dragging one of them moves them all (the top-left of the group snapped,
+  // kept on the map as a whole).
+  const groupDrag = (e) => {
+    const list = shapeSelIdx().map((k) => m.shapes[k]), orig = list.map((x) => ({ x: x.x, y: x.y }));
+    const b = bboxAll(list.map((x) => shapeBBox(x, m.aspect)));
+    return drag(e, (p0, pt) => {
+      let dx = snap(b.x0 + pt.x - p0.x) - b.x0, dy = snapY(b.y0 + pt.y - p0.y) - b.y0;
+      dx = Math.max(Math.min(0, -b.x0), Math.min(Math.max(0, 1 - b.x1), dx));
+      dy = Math.max(Math.min(0, -b.y0), Math.min(Math.max(0, 1 - b.y1), dy));
+      list.forEach((x, i) => { x.x = orig[i].x + dx; x.y = orig[i].y + dy; });
+    }, done);
+  };
   // Our own double-click: the page is rebuilt after each click, so the browser's dblclick gets lost.
   // key = what was clicked; true on the second press within 350 ms and a few pixels.
   const dbl = (e, key) => {
@@ -1573,7 +1976,7 @@ function wireMapShapes(canvas, m, snap) {
     if (Math.hypot(n.w * m.aspect, n.h) < 0.01) return render();   // a tiny scribble
     tidy(n);
     m.shapes.push(n);
-    S.mapShapeSel = m.shapes.length - 1;
+    setShapeSel([m.shapes.length - 1]);
     S.mapTool = 'select';
     markDirty();
     render();
@@ -1589,7 +1992,7 @@ function wireMapShapes(canvas, m, snap) {
       // Near the first point (in screen pixels): close it.
       if (d.pts.length >= 3 && Math.hypot((p.x - fx) * r.width, (p.y - fy) * r.height) < 9) return finishDraft(true);
       if (dbl(e, 'draft')) return finishDraft(false);
-      let q = [snap(p.x), snap(p.y)];
+      let q = [snap(p.x), snapY(p.y)];
       if (e.shiftKey) { const [dx, dy] = lineSnap(q[0] - last[0], q[1] - last[1]); q = [last[0] + dx, last[1] + dy]; }
       if (Math.hypot((q[0] - last[0]) * r.width, (q[1] - last[1]) * r.height) >= 3) d.pts.push(q);
       d.hover = null;
@@ -1597,7 +2000,7 @@ function wireMapShapes(canvas, m, snap) {
     }
     // The first point: a click starts point-by-point drawing, a drag draws freehand.
     dbl(e, 'draft');
-    d = S.mapDraft = { map: m.id, pts: [[snap(p.x), snap(p.y)]], hover: null, free: false };
+    d = S.mapDraft = { map: m.id, pts: [[snap(p.x), snapY(p.y)]], hover: null, free: false };
     const raw = [[p.x, p.y]];
     canvas.setPointerCapture(e.pointerId);
     const move = (ev) => {
@@ -1625,7 +2028,7 @@ function wireMapShapes(canvas, m, snap) {
     const d = S.mapDraft;
     if (!d || d.free || d.map !== m.id || (S.mapTool || 'select') !== 'poly') return;
     const p = at(e), last = d.pts[d.pts.length - 1];
-    let q = [snap(p.x), snap(p.y)];
+    let q = [snap(p.x), snapY(p.y)];
     if (e.shiftKey) { const [dx, dy] = lineSnap(q[0] - last[0], q[1] - last[1]); q = [last[0] + dx, last[1] + dy]; }
     d.hover = q;
     redraw();
@@ -1646,7 +2049,7 @@ function wireMapShapes(canvas, m, snap) {
           if (W.length > (s.closed ? 3 : 2)) { W.splice(k, 1); Object.assign(s, polyFromWorld(W, s.rot, m.aspect)); tidy(s); markDirty(); }
           return render();
         }
-        return drag(e, (p0, pt) => { W[k] = [snap(pt.x), snap(pt.y)]; Object.assign(s, polyFromWorld(W, s.rot, m.aspect)); }, done);
+        return drag(e, (p0, pt) => { W[k] = [snap(pt.x), snapY(pt.y)]; Object.assign(s, polyFromWorld(W, s.rot, m.aspect)); }, done);
       }
       const c0 = shapeCenter(o), ang = (p) => (Math.atan2(p.y - c0[1], (p.x - c0[0]) * m.aspect) * 180) / Math.PI;
       if (h === 'rot') {
@@ -1654,14 +2057,15 @@ function wireMapShapes(canvas, m, snap) {
         return drag(e, (p0, pt, ev) => {
           let r = (o.rot || 0) + ang(pt) - ang(p0);
           if (ev.shiftKey) r = Math.round(r / 15) * 15;
-          s.rot = 0;
+          Object.assign(s, { x: o.x, y: o.y, w: o.w, h: o.h, rot: 0 });
           shapeRotate(s, r, m.aspect);
+          snapShapesCorner(m, [s]);
         }, done);
       }
       return drag(e, (p0, pt, ev) => {
         if (s.type === 'line') {
           const ex = o.x + o.w, ey = o.y + o.h, fx = h === 'a' ? ex : o.x, fy = h === 'a' ? ey : o.y;   // the end that stays
-          let [dx, dy] = [snap(pt.x) - fx, snap(pt.y) - fy];
+          let [dx, dy] = [snap(pt.x) - fx, snapY(pt.y) - fy];
           if (ev.shiftKey) [dx, dy] = lineSnap(dx, dy);
           if (h === 'a') Object.assign(s, { x: fx + dx, y: fy + dy, w: -dx, h: -dy });
           else Object.assign(s, { w: dx, h: dy });
@@ -1669,7 +2073,8 @@ function wireMapShapes(canvas, m, snap) {
         }
         // A turned shape: the mouse is turned back round the old centre and the box worked out
         // there (no snapping: the grid doesn't line up with it), then its new centre turned forward.
-        const q = o.rot ? rotPt([pt.x, pt.y], c0, -o.rot, m.aspect) : [snap(pt.x), snap(pt.y)];
+        // (At 90° / 180° the grid does line up: the mouse is snapped first.)
+        const q = o.rot ? rotPt(o.rot % 90 ? [pt.x, pt.y] : [snap(pt.x), snapY(pt.y)], c0, -o.rot, m.aspect) : [snap(pt.x), snapY(pt.y)];
         let L = o.x, R = o.x + o.w, T = o.y, B = o.y + o.h;
         if (h.includes('w')) L = q[0];
         if (h.includes('e')) R = q[0];
@@ -1687,23 +2092,40 @@ function wireMapShapes(canvas, m, snap) {
       }, done);
     }
     if (tool === 'poly') return drawPoly(e);
+    if (tool === 'select') {
+      if (e.shiftKey) return band(e, hit ? +hit.dataset.shape : null);
+      if (hit && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        const k = +hit.dataset.shape, cur = shapeSelIdx();
+        setShapeSel(cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]);
+        return render();
+      }
+      if (hit && S.mapShapeMulti?.has(+hit.dataset.shape)) return groupDrag(e);
+      if (!hit) return band(e, null);
+    }
     if (tool !== 'select') {
       // Draw a new shape (text: placed where clicked).
       const p0 = at(e);
-      const n = tool === 'text' ? { type: 'text', x: snap(p0.x), y: snap(p0.y), text: 'Text', size: 3 }
-        : { type: tool, x: snap(p0.x), y: snap(p0.y), w: 0, h: 0, color: SHAPE_COLOR, width: 2 };
+      const n = tool === 'text' ? { type: 'text', x: snap(p0.x), y: snapY(p0.y), text: 'Text', size: 3 }
+        : { type: tool, x: snap(p0.x), y: snapY(p0.y), w: 0, h: 0, color: SHAPE_COLOR, width: 2 };
       m.shapes.push(n);
-      S.mapShapeSel = m.shapes.length - 1;
+      setShapeSel([m.shapes.length - 1]);
       const x0 = n.x, y0 = n.y;   // where the drag started (snapped)
       return drag(e, (q, pt, ev) => {
         if (tool === 'text') return;
-        let dx = snap(pt.x) - x0, dy = snap(pt.y) - y0;
+        let dx = snap(pt.x) - x0, dy = snapY(pt.y) - y0;
         if (tool === 'line') { if (ev.shiftKey) [dx, dy] = lineSnap(dx, dy); return Object.assign(n, { w: dx, h: dy }); }
         if (ev.shiftKey) { const sz = Math.max(Math.abs(dx) * m.aspect, Math.abs(dy)); dx = Math.sign(dx || 1) * (sz / m.aspect); dy = Math.sign(dy || 1) * sz; }   // square / circle
         Object.assign(n, { x: Math.min(x0, x0 + dx), y: Math.min(y0, y0 + dy), w: Math.abs(dx), h: Math.abs(dy) });
       }, (moved) => {
-        // A click without dragging draws nothing (except a text).
-        if (tool !== 'text' && (!moved || Math.hypot(n.w, n.h) < 0.01)) { m.shapes.pop(); S.mapShapeSel = null; return render(); }
+        // A click places a door / stairs of a usual size (real size when the map has a width).
+        if ((tool === 'door' || tool === 'stairs') && (!moved || Math.hypot(n.w, n.h) < 0.01)) {
+          const w = Math.min(0.5, m.widthM ? (tool === 'door' ? 0.9 : 3) / m.widthM : tool === 'door' ? 0.05 : 0.15), h = w * m.aspect * (tool === 'door' ? 1 : 0.4);
+          Object.assign(n, { x: Math.max(0, Math.min(1 - w, x0 - w / 2)), y: Math.max(0, Math.min(1 - h, y0 - h / 2)), w, h });
+          moved = true;
+        }
+        // A click without dragging draws nothing else (except a text).
+        if (tool !== 'text' && (!moved || Math.hypot(n.w, n.h) < 0.01)) { m.shapes.pop(); setShapeSel([]); return render(); }
         S.mapTool = 'select';
         tidy(n);
         markDirty();
@@ -1714,7 +2136,7 @@ function wireMapShapes(canvas, m, snap) {
     if (hit) {
       // Select, and drag to move it.
       const k = +hit.dataset.shape, sh = m.shapes[k], o = { ...sh };
-      S.mapShapeSel = k;
+      setShapeSel([k]);
       if (sh.type === 'poly' && dbl(e, 'sh' + k)) {
         // Double-click on an own shape's outline: a new point on the nearest side.
         e.preventDefault();
@@ -1726,24 +2148,42 @@ function wireMapShapes(canvas, m, snap) {
           const d = Math.hypot((ax + (bx - ax) * t - p.x) * m.aspect, ay + (by - ay) * t - p.y);
           if (d < bd) { bd = d; best = j; }
         }
-        abs.splice(best + 1, 0, [snap(p.x), snap(p.y)]);
+        abs.splice(best + 1, 0, [snap(p.x), snapY(p.y)]);
         Object.assign(sh, polyFromWorld(abs, sh.rot, m.aspect));
         tidy(sh);
         markDirty();
         return render();
       }
       redraw();
+      // Snapped and kept on the map by what you see (its turned box; a line: both ends; a text:
+      // its centre), not by the stored unturned box.
+      const b0 = shapeBBox(o, m.aspect), bw = b0.x1 - b0.x0, bh = b0.y1 - b0.y0;
       return drag(e, (p0, pt) => {
-        let x = snap(o.x + pt.x - p0.x), y = snap(o.y + pt.y - p0.y);
-        // Stays on the map: the whole box (a line: both ends; a text: its centre).
-        const w = sh.type === 'text' ? 0 : o.w, h = sh.type === 'text' ? 0 : o.h;
-        x = Math.max(Math.max(0, -w), Math.min(Math.min(1, 1 - w), x));
-        y = Math.max(Math.max(0, -h), Math.min(Math.min(1, 1 - h), y));
-        Object.assign(sh, { x, y });
+        let x0 = snap(b0.x0 + pt.x - p0.x), y0 = snapY(b0.y0 + pt.y - p0.y);
+        x0 = Math.max(Math.min(0, 1 - bw), Math.min(Math.max(0, 1 - bw), x0));
+        y0 = Math.max(Math.min(0, 1 - bh), Math.min(Math.max(0, 1 - bh), y0));
+        Object.assign(sh, { x: o.x + x0 - b0.x0, y: o.y + y0 - b0.y0 });
       }, done);
     }
-    if (S.mapShapeSel != null) { S.mapShapeSel = null; render(); }   // a click on empty space
   });
+  // Several selected: what the bar sets goes to all of them (fill only to the ones that can have one).
+  if (S.mapShapeMulti) {
+    const list = shapeSelIdx().map((k) => m.shapes[k]);
+    const setAll = (fn) => { list.forEach(fn); markDirty(); render(); };
+    $('#shmColor')?.addEventListener('change', (e) => setAll((x) => (x.color = e.target.value)));
+    $('#shmWidth')?.addEventListener('change', (e) => setAll((x) => { if (x.type !== 'text') x.width = Math.max(0, Math.min(20, +e.target.value || 0)); }));
+    $$('[data-shsw]').forEach((el) => el.addEventListener('click', () => setAll((x) => {
+      if (el.dataset.shsw === 'color') x.color = el.dataset.c;
+      else if (shapeFillable(x)) { x.fill = el.dataset.c; x.alpha ??= 0.35; }
+    })));
+    $('#shmNoFill')?.addEventListener('click', () => setAll((x) => { delete x.fill; delete x.pattern; }));
+    $$('[data-shrot]').forEach((b) => b.addEventListener('click', () => { shapesRotate(list, +b.dataset.shrot, m.aspect); snapShapesCorner(m, list); markDirty(); render(); }));
+    $('#shBack').addEventListener('click', () => shapeOrder(m, -Infinity));
+    $('#shFront').addEventListener('click', () => shapeOrder(m, Infinity));
+    $('#shDup').addEventListener('click', () => shapeDuplicate(m));
+    $('#shDel').addEventListener('click', () => shapeDelete(m));
+    return;
+  }
   // The selected shape's settings (typing in the text redraws only the map, keeping the focus).
   const s = m.shapes[S.mapShapeSel];
   if (!s) return;
@@ -1752,9 +2192,12 @@ function wireMapShapes(canvas, m, snap) {
   $('#shSize')?.addEventListener('change', (e) => set('size', Math.max(0.5, Math.min(30, +e.target.value || 3))));
   $('#shColor').addEventListener('input', (e) => set('color', e.target.value));
   $('#shWidth')?.addEventListener('change', (e) => set('width', Math.max(0, Math.min(20, +e.target.value || 0))));
-  $('#shRot')?.addEventListener('change', (e) => { s.rot = 0; shapeRotate(s, +e.target.value || 0, m.aspect); tidy(s); markDirty(); render(); });
-  $$('[data-shrot]').forEach((b) => b.addEventListener('click', () => { shapeRotate(s, +b.dataset.shrot, m.aspect); tidy(s); markDirty(); render(); }));
+  $('#shRot')?.addEventListener('change', (e) => { s.rot = 0; shapeRotate(s, +e.target.value || 0, m.aspect); snapShapesCorner(m, [s]); tidy(s); markDirty(); render(); });
+  $$('[data-shrot]').forEach((b) => b.addEventListener('click', () => { shapeRotate(s, +b.dataset.shrot, m.aspect); snapShapesCorner(m, [s]); tidy(s); markDirty(); render(); }));
   $('#shClosed')?.addEventListener('change', (e) => set('closed', e.target.checked, true));
+  $('#shFlip')?.addEventListener('click', () => set('flip', !s.flip || undefined, true));
+  $('#shDouble')?.addEventListener('change', (e) => set('double', e.target.checked || undefined, true));
+  $('#shSteps')?.addEventListener('change', (e) => set('steps', Math.max(2, Math.min(60, Math.round(+e.target.value))) || undefined, true));
   $('#shFillOn')?.addEventListener('change', (e) => set('fill', e.target.checked ? s.color || SHAPE_COLOR : '', true));
   $('#shFill')?.addEventListener('input', (e) => set('fill', e.target.value));
   $('#shAlpha')?.addEventListener('input', (e) => set('alpha', +e.target.value));
@@ -1766,44 +2209,250 @@ function wireMapShapes(canvas, m, snap) {
   $('#shDup').addEventListener('click', () => shapeDuplicate(m));
   $('#shDel').addEventListener('click', () => shapeDelete(m));
 }
+// Duplicate / delete / copy work on all selected shapes; the copies are selected afterwards.
+const shapeClone = (x) => ({ ...x, ...(x.pts ? { pts: x.pts.map((p) => [...p]) } : {}) });
 function shapeDuplicate(m) {
-  const s = m.shapes[S.mapShapeSel];
-  if (!s) return;
-  const c = { ...s, x: Math.min(0.98, s.x + 0.025), y: Math.min(0.98, s.y + 0.025) };
-  if (s.pts) c.pts = s.pts.map((p) => [...p]);
-  m.shapes.push(c);
-  S.mapShapeSel = m.shapes.length - 1;
+  const idx = shapeSelIdx();
+  if (!idx.length) return;
+  const n0 = m.shapes.length;
+  for (const k of idx) { const c = shapeClone(m.shapes[k]); c.x = Math.min(0.98, c.x + 0.025); c.y = Math.min(0.98, c.y + 0.025); m.shapes.push(c); }
+  setShapeSel(idx.map((_, i) => n0 + i));
   markDirty();
   render();
 }
-// Moves the selected shape d places up (later = drawn on top) or down; ±Infinity = front / back.
+// Moves the selected shape d places up (later = drawn on top) or down; ±Infinity = front / back
+// (several selected: all of them, keeping their order among themselves).
 function shapeOrder(m, d) {
-  const k = S.mapShapeSel, s = m.shapes[k];
-  if (!s) return;
+  const idx = shapeSelIdx();
+  if (!idx.length) return;
+  if (idx.length > 1) {
+    if (Number.isFinite(d)) return;
+    const sel = idx.map((k) => m.shapes[k]), rest = m.shapes.filter((_, k) => !idx.includes(k));
+    m.shapes = d > 0 ? [...rest, ...sel] : [...sel, ...rest];
+    setShapeSel(sel.map((x) => m.shapes.indexOf(x)));
+    markDirty();
+    return render();
+  }
+  const k = idx[0], s = m.shapes[k];
   const to = Math.max(0, Math.min(m.shapes.length - 1, k + d));
   if (to === k) return;
   m.shapes.splice(k, 1);
   m.shapes.splice(to, 0, s);
-  S.mapShapeSel = to;
+  setShapeSel([to]);
   markDirty();
   render();
 }
 function shapeDelete(m) {
-  if (!m.shapes[S.mapShapeSel]) return;
-  m.shapes.splice(S.mapShapeSel, 1);
-  S.mapShapeSel = null;
+  const idx = shapeSelIdx();
+  if (!idx.length) return;
+  m.shapes = m.shapes.filter((_, k) => !idx.includes(k));
+  setShapeSel([]);
+  markDirty();
+  render();
+}
+// Copy / paste shapes (Ctrl+C / V in floor-plan mode), also to another map: the same place on
+// the map; on the same map a little lower and to the right, so the copy is seen.
+function shapeCopy(m) {
+  const idx = shapeSelIdx();
+  if (!idx.length) return toast('Select shapes first', true);
+  S.shapeClip = { map: m.id, shapes: idx.map((k) => shapeClone(m.shapes[k])) };
+  toast(`Copied ${idx.length} shape${idx.length > 1 ? 's' : ''} - Ctrl+V pastes them (also on another map)`);
+}
+function shapePaste(m) {
+  const c = S.shapeClip;
+  if (!c?.shapes.length) return toast('Nothing copied yet (select shapes, Ctrl+C)', true);
+  const off = c.map === m.id ? 0.025 : 0, n0 = m.shapes.length;
+  c.shapes.forEach((x) => { const n = shapeClone(x); n.x += off; n.y += off; m.shapes.push(n); });
+  setShapeSel(c.shapes.map((_, i) => n0 + i));
   markDirty();
   render();
 }
 // Map keys: nudge, delete from map, select all.
+// Rooms & floors mode on the Map page: the maps on this one (m.parts) are boxes. Drag one to
+// move it (its corner snaps to the grid), drag its corner handle to size it (it keeps its shape).
+function wireMapParts(canvas, m, snap, snapY) {
+  const at = (e) => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
+  const r4 = (x) => Math.round(x * 1e4) / 1e4;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('.map-resize')) return;
+    const el = e.target.closest('[data-part]'), hd = e.target.closest('[data-parth]');
+    if (!el) { if (S.mapPartSel != null) { S.mapPartSel = null; render(); } return; }
+    e.preventDefault();
+    e.stopPropagation();
+    const k = +el.dataset.part, pt = m.parts[k], c = mapById(pt.map), o = { ...pt }, p0 = at(e);
+    if (!c) return;
+    S.mapPartSel = k;
+    canvas.setPointerCapture(e.pointerId);
+    let moved = false;
+    const move = (ev) => {
+      const q = at(ev);
+      if (!moved && Math.hypot(q.x - p0.x, q.y - p0.y) < 0.004) return;
+      moved = true;
+      if (hd) {
+        // The bottom-right corner follows the mouse; the width is what fits both ways.
+        const wx = q.x - o.x, wy = ((q.y - o.y) * (c.aspect || 1)) / (m.aspect || 1);
+        pt.w = Math.max(0.02, Math.min(4, Math.max(wx, wy)));
+      } else {
+        const h = partH(m, pt, c);
+        pt.x = snap(o.x + q.x - p0.x);
+        pt.y = snapY(o.y + q.y - p0.y);
+        // On the map when it fits (a part bigger than the map can stick out).
+        if (pt.w <= 1) pt.x = Math.max(0, Math.min(1 - pt.w, pt.x));
+        if (h <= 1) pt.y = Math.max(0, Math.min(1 - h, pt.y));
+      }
+      Object.assign(el.style, { left: pc4(pt.x) + '%', top: pc4(pt.y) + '%', width: pc4(pt.w) + '%', height: pc4(partH(m, pt, c)) + '%' });
+    };
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', () => {
+      canvas.removeEventListener('pointermove', move);
+      if (moved) { pt.x = r4(pt.x); pt.y = r4(pt.y); pt.w = r4(pt.w); markDirty(); }
+      render();
+    }, { once: true });
+  });
+  // Put a map on this one: to scale when both have a width in metres, else a third of it wide
+  // (less when it is tall), a bit further down and right for each one already on it.
+  $('#mapPartAdd')?.addEventListener('change', (e) => {
+    const c = mapById(+e.target.value);
+    if (!c || c === m || mapHolds(c, m.id)) return;
+    let w = m.widthM && c.widthM ? c.widthM / m.widthM : 0.33;
+    if (!(m.widthM && c.widthM)) w = Math.min(w, (0.6 * (c.aspect || 1)) / (m.aspect || 1));
+    const off = Math.min(0.5, 0.04 * (m.parts || []).length);
+    (m.parts = m.parts || []).push({ map: c.id, x: r4(Math.min(Math.max(0, 1 - w), 0.05 + off)), y: r4(Math.min(Math.max(0, 1 - partH(m, { w }, c)), 0.05 + off)), w: r4(w) });
+    S.mapPartSel = m.parts.length - 1;
+    // A map that holds rooms is a floor (or a building, when what it holds are floors).
+    if (!m.kind) m.kind = c.kind === 'floor' ? 'building' : 'floor';
+    markDirty();
+    render();
+  });
+  const pt = m.parts?.[S.mapPartSel], c = pt && mapById(pt.map);
+  if (!pt || !c) return;
+  $('#mapPartScale')?.addEventListener('click', () => { pt.w = r4(c.widthM / m.widthM); markDirty(); render(); });
+  $('#mapPartW')?.addEventListener('change', (e) => { const w = +e.target.value / 100; if (w > 0) { pt.w = r4(Math.max(0.01, Math.min(4, w))); markDirty(); render(); } });
+  $('#mapPartRemove')?.addEventListener('click', () => mapPartRemove(m));
+}
+function mapPartRemove(m) {
+  if (!m.parts?.[S.mapPartSel]) return;
+  m.parts.splice(S.mapPartSel, 1);
+  if (!m.parts.length) delete m.parts;
+  S.mapPartSel = null;
+  markDirty();
+  render();
+}
+// Devices on the Map page: drag a row of the Devices list onto the map (or a marker to move it),
+// click a marker to select it (S.mapDevSel). One device at a time; fixtures and devices are
+// never selected together.
+function wireMapDevices(canvas, m, snap, snapY, at) {
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const inside = (ev) => { const r = canvas.getBoundingClientRect(); return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom; };
+  const find = (key) => (m.devices || []).find((d) => mapDevKey(d) === key);
+  paintMapDevs(canvas);
+  mapDevSelState();
+  // Empty space: the band selection of fixtures starts there, so a selected device lets go.
+  canvas.addEventListener('pointerdown', (e) => { if (S.mapDevSel && !e.target.closest('.mdev')) S.mapDevSel = null; });
+  $$('.mdev', canvas).forEach((el) => el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const d = find(el.dataset.mdev);
+    if (!d) return;
+    S.mapSel.clear();
+    S.mapDevSel = el.dataset.mdev;
+    el.setPointerCapture(e.pointerId);
+    const start = at(e), o = { x: d.x, y: d.y };
+    let moved = false;
+    const move = (ev) => {
+      const pt = at(ev), dx = pt.x - start.x, dy = pt.y - start.y;
+      if (!moved && Math.hypot(dx, dy) < 0.004) return;
+      moved = true;
+      d.x = clamp01(snap(o.x + dx));
+      d.y = clamp01(snapY(o.y + dy));
+      el.style.left = d.x * 100 + '%';
+      el.style.top = d.y * 100 + '%';
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', () => { el.removeEventListener('pointermove', move); if (moved) markDirty(); render(); }, { once: true });
+  }));
+  $$('[data-mapdev]').forEach((row) => row.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const key = row.dataset.mapdev, [list, ...n] = key.split(':'), name = n.join(':');
+    let ghost = null;
+    const move = (ev) => {
+      if (!ghost && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 4) return;
+      if (!ghost) {
+        ghost = document.createElement('div');
+        ghost.className = 'map-ghost';
+        ghost.textContent = name;
+        document.body.appendChild(ghost);
+      }
+      ghost.style.left = ev.clientX / uiZoom() + 'px';
+      ghost.style.top = ev.clientY / uiZoom() + 'px';
+    };
+    const up = (ev) => {
+      document.removeEventListener('pointermove', move);
+      if (ghost) {
+        ghost.remove();
+        if (!inside(ev)) return;
+        const pt = at(ev);
+        let d = find(key);
+        if (!d) (m.devices = m.devices || []).push((d = { list, name, x: 0, y: 0 }));
+        d.x = clamp01(snap(pt.x));
+        d.y = clamp01(snapY(pt.y));
+        markDirty();
+      }
+      // A click selects the marker when it is on the map already.
+      S.mapSel.clear();
+      S.mapDevSel = find(key) ? key : null;
+      render();
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up, { once: true });
+  }));
+  $('#mapDevShow')?.addEventListener('click', () => { m.showDevices = true; markDirty(); render(); });
+  $('#mapDevRemove')?.addEventListener('click', () => mapDevRemove(m));
+  $('#mapDevMon')?.addEventListener('click', () => { const [list, ...n] = S.mapDevSel.split(':'); openDeviceMonitor(list, n.join(':')); });
+}
+function mapDevRemove(m) {
+  m.devices = (m.devices || []).filter((d) => mapDevKey(d) !== S.mapDevSel);
+  S.mapDevSel = null;
+  markDirty();
+  render();
+}
+// The selected device's state in the bar under the map (refreshed with the status).
+function mapDevSelState() {
+  const el = $('#mapDevState');
+  if (!el || !S.mapDevSel) return;
+  const [list, ...n] = S.mapDevSel.split(':'), x = (P()[list] || []).find((y) => y.name === n.join(':'));
+  if (!x) return;
+  const r = mapDevStatus(list, x);
+  el.innerHTML = `<span class="dot ${r.state === 'online' ? 'ok' : r.state === 'offline' ? 'bad' : ''}"></span> ${esc(r.state)}${r.extra ? ' · ' + esc(r.extra) : ''}`;
+}
 views.map.keys = (e) => {
   const m = P()?.maps[S.sel.map];
   if (!m) return;
-  if (S.mapShapes) {
-    // Floor-plan mode: the keys work on the selected shape.
-    const s = m.shapes[S.mapShapeSel], st = e.shiftKey ? 0.025 : 0.005;
+  // Rooms & floors mode: arrows nudge the selected room, Del takes it off, Esc lets go.
+  if (S.mapParts && !S.mapShapes) {
+    const pt = m.parts?.[S.mapPartSel], st = e.shiftKey ? 0.025 : 0.005;
     const d = { ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st] }[e.key];
-    const dr = S.mapDraft?.map === m.id ? S.mapDraft : null;
+    if (e.key === 'Escape') { S.mapPartSel = null; return render(); }
+    if (!pt) return;
+    if (d) { e.preventDefault(); pt.x = Math.round((pt.x + d[0]) * 1e4) / 1e4; pt.y = Math.round((pt.y + d[1]) * 1e4) / 1e4; markDirty(); return render(); }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return mapPartRemove(m); }
+    return;
+  }
+  // A selected device: arrows nudge it, Del removes it from the map, Esc lets go.
+  const dv = !S.mapShapes && S.mapDevSel && (m.devices || []).find((d) => mapDevKey(d) === S.mapDevSel);
+  if (dv) {
+    const st = e.shiftKey ? 0.025 : 0.005;
+    const d = { ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st] }[e.key];
+    if (d) { e.preventDefault(); dv.x = Math.max(0, Math.min(1, dv.x + d[0])); dv.y = Math.max(0, Math.min(1, dv.y + d[1])); markDirty(); return render(); }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return mapDevRemove(m); }
+    if (e.key === 'Escape') { S.mapDevSel = null; return render(); }
+  }
+  if (S.mapShapes) {
+    // Floor-plan mode: the keys work on the selected shape(s).
+    const list = shapeSelIdx().map((k) => m.shapes[k]).filter(Boolean), s = list.length === 1 ? list[0] : null, st = e.shiftKey ? 0.025 : 0.005;
+    const d = { ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st] }[e.key];
+    const dr = S.mapDraft?.map === m.id ? S.mapDraft : null, mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (dr) {
       // Drawing an own shape: Enter ends it (open), Backspace takes the last point back, Esc cancels.
       if (e.key === 'Enter') { e.preventDefault(); S.mapFinishDraft?.(false); }
@@ -1811,20 +2460,24 @@ views.map.keys = (e) => {
       else if (e.key === 'Escape') { S.mapDraft = null; render(); }
       return;
     }
-    if (e.key === 'Escape') { S.mapTool = 'select'; S.mapShapeSel = null; render(); }
-    if (!s) return;
-    if (d) { e.preventDefault(); s.x = Math.round((s.x + d[0]) * 1e4) / 1e4; s.y = Math.round((s.y + d[1]) * 1e4) / 1e4; markDirty(); render(); }
+    if (e.key === 'Escape') { S.mapTool = 'select'; setShapeSel([]); return render(); }
+    if (mod && k === 'a') { e.preventDefault(); S.mapTool = 'select'; setShapeSel(m.shapes.map((_, i) => i)); return render(); }
+    if (mod && k === 'v') { e.preventDefault(); return shapePaste(m); }
+    if (!list.length) return;
+    if (mod && k === 'c') { e.preventDefault(); return shapeCopy(m); }
+    if (d) { e.preventDefault(); list.forEach((x) => { x.x = Math.round((x.x + d[0]) * 1e4) / 1e4; x.y = Math.round((x.y + d[1]) * 1e4) / 1e4; }); markDirty(); render(); }
     else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); shapeDelete(m); }
     else if (e.key === '[' || e.key === ']' || e.key === '{' || e.key === '}') {
-      // Turn 15° (Shift = 1°; Shift+[ arrives as { on most keyboards).
+      // Turn 15° (Shift = 1°; Shift+[ arrives as { on most keyboards); several: round their middle.
       e.preventDefault();
-      shapeRotate(s, (e.key === '[' || e.key === '{' ? -1 : 1) * (e.shiftKey ? 1 : 15), m.aspect);
-      for (const k of ['x', 'y', 'w', 'h']) s[k] = Math.round(s[k] * 1e4) / 1e4;
+      const deg = (e.key === '[' || e.key === '{' ? -1 : 1) * (e.shiftKey ? 1 : 15);
+      if (s) { shapeRotate(s, deg, m.aspect); for (const q of ['x', 'y', 'w', 'h']) if (s[q] != null) s[q] = Math.round(s[q] * 1e4) / 1e4; } else shapesRotate(list, deg, m.aspect);
+      snapShapesCorner(m, list);
       markDirty();
       render();
     }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); shapeDuplicate(m); }
-    else if (e.key === 'PageUp' || e.key === 'PageDown') { e.preventDefault(); shapeOrder(m, (e.key === 'PageUp' ? 1 : -1) * (e.shiftKey ? Infinity : 1)); }
+    else if (mod && k === 'd') { e.preventDefault(); shapeDuplicate(m); }
+    else if (e.key === 'PageUp' || e.key === 'PageDown') { e.preventDefault(); shapeOrder(m, (e.key === 'PageUp' ? 1 : -1) * (e.shiftKey || !s ? Infinity : 1)); }
     return;
   }
   const its = m.items.filter((it) => S.mapSel.has(it.fixture));
@@ -1850,7 +2503,7 @@ views.map.keys = (e) => {
     render();
   } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
     e.preventDefault();
-    S.mapSel = new Set(m.items.map((it) => it.fixture));
+    S.mapSel = new Set(mapView(m).items.map((it) => it.fixture));
     render();
   } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); mapCopy(m); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); mapPaste(m); }

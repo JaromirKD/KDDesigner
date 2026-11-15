@@ -29,10 +29,12 @@ views.live = () => {
       <div class="lv-tiles">${list.map((f) => `<div class="lv-tile" data-lvfx="${f.id}"><span class="dot"></span><span class="lbl">${esc(f.name)}</span></div>`).join('')}</div></div>`).join('')
       || '<p class="muted">No fixtures yet.</p>';
   } else {
-    const m = p.maps[stage];
+    const m = mapView(p.maps[stage]);   // a floor: with what its rooms hold
     const items = m.items.map((it) => { const f = fixture(it.fixture); return f ? mapDotHtml(f, it, '', m.labels !== false) : ''; }).join('');
+    // Devices on the map (optional per map): coloured by their state, click opens Monitoring.
+    const devs = (m.showDevices !== false ? (m.devices || []).filter(mapDevOf) : []).map((d) => mapDevHtml(d, mapDevOf(d), m.labels !== false, mapDevKey(d) === S.liveDev ? ' sel' : '')).join('');
     body = `<div class="map-wrap"><div class="map-canvas live-map${m.background ? ' has-bg' : ''}${m.items.length > 40 ? ' dense' : ''}" id="liveCanvas" style="${mapSizeStyle('kd.mapH.live', m.aspect)}">
-      ${m.background ? `<img src="/media/${encodeURIComponent(m.background)}" alt="" draggable="false">` : ''}${mapShapesHtml(m)}${items}${mapResizeHtml('kd.mapH.live')}</div></div>`;
+      ${mapUnderHtml(m)}${items}${devs}${mapResizeHtml('kd.mapH.live')}</div></div>`;
   }
   return `<div class="live" id="live">
     <div class="row lv-top"><h2 style="margin:0">Live</h2><div class="row" id="lvTop" style="flex:1"></div>
@@ -43,6 +45,7 @@ views.live = () => {
           <span class="spacer" style="flex:1"></span>${stage === 'all' ? '' : mapZoomHtml(`live:${p.maps[stage].id}`)}</div>
         <div id="lvStage">${body}</div>
         <div class="muted mono lv-info" id="lvInfo">Hover a fixture to see its channels.</div>
+        <div id="lvDevCard" class="lv-devcard"></div>
       </div>
       <div class="lv-side">
         <div class="card"><h3>Playing now</h3><div id="lvPlay"></div></div>
@@ -65,11 +68,31 @@ views.live.after = () => {
   if (canvas) { attachMapResize(canvas, p.maps[stage].aspect); attachMapZoom(canvas, `live:${p.maps[stage].id}`); }
   // Hover: the fixture's channel values (refreshed with every colour poll).
   $('#lvStage').addEventListener('mouseover', (e) => {
-    const el = e.target.closest('[data-mfx],[data-lvfx]');
+    const el = e.target.closest('[data-mfx],[data-lvfx]'), dv = e.target.closest('[data-mdev]');
     S.liveHover = el ? +(el.dataset.mfx || el.dataset.lvfx) : null;
+    S.liveHoverDev = dv ? dv.dataset.mdev : null;
     liveInfo();
   });
-  $('#lvStage').addEventListener('mouseleave', () => { S.liveHover = null; liveInfo(); });
+  $('#lvStage').addEventListener('mouseleave', () => { S.liveHover = S.liveHoverDev = null; liveInfo(); });
+  // A device on the map: its Monitoring card (with the same buttons and sliders) under the map;
+  // clicking it again closes it.
+  $('#lvStage').addEventListener('click', (e) => {
+    const dv = e.target.closest('[data-mdev]');
+    if (!dv) return;
+    S.liveDev = S.liveDev === dv.dataset.mdev ? null : dv.dataset.mdev;
+    $$('#lvStage .mdev').forEach((n) => n.classList.toggle('sel', n.dataset.mdev === S.liveDev));
+    S.liveCardHold = false;
+    liveDevCard(true);
+  });
+  const dc = $('#lvDevCard');
+  // Like Monitoring: the card is rebuilt with every status, but not between mouse down and up.
+  dc.addEventListener('pointerdown', () => (S.liveCardHold = true));
+  dc.addEventListener('click', (e) => {
+    if (e.target.closest('#lvDevClose')) { S.liveDev = null; $$('#lvStage .mdev.sel').forEach((n) => n.classList.remove('sel')); return liveDevCard(true); }
+    if (e.target.closest('#lvDevMon')) { const [list, ...n] = S.liveDev.split(':'); return openDeviceMonitor(list, n.join(':')); }
+  });
+  paintMapDevs($('#lvStage'));
+  liveDevCard(true);
   // The history strip: a row opens its trigger (on the Triggers page it selects it).
   $('#histBody').addEventListener('click', (e) => {
     const row = e.target.closest('[data-sel^="trigger:"]');
@@ -105,11 +128,42 @@ views.live.after = () => {
   pageAnimation('livePos', livePosFrame);
 };
 
+addEventListener('pointerup', () => setTimeout(() => (S.liveCardHold = false)));   // after the click handlers ran
+
+// The clicked device's Monitoring card under the map (S.liveDev = its marker key list:name).
+// force: rebuild now (a click), else only when nobody is pressing or typing on it.
+function liveDevCard(force) {
+  const el = $('#lvDevCard');
+  if (!el) return;
+  const a = document.activeElement;
+  if (!force && (S.liveCardHold || (a && el.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.type !== 'range'))) return;
+  const [list, ...n] = (S.liveDev || '').split(':'), x = S.liveDev && (P()[list] || []).find((y) => y.name === n.join(':'));
+  if (!x) {
+    S.liveDev = null;
+    if (el.innerHTML) el.innerHTML = '';
+    return;
+  }
+  const r = mapDevStatus(list, x), it = monItem(r.card || r.open);
+  const head = `<div class="row lv-devcard-h"><span class="muted">Device</span><span class="spacer" style="flex:1"></span>
+    <button class="btn small" id="lvDevMon" title="Its card on the Monitoring page, with history and log">History &amp; log</button>
+    <button class="btn small ghost" id="lvDevClose" title="Close">✕</button></div>`;
+  const html = head + (it ? it.html(false) : `<div class="card mon-card unknown"><b>${esc(x.name)}</b><p class="muted">${esc(r.extra || 'No status from the controller yet.')}</p></div>`);
+  if (el.dataset.last !== html) { el.dataset.last = html; el.innerHTML = html; }
+}
+
 function liveInfo() {
   const el = $('#lvInfo');
   if (!el) return;
+  if (S.liveHoverDev) {
+    const [list, ...n] = S.liveHoverDev.split(':'), x = (P()[list] || []).find((y) => y.name === n.join(':'));
+    if (x) {
+      const r = mapDevStatus(list, x), label = allMapDevs().find((d) => d.x === x)?.label || '';
+      el.textContent = `${x.name} · ${label}${x.ip ? ' · ' + x.ip : ''} · ${r.state}${r.extra ? ' · ' + r.extra : ''} · click to see and control it under the map`;
+      return;
+    }
+  }
   const f = S.liveHover != null && fixture(S.liveHover);
-  if (!f) { el.textContent = 'Hover a fixture to see its channels.'; return; }
+  if (!f) { el.textContent = P().maps.some((m) => mapDevsShown(m).length) ? 'Hover a fixture to see its channels, or a device to see its state.' : 'Hover a fixture to see its channels.'; return; }
   const d = S.liveDmx?.[f.universe];
   const vals = slots(f).map((s) => `${s.name} ${d ? d[f.address - 1 + s.offset] ?? 0 : '–'}`).join(' · ');
   el.textContent = `${f.name} · ${f.universe}.${f.address} · ${vals}`;
@@ -132,6 +186,7 @@ function liveStatus() {
   if (!S.liveHold) livePlaying(st);
   liveVars(st);
   liveDevices(st);
+  liveDevCard();
 }
 
 function livePlaying(st) {

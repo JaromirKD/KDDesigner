@@ -479,15 +479,20 @@ const CTX_MENUS = [
   ['[data-shape]', (el) => {
     const m = S.view === 'map' && P().maps[S.sel.map];
     if (!m) return null;
-    if (S.mapShapeSel !== +el.dataset.shape) { S.mapShapeSel = +el.dataset.shape; render(); }
+    const k = +el.dataset.shape;
+    if (!shapeSelIdx().includes(k)) { setShapeSel([k]); render(); }
+    const n = shapeSelIdx().length;
     return [
-      { label: 'Duplicate', key: 'Ctrl+D', run: () => shapeDuplicate(m) },
-      { label: 'Bring forward', key: 'PgUp', run: () => shapeOrder(m, 1) },
-      { label: 'Send backward', key: 'PgDn', run: () => shapeOrder(m, -1) },
+      { label: n > 1 ? `Duplicate ${n} shapes` : 'Duplicate', key: 'Ctrl+D', run: () => shapeDuplicate(m) },
+      { label: n > 1 ? `Copy ${n} shapes` : 'Copy', key: 'Ctrl+C', run: () => shapeCopy(m) },
+      S.shapeClip?.shapes.length && { label: `Paste ${S.shapeClip.shapes.length} shape(s)`, key: 'Ctrl+V', run: () => shapePaste(m) },
+      null,
+      n === 1 && { label: 'Bring forward', key: 'PgUp', run: () => shapeOrder(m, 1) },
+      n === 1 && { label: 'Send backward', key: 'PgDn', run: () => shapeOrder(m, -1) },
       { label: 'Bring to front', run: () => shapeOrder(m, Infinity) },
       { label: 'Send to back', run: () => shapeOrder(m, -Infinity) },
       null,
-      { label: 'Delete', key: 'Del', danger: true, run: () => shapeDelete(m) },
+      { label: n > 1 ? `Delete ${n} shapes` : 'Delete', key: 'Del', danger: true, run: () => shapeDelete(m) },
     ];
   }],
   ['[data-mfx], [data-mapfx]', (el) => {
@@ -506,10 +511,16 @@ const CTX_MENUS = [
       { label: n > 1 ? `Delete ${n} fixtures…` : 'Delete fixture…', danger: true, run: () => deleteFixtures(ids) },
     ];
   }],
-  ['[data-fxi]', (el) => {
-    const p = P(), f = p.fixtures[+el.dataset.fxi];
-    if (!f || S.view !== 'fixtures') return null;
-    if (!S.fxSel.has(f.id)) { S.fxSel = new Set([f.id]); render(); }
+  // Fixtures page: a fixture row, a folded row (all its fixtures) or a fixture on the patch grid.
+  ['[data-fxi], [data-fold], #patchGrid [data-f]', (el) => {
+    const p = P();
+    if (S.view !== 'fixtures') return null;
+    let ids;
+    if (el.dataset.fold) { const [i, j] = el.dataset.fold.split('-').map(Number); ids = p.fixtures.slice(i, j + 1).map((x) => x.id); }
+    else ids = [el.dataset.fxi != null ? p.fixtures[+el.dataset.fxi]?.id : +el.dataset.f].filter((id) => fixture(id));
+    if (!ids.length) return null;
+    const f = fixture(ids[0]);
+    if (!ids.every((id) => S.fxSel.has(id))) { S.fxSel = new Set(ids); S.fxGroup = null; S.fxPanel = ''; render(); }
     const n = S.fxSel.size, mi = p.maps.findIndex((m) => m.items.some((it) => S.fxSel.has(it.fixture)));
     return [
       { label: n > 1 ? `Locate ${n} fixtures` : 'Locate (flash white)', key: 'L', run: () => locateFixtures([...S.fxSel]) },
@@ -519,8 +530,25 @@ const CTX_MENUS = [
       { label: 'Copy', key: 'Ctrl+C', run: () => pageKey('c', true) },
       { label: 'Paste', key: 'Ctrl+V', off: !S.fxClip?.length, run: () => pageKey('v', true) },
       n === 1 && { label: 'Copy name', run: () => copyText(f.name) },
+      n > 1 && { label: `New group from these ${n}…`, run: () => $('#fxGroupNew')?.click() },
+      ...p.groups.slice(0, 12).map((g) => n && { label: `Add to group '${g.name}'`, run: () => { g.fixtures = [...new Set([...g.fixtures, ...S.fxSel])]; toast(`Added to ${g.name}`); markDirty(); render(); } }),
       null,
       { label: n > 1 ? `Delete ${n} fixtures` : 'Delete', key: 'Del', danger: true, run: () => pageKey('Delete') },
+    ];
+  }],
+  // Fixtures page: a group in the Groups list.
+  ['[data-fxgroupsel]', (el) => {
+    const p = P(), gi = p.groups.findIndex((g) => g.id === +el.dataset.fxgroupsel), g = p.groups[gi];
+    if (!g || S.view !== 'fixtures') return null;
+    return [
+      { label: `Select its ${g.fixtures.length} fixtures`, run: () => { S.fxSel = new Set(g.fixtures); S.fxGroup = null; S.fxPanel = ''; S.revealFx = true; render(); } },
+      { label: 'Locate (flash white)', run: () => locateFixtures(g.fixtures) },
+      S.fxSel.size && { label: `Add the ${S.fxSel.size} selected fixture(s)`, run: () => { g.fixtures = [...new Set([...g.fixtures, ...S.fxSel])]; markDirty(); render(); } },
+      null,
+      { label: 'Copy name', run: () => copyText(g.name) },
+      USE_KINDS.groups && { label: 'Where used…', run: () => showWhereUsed('groups', g) },
+      null,
+      { label: 'Delete group', danger: true, run: () => deleteItem(`groups.${gi}`) },
     ];
   }],
   ['[data-sel^="theme:"]', (el) => themeMenu(el)],   // app-colors.js
@@ -600,8 +628,16 @@ function openCtxMenu(e, items) {
   m.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
   return true;
 }
+// On a Mac, Ctrl+click is a right-click to the system: no click event, only this menu. Ctrl+click
+// selects several items in the lists here (like Cmd+click), so it is turned back into a click.
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 document.addEventListener('contextmenu', (e) => {
   closeCtxMenu();
+  if (IS_MAC && e.ctrlKey && !e.shiftKey && P()) {
+    e.preventDefault();
+    e.target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true, clientX: e.clientX, clientY: e.clientY }));
+    return;
+  }
   if (e.shiftKey || !P() || e.target.closest('#ctxMenu')) return;
   const el = e.target;
   if (editingText(el) && !/^(range|checkbox|radio|button|color)$/.test(el.type || '')) return;   // the browser's cut/copy/paste

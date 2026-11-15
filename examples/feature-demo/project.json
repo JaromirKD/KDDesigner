@@ -4468,8 +4468,86 @@
           "text": "FOH desk",
           "size": 2,
           "color": "#d0d8e2"
+        },
+        {
+          "type": "door",
+          "x": 0.02,
+          "y": 0.86,
+          "w": 0.0375,
+          "h": 0.0563,
+          "color": "#d0d8e2",
+          "width": 2
+        },
+        {
+          "type": "door",
+          "x": 0.93,
+          "y": 0.66,
+          "w": 0.075,
+          "h": 0.0563,
+          "rot": -90,
+          "double": true,
+          "color": "#d0d8e2",
+          "width": 2
+        },
+        {
+          "type": "stairs",
+          "x": 0.86,
+          "y": 0.12,
+          "w": 0.1,
+          "h": 0.0938,
+          "steps": 8,
+          "color": "#8aa0b8",
+          "width": 1.5,
+          "fill": "#8aa0b8",
+          "alpha": 0.15
         }
-      ]
+      ],
+      "devices": [
+        {
+          "list": "projectors",
+          "name": "PJ left",
+          "x": 0.15,
+          "y": 0.06
+        },
+        {
+          "list": "projectors",
+          "name": "PJ right",
+          "x": 0.85,
+          "y": 0.06
+        },
+        {
+          "list": "pcs",
+          "name": "Media PC",
+          "x": 0.1,
+          "y": 0.92
+        },
+        {
+          "list": "pcs",
+          "name": "Kiosk PC",
+          "x": 0.9,
+          "y": 0.92
+        },
+        {
+          "list": "drivers",
+          "name": "io",
+          "x": 0.27,
+          "y": 0.8
+        },
+        {
+          "list": "drivers",
+          "name": "rack",
+          "x": 0.73,
+          "y": 0.8
+        },
+        {
+          "list": "tcp",
+          "name": "watchout",
+          "x": 0.3,
+          "y": 0.94
+        }
+      ],
+      "widthM": 24,
+      "grid": 48
     },
     {
       "id": 2,
@@ -4649,7 +4727,9 @@
           "size": 2,
           "color": "#d0d8e2"
         }
-      ]
+      ],
+      "widthM": 12,
+      "grid": 24
     },
     {
       "id": 3,
@@ -4698,6 +4778,132 @@
           "fixture": 20,
           "x": 0.2313,
           "y": 0.2313
+        }
+      ],
+      "widthM": 10,
+      "grid": 20
+    },
+    {
+      "id": 4,
+      "name": "Ground floor",
+      "kind": "floor",
+      "aspect": 2,
+      "widthM": 50,
+      "grid": 50,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [],
+      "parts": [
+        {
+          "map": 1,
+          "x": 0.02,
+          "y": 0.06,
+          "w": 0.48
+        },
+        {
+          "map": 2,
+          "x": 0.56,
+          "y": 0.06,
+          "w": 0.24
+        }
+      ],
+      "shapes": [
+        {
+          "type": "rect",
+          "x": 0.52,
+          "y": 0.4,
+          "w": 0.46,
+          "h": 0.12,
+          "color": "#8aa0b8",
+          "width": 1.5,
+          "fill": "#8aa0b8",
+          "alpha": 0.08
+        },
+        {
+          "type": "text",
+          "x": 0.75,
+          "y": 0.46,
+          "text": "Corridor",
+          "size": 1.6,
+          "color": "#8aa0b8"
+        },
+        {
+          "type": "door",
+          "x": 0.64,
+          "y": 0.33,
+          "w": 0.03,
+          "h": 0.06,
+          "flip": true,
+          "color": "#d0d8e2",
+          "width": 2
+        },
+        {
+          "type": "stairs",
+          "x": 0.86,
+          "y": 0.56,
+          "w": 0.1,
+          "h": 0.16,
+          "color": "#8aa0b8",
+          "width": 1.5
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "First floor",
+      "kind": "floor",
+      "aspect": 2,
+      "widthM": 50,
+      "grid": 50,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [],
+      "parts": [
+        {
+          "map": 3,
+          "x": 0.3,
+          "y": 0.1,
+          "w": 0.2
+        }
+      ],
+      "shapes": [
+        {
+          "type": "stairs",
+          "x": 0.86,
+          "y": 0.56,
+          "w": 0.1,
+          "h": 0.16,
+          "flip": true,
+          "color": "#8aa0b8",
+          "width": 1.5
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Museum",
+      "kind": "building",
+      "aspect": 1,
+      "widthM": 50,
+      "grid": 25,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [],
+      "parts": [
+        {
+          "map": 4,
+          "x": 0,
+          "y": 0.02,
+          "w": 1
+        },
+        {
+          "map": 5,
+          "x": 0,
+          "y": 0.52,
+          "w": 1
         }
       ]
     }

@@ -68,9 +68,46 @@ Object.assign(maps[0], {
     { type: 'text', x: 0.5, y: 0.37, text: 'STAGE', size: 4, color: '#d0d8e2' },
     { type: 'text', x: 0.5, y: 0.76, text: 'FOH desk', size: 2, color: '#d0d8e2' },
   ],
+  // Devices on the map (by list + name): on the Live page they show online / offline.
+  devices: [
+    { list: 'projectors', name: 'PJ left', x: 0.15, y: 0.06 }, { list: 'projectors', name: 'PJ right', x: 0.85, y: 0.06 },
+    { list: 'pcs', name: 'Media PC', x: 0.1, y: 0.92 }, { list: 'pcs', name: 'Kiosk PC', x: 0.9, y: 0.92 },
+    { list: 'drivers', name: 'io', x: 0.27, y: 0.8 }, { list: 'drivers', name: 'rack', x: 0.73, y: 0.8 },
+    { list: 'tcp', name: 'watchout', x: 0.3, y: 0.94 },
+  ],
 });
 // The pixel grid (2:1) gets a text label too: a floor plan can be only text.
 maps[1].shapes = [{ type: 'text', x: 0.5, y: 0.04, text: 'LED wall (wired as a snake)', size: 2, color: '#d0d8e2' }];
+// Real widths in metres (widthM): the grid is then set in metres (grid = squares across: 24 m / 48
+// = 0.5 m squares), and rooms go on a floor to scale.
+Object.assign(maps[0], { widthM: 24, grid: 48 });
+Object.assign(maps[1], { widthM: 12, grid: 24 });
+Object.assign(maps[2], { widthM: 10, grid: 20 });
+// A door (hinge bottom-left; flip = bottom-right, double = both), a double door turned to stand
+// in the side wall, and stairs (the arrow points up them; steps = how many treads).
+maps[0].shapes.push(
+  { type: 'door', x: 0.02, y: 0.86, w: 0.0375, h: 0.0563, color: '#d0d8e2', width: 2 },
+  { type: 'door', x: 0.93, y: 0.66, w: 0.075, h: 0.0563, rot: -90, double: true, color: '#d0d8e2', width: 2 },
+  { type: 'stairs', x: 0.86, y: 0.12, w: 0.1, h: 0.0938, steps: 8, color: '#8aa0b8', width: 1.5, fill: '#8aa0b8', alpha: 0.15 },
+);
+// Rooms put together: a floor holds rooms (parts: another map at x/y, w of the floor's width;
+// to scale = the room's widthM / the floor's widthM), a building holds floors. A map can be on
+// several others; what a room holds stays on the room's own map.
+maps.push(
+  { id: 4, name: 'Ground floor', kind: 'floor', aspect: 2, widthM: 50, grid: 50, background: '', snap: true, labels: true, items: [],
+    parts: [{ map: 1, x: 0.02, y: 0.06, w: 0.48 }, { map: 2, x: 0.56, y: 0.06, w: 0.24 }],
+    shapes: [
+      { type: 'rect', x: 0.52, y: 0.4, w: 0.46, h: 0.12, color: '#8aa0b8', width: 1.5, fill: '#8aa0b8', alpha: 0.08 },
+      { type: 'text', x: 0.75, y: 0.46, text: 'Corridor', size: 1.6, color: '#8aa0b8' },
+      { type: 'door', x: 0.64, y: 0.33, w: 0.03, h: 0.06, flip: true, color: '#d0d8e2', width: 2 },
+      { type: 'stairs', x: 0.86, y: 0.56, w: 0.1, h: 0.16, color: '#8aa0b8', width: 1.5 },
+    ] },
+  { id: 5, name: 'First floor', kind: 'floor', aspect: 2, widthM: 50, grid: 50, background: '', snap: true, labels: true, items: [],
+    parts: [{ map: 3, x: 0.3, y: 0.1, w: 0.2 }],
+    shapes: [{ type: 'stairs', x: 0.86, y: 0.56, w: 0.1, h: 0.16, flip: true, color: '#8aa0b8', width: 1.5 }] },
+  { id: 6, name: 'Museum', kind: 'building', aspect: 1, widthM: 50, grid: 25, background: '', snap: true, labels: true, items: [],
+    parts: [{ map: 4, x: 0, y: 0.02, w: 1 }, { map: 5, x: 0, y: 0.52, w: 1 }] },
+);
 
 // ---------- scenes ----------
 const L = (ids, ch, v) => ids.map((fixture) => ({ fixture, ch, v }));
