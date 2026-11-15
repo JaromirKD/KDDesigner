@@ -302,7 +302,7 @@ function hostOnline(name) {
 
 // ---- simulated device drivers (mirrors src/Drivers.cpp) -------------------------
 // Each type keeps a fake device state; commands change it, polls report it.
-const DRV_NAMES = { kissbox: 'Kiss-Box', knx: 'KNX', brightsign: 'BrightSign', digidot: 'DiGidot', netio: 'NETIO', pharos: 'Pharos' };
+const DRV_NAMES = { kissbox: 'Kiss-Box', knx: 'KNX', brightsign: 'BrightSign', digidot: 'DiGidot', netio: 'NETIO', pharos: 'Pharos', netgear: 'Netgear' };
 const drvState = new Map();   // "type:name:ip" -> state
 function drv(d) {
   const key = `${d.type}:${d.name}:${d.ip}:${d.model || ''}`;
@@ -310,7 +310,7 @@ function drv(d) {
   const st = { seen: false, online: false, last: '', history: 0, checks: 0, lastSeen: 0, lastCheck: 0, info: {}, points: [], scenes: [],
     onlineSince: 0, dropouts: 0, restarts: 0, uptime: 0 };
   // Devices whose API reports uptime "booted" a while ago; BrightSign "reboot" restarts it.
-  if (['netio', 'brightsign', 'pharos'].includes(d.type)) st.bootAt = epoch() - (d.type === 'netio' ? 276720 : d.type === 'pharos' ? 1209600 : 23400);
+  if (['netio', 'brightsign', 'pharos', 'netgear'].includes(d.type)) st.bootAt = epoch() - (d.type === 'netio' ? 276720 : d.type === 'pharos' ? 1209600 : d.type === 'netgear' ? 3888000 : 23400);
   const pt = (k, n, v) => st.points.push({ k, n, v: String(v) });
   if (d.type === 'netio') {
     st.info = { Model: '4PZ PowerDIN-4PZ', Firmware: '5.0.3', Serial: '24A42C3A5E55', 'Device clock': '', Mains: '231.4 V · 50.01 Hz', 'Total load': '84 W' };
@@ -342,6 +342,16 @@ function drv(d) {
     st.playlists = ['Evening loop', 'Party', 'Christmas'];
     st.c4triggers = ['Button 1', 'Sunset', 'All off', 'Art-Net lost'];
     pt('scene', 'Scene playing', '-'); pt('playlist', 'Playlist playing', '-'); pt('master', 'Master (%)', 100); pt('speed', 'Speed (%)', 100); pt('paused', 'Paused', 0);
+  } else if (d.type === 'netgear') {
+    // A simulated M4250 (24 x 1G PoE+ and 4 SFP): what pollNetgear in Drivers.cpp reads over SNMP.
+    st.info = { Model: 'M4250-26G4F-PoE+ ProSAFE 24-port 1G PoE+ and 4-port SFP, 13.0.4.26', 'Switch name': d.name };
+    const dev = ['Projector L', 'Projector R', 'BrightSign 1', 'BrightSign 2', 'Dante amp', 'PTZ camera', 'Touch panel', 'Show PC', '', '', 'NETIO rack', 'Pharos LPC'];
+    st.ports = Array.from({ length: 28 }, (_, k) => {
+      const n = k + 1, used = n <= dev.length && dev[n - 1], sfp = n > 24;
+      return { n, i: `1/0/${n}`, a: n === 28 ? 'Uplink core' : '', up: used || n === 28 ? 1 : 0, sp: n === 28 ? 10000 : used ? 1000 : 0,
+        mac: used ? `a4:5e:60:00:00:${n.toString(16).padStart(2, '0')}` : n === 28 ? 'b0:7f:b9:12:34:56' : '', m: used ? 1 : n === 28 ? 143 : 0,
+        l: used && /BrightSign|Pharos|PC/.test(dev[n - 1]) ? dev[n - 1] : n === 28 ? 'core-sw' : '', poe: sfp ? -1 : used && /PTZ|Touch|BrightSign/.test(dev[n - 1]) ? 1 : 0 };
+    });
   } else if (d.type === 'pharos') {
     st.info = { Model: 'LPC X', Firmware: '2.9.3', Serial: '009812', 'Last boot': '17 Oct 2026 09:12:40', 'Reset reason': 'Software Reset',
       Memory: '24056Kb used of 127940Kb', Project: 'Museum', 'Project file': 'museum_v12.pd2 (uploaded 2026-10-01T15:19:08)',
@@ -373,6 +383,7 @@ function drvOnOff(d, k, v) {
   else if (d.type === 'knx') bin = parseInt((d.addresses || []).find((a) => a.ga === k)?.dpt || '1', 10) === 1;
   else if (d.type === 'brightsign') bin = /^gpio\d$/.test(k) || k === 'screen' || k === 'hdmi';
   else if (d.type === 'pharos' && /^(tl|sc)/.test(k)) return v === '' ? -1 : v === 'none' || v === 'released' ? 0 : 1;
+  else if (d.type === 'netgear') bin = /^p\d+$/.test(k) && !!(d.expect || {})[k.slice(1)];   // only remembered ports get a lane
   if (!bin) return -1;
   return v === '1' ? 1 : v === '0' ? 0 : -1;
 }
@@ -417,6 +428,7 @@ function drvPoll() {
     st.live = d.type === 'knx' ? st.live : d.live ? (st.online ? 'live' : 'waiting') : undefined;
     st.liveNote = d.live && !st.online ? (d.type === 'netio' ? 'MQTT connection closed' : 'WebSocket: no connection') : undefined;
     if (d.type === 'brightsign') bsPlugin(d);
+    if (d.type === 'netgear' && st.online) netgearPoll(d);
     if (d.type === 'kissbox' && st.online) {   // a simulated door contact on the first input slot toggles every 20 s
       const s = kissKinds(d).findIndex((t) => t === 'in');
       if (s >= 0) drvSet(d, `${s + 1}.1`, Math.floor(Date.now() / 20000) % 2);
@@ -426,6 +438,50 @@ function drvPoll() {
     if (first || st.online !== was) histRecord(d.type, d.name, st.online ? 'online' : 'offline');
     if (!first && st.online !== was) deviceEvent(d.type, d.name, st.online);
   }
+}
+// Netgear: the simulated switch moves a little (port 7's touch panel is unplugged for a minute every
+// 4 minutes, port 6's camera drops to 100 Mb/s in the second half of each 10 minutes), then each port
+// is compared with its remembered state like netgearCompare in Drivers.cpp.
+function netgearPoll(d) {
+  const st = drv(d), t = Date.now() / 1000, p7 = st.ports[6], p6 = st.ports[5];
+  const off = t % 240 < 60;
+  Object.assign(p7, { up: off ? 0 : 1, sp: off ? 0 : 1000, m: off ? 0 : 1, poe: off ? 0 : 1, mac: off ? '' : 'a4:5e:60:00:00:07' });
+  p6.sp = t % 600 >= 300 ? 100 : 1000;
+  st.info.Ports = `${st.ports.filter((p) => p.up).length} of ${st.ports.length} connected`;
+  const exp = d.expect || {}, names = d.names || {};
+  const seenOn = (mac) => { const own = st.ports.find((p) => p.mac === mac); return own ? own.n : 0; };
+  const speed = (mb) => (mb >= 1000 && mb % 1000 === 0 ? `${mb / 1000} Gb/s` : `${mb} Mb/s`);
+  st.issues = st.issues || {};
+  let count = 0;
+  const list = [];
+  for (const p of st.ports) {
+    const label = names[p.n] || p.a || '';
+    drvSet(d, 'p' + p.n, p.up, `Port ${p.n}${label ? ' ' + label : ''}`);
+    const e = exp[p.n];
+    let issue = '';
+    if (e) {
+      const on = e.mac ? seenOn(e.mac) : 0;
+      if (e.up === 1 && !p.up) issue = on && on !== p.n ? `unplugged, device now on port ${on}` : 'unplugged / device off';
+      else if (e.up === 0 && p.up) issue = 'something plugged in';
+      else if (p.up) {
+        if (e.mac && on !== p.n) issue = on ? `device moved to port ${on}` : p.m ? `other device (${p.mac})` : '';
+        if (!issue && e.speed && p.sp && p.sp !== e.speed) issue = `${speed(p.sp)} instead of ${speed(e.speed)}`;
+        if (!issue && e.poe === 1 && p.poe === 0) issue = 'no PoE power';
+        if (!issue && p.poe === 2) issue = 'PoE fault';
+      }
+    }
+    const was = st.issues[p.n];
+    if (issue !== (was || '') || (!st.compared && issue)) {
+      const what = `port ${p.n}${label ? ` (${label})` : ''}`;
+      if (issue) log(2, 'SYS', `Netgear ${d.name}: ${what} ${issue}`);
+      else if (was !== undefined) log(1, 'SYS', `Netgear ${d.name}: ${what} back to normal`);
+    }
+    st.issues[p.n] = issue;
+    if (issue) { count++; list.push(`${p.n} ${issue}`); }
+  }
+  st.compared = true;
+  drvSet(d, 'changes', count, 'Ports not as remembered');
+  drvSet(d, 'changed', list.join(', '), 'What changed');
 }
 // The kdlink plugin answering a hello (like pluginPacket in Drivers.cpp): zones z<n> + z<n>.file, var.<name>.
 // A DWS that doesn't answer leaves the player online while the plugin does (here both follow answers()).
@@ -861,6 +917,10 @@ function drvCommandOne(t) {
       return '200 netio.json';
     });
   }
+  if (type === 'netgear') {
+    if (w[2] === 'refresh' && t.length === 3) { setTimeout(() => { if (answers(d.ip)) netgearPoll(d); }, 300); return `Netgear ${d.name}: reading the switch`; }
+    throw new Error('expected: netgear <switch> refresh');
+  }
   if (type === 'pharos') {
     if ((w[2] === 'timeline' || w[2] === 'scene') && t.length >= 5) {
       const tl = w[2] === 'timeline', a = w[4];
@@ -905,7 +965,9 @@ function drvStatus() {
       ...(st.lastError ? { lastError: st.lastError, lastErrorAt: st.lastErrorAt } : {}),
       ...(st.live ? { live: st.live } : {}), ...(st.liveNote ? { liveNote: st.liveNote } : {}), ...(st.triggers ? { triggers: st.triggers } : {}), ...(st.scenes.length ? { scenes: st.scenes } : {}), ...(st.playlists ? { playlists: st.playlists, c4triggers: st.c4triggers } : {}), ...(d.type === 'knx' ? { tunnel: !!st.tunnel } : {}),
       ...(d.plugin && st.pluginSeen && st.states ? { states: st.states.map(([z, n, f, ms]) => ({ z, n, ...(f ? { f } : {}), ...(ms ? { ms } : {}) })) } : {}),
-      ...(st.activity?.length ? { activity: st.activity } : {}) };
+      ...(st.activity?.length ? { activity: st.activity } : {}),
+      ...(d.type === 'netgear' && st.ports && st.compared ? { ports: st.ports.map((p) => ({ n: p.n, i: p.i, ...(p.a ? { a: p.a } : {}), up: p.up, ...(p.sp ? { sp: p.sp } : {}),
+        ...(p.m ? { mac: p.mac, m: p.m } : {}), ...(p.l && p.up ? { l: p.l } : {}), ...(p.poe >= 0 ? { poe: p.poe } : {}), ...(st.issues?.[p.n] ? { x: st.issues[p.n] } : {}) })) } : {}) };
   });
 }
 const overrides = new Map();

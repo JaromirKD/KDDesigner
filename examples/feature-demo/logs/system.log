@@ -14449,3 +14449,1158 @@
 2026-11-14 23:28:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
 2026-11-14 23:28:46 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
 2026-11-14 23:28:46 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:29:01 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:29:06 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:29:06 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:29:08 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:49:15 [INFO ] SYS    KD Designer mock booting
+2026-11-14 23:49:15 [INFO ] USB    Storage device mounted at /usb
+2026-11-14 23:49:15 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-14 23:49:15 [INFO ] SYS    Mode System starts in Idle
+2026-11-14 23:49:15 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-14 23:49:15 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-14 23:49:16 [INFO ] SYS    pc 'Media PC' (192.168.1.41) is online (2 ms)
+2026-11-14 23:49:16 [WARN ] SYS    pc 'Kiosk PC' (192.168.1.199) is OFFLINE
+2026-11-14 23:49:16 [INFO ] SYS    device 'mediaserver' (192.168.1.52) is online (1 ms)
+2026-11-14 23:49:16 [INFO ] SYS    device 'qlab' (192.168.1.51) is online (10 ms)
+2026-11-14 23:49:16 [INFO ] SYS    device 'motors' (192.168.1.70) is online (4 ms)
+2026-11-14 23:49:16 [INFO ] SYS    device 'screen1' (192.168.1.61) is online (5 ms)
+2026-11-14 23:49:16 [INFO ] SYS    device 'screen2' (192.168.1.62) is online (4 ms)
+2026-11-14 23:49:16 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (12 ms)
+2026-11-14 23:49:16 [WARN ] PJLINK PJ left: filter warning
+2026-11-14 23:49:16 [INFO ] TRIG   Trigger 64 'Projector error' fired (projector alarm)
+2026-11-14 23:49:16 [INFO ] SYS    Email 'PJ left: filter warning' sent to tech@example.com (simulated)
+2026-11-14 23:49:16 [INFO ] PJLINK PJ left (192.168.1.101) online
+2026-11-14 23:49:16 [INFO ] PJLINK PJ right (192.168.1.102) online
+2026-11-14 23:49:16 [WARN ] PJLINK PJ foyer (192.168.1.199) offline: no connection
+2026-11-14 23:49:16 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:49:16 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:49:16 [INFO ] SYS    Kiss-Box io (192.168.1.121) online
+2026-11-14 23:49:16 [INFO ] SYS    KNX gw (192.168.1.123) online
+2026-11-14 23:49:16 [INFO ] SYS    BrightSign lobby (192.168.1.125) online
+2026-11-14 23:49:16 [INFO ] SYS    DiGidot c4 (192.168.1.126) online
+2026-11-14 23:49:16 [INFO ] SYS    NETIO rack (192.168.1.127) online
+2026-11-14 23:49:16 [INFO ] SYS    Pharos lpc (192.168.1.128) online
+2026-11-14 23:49:16 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-14 23:49:16 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-14 23:49:16 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-14 23:49:16 [INFO ] SYS    Netgear avswitch (192.168.1.2) online
+2026-11-14 23:49:16 [INFO ] SYS    Clock set from browser
+2026-11-14 23:49:20 [INFO ] TRIG   Trigger 15 'Start inloop' fired (delayed from trigger 1)
+2026-11-14 23:49:20 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-14 23:49:24 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:49:36 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:49:36 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:49:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:49:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:49:56 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:49:56 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:50:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:50:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:50:16 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:50:16 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:50:17 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-14 23:50:17 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-14 23:50:17 [INFO ] CMD    Network cabling back to normal
+2026-11-14 23:50:17 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:50:17 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:50:23 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:50:36 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:50:36 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:50:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:50:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:50:56 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:50:56 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:51:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:51:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:51:16 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:51:16 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:51:36 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:51:36 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:51:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:51:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:51:56 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:51:56 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:52:08 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:52:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:52:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:52:16 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:52:16 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:52:17 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-14 23:52:17 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-14 23:52:17 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-14 23:52:17 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:52:17 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:52:29 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:52:36 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:52:36 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:52:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:52:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:52:56 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:52:56 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:53:11 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:53:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:53:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:53:16 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:53:16 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:53:17 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-14 23:53:17 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-14 23:53:17 [INFO ] CMD    Network cabling back to normal
+2026-11-14 23:53:27 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:53:36 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:53:36 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:53:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:53:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:53:56 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:53:56 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:54:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:54:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:54:16 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-14 23:54:16 [INFO ] TRIG   Trigger 62 'Device offline -> email' fired (device offline)
+2026-11-14 23:54:16 [INFO ] CMD    device Wi-Fi bridge is offline
+2026-11-14 23:54:16 [INFO ] SYS    Email 'Wi-Fi bridge offline' sent to tech@example.com (simulated)
+2026-11-14 23:54:16 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:54:16 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:54:17 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:54:17 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:54:36 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:54:36 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:54:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:54:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:54:56 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:54:56 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:55:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:55:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:55:16 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (11 ms)
+2026-11-14 23:55:16 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:55:16 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:55:17 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-14 23:55:17 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-14 23:55:17 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-14 23:55:36 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:55:36 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:55:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:55:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:55:56 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:55:56 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:56:09 [INFO ] SYS    KD Designer mock booting
+2026-11-14 23:56:09 [INFO ] USB    Storage device mounted at /usb
+2026-11-14 23:56:09 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-14 23:56:09 [INFO ] SYS    Mode System starts in Idle
+2026-11-14 23:56:09 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-14 23:56:09 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-14 23:56:10 [INFO ] SYS    pc 'Media PC' (192.168.1.41) is online (3 ms)
+2026-11-14 23:56:10 [WARN ] SYS    pc 'Kiosk PC' (192.168.1.199) is OFFLINE
+2026-11-14 23:56:10 [INFO ] SYS    device 'mediaserver' (192.168.1.52) is online (4 ms)
+2026-11-14 23:56:10 [INFO ] SYS    device 'qlab' (192.168.1.51) is online (5 ms)
+2026-11-14 23:56:10 [INFO ] SYS    device 'motors' (192.168.1.70) is online (5 ms)
+2026-11-14 23:56:10 [INFO ] SYS    device 'screen1' (192.168.1.61) is online (12 ms)
+2026-11-14 23:56:10 [INFO ] SYS    device 'screen2' (192.168.1.62) is online (8 ms)
+2026-11-14 23:56:10 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-14 23:56:10 [WARN ] PJLINK PJ left: filter warning
+2026-11-14 23:56:10 [INFO ] TRIG   Trigger 64 'Projector error' fired (projector alarm)
+2026-11-14 23:56:10 [INFO ] SYS    Email 'PJ left: filter warning' sent to tech@example.com (simulated)
+2026-11-14 23:56:10 [INFO ] PJLINK PJ left (192.168.1.101) online
+2026-11-14 23:56:10 [INFO ] PJLINK PJ right (192.168.1.102) online
+2026-11-14 23:56:10 [WARN ] PJLINK PJ foyer (192.168.1.199) offline: no connection
+2026-11-14 23:56:10 [INFO ] SYS    Kiss-Box io (192.168.1.121) online
+2026-11-14 23:56:10 [INFO ] SYS    KNX gw (192.168.1.123) online
+2026-11-14 23:56:10 [INFO ] SYS    BrightSign lobby (192.168.1.125) online
+2026-11-14 23:56:10 [INFO ] SYS    DiGidot c4 (192.168.1.126) online
+2026-11-14 23:56:10 [INFO ] SYS    NETIO rack (192.168.1.127) online
+2026-11-14 23:56:10 [INFO ] SYS    Pharos lpc (192.168.1.128) online
+2026-11-14 23:56:10 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-14 23:56:10 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-14 23:56:10 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-14 23:56:10 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-14 23:56:10 [INFO ] SYS    Netgear avswitch (192.168.1.2) online
+2026-11-14 23:56:10 [INFO ] SYS    Clock set from browser
+2026-11-14 23:56:14 [INFO ] TRIG   Trigger 15 'Start inloop' fired (delayed from trigger 1)
+2026-11-14 23:56:14 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-14 23:56:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:56:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:56:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:56:30 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:56:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:56:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:56:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:56:50 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:57:10 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (9 ms)
+2026-11-14 23:57:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:57:10 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:57:11 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:57:11 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:57:11 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-14 23:57:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-14 23:57:11 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-14 23:57:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:57:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:57:20 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:57:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:57:30 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:57:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:57:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:57:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:57:50 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:58:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:58:10 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:58:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:58:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:58:15 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:58:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:58:30 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:58:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:58:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:58:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:58:50 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:59:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:59:10 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-14 23:59:11 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:59:11 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:59:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:59:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:59:27 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-14 23:59:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:59:30 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-14 23:59:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-14 23:59:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-14 23:59:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-14 23:59:50 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:00:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:00:10 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:00:11 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 00:00:11 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:00:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:00:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:00:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:00:30 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:00:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:00:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:00:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:00:50 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:01:03 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:01:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:01:10 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:01:11 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:01:11 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:01:11 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:01:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:01:11 [INFO ] CMD    Network cabling back to normal
+2026-11-15 00:01:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:01:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:01:29 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:01:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:01:30 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:01:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:01:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:01:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:01:50 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:02:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:02:10 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:02:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:02:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:02:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:02:30 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:02:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:02:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:02:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:02:50 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:03:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:03:10 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:03:11 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:03:11 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:03:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:03:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:03:15 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:03:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:03:30 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:03:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:03:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:03:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:03:50 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:04:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:04:10 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:04:11 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:04:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:04:11 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:04:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:04:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:04:30 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:04:30 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:04:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:04:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:04:45 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:04:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:04:50 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:05:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:05:11 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:05:12 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:05:12 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:05:12 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 00:05:12 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:05:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:05:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:05:26 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:05:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:05:31 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:05:36 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:05:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:05:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:05:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:05:51 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:06:00 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:06:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:06:11 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:06:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:06:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:06:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:06:31 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:06:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:06:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:06:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:06:51 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:07:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:07:11 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:07:12 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:07:12 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:07:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:07:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:07:24 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:07:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:07:31 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:07:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:07:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:07:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:07:51 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:08:06 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:08:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:08:11 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:08:12 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:08:12 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:08:12 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:08:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:08:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:08:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:08:32 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:08:35 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:08:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:08:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:08:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:08:52 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:09:11 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:09:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:09:12 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:09:12 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:09:12 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:09:12 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:09:12 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:09:12 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:09:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:09:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:09:20 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:09:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:09:32 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:09:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:09:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:09:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:09:52 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:10:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:10:12 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:10:12 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 00:10:12 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:10:12 [INFO ] CMD    Network cabling back to normal
+2026-11-15 00:10:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:10:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:10:23 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:10:27 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:10:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:10:32 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:10:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:10:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:10:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:10:52 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:11:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:11:12 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:11:12 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:11:12 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:11:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:11:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:11:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:11:32 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:11:39 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:11:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:11:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:11:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:11:52 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:12:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:12:12 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:12:12 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:12:12 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:12:12 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:12:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:12:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:12:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:12:32 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:12:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:12:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:12:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:12:52 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:12:58 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:13:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:13:12 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:13:12 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:13:12 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:13:12 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:13:12 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:13:12 [INFO ] CMD    Network cabling back to normal
+2026-11-15 00:13:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:13:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:13:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:13:32 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:13:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:13:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:13:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:13:52 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:13:58 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:14:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:14:12 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:14:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:14:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:14:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:14:32 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:14:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:14:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:14:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:14:52 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:14:53 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:15:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:15:12 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:15:13 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:15:13 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:15:13 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 00:15:13 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:15:13 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:15:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:15:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:15:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:15:32 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:15:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:15:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:15:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:15:52 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:15:53 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:16:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:16:12 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:16:13 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:16:13 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:16:13 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:16:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:16:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:16:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:16:32 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:16:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:16:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:16:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:16:52 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:17:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:17:12 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:17:13 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:17:13 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:17:13 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:17:13 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:17:13 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:17:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:17:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:17:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:17:32 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:17:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:17:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:17:52 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:17:52 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:18:12 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:18:12 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:18:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:18:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:18:26 [INFO ] SYS    KD Designer mock booting
+2026-11-15 00:18:26 [INFO ] USB    Storage device mounted at /usb
+2026-11-15 00:18:26 [INFO ] NET    IP 127.0.0.1  MAC 00:00:00:00:00:00
+2026-11-15 00:18:26 [INFO ] SYS    Mode System starts in Idle
+2026-11-15 00:18:26 [INFO ] SHOW   Project 'KD Feature demo' loaded: 3 universes, 58 fixtures, 8 scenes, 5 timelines
+2026-11-15 00:18:26 [INFO ] TRIG   Trigger 1 'Startup' fired (startup)
+2026-11-15 00:18:27 [INFO ] SYS    pc 'Media PC' (192.168.1.41) is online (10 ms)
+2026-11-15 00:18:27 [WARN ] SYS    pc 'Kiosk PC' (192.168.1.199) is OFFLINE
+2026-11-15 00:18:27 [INFO ] SYS    device 'mediaserver' (192.168.1.52) is online (8 ms)
+2026-11-15 00:18:27 [INFO ] SYS    device 'qlab' (192.168.1.51) is online (12 ms)
+2026-11-15 00:18:27 [INFO ] SYS    device 'motors' (192.168.1.70) is online (9 ms)
+2026-11-15 00:18:27 [INFO ] SYS    device 'screen1' (192.168.1.61) is online (4 ms)
+2026-11-15 00:18:27 [INFO ] SYS    device 'screen2' (192.168.1.62) is online (8 ms)
+2026-11-15 00:18:27 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-15 00:18:27 [WARN ] PJLINK PJ left: filter warning
+2026-11-15 00:18:27 [INFO ] TRIG   Trigger 64 'Projector error' fired (projector alarm)
+2026-11-15 00:18:27 [INFO ] SYS    Email 'PJ left: filter warning' sent to tech@example.com (simulated)
+2026-11-15 00:18:27 [INFO ] PJLINK PJ left (192.168.1.101) online
+2026-11-15 00:18:27 [INFO ] PJLINK PJ right (192.168.1.102) online
+2026-11-15 00:18:27 [WARN ] PJLINK PJ foyer (192.168.1.199) offline: no connection
+2026-11-15 00:18:27 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:18:27 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:18:27 [INFO ] SYS    Kiss-Box io (192.168.1.121) online
+2026-11-15 00:18:27 [INFO ] SYS    KNX gw (192.168.1.123) online
+2026-11-15 00:18:27 [INFO ] SYS    BrightSign lobby (192.168.1.125) online
+2026-11-15 00:18:27 [INFO ] SYS    DiGidot c4 (192.168.1.126) online
+2026-11-15 00:18:27 [INFO ] SYS    NETIO rack (192.168.1.127) online
+2026-11-15 00:18:27 [INFO ] SYS    Pharos lpc (192.168.1.128) online
+2026-11-15 00:18:27 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 00:18:27 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:18:27 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:18:27 [INFO ] SYS    Netgear avswitch (192.168.1.2) online
+2026-11-15 00:18:27 [INFO ] SYS    Clock set from browser
+2026-11-15 00:18:31 [INFO ] TRIG   Trigger 15 'Start inloop' fired (delayed from trigger 1)
+2026-11-15 00:18:31 [INFO ] SHOW   Started timeline 1 'Inloop'
+2026-11-15 00:18:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:18:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:18:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:18:47 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:19:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:19:07 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:19:13 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:19:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:19:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:19:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:19:27 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:19:28 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:19:28 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:19:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:19:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:19:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:19:47 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:20:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:20:07 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:20:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:20:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:20:17 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:20:27 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (12 ms)
+2026-11-15 00:20:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:20:27 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:20:28 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 00:20:28 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:20:40 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:20:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:20:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:20:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:20:47 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:21:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:21:07 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:21:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:21:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:21:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:21:27 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:21:28 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:21:28 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:21:28 [INFO ] CMD    Network cabling back to normal
+2026-11-15 00:21:28 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:21:28 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:21:40 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:21:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:21:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:21:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:21:47 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:21:59 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:22:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:22:07 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:22:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:22:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:22:23 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:22:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:22:27 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:22:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:22:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:22:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:22:47 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:23:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:23:07 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:23:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:23:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:23:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:23:27 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:23:28 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:23:28 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:23:35 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:23:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:23:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:23:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:23:47 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:24:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:24:07 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:24:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:24:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:24:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:24:27 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:24:28 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:24:28 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:24:28 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:24:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:24:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:24:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:24:47 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:25:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:25:07 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:25:11 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:25:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:25:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:25:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:25:27 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:25:28 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 00:25:28 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:25:28 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:25:28 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:25:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:25:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:25:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:25:47 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:26:02 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:26:04 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:26:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:26:07 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:26:11 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:26:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:26:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:26:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:26:27 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:26:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:26:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:26:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:26:47 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:26:52 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:27:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:27:07 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:27:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:27:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:27:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:27:27 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:27:28 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:27:28 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:27:31 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:27:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:27:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:27:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:27:47 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:27:59 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:28:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:28:07 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:28:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:28:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:28:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:28:27 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:28:28 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:28:28 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:28:28 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:28:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:28:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:28:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:28:47 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:28:53 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:29:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:29:07 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:29:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:29:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:29:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:29:27 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:29:28 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:29:28 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:29:28 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:29:28 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:29:28 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:29:31 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:29:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:29:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:29:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:29:47 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:30:05 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:30:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:30:07 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:30:13 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:30:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:30:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:30:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:30:27 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:30:28 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 00:30:28 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:30:28 [INFO ] CMD    Network cabling back to normal
+2026-11-15 00:30:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:30:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:30:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:30:47 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:31:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:31:07 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:31:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:31:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:31:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:31:27 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:31:28 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:31:28 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:31:29 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:31:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:31:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:31:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:31:47 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:32:02 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:32:07 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:32:07 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:32:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:32:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:32:19 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:32:27 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:32:27 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:32:28 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:32:28 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:32:28 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:32:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:32:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:32:47 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:32:48 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:32:58 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:33:08 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:33:08 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:33:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:33:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:33:28 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:33:28 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:33:29 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:33:29 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:33:29 [INFO ] CMD    Network cabling back to normal
+2026-11-15 00:33:29 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:33:29 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:33:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:33:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:33:48 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:33:48 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:34:08 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:34:08 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:34:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:34:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:34:28 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:34:28 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:34:41 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:34:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:34:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:34:48 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:34:48 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:35:08 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:35:08 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:35:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:35:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:35:28 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:35:28 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:35:28 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-15 00:35:28 [INFO ] TRIG   Trigger 62 'Device offline -> email' fired (device offline)
+2026-11-15 00:35:28 [INFO ] CMD    device Wi-Fi bridge is offline
+2026-11-15 00:35:28 [INFO ] SYS    Email 'Wi-Fi bridge offline' sent to tech@example.com (simulated)
+2026-11-15 00:35:29 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 00:35:29 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:35:29 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:35:29 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:35:29 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:35:44 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:35:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:35:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:35:48 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:35:48 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:36:01 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:36:08 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:36:08 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:36:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:36:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:36:28 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:36:28 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:36:28 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (7 ms)
+2026-11-15 00:36:29 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:36:29 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:36:29 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:36:38 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:36:44 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:36:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:36:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:36:48 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:36:48 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:37:08 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:37:08 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:37:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:37:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:37:19 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:37:28 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:37:28 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:37:29 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:37:29 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:37:29 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:37:29 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:37:29 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:37:35 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:37:43 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:37:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:37:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:37:46 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:37:48 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:37:48 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:37:49 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:37:58 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:38:08 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:38:08 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:38:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:38:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:38:27 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:38:28 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:38:28 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:40:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:40:13 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:40:13 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 00:40:13 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:40:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:40:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:40:33 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:40:33 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:40:33 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:40:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:40:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:40:53 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:40:53 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:41:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:41:13 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:41:13 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:41:13 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:41:13 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:41:13 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:41:13 [INFO ] CMD    Network cabling back to normal
+2026-11-15 00:41:15 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:41:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:41:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:41:16 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:41:21 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:41:33 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:41:33 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:41:42 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:41:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:41:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:41:53 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:41:53 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:42:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:42:13 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:42:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:42:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:42:33 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:42:33 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:42:34 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:42:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:42:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:42:53 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:42:53 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:43:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:43:13 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:43:13 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:43:13 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:43:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:43:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:43:18 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:43:30 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:43:33 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:43:33 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:43:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:43:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:43:53 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:43:53 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:44:09 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:44:10 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:44:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:44:13 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:44:13 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 00:44:13 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 00:44:13 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 00:44:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:44:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:44:33 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:44:33 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:44:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:44:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:44:53 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:44:53 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 00:45:04 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:45:07 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 00:45:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 00:45:13 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 00:45:13 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:45:13 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 00:45:13 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 00:45:13 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 00:45:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 00:45:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 01:02:05 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 01:02:05 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 01:02:05 [INFO ] CMD    Network cabling back to normal
+2026-11-15 01:02:05 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 01:02:05 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 01:02:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 01:02:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 01:02:25 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 01:02:25 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 01:18:54 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 01:18:54 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 01:18:54 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 01:18:54 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 01:18:54 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 01:18:54 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 01:18:54 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 01:33:58 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 01:33:58 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 01:33:58 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 01:33:58 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 01:33:58 [INFO ] CMD    Network cabling back to normal
+2026-11-15 01:50:54 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 01:50:54 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 01:50:54 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 01:50:54 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 01:50:55 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 01:50:55 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 02:06:50 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:06:50 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 02:06:50 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-15 02:06:50 [INFO ] TRIG   Trigger 62 'Device offline -> email' fired (device offline)
+2026-11-15 02:06:50 [INFO ] CMD    device Wi-Fi bridge is offline
+2026-11-15 02:06:50 [INFO ] SYS    Email 'Wi-Fi bridge offline' sent to tech@example.com (simulated)
+2026-11-15 02:06:50 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 02:06:50 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 02:06:50 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 02:07:10 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:07:10 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 02:07:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 02:07:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 02:25:04 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:25:04 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 02:25:04 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (4 ms)
+2026-11-15 02:25:04 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 02:25:04 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 02:25:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 02:25:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 02:25:25 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:25:25 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 02:25:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 02:25:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 02:25:45 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:25:45 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 02:43:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:43:31 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 02:43:31 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 02:43:31 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 02:43:31 [INFO ] CMD    Network cabling back to normal
+2026-11-15 02:46:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:46:11 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 02:46:11 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-15 02:46:11 [INFO ] TRIG   Trigger 62 'Device offline -> email' fired (device offline)
+2026-11-15 02:46:11 [INFO ] CMD    device Wi-Fi bridge is offline
+2026-11-15 02:46:11 [INFO ] SYS    Email 'Wi-Fi bridge offline' sent to tech@example.com (simulated)
+2026-11-15 02:46:11 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 02:46:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 02:46:11 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 02:46:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 02:46:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 02:46:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:46:31 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 02:46:40 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 02:46:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 02:46:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 02:46:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 02:46:51 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 03:02:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 03:02:13 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 03:02:13 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (2 ms)
+2026-11-15 03:02:13 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 03:02:13 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 03:02:13 [INFO ] CMD    Network cabling back to normal
+2026-11-15 03:02:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 03:02:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 03:17:42 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 03:17:42 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 03:17:42 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 03:17:42 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 03:17:42 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 03:17:42 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 03:17:42 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 03:17:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 03:17:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 03:18:02 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 03:18:02 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 03:33:53 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 03:33:53 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 03:33:53 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 03:33:53 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 03:33:53 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 03:33:53 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 03:33:53 [INFO ] CMD    Network cabling back to normal
+2026-11-15 03:47:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 03:47:11 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 03:47:11 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 03:47:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 03:47:11 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 03:47:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 03:47:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 03:47:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 03:47:31 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 03:47:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 03:47:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 03:47:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 03:47:51 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 03:47:58 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 04:05:04 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 04:05:04 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 04:22:05 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 04:22:05 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 04:22:05 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 04:22:05 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 04:22:05 [INFO ] CMD    Network cabling back to normal
+2026-11-15 04:22:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 04:22:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 04:22:26 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 04:22:26 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 04:22:30 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 04:39:13 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 04:39:13 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 04:39:13 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 04:39:13 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 04:39:13 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 04:39:13 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 04:39:13 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 04:39:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 04:39:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 04:48:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 04:48:11 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 04:48:11 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 04:48:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 04:48:11 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 04:48:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 04:48:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 04:48:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 04:48:31 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 04:48:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 04:48:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 04:48:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 04:48:51 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 05:06:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 05:06:11 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 05:06:11 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 05:06:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 05:06:11 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 05:06:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 05:06:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 05:22:55 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 05:22:55 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 05:22:55 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 05:22:55 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 05:22:55 [INFO ] CMD    Network cabling back to normal
+2026-11-15 05:23:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 05:23:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 05:23:15 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 05:23:15 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 05:38:29 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 05:38:29 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 05:38:29 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 05:38:29 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 05:38:29 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 05:49:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 05:49:11 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 05:49:11 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 05:49:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 05:49:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 05:49:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 05:49:31 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 05:49:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 05:49:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 05:49:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 05:49:51 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 05:49:58 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 06:06:59 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:06:59 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 06:06:59 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 06:06:59 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 06:23:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:23:31 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 06:23:31 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 06:23:31 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 06:23:31 [INFO ] CMD    Network cabling back to normal
+2026-11-15 06:23:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 06:23:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 06:23:49 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 06:23:50 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 06:23:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:23:51 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 06:30:01 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:30:01 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 06:30:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 06:30:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 06:30:19 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 06:30:21 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:30:21 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 06:47:48 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 06:47:48 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 06:47:48 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 06:47:48 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:47:48 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 06:50:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:50:11 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 06:50:11 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-15 06:50:11 [INFO ] TRIG   Trigger 62 'Device offline -> email' fired (device offline)
+2026-11-15 06:50:11 [INFO ] CMD    device Wi-Fi bridge is offline
+2026-11-15 06:50:11 [INFO ] SYS    Email 'Wi-Fi bridge offline' sent to tech@example.com (simulated)
+2026-11-15 06:50:11 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 06:50:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 06:50:11 [INFO ] CMD    Network cabling back to normal
+2026-11-15 06:50:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 06:50:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 06:50:20 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 06:50:31 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:50:31 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 06:50:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 06:50:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 06:50:51 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 06:50:51 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 07:07:57 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 07:07:57 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 07:07:57 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 07:07:57 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 07:07:57 [INFO ] SYS    Email 'Network' sent to tech@example.com (simulated)
+2026-11-15 07:08:01 [WARN ] NET    Ethernet link flapped (simulated)
+2026-11-15 07:24:04 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 07:24:04 [WARN ] SYS    Netgear avswitch: port 7 (Touch panel) unplugged / device off
+2026-11-15 07:24:04 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 07:24:04 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 07:24:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 07:24:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 07:24:24 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 07:24:24 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 07:40:17 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 07:40:17 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 07:40:17 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 07:40:17 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 07:40:17 [INFO ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is online (6 ms)
+2026-11-15 07:46:32 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 07:46:33 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 07:46:33 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 07:46:33 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 07:46:33 [WARN ] SYS    Netgear avswitch: port 6 (PTZ camera) 100 Mb/s instead of 1 Gb/s
+2026-11-15 07:46:33 [INFO ] SYS    Netgear avswitch: port 7 (Touch panel) back to normal
+2026-11-15 07:46:45 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 07:46:45 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 07:51:11 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 07:51:11 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 07:51:11 [INFO ] SYS    Netgear avswitch: port 6 (PTZ camera) back to normal
+2026-11-15 07:51:11 [INFO ] TRIG   Trigger 68 'Network cabling changed' fired (variable)
+2026-11-15 07:51:11 [INFO ] CMD    Network cabling back to normal
+2026-11-15 07:51:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 07:51:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)
+2026-11-15 08:03:54 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 08:03:54 [INFO ] CMD    video1.mp4 ended in Video on lobby
+2026-11-15 08:03:54 [WARN ] SYS    device 'Wi-Fi bridge' (192.168.1.77) is OFFLINE
+2026-11-15 08:03:54 [INFO ] TRIG   Trigger 62 'Device offline -> email' fired (device offline)
+2026-11-15 08:03:54 [INFO ] CMD    device Wi-Fi bridge is offline
+2026-11-15 08:03:54 [INFO ] SYS    Email 'Wi-Fi bridge offline' sent to tech@example.com (simulated)
+2026-11-15 08:04:14 [INFO ] TRIG   Trigger 21 'Lobby: video ended' fired (media end)
+2026-11-15 08:04:14 [INFO ] CMD    video2.mp4 ended in Video on lobby
+2026-11-15 08:04:15 [INFO ] TRIG   Trigger 66 'Door opened (PLC)' fired (variable)
+2026-11-15 08:04:15 [INFO ] SYS    Email 'Door' sent to tech@example.com (simulated)

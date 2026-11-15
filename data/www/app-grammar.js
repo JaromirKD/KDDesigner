@@ -139,6 +139,7 @@ const GRAMMAR = [
   ['netio {netio} output {netioout} {netioact}', 'NETIO: switch a power output'],
   ['netio {netio} output {netioout} {netioact} {sec}', 'NETIO: restart (off) or pulse (on) an output for this many seconds'],
   ['netio {netio} send {text...}', 'NETIO: post any netio.json content'],
+  ['netgear {netgear} refresh', 'Netgear switch: read all ports, names and descriptions now'],
   ['pharos {pharos} timeline {num} {pharostl}', 'Pharos: start, release, toggle, pause or resume a timeline'],
   ['pharos {pharos} timeline {num} {pharostl} fade {sec}', 'Pharos: timeline action with a fade'],
   ['pharos {pharos} timeline {num} rate {num}', 'Pharos: timeline speed (1 = normal)'],
@@ -239,7 +240,7 @@ const panelLabels = () => P().panel.pages.flatMap((pg) => pg.controls).filter((c
 const monitoredNames = () => [...P().pcs.filter((x) => x.monitor !== false), ...P().devices.filter((x) => x.monitor !== false), ...P().projectors,
   ...P().tcp, ...P().modbus, ...P().drivers].map((x) => x.name).filter(Boolean);
 // Driver placeholders: {kiss} -> drivers of type kissbox, etc. The device is always the 2nd token.
-const DRV_PART = { '{kiss}': 'kissbox', '{knx}': 'knx', '{bsign}': 'brightsign', '{digi}': 'digidot', '{netio}': 'netio', '{pharos}': 'pharos' };
+const DRV_PART = { '{kiss}': 'kissbox', '{knx}': 'knx', '{bsign}': 'brightsign', '{digi}': 'digidot', '{netio}': 'netio', '{pharos}': 'pharos', '{netgear}': 'netgear' };
 const drvList = (type) => P().drivers.filter((d) => d.type === type);
 const drvStatusOf = (d) => S.status?.drivers?.find((x) => x.id === d?.id && x.type === d?.type);
 // Device groups of one kind (network = no kind; pc, projector, tcp, or a show-device type): the group
@@ -263,7 +264,7 @@ const panelButtons = () => [...new Set(P().panel.pages.flatMap((pg) => pg.contro
 const panelControls = () => [...new Set(P().panel.pages.flatMap((pg) => pg.controls).filter((c) => c.name && c.type !== 'clock' && c.type !== 'spacer').map((c) => c.name))];
 const panelControlType = (name) => P().panel.pages.flatMap((pg) => pg.controls).find((c) => (c.name || '').toLowerCase() === String(name || '').toLowerCase())?.type;
 // Parts that take a list in commands ("pc a,b wake", "kissbox box 1.1,2.all on"): spread in Cmd.cpp.
-const LIST_PARTS = new Set(['{pc}', '{pj}', '{iopoint}', '{kiss}', '{knx}', '{bsign}', '{digi}', '{netio}', '{pharos}', '{kisspoint}', '{knxga}', '{netioout}']);
+const LIST_PARTS = new Set(['{pc}', '{pj}', '{iopoint}', '{kiss}', '{knx}', '{bsign}', '{digi}', '{netio}', '{pharos}', '{netgear}', '{kisspoint}', '{knxga}', '{netioout}']);
 let LISTS_OK = true;   // false while checking a condition (io a,b is on means nothing)
 function matchPart(part, tok) {
   const p = P();
@@ -322,7 +323,7 @@ function matchPart(part, tok) {
       const m = /^(\d+)\.(\d+)(?:-(\d+))?$/.exec(tok);
       return !!m && !!p.universes.find((u) => u.id === +m[1]) && +m[2] >= 1 && +(m[3] || m[2]) <= 512 && +(m[3] || m[2]) >= +m[2];
     }
-    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': return !!findRef(drvList(DRV_PART[part]), tok) || !!findKindGroup(DRV_PART[part], tok);
+    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': case '{netgear}': return !!findRef(drvList(DRV_PART[part]), tok) || !!findKindGroup(DRV_PART[part], tok);
     case '{kisspoint}': return /^[1-8]\.([1-8]|all|\*)$/i.test(tok) || tok.toLowerCase() === 'all';
     case '{kissval}': return /^(on|off|toggle)$/i.test(tok) || (/^\d+$/.test(tok) && +tok <= 255);
     case '{slot}': return /^[1-8]$/.test(tok);
@@ -436,7 +437,7 @@ function candidates(part, partial) {
     case '{updown}': return ['online', 'offline'].filter((v) => v.startsWith(pl)).map((v) => ({ insert: v, label: v, key: 'ud' + v }));
     case '{pcaction}': return PC_ACTIONS.filter(([v]) => v.startsWith(pl)).map(([v, d]) => ({ insert: v, label: v, desc: d, key: 'pa' + v }));
     case '{pjinput}': return [...PJ_INPUTS.filter(([v, n]) => !pl || v.startsWith(pl) || n.toLowerCase().includes(pl)).map(([v, n]) => ({ insert: v, label: v, desc: n, key: 'i' + v })), ...hint('<input code>')];
-    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': {
+    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': case '{netgear}': {
       const ty = DRV_PART[part];
       return [...drvList(ty).filter((d) => !pl || String(d.id).startsWith(pl) || (d.name || '').toLowerCase().includes(pl))
         .map((d) => ({ insert: quote(d.name || String(d.id)), label: d.name || String(d.id), desc: `${DRIVERS[ty].label} · ${d.ip}`, key: 'dr' + d.id })), ...groups(ty)];
@@ -675,7 +676,7 @@ function splitHead(text) {
 // "<command> interval <s>" (spread in Cmd.cpp): a pc / projector / io / show-device line for several
 // devices or outputs, one after another. {base, kw, sec} or null (also for a text form: there
 // "interval 2" is part of the text).
-const INTERVAL_HEADS = /^(pc|projector|io|kissbox|knx|brightsign|digidot|netio|pharos)$/i;
+const INTERVAL_HEADS = /^(pc|projector|io|kissbox|knx|brightsign|digidot|netio|pharos|netgear)$/i;
 const INTERVAL_G = { pattern: '<command> interval {sec}', parts: ['<command>', 'interval', '{sec}'],
   doc: 'One after another, this many seconds apart (the first at once): every PC / projector / device of "all", a group or a list (a,b,c), the channels of a Kiss-Box card (1.all) or of every output card (all), KNX addresses (1/1/1,1/1/2), NETIO outputs (all or 1,3)' };
 function splitInterval(line) {
@@ -1117,6 +1118,8 @@ const KEYWORD_HELP = {
   brightsign: 'A BrightSign media player (Devices page): UDP commands to the presentation and the local DWS API.',
   digidot: 'A DiGidot C4 LED pixel controller (Devices page).', netio: 'NETIO switchable power sockets (Devices page).',
   pharos: 'A Pharos lighting controller (LPC/TPC) via its HTTP API (Devices page).',
+  netgear: 'A Netgear AV (or other managed) network switch, watched over SNMP: ports, links, devices plugged in (Devices page).',
+  refresh: 'Read the device again now (DiGidot: scenes, playlists, triggers; Netgear: ports and names).',
   read: 'Ask the device for its current value.', reboot: 'Restart the device.', api: 'Raw API call: any endpoint of the device.',
   playlist: 'A DiGidot playlist.', speed: 'Playback speed in percent.', reset: 'DiGidot: restart the controller. Panel: back to how it is set on the Panel page.',
   rate: 'Timeline speed: 1 = normal, 0.5 = half speed.', position: 'Jump to a point in the timeline (percent of its length).',
@@ -1134,7 +1137,7 @@ const PART_CLASS = {
   '{onoff}': 'kw', '{loglvl}': 'kw', '{text...}': 'str', '{pc}': 'ref', '{pcaction}': 'kw', '{devname}': 'ref', '{updown}': 'kw',
   '{var}': 'ref', '{num}': 'num', '{op}': 'kw', '{tcpdev}': 'ref', '{httpmethod}': 'kw', '{url}': 'addr', '{mbdev}': 'ref', '{mbtable}': 'kw',
   '{calname}': 'ref', '{activity}': 'kw', '{date}': 'addr',
-  '{kiss}': 'ref', '{knx}': 'ref', '{bsign}': 'ref', '{digi}': 'ref', '{netio}': 'ref', '{pharos}': 'ref',  '{digiscene}': 'ref', '{digilist}': 'ref', '{digitrig}': 'ref', '{word}': 'ref', '{bszone}': 'ref', '{bsvar}': 'ref', '{bsfile}': 'str', '{bsstate}': 'ref',
+  '{kiss}': 'ref', '{knx}': 'ref', '{bsign}': 'ref', '{digi}': 'ref', '{netio}': 'ref', '{pharos}': 'ref', '{netgear}': 'ref',  '{digiscene}': 'ref', '{digilist}': 'ref', '{digitrig}': 'ref', '{word}': 'ref', '{bszone}': 'ref', '{bsvar}': 'ref', '{bsfile}': 'str', '{bsstate}': 'ref',
   '{kisspoint}': 'addr', '{knxga}': 'addr', '{path}': 'addr', '{kissval}': 'num', '{slot}': 'num', '{dpt}': 'num', '{netioout}': 'num', '{knxval}': 'str',
   '{netioact}': 'kw', '{pharostl}': 'kw', '{pharossc}': 'kw', '{fixgrp}': 'kw', '{pharosproto}': 'kw',
   '{iopoint}': 'addr', '{ioval}': 'num',
@@ -1199,7 +1202,7 @@ function partHelp(part, tok, g) {
       };
       return pcHelp[tok.toLowerCase()] || '';
     }
-    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': {
+    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': case '{netgear}': {
       const ty = DRV_PART[part], d = findRef(drvList(ty), tok);
       if (!d && findKindGroup(ty, tok)) return groupTip(findKindGroup(ty, tok), DRIVERS[ty].label);
       if (!d) return `Unknown ${DRIVERS[ty].label} device '${tok}' (Devices page)`;
@@ -1382,7 +1385,7 @@ function category(g) {
   if (/^(mode |label|fire|cancel|repeat|stop repeat)/.test(p)) return 'Show control';
   if (/^(send|reply|email)/.test(p)) return 'Network & messages';
   if (/^(projector|output|pc )/.test(p)) return 'Devices & outputs';
-  if (/^(kissbox|knx|brightsign|digidot|netio|pharos) /.test(p)) return 'Show devices';
+  if (/^(kissbox|knx|brightsign|digidot|netio|pharos|netgear) /.test(p)) return 'Show devices';
   if (/^io \{iopoint\} (is|\{op\})/.test(p)) return 'Conditions';
   if (/^io /.test(p)) return 'Machine Control';
   if (/^(var \{var\} \{op\}|calendar|date)/.test(p)) return 'Conditions';
@@ -1442,7 +1445,7 @@ function builderField(part, val, i) {
     case '{activity}': return sel([['active', 'active'], ['inactive', 'inactive']]);
     case '{num}': return num(-1000000, 1000000);
     case '{updown}': return sel([['online', 'online'], ['offline', 'offline']]);
-    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}':
+    case '{kiss}': case '{knx}': case '{bsign}': case '{digi}': case '{netio}': case '{pharos}': case '{netgear}':
       return sel([...drvList(DRV_PART[part]).map((d) => [quote(d.name), `${d.name} (${d.ip})`]), ...groupOpts(DRV_PART[part])]);
     case '{kisspoint}': {
       const d = drvList('kissbox').find((x) => quote(x.name) === String(CTX[1] ?? '')) || drvList('kissbox')[0];

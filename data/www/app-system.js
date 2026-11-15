@@ -222,7 +222,7 @@ views.panel = () => {
         <label class="muted" title="Split every cell into smaller ones, for smaller buttons. What is on the page keeps its size; sizes and places are then counted in the small cells">Grid</label><select data-pfine>${PANEL_GRIDS.map(([v, t]) => `<option value="${v}"${v === panelFine(pg) ? ' selected' : ''}>${t}</option>`).join('')}</select>
         <label class="muted" title="This page's own background colour; none = the theme's Background">Background</label><input type="color" data-p="${base}.bg" value="${esc(pg.bg || panelTheme(p.panel.theme).bg)}" data-r>${pg.bg
           ? '<button class="btn small ghost" data-pbgclr title="Use the theme background again">✕</button>' : '<span class="muted" style="font-size:11px">theme</span>'}
-        <label class="muted" title="Ask for this PIN before showing the page">PIN</label><input style="width:110px" data-p="${base}.pin" value="${esc(pg.pin || '')}" placeholder="none" inputmode="numeric">
+        <label class="muted" title="Ask for this PIN before showing the page. Pages with the same PIN open together: type it once, then move between them freely. Give a service page its own PIN to make it ask separately">PIN</label><input style="width:110px" data-p="${base}.pin" value="${esc(pg.pin || '')}" placeholder="none" inputmode="numeric">
         ${p.panel.panels.length > 1 ? `<label class="muted" title="Move this page to another panel">Panel</label><select data-p="${base}.panel" data-t="num" data-r>${p.panel.panels.map((x) => `<option value="${x.id}"${x.id === pg.panel ? ' selected' : ''}>${esc(x.name || 'Panel ' + x.id)}</option>`).join('')}</select>` : ''}
         ${pg.controls.some((c) => c.col) ? '<button class="btn small ghost" data-pauto title="Forget where controls were dragged to: they fill the page in list order again">Auto layout</button>' : ''}
       </div>
@@ -1127,7 +1127,7 @@ views.monitor = () => {
   </div>
   <div id="monBody"></div>
   <p class="muted">PCs and network devices are pinged (ICMP); projectors are polled over PJLink for power, lamp hours, input, mute and error status.
-    Kiss-Box, KNX, BrightSign, DiGidot, NETIO and Pharos devices are asked for their status in their own protocol at this same interval; with live updates they report changes at once.
+    Kiss-Box, KNX, BrightSign, DiGidot, NETIO, Pharos and Netgear devices are asked for their status in their own protocol at this same interval; with live updates they report changes at once.
     Turn monitoring off per PC/device on the Devices page. Use a <b>Device online/offline</b> trigger to react, e.g. send an email.
     <b>Click a card</b> to open it with its online/offline history and its own log lines.</p>`;
 };

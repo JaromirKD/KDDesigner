@@ -718,12 +718,14 @@ input[type=range].cw-grad::-moz-range-track { background: transparent; }
 .chip-link.dev .dev-ico { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
 .chip-link.in.dev .dev-ico { color: var(--blue); } .chip-link.out.dev .dev-ico { color: var(--ok); }
 /* the selected trigger's connections, as lines in a gutter left of the rows (trigLinkLines) */
-.trig-list { padding-left: 24px; background: linear-gradient(to right, var(--bg) 24px, var(--panel) 24px); }
+.trig-list { padding-left: 28px; background: linear-gradient(to right, var(--bg) 28px, var(--panel) 28px); }
 .trig-gutter { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 2; }
 .trig-gutter path { fill: none; stroke-width: 1.6; stroke-linecap: round; }
 .trig-gutter path.out { stroke: var(--ok); } .trig-gutter path.in { stroke: var(--blue); }
 .trig-gutter path.h { stroke: none; } .trig-gutter path.h.out { fill: var(--ok); } .trig-gutter path.h.in { fill: var(--blue); }
+.trig-gutter .far { opacity: .6; } .trig-gutter path.far:not(.h) { stroke-dasharray: 3 3; stroke-width: 1.3; }
 .trig-gutter .dot { fill: var(--accent); }
+.list .item.link-far { background: color-mix(in srgb, var(--muted) 7%, transparent); }
 .trig-gutter .hit { fill: transparent; pointer-events: auto; cursor: help; }
 .links { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
 .links .link-head { min-width: 76px; font-size: 12px; }
@@ -836,6 +838,46 @@ tr.cal-mark.now td { color: var(--accent); border-bottom: 1px solid var(--accent
 .drv-row .btn.small { padding: 1px 7px; }
 .kiss { display: inline-block; min-width: 20px; text-align: center; border-radius: 3px; background: var(--panel2); color: var(--muted); font-size: 11px; padding: 1px 3px; }
 .kiss.on { background: var(--ok); color: #111; }
+/* Netgear switch: the front panel (a square per port) and the port table */
+.ng-sum { margin: 2px 0 6px; }
+/* The switch's front panel, in theme colours like the rest of the UI */
+.ng-wrap { overflow-x: auto; margin: 4px 0 10px; }
+.ng-wrap.small { zoom: .8; }
+/* On Monitoring > All the switch card takes a whole row, so the switch fits */
+.mon-grid > *:has(.ng-wrap.small) { grid-column: 1 / -1; }
+.ng-unit { display: inline-flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel2); border: 1px solid var(--border2); border-radius: 6px; }
+.ng-brand { display: flex; flex-direction: column; gap: 3px; min-width: 96px; max-width: 140px; }
+.ng-brand b { font-size: 13px; }
+.ng-brand small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ng-brand .dot { margin-right: 4px; }
+.ng-brand svg { width: 18px; height: 18px; }
+.ng-blk { display: flex; gap: 3px; padding: 4px 5px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+.ng-col { display: flex; flex-direction: column; gap: 5px; }
+.ng-p { display: flex; flex-direction: column-reverse; align-items: center; gap: 2px; cursor: pointer; }
+.ng-p.top { flex-direction: column; }
+.ng-num { font-size: 10px; line-height: 11px; color: var(--muted); }
+.ng-p.watched .ng-num { color: var(--text); font-weight: 600; }
+.ng-leds { display: flex; gap: 6px; height: 4px; }
+.ng-leds i { width: 4px; height: 4px; border-radius: 50%; background: transparent; }
+.ng-leds i:first-child { display: none; }   /* the socket's colour is the link state */
+.ng-leds i.poe.on { background: var(--warn); }
+.ng-leds i.poe.bad { background: var(--err); }
+/* RJ45 socket: the key slot points to the edge of the panel (down on the top row, up below) */
+.ng-hole { display: flex; }
+.ng-p:not(.top) .ng-hole { transform: scaleY(-1); }
+.ng-sock { position: relative; width: 22px; height: 17px; background: var(--border2);
+  clip-path: polygon(0 0, 100% 0, 100% 72%, 72% 72%, 72% 100%, 28% 100%, 28% 72%, 0 72%); }
+.ng-sock::before { content: ''; position: absolute; inset: 1px; background: var(--panel); clip-path: inherit; }
+.ng-plug { display: none; }
+.ng-p.up .ng-sock, .ng-p.up .ng-sock::before { background: var(--ok); }
+.ng-p.bad .ng-sock, .ng-p.bad .ng-sock::before { background: var(--err); }
+.ng-p:hover .ng-sock { background: var(--accent); }
+.ng-p.sfp .ng-hole { transform: none; }
+.ng-p.sfp .ng-sock { width: 26px; height: 13px; clip-path: none; border-radius: 2px; }
+.ng-p.sfp .ng-sock::before { inset: 2px; border-radius: 1px; }
+.ng-tbl tr.ng-flash td { animation: ng-flash 1.6s ease-out; }
+@keyframes ng-flash { from { background: color-mix(in srgb, var(--accent) 45%, transparent); } }
+.ng-tbl tr.ng-bad td { background: var(--err-bg); }
 /* BrightSign test buttons (the state playing now is lit) and the Activity list */
 .btn.bs-test.on { background: var(--ok); border-color: var(--ok); color: #111; }
 .bs-act { background: var(--panel2); border-radius: 4px; padding: 4px 8px; max-height: 220px; overflow: auto; font-size: 12px; }

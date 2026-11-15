@@ -15,6 +15,7 @@ const DRIVERS = {
   digidot: { label: 'DiGidot C4', port: 80, about: 'pixel controller · JSON API' },
   netio: { label: 'NETIO', port: 80, about: 'power sockets · JSON API' },
   pharos: { label: 'Pharos', port: 80, about: 'LPC / TPC · HTTP API' },
+  netgear: { label: 'Netgear switch', port: 161, about: 'AV network switch · SNMP' },
 };
 // Icons per kind of device (24 x 24 line drawings in currentColor, like the fixture icons):
 // key -> [name, svg, Devices tab]. Used on the Devices / Monitoring tabs and in the trigger list.
@@ -40,6 +41,9 @@ const DEVICE_ICONS = {
     [12.13, 5.2, 1.25], [17.82, 7.67, 1.25], [18.81, 14.35, 1.25], [15.1, 18.56, 1.25], [8.91, 18.56, 1.25], [5.2, 13.86, 1.25], [6.43, 7.92, 1.25],
     [12.13, 2.72, 1], [19.8, 6.19, 1], [21.28, 15.34, 1], [16.08, 20.79, 1], [7.67, 20.79, 1], [2.72, 14.35, 1], [4.45, 6.43, 1],
   ].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}"/>`).join('')}</g>`, 'pharos'],
+  // A switch front with two rows of ports, in Netgear's purple.
+  netgear: ['Netgear switch', '<rect x="2" y="6" width="20" height="12" rx="1.5" fill="#5b2d8e" stroke="none"/><g fill="#fff" stroke="none">'
+    + [5, 9, 13, 17].map((x) => `<rect x="${x}" y="8.6" width="2.6" height="2.4" rx=".3"/><rect x="${x}" y="13" width="2.6" height="2.4" rx=".3"/>`).join('') + '</g>', 'netgear'],
   // A finger tapping (shape after the Lucide "pointer" icon).
   panel: ['Touch panel', '<path d="M22 14a8 8 0 0 1-8 8M18 11v-1a2 2 0 0 0-4 0M14 10V9a2 2 0 0 0-4 0v1M10 9.5V4a2 2 0 0 0-4 0v10"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>', ''],
   trigger: ['Another trigger (fire / repeat trigger)', '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>', ''],
@@ -156,7 +160,7 @@ const PLACEHOLDER = {
   '{var}': '<variable>', '{num}': '<number>', '{op}': '= != > < >= <=', '{tcpdev}': '<tcp device>', '{httpmethod}': 'get|post|put|delete',
   '{url}': '<http://…>', '{mbdev}': '<modbus device>', '{mbtable}': 'coil|holding', '{calname}': '<calendar>', '{activity}': 'active|inactive',
   '{date}': '<DD-MM|DD-MM-YYYY>', '{cond...}': '<condition>', '{command...}': '<command>',
-  '{kiss}': '<kiss-box>', '{knx}': '<knx interface>', '{bsign}': '<brightsign>', '{digi}': '<digidot>', '{netio}': '<netio>', '{pharos}': '<pharos>',
+  '{kiss}': '<kiss-box>', '{knx}': '<knx interface>', '{bsign}': '<brightsign>', '{digi}': '<digidot>', '{netio}': '<netio>', '{pharos}': '<pharos>', '{netgear}': '<switch>',
   '{kisspoint}': '<slot>.<channel>', '{kissval}': 'on|off|0-255', '{slot}': '<slot 1-8>', '{knxga}': '<group address or name>', '{knxval}': '<value>',
   '{dpt}': '<dpt, e.g. 1 / 5.001 / 9>', '{path}': '<path>', '{digiscene}': '<scene name or #>', '{digilist}': '<playlist name or #>', '{digitrig}': '<trigger name or #>', '{netioout}': '<output|all>',
   '{netioact}': 'on|off|toggle|restart|pulse', '{pharostl}': 'start|release|toggle|pause|resume', '{pharossc}': 'start|release|toggle',

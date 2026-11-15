@@ -14,6 +14,8 @@
 //   digidot     DiGidot C4: JSON API (POST /ajax.json, SHA-1 framing, HMAC-SHA256 with an account)
 //   netio       NETIO power sockets: JSON API (/netio.json, basic auth)
 //   pharos      Pharos LPC/TPC/VLC: Controller HTTP API (/api/..., bearer token when a user is set)
+//   netgear     Netgear AV / managed switch: SNMP v2c (UDP 161, read-only): per port link, speed, PoE,
+//               MACs learned and LLDP neighbour, compared with the remembered normal state
 //
 // Project JSON:
 //   "drivers": [{"id":1,"type":"netio","name":"Rack","ip":"10.0.0.40","port":80,
@@ -25,11 +27,13 @@
 //   brightsign: "udpPort":5000, "plugin":true, "pluginPort":5010   (kdlink plugin: zones, user variables, control)
 //               "gpioOut":[3,4]   GPIO pins that are outputs in the presentation ("gpio 3 on")
 //               "follow":[{"timeline":2,"zone":"Video","file":"Video 3","offset":0,"drift":true}]   a zone's video in step with a timeline
+//   netgear:    "community":"public", "names":{"5":"Projector L"},
+//               "expect":{"5":{"up":1,"speed":1000,"mac":"a4:5e:60:11:22:33","poe":1}}   (Remember as normal)
 //   knx:        "addresses":[{"ga":"1/1/1","name":"Hall light","dpt":"1","var":"hall"}], "readEvery":0
 namespace Drivers {
 void begin();                                             // starts the worker threads
 void load();                                              // caller holds g_engine
-bool isCommand(const String& word);                       // kissbox|knx|brightsign|digidot|netio|pharos
+bool isCommand(const String& word);                       // kissbox|knx|brightsign|digidot|netio|pharos|netgear
 bool command(const std::vector<String>& t, String& msg);  // t[0] is the device type
 // A command for several things as one command each, in order (Cmd.cpp runs them, "interval <s>" apart):
 // a list or group of devices ("kissbox a,b ..."), Kiss-Box channels ("1.1,1.2", "<slot>.all", "all"

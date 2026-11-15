@@ -179,59 +179,84 @@ views.triggers = () => {
 // The right-hand pane: the editor of the selected trigger, or the multi-edit form when several
 // are selected. Built on its own when the selection changes (trigSelectUi): the list stays.
 // The selected trigger's connections, drawn in the gutter left of the list (trigLinkLines):
-// a green line from it to each trigger it sets off, a blue line from each trigger that sets it off.
-let trigLinkNow = { selT: null, links: null };
-const TL_GUT = 24; // gutter width in CSS px = .trig-list padding-left
+// green = what it sets off, blue = what sets it off. Its own links are solid; the rest of
+// the chain (what those set off in turn, what sets those off) is dashed, in an outer lane.
+let trigLinkNow = { selT: null, links: null, edges: [] };
+const TL_GUT = 28; // gutter width in CSS px = .trig-list padding-left
+const TL_CHAIN_MAX = 40; // triggers followed per direction (triggerLinks scans the whole list)
+// Every link of the chain through selT: { a: from, b: to, kind: 'in'|'out', why, far }.
+function trigLinkChain(selT, links) {
+  const edges = [];
+  if (!selT || !links) return edges;
+  for (const l of links.out) edges.push({ a: selT, b: l.t, kind: 'out', why: l.why, far: false });
+  for (const l of links.in) edges.push({ a: l.t, b: selT, kind: 'in', why: l.why, far: false });
+  // Follow on: out = what the triggers it sets off set off; in = what sets its setters off.
+  for (const kind of ['out', 'in']) {
+    const seen = new Set([selT]), todo = links[kind].map((l) => l.t);
+    todo.forEach((t) => seen.add(t));
+    for (let n = 0; todo.length && n < TL_CHAIN_MAX; n++) {
+      const x = todo.shift();
+      for (const l of triggerLinks(x)[kind]) {
+        edges.push(kind === 'out' ? { a: x, b: l.t, kind, why: l.why, far: true } : { a: l.t, b: x, kind, why: l.why, far: true });
+        if (!seen.has(l.t)) { seen.add(l.t); todo.push(l.t); }
+      }
+    }
+  }
+  return edges;
+}
 // The rows' link tints and the gutter lines for these links (selection change, or an edit).
 function trigLinkRows(list, selT, links) {
-  const p = P();
+  const p = P(), edges = trigLinkChain(selT, links);
+  const near = (x, k) => links?.[k].some((l) => l.t === x);
+  const far = new Set(edges.filter((e) => e.far).flatMap((e) => [e.a, e.b]));
   for (const row of $$('.item[data-sel]', list)) {
     const x = p.triggers[+row.dataset.sel.slice(8)];
     if (!x || x.type === 'comment') continue;
-    const lo = links?.out.find((l) => l.t === x), li = links?.in.find((l) => l.t === x);
+    const lo = near(x, 'out'), li = near(x, 'in');
     row.classList.toggle('linked', !!(lo || li));
     row.classList.toggle('link-out', !!lo);
     row.classList.toggle('link-in', !!li);
+    row.classList.toggle('link-far', !lo && !li && x !== selT && far.has(x));
   }
-  trigLinkNow = { selT, links };
+  trigLinkNow = { selT, links, edges };
   trigLinkLines(list);
 }
 function trigLinkLines(list = $('.trig-list')) {
   if (!list) return;
   list.querySelector('.trig-gutter')?.remove();
-  const { selT, links } = trigLinkNow;
-  if (!selT || !links || (!links.out.length && !links.in.length)) return;
-  const p = P(), rowOf = (t) => list.querySelector(`.item[data-sel="trigger:${p.triggers.indexOf(t)}"]`);
-  const mid = (r) => Math.round(r.offsetTop + r.offsetHeight / 2) + 0.5;
-  const sr = rowOf(selT), sy = sr && mid(sr), E = TL_GUT - 2, r = 4;
-  // Lanes: blue (into the selected one) on the outside, green (out of it) on the inside.
-  const lane = { in: 6, out: 14 };
-  const head = (y, x, dir) => `M${x} ${y}l${-5 * dir} -3.5v7z`; // a small triangle pointing dir (1 = right)
-  let paths = '', heads = '', hits = '';
-  const one = (kind, l) => {
-    const tr = rowOf(l.t);
-    if (!tr) return;
-    const ty = mid(tr), x = lane[kind];
-    const tip = kind === 'out' ? `${esc(selT.name)} sets off #${l.t.id} ${esc(l.t.name)}: ${esc(l.why)}` : `#${l.t.id} ${esc(l.t.name)} sets off ${esc(selT.name)}: ${esc(l.why)}`;
-    const [from, to] = kind === 'out' ? [sy, ty] : [ty, sy];
-    if (sr && from !== to) {
-      const d = to > from ? 1 : -1;
-      paths += `<path class="${kind}" d="M${E - 4} ${from}H${x + r}Q${x} ${from} ${x} ${from + r * d}V${to - r * d}Q${x} ${to} ${x + r} ${to}H${E - 4}"/>`;
-      heads += `<path class="h ${kind}" d="${head(to, E, 1)}"/>`;
-    } else if (kind === 'out') {
-      // The selected row is hidden (search, colour tab): only a short arrow into this row.
-      paths += `<path class="${kind}" d="M${x} ${ty}H${E - 4}"/>`;
-      heads += `<path class="h ${kind}" d="${head(ty, E, 1)}"/>`;
-    } else {
-      paths += `<path class="${kind}" d="M${E} ${ty}H${x + 4}"/>`;
-      heads += `<path class="h ${kind}" d="${head(ty, x, -1)}"/>`;
-    }
-    hits += `<rect class="hit" x="0" y="${ty - 8}" width="${TL_GUT}" height="16"><title>${tip}</title></rect>`;
+  const { selT, edges } = trigLinkNow;
+  if (!selT || !edges?.length) return;
+  const p = P(), rows = new Map();
+  const rowOf = (t) => {
+    if (!rows.has(t)) rows.set(t, list.querySelector(`.item[data-sel="trigger:${p.triggers.indexOf(t)}"]`));
+    return rows.get(t);
   };
-  links.in.forEach((l) => one('in', l));
-  links.out.forEach((l) => one('out', l));
+  const mid = (r) => Math.round(r.offsetTop + r.offsetHeight / 2) + 0.5;
+  const E = TL_GUT - 2, r = 4;
+  // Lanes from the outside in: blue chain, blue, green, green chain.
+  const lane = { in: [10, 4], out: [16, 22] };
+  const head = (y, x, dir) => `M${x} ${y}l${-5 * dir} -3.5v7z`; // a small triangle pointing dir (1 = right)
+  const tname = (t) => `#${t.id} ${esc(t.name)}`;
+  let paths = '', heads = '', hits = '';
+  for (const e of edges) {
+    const ar = rowOf(e.a), br = rowOf(e.b), x = lane[e.kind][+e.far], cls = `${e.kind}${e.far ? ' far' : ''}`;
+    const tip = `${tname(e.a)} sets off ${tname(e.b)}: ${esc(e.why)}`;
+    if (ar && br && e.a !== e.b) {
+      const from = mid(ar), to = mid(br), d = to > from ? 1 : -1;
+      paths += `<path class="${cls}" d="M${E - 4} ${from}H${x + r}Q${x} ${from} ${x} ${from + r * d}V${to - r * d}Q${x} ${to} ${x + r} ${to}H${E - 4}"/>`;
+      heads += `<path class="h ${cls}" d="${head(to, E, 1)}"/>`;
+      hits += `<rect class="hit" x="0" y="${(e.b === selT ? from : to) - 8}" width="${TL_GUT}" height="16"><title>${tip}</title></rect>`;
+    } else if (!e.far && (ar || br)) {
+      // The selected row is hidden (search, colour tab): only a short arrow at the other row.
+      const y = mid(ar || br);
+      if (br) { paths += `<path class="${cls}" d="M${x} ${y}H${E - 4}"/>`; heads += `<path class="h ${cls}" d="${head(y, E, 1)}"/>`; }
+      else { paths += `<path class="${cls}" d="M${E} ${y}H${x + 4}"/>`; heads += `<path class="h ${cls}" d="${head(y, x, -1)}"/>`; }
+      hits += `<rect class="hit" x="0" y="${y - 8}" width="${TL_GUT}" height="16"><title>${tip}</title></rect>`;
+    }
+  }
   if (!paths) return;
-  if (sr) heads += `<circle class="dot" cx="${E - 3}" cy="${sy}" r="2.5"/>`;
+  const sr = rowOf(selT);
+  if (sr) heads += `<circle class="dot" cx="${E - 3}" cy="${mid(sr)}" r="2.5"/>`;
   list.insertAdjacentHTML('afterbegin', `<svg class="trig-gutter" width="${TL_GUT}" height="${list.scrollHeight}">${paths}${heads}${hits}</svg>`);
 }
 function trigEditorHtml(p, ti, t, multi, links) {
@@ -503,7 +528,7 @@ views.triggers.after = () => {
   list.addEventListener('scroll', () => (S.trigScroll = list.scrollTop));
   initTriggerDrag(list);
   // Row heights change with the UI size, the window and search hits: redraw the gutter lines.
-  trigLinkLines(list);
+  trigLinkRows(list, trigLinkNow.selT, trigLinkNow.links);
   new ResizeObserver(() => list.isConnected && trigLinkLines(list)).observe(list);
   $('#trigFlow').addEventListener('change', (e) => { setTrigFlow(e.target.checked); render(); });
   $('#trigLive').addEventListener('change', (e) => { setTrigLive(e.target.checked); render(); });
@@ -1233,7 +1258,7 @@ function cmdOutputs(cmd, most = 6) {
       return host ? [{ kind: 'http', name: host, act: `${l[1]} ${w[2]}` }] : [];
     }
     case 'modbus': return [{ kind: 'modbus', name: w[1], act: rest(2) }];
-    case 'kissbox': case 'knx': case 'brightsign': case 'digidot': case 'netio': case 'pharos':
+    case 'kissbox': case 'knx': case 'brightsign': case 'digidot': case 'netio': case 'pharos': case 'netgear':
       return each((p.drivers || []).filter((d) => d.type === l[0]), 'drv', 'devices', rest(2), l[0]).map((o) => ({ ...o, type: l[0] }));
     case 'io': return [{ kind: 'io', name: l[1] === 'all' ? 'all outputs' : pmcCfg(w[1]).name || w[1], act: rest(2) }];
     case 'email': return [{ kind: 'email', name: w[1], act: w[2] || '' }];

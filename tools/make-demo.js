@@ -244,6 +244,8 @@ trig('Projector error', 'projector', { projector: '', alarm: 'any', level: 'warn
 trig('Lamp hours 4000', 'projector', { projector: 'PJ left', alarm: 'lamp_hours', hours: 4000 }, ['email tech@example.com "{projector} lamp" Lamp passed {hours} h (now {lamp} h)'], [], { notes: 'Mock console: projector "PJ left" send LAMP=4100' });
 trig('Door opened (PLC)', 'variable', { variable: 'door', value: 'on' }, ['if mode Museum is Open then log Door opened during opening hours else email tech@example.com "Door" Door opened outside opening hours']);
 trig('KNX hall light changed', 'variable', { variable: 'hall_light' }, ['log Hall light is now {value} (was {old})']);
+trig('Network cabling changed', 'variable', { variable: 'switch_changes' }, ['if var switch_changes > 0 then email tech@example.com "Network" {value} switch port(s) not as remembered else log Network cabling back to normal'],
+  [], { notes: 'The Netgear switch on the Devices page counts the ports that are not as remembered (unplugged, other device, slower, no PoE) into switch_changes.' });
 trig('Daylight above 5 V (ai0)', 'input', { io: 'ai0', edge: 'rising', level: 5 }, ['stop timeline "Exterior evening" fade 10']);
 trig('Visitor sensor (in1)', 'input', { io: 'in1', edge: 'rising' }, ['var visitors ++'], [], { cooldown: 1, onlyIn: { group: 'Museum', states: ['Open'] }, notes: 'Only counts while the museum is open (Only active in).' });
 trig('Reset button held (in3)', 'input', { io: 'in3', edge: 'hold', hold: 5 }, ['var visitors = 0', 'log Visitor counter reset']);
@@ -414,6 +416,7 @@ const project = {
     { name: 'hall_light', type: 'bool', initial: false },
     { name: 'daylight', type: 'number', initial: 0 },
     { name: 'pharos_tl1', type: 'text', initial: '' },
+    { name: 'switch_changes', type: 'number', initial: 0 },
   ],
   // Stored MM-DD (shown DD-MM). Open: no dates = all year, on these weekdays (closed on Mondays).
   calendar: [
@@ -448,6 +451,11 @@ mode Simple: dim, r, g, b`],
     { id: 4, type: 'digidot', name: 'c4', ip: '192.168.1.126', port: 80, user: 'admin', password: 'admin', vars: {} },
     { id: 5, type: 'netio', name: 'rack', ip: '192.168.1.127', port: 80, user: 'netio', password: 'netio', model: '4PZ', outputs: 4, live: true, vars: {} },
     { id: 6, type: 'pharos', name: 'lpc', ip: '192.168.1.128', port: 80, live: true, vars: { tl1: 'pharos_tl1' } },
+    // Port states remembered with Remember as normal; the controller reports any port that differs.
+    { id: 7, type: 'netgear', name: 'avswitch', ip: '192.168.1.2', port: 161, community: 'public', vars: { changes: 'switch_changes' },
+      names: { 1: 'Projector L', 2: 'Projector R', 3: 'BrightSign lobby', 6: 'PTZ camera', 7: 'Touch panel', 28: 'Uplink' },
+      expect: Object.fromEntries([...[1, 2, 3, 4, 5, 6, 7, 8, 11, 12].map((n) => [n, { up: 1, speed: 1000, mac: `a4:5e:60:00:00:${n.toString(16).padStart(2, '0')}`, ...([3, 4, 6, 7].includes(n) ? { poe: 1 } : {}) }]),
+        [28, { up: 1, speed: 10000 }]]) },
   ],
   machineControl: {
     in0: { name: 'Emergency stop' }, in1: { name: 'Visitor sensor' }, in2: { name: 'Winch safety' }, in3: { name: 'Reset button' },

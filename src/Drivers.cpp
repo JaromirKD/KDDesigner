@@ -2,6 +2,7 @@
 #include <Ethernet.h>
 #include <mbed.h>
 #include <deque>
+#include <functional>
 #include "Globals.h"
 #include "Log.h"
 #include "Monitor.h"
@@ -18,10 +19,10 @@ using namespace std::chrono_literals;
 
 namespace {
 
-enum Type : uint8_t { Kiss, Knx, Bsign, Digi, Netio, Pharos, TypeCount };
-const char* const kTypes[] = {"kissbox", "knx", "brightsign", "digidot", "netio", "pharos"};
-const char* const kTypeNames[] = {"Kiss-Box", "KNX", "BrightSign", "DiGidot", "NETIO", "Pharos"};
-const uint16_t kDefaultPort[] = {9813, 3671, 80, 80, 80, 80};
+enum Type : uint8_t { Kiss, Knx, Bsign, Digi, Netio, Pharos, Netgear, TypeCount };
+const char* const kTypes[] = {"kissbox", "knx", "brightsign", "digidot", "netio", "pharos", "netgear"};
+const char* const kTypeNames[] = {"Kiss-Box", "KNX", "BrightSign", "DiGidot", "NETIO", "Pharos", "Netgear"};
+const uint16_t kDefaultPort[] = {9813, 3671, 80, 80, 80, 80, 161};
 const uint16_t kKnxLocalPort = 3672;   // our end of the KNX tunnel
 const size_t kMaxBody = 12 * 1024;     // HTTP replies are cut here (status JSON fits easily)
 const size_t kMaxPoints = 200;    // a Pharos project can have many timelines, scenes and groups
@@ -33,7 +34,20 @@ int typeOf(const String& s) {
 
 struct Point { String key, name, value, dpt; };
 struct Trig { int num; String name, type; };   // a Pharos trigger (fired with "pharos <dev> trigger <num>")
-struct BsState { uint8_t zone; String name, file; uint32_t ms; };   // a BrightSign presentation state (kdlink plugin); ms = file length (v12, 0 = unknown)
+struct BsState { uint8_t zone; String name, file; uint32_t ms; };
+// Netgear (any SNMP switch): one physical port as read at the last poll. num = 1.. in ifIndex order.
+struct SwPort {
+  uint16_t num = 0, ifIndex = 0;
+  String ifName, alias, lldp;      // switch's port name ("1/0/5"), its description, LLDP neighbour's name
+  bool up = false;
+  uint32_t speed = 0;              // Mb/s (only meaningful while up)
+  uint8_t mac[6] = {};             // first MAC learned on the port (or the remembered one, when it is there)
+  uint16_t macs = 0;               // how many MACs the switch learned on it
+  int8_t poe = -1;                 // -1 no PoE port, 0 not powering, 1 powering, 2 fault
+};
+// What the port should look like ("expect" in project.json, filled by Remember as normal in the UI).
+struct SwExpect { uint16_t num; int8_t up, poe; uint32_t speed; uint8_t mac[6]; bool hasMac; };
+const size_t kMaxSwPorts = 96;   // a BrightSign presentation state (kdlink plugin); ms = file length (v12, 0 = unknown)
 const size_t kMaxBsStates = 80, kMaxActivity = 30;
 struct Drv {
   int id = 0;
@@ -96,6 +110,13 @@ struct Drv {
   bool cardLow = false;           // the player's card had under 5 % free at the last health report (warned once)
   std::vector<Follow> follows;
   std::deque<std::pair<uint32_t, String>> activity;   // what the player received: serial, UDP, GPIO, zone changes
+  // Netgear: ports, bridge port -> ifIndex (for the MAC table), the normal state, names, and what is
+  // different now (num -> text; "" = as remembered), so a change is logged once.
+  std::vector<SwPort> ports;
+  std::vector<std::pair<uint16_t, uint16_t>> bridge;
+  std::vector<SwExpect> expect;
+  std::vector<std::pair<uint16_t, String>> portNames, issues;
+  bool compared = false;
 };
 
 struct Job { int id; String method, path, body, label; };          // HTTP (method "POLL" = status poll)
@@ -139,6 +160,11 @@ int onOff(const Drv& d, const Point& p) {
     bin = p.dpt.toInt() == 1;
   } else if (d.type == Bsign) {
     bin = k.startsWith("gpio") || k == "screen" || k == "hdmi";   // inputs, video output on/off, a screen connected
+  } else if (d.type == Netgear) {
+    // Only ports with a remembered state get a lane in the history (a 52-port switch would drown it).
+    bool port = k.length() > 1 && k[0] == 'p' && isNumber(k.substring(1));
+    int n = port ? k.substring(1).toInt() : 0;
+    for (auto& e : d.expect) bin |= port && e.num == n;
   } else if (d.type == Pharos && (k.startsWith("tl") || k.startsWith("sc"))) {
     return !v.length() ? -1 : v == "none" || v == "released" ? 0 : 1;   // running, paused, started... = on
   }
@@ -438,6 +464,18 @@ struct Update {
   std::vector<std::pair<String, uint32_t>> playlists, c4trigs;   // DiGidot, read from its card
   bool newLists = false;
   uint32_t listSig = 0;
+  // Netgear: the ports as read now, and for each remembered MAC the port it was seen on (0 = nowhere).
+  std::vector<SwPort> ports;
+  std::vector<std::pair<uint16_t, uint16_t>> bridge;
+  std::vector<uint16_t> seenOn;
+  bool newPorts = false, fullRead = false;
+};
+// What we already know of a Netgear when a poll starts (copied under mtx).
+struct SwKnown {
+  std::vector<SwPort> ports;
+  std::vector<std::pair<uint16_t, uint16_t>> bridge;
+  std::vector<SwExpect> expect;
+  bool full;
 };
 // What we already know of a DiGidot when a poll starts (copied under mtx).
 struct DigiKnown {
@@ -709,6 +747,314 @@ void pollDigi(Conn& c, Update& u, String& err, bool& ok, uint32_t polls, const D
   err = "";
 }
 
+// ---- Netgear switches: SNMP v2c ------------------------------------------------
+// Netgear AV (M4250 / M4300 / M4350) and other managed switches answer SNMP v2c on UDP 161 with
+// the standard tables: IF-MIB (link, speed, names), BRIDGE / Q-BRIDGE (MAC per port), LLDP (the
+// neighbour's name) and POWER-ETHERNET (PoE). Read-only: only GET and GETBULK are sent.
+// Runs in the HTTP thread (one request at a time, 1 s timeout); replies must stay under
+// WIFI_UDP_BUFFER_SIZE (1024), so a reply that doesn't parse is asked again with fewer rows.
+const uint16_t kSnmpLocalPort = 16161;
+EthernetUDP snmpSock;
+bool snmpOpen = false;
+uint32_t snmpReqId = 1;
+uint8_t snmpBuf[1100];
+
+struct Oid { uint32_t v[32]; uint8_t n = 0; };
+Oid oidOf(std::initializer_list<uint32_t> l) { Oid o; for (uint32_t x : l) if (o.n < 32) o.v[o.n++] = x; return o; }
+bool oidUnder(const Oid& o, const Oid& base) {
+  if (o.n <= base.n) return false;
+  for (int i = 0; i < base.n; i++) if (o.v[i] != base.v[i]) return false;
+  return true;
+}
+int oidCmp(const Oid& a, const Oid& b) {
+  for (int i = 0; i < a.n && i < b.n; i++) if (a.v[i] != b.v[i]) return a.v[i] < b.v[i] ? -1 : 1;
+  return a.n == b.n ? 0 : a.n < b.n ? -1 : 1;
+}
+
+void berLen(std::vector<uint8_t>& o, size_t n) {
+  if (n < 128) o.push_back(n);
+  else if (n < 256) { o.push_back(0x81); o.push_back(n); }
+  else { o.push_back(0x82); o.push_back(n >> 8); o.push_back(n & 0xff); }
+}
+void berWrap(std::vector<uint8_t>& o, uint8_t tag, const std::vector<uint8_t>& in) {
+  o.push_back(tag);
+  berLen(o, in.size());
+  o.insert(o.end(), in.begin(), in.end());
+}
+void berInt(std::vector<uint8_t>& o, uint32_t v) {
+  uint8_t b[5];
+  int n = 0;
+  do { b[n++] = v & 0xff; v >>= 8; } while (v);
+  if (b[n - 1] & 0x80) b[n++] = 0;   // keep it positive
+  o.push_back(0x02);
+  o.push_back(n);
+  while (n) o.push_back(b[--n]);
+}
+void berOid(std::vector<uint8_t>& o, const Oid& id) {
+  std::vector<uint8_t> c;
+  c.push_back(id.v[0] * 40 + id.v[1]);
+  for (int i = 2; i < id.n; i++) {
+    uint32_t x = id.v[i];
+    uint8_t t[5];
+    int n = 0;
+    do { t[n++] = x & 0x7f; x >>= 7; } while (x);
+    while (n) { uint8_t b = t[--n]; c.push_back(n ? b | 0x80 : b); }
+  }
+  berWrap(o, 0x06, c);
+}
+// Reads a tag and length; false if it runs past the end (a cut-off reply).
+bool berTl(const uint8_t* p, size_t n, size_t& at, uint8_t& tag, size_t& len) {
+  if (at + 2 > n) return false;
+  tag = p[at++];
+  uint8_t l = p[at++];
+  if (l & 0x80) {
+    int k = l & 0x7f;
+    if (k < 1 || k > 3 || at + k > n) return false;
+    len = 0;
+    while (k--) len = len << 8 | p[at++];
+  } else len = l;
+  return at + len <= n;
+}
+uint32_t berUint(const uint8_t* v, size_t n) { uint32_t x = 0; for (size_t i = 0; i < n; i++) x = x << 8 | v[i]; return x; }
+String berText(const uint8_t* v, size_t n, size_t max) {
+  String s;
+  for (size_t i = 0; i < n && s.length() < max; i++) if (v[i] >= 32 && v[i] < 127) s += (char)v[i];
+  s.trim();
+  return s;
+}
+
+using SnmpRow = std::function<void(const Oid& oid, uint8_t tag, const uint8_t* v, size_t n)>;
+// One GET (0xA0) or GETBULK (0xA5, reps rows) request. 1 = answered (f gets every varbind),
+// 0 = no answer, -1 = a reply that doesn't parse (cut off: ask for fewer rows).
+int snmpCall(const Conn& c, uint8_t pdu, const Oid* oids, int k, int reps, const SnmpRow& f) {
+  if (!snmpOpen) snmpOpen = snmpSock.begin(kSnmpLocalPort);
+  if (!snmpOpen) return 0;
+  std::vector<uint8_t> vbl, pd, msg, out;
+  for (int i = 0; i < k; i++) {
+    std::vector<uint8_t> vb;
+    berOid(vb, oids[i]);
+    vb.push_back(0x05); vb.push_back(0x00);
+    berWrap(vbl, 0x30, vb);
+  }
+  uint32_t id = snmpReqId++ & 0x7fffffff;
+  berInt(pd, id);
+  berInt(pd, 0);                          // error status / non-repeaters
+  berInt(pd, pdu == 0xA5 ? reps : 0);     // error index / max-repetitions
+  berWrap(pd, 0x30, vbl);
+  berInt(msg, 1);                         // version: v2c
+  std::vector<uint8_t> com(c.pass.c_str(), c.pass.c_str() + c.pass.length());
+  berWrap(msg, 0x04, com);
+  berWrap(msg, pdu, pd);
+  berWrap(out, 0x30, msg);
+  for (int len; (len = snmpSock.parsePacket()) > 0;) snmpSock.read(snmpBuf, sizeof snmpBuf);   // late replies
+  for (int attempt = 0; attempt < 2; attempt++) {
+    snmpSock.beginPacket(c.ip, c.port);
+    snmpSock.write(out.data(), out.size());
+    snmpSock.endPacket();
+    uint32_t t0 = millis();
+    while (millis() - t0 < 1000) {
+      int len = snmpSock.parsePacket();
+      if (len <= 0) { rtos::ThisThread::sleep_for(2ms); continue; }
+      int n = snmpSock.read(snmpBuf, min(len, (int)sizeof snmpBuf));
+      if (snmpSock.remoteIP() != c.ip || n <= 0) continue;
+      // SEQUENCE { version, community, Response-PDU { id, error, index, SEQUENCE OF varbind } }
+      size_t at = 0, l;
+      uint8_t tag;
+      if (!berTl(snmpBuf, n, at, tag, l) || tag != 0x30) return -1;
+      if (!berTl(snmpBuf, n, at, tag, l) || tag != 0x02) return -1;
+      at += l;
+      if (!berTl(snmpBuf, n, at, tag, l) || tag != 0x04) return -1;
+      at += l;
+      if (!berTl(snmpBuf, n, at, tag, l) || tag != 0xA2) return -1;
+      if (!berTl(snmpBuf, n, at, tag, l) || tag != 0x02) return -1;
+      uint32_t rid = berUint(snmpBuf + at, l);
+      at += l;
+      if (rid != id) continue;   // an old reply
+      if (!berTl(snmpBuf, n, at, tag, l)) return -1;
+      uint32_t es = berUint(snmpBuf + at, l);
+      at += l;
+      if (!berTl(snmpBuf, n, at, tag, l)) return -1;
+      at += l;
+      if (es == 1) return -1;    // tooBig
+      if (!berTl(snmpBuf, n, at, tag, l) || tag != 0x30) return -1;
+      size_t end = at + l;
+      // Parse everything first, so a cut-off reply gives no half rows.
+      std::vector<std::pair<size_t, size_t>> vbs;
+      while (at < end) {
+        size_t vl;
+        if (!berTl(snmpBuf, end, at, tag, vl) || tag != 0x30) return -1;
+        vbs.push_back({at, vl});
+        at += vl;
+      }
+      for (auto& vb : vbs) {
+        size_t a = vb.first, e = vb.first + vb.second, ol, vl;
+        uint8_t vt;
+        if (!berTl(snmpBuf, e, a, tag, ol) || tag != 0x06 || !ol) return -1;
+        Oid o;
+        o.v[0] = snmpBuf[a] / 40; o.v[1] = snmpBuf[a] % 40; o.n = 2;
+        uint32_t x = 0;
+        for (size_t i = 1; i < ol; i++) {
+          x = x << 7 | (snmpBuf[a + i] & 0x7f);
+          if (!(snmpBuf[a + i] & 0x80)) { if (o.n < 32) o.v[o.n++] = x; x = 0; }
+        }
+        a += ol;
+        if (!berTl(snmpBuf, e, a, vt, vl)) return -1;
+        f(o, vt, snmpBuf + a, vl);
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+// Walks one table column: f gets the index (the sub-ids after base) and the value of every row.
+// false = the switch stopped answering.
+using SnmpCell = std::function<void(const uint32_t* idx, int ni, uint8_t tag, const uint8_t* v, size_t n)>;
+bool snmpWalk(const Conn& c, const Oid& base, int reps, const SnmpCell& f, int maxRows = 3000) {
+  Oid cur = base;
+  int rows = 0;
+  for (int req = 0; req < 200; req++) {
+    bool done = false, moved = false;
+    Oid last = cur;
+    int r = snmpCall(c, 0xA5, &cur, 1, reps, [&](const Oid& o, uint8_t tag, const uint8_t* v, size_t n) {
+      if (done) return;
+      if (tag >= 0x80 || !oidUnder(o, base) || oidCmp(o, last) <= 0) { done = true; return; }   // end of the column
+      f(o.v + base.n, o.n - base.n, tag, v, n);
+      last = o;
+      moved = true;
+      if (++rows >= maxRows) done = true;
+    });
+    if (r == 0) return false;
+    if (r < 0) { if (reps <= 1) return true; reps /= 2; continue; }
+    if (done || !moved) return true;
+    cur = last;
+  }
+  return true;
+}
+String macText(const uint8_t* m) {
+  char b[18];
+  snprintf(b, sizeof b, "%02x:%02x:%02x:%02x:%02x:%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
+  return b;
+}
+bool macParse(const String& s, uint8_t* m) {
+  unsigned v[6];
+  if (sscanf(s.c_str(), "%x:%x:%x:%x:%x:%x", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6 &&
+      sscanf(s.c_str(), "%x-%x-%x-%x-%x-%x", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6) return false;
+  for (int i = 0; i < 6; i++) m[i] = v[i];
+  return true;
+}
+String speedText(uint32_t mb) { return mb >= 1000 && mb % 1000 == 0 ? String(mb / 1000) + " Gb/s" : String(mb) + " Mb/s"; }
+
+void pollNetgear(Conn& c, Update& u, String& err, bool& ok, uint32_t polls, const SwKnown& known) {
+  // System: description (model + firmware), name, uptime. No answer = offline.
+  Oid sys[3] = {oidOf({1, 3, 6, 1, 2, 1, 1, 1, 0}), oidOf({1, 3, 6, 1, 2, 1, 1, 3, 0}), oidOf({1, 3, 6, 1, 2, 1, 1, 5, 0})};
+  int r = snmpCall(c, 0xA0, sys, 3, 0, [&](const Oid& o, uint8_t tag, const uint8_t* v, size_t n) {
+    if (o.n < 8) return;
+    if (o.v[7] == 1 && tag == 0x04) u.info.push_back({"Model", berText(v, n, 90)});
+    if (o.v[7] == 5 && tag == 0x04) u.info.push_back({"Switch name", berText(v, n, 60)});
+    if (o.v[7] == 3 && tag == 0x43) u.uptime = berUint(v, n) / 100;
+  });
+  if (r == 0) { err = "no SNMP answer (switch it on: SNMP v2c, read community '" + c.pass + "')"; return; }
+  if (r < 0) { err = "bad SNMP reply"; return; }
+  ok = true;
+  bool full = known.full || known.ports.empty() || polls % 10 == 0;
+  std::vector<SwPort>& ports = u.ports;
+  auto byIf = [&](uint32_t ifi) -> SwPort* { for (auto& p : ports) if (p.ifIndex == ifi) return &p; return nullptr; };
+  if (full) {
+    // Physical ports: Ethernet interfaces (not the CPU, VLANs or LAGs), numbered in ifIndex order.
+    snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 2, 2, 1, 3}), 40, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+      uint32_t t = berUint(v, n);
+      if (ni == 1 && (t == 6 || t == 62 || t == 69 || t == 117) && ports.size() < kMaxSwPorts) {
+        SwPort p;
+        p.ifIndex = idx[0];
+        p.num = ports.size() + 1;
+        ports.push_back(p);
+      }
+    });
+    snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 1}), 25, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+      SwPort* p = ni == 1 ? byIf(idx[0]) : nullptr;
+      if (p) p->ifName = berText(v, n, 24);
+    });
+    snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 18}), 8, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+      SwPort* p = ni == 1 ? byIf(idx[0]) : nullptr;
+      if (p) p->alias = berText(v, n, 48);
+    });
+    snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 17, 1, 4, 1, 2}), 40, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+      if (ni == 1 && u.bridge.size() < 256) u.bridge.push_back({(uint16_t)idx[0], (uint16_t)berUint(v, n)});
+    });
+    u.fullRead = true;
+  } else {
+    for (auto& k : known.ports) {   // names and numbers from the last full read
+      SwPort p;
+      p.num = k.num; p.ifIndex = k.ifIndex; p.ifName = k.ifName; p.alias = k.alias;
+      ports.push_back(p);
+    }
+    u.bridge = known.bridge;
+  }
+  if (ports.empty()) { err = "the switch reports no Ethernet ports"; return; }
+  snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 2, 2, 1, 8}), 40, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+    SwPort* p = ni == 1 ? byIf(idx[0]) : nullptr;
+    if (p) p->up = berUint(v, n) == 1;
+  });
+  snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 15}), 40, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+    SwPort* p = ni == 1 ? byIf(idx[0]) : nullptr;
+    if (p) p->speed = berUint(v, n);
+  });
+  for (auto& p : ports) if (!p.up) p.speed = 0;   // a free port reports its top speed
+  // MAC table: Q-BRIDGE (fdb id + MAC -> bridge port), or the older BRIDGE table (MAC -> bridge port).
+  u.seenOn.assign(known.expect.size(), 0);
+  auto learned = [&](const uint32_t* m6, uint32_t bport) {
+    if (!bport) return;   // the switch's own address
+    uint32_t ifi = bport;
+    for (auto& b : u.bridge) if (b.first == bport) { ifi = b.second; break; }
+    SwPort* p = byIf(ifi);
+    if (!p) return;
+    uint8_t mac[6];
+    for (int i = 0; i < 6; i++) mac[i] = m6[i];
+    if (!p->macs++) memcpy(p->mac, mac, 6);
+    for (size_t i = 0; i < known.expect.size(); i++) {
+      const SwExpect& e = known.expect[i];
+      if (!e.hasMac || memcmp(e.mac, mac, 6)) continue;
+      if (!u.seenOn[i] || p->num == e.num) u.seenOn[i] = p->num;
+      if (p->num == e.num) memcpy(p->mac, mac, 6);   // show the one we look for
+    }
+  };
+  bool any = false;
+  snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 17, 7, 1, 2, 2, 1, 2}), 20, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+    if (ni == 7) { learned(idx + 1, berUint(v, n)); any = true; }
+  });
+  if (!any)
+    snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 17, 4, 3, 1, 2}), 20, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+      if (ni == 6) learned(idx, berUint(v, n));
+    });
+  // LLDP neighbours (lldpRemSysName: time mark, local port = ifIndex on Netgear, index).
+  snmpWalk(c, oidOf({1, 0, 8802, 1, 1, 2, 1, 4, 1, 1, 9}), 10, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+    if (ni != 3) return;
+    SwPort* p = byIf(idx[1]);
+    if (!p && idx[1] >= 1 && idx[1] <= ports.size()) p = &ports[idx[1] - 1];
+    if (p && !p->lldp.length()) p->lldp = berText(v, n, 40);
+  }, 200);
+  // PoE (pethPsePortDetectionStatus: group = unit, port = port on that unit; 3 = delivering power).
+  snmpWalk(c, oidOf({1, 3, 6, 1, 2, 1, 105, 1, 1, 1, 6}), 40, [&](const uint32_t* idx, int ni, uint8_t, const uint8_t* v, size_t n) {
+    if (ni != 2) return;
+    uint32_t st = berUint(v, n);
+    SwPort* hit = nullptr;
+    for (auto& p : ports) {
+      // "1/0/5" or "0/5": unit first (1 when there is none), port last.
+      int last = p.ifName.lastIndexOf('/'), first = p.ifName.indexOf('/');
+      if (last < 0) continue;
+      uint32_t unit = first == last ? 1 : p.ifName.substring(0, first).toInt(), port = p.ifName.substring(last + 1).toInt();
+      if (unit == 0) unit = 1;
+      if (unit == idx[0] && port == idx[1]) { hit = &p; break; }
+    }
+    if (!hit && idx[0] == 1 && idx[1] >= 1 && idx[1] <= ports.size()) hit = &ports[idx[1] - 1];
+    if (hit) hit->poe = st == 3 ? 1 : st == 4 || st >= 6 ? 2 : 0;
+  }, 200);
+  u.newPorts = true;
+  int up = 0;
+  for (auto& p : ports) up += p.up;
+  u.info.push_back({"Ports", String(up) + " of " + String((unsigned)ports.size()) + " connected"});
+}
+
 String preview(const String& s) {
   String p = s.substring(0, 120);
   p.replace("\r", " ");
@@ -728,6 +1074,57 @@ void noteUptime(Drv& d, long uptime) {
   d.uptime = uptime;
 }
 
+// Netgear: each port against its remembered state. Readings p<n> (link 1/0, linkable to a variable),
+// "changes" (how many ports are not as remembered) and "changed" (which, and how); a port that
+// changes or comes back is logged once (caller holds mtx).
+String portLabel(const Drv& d, const SwPort& p) {
+  for (auto& n : d.portNames) if (n.first == p.num) return n.second;
+  return p.alias;
+}
+void netgearCompare(Drv& d, const Update& u, VarSets& vars) {
+  d.ports = u.ports;
+  if (u.fullRead) d.bridge = u.bridge;
+  int count = 0;
+  String list;
+  for (auto& p : d.ports) {
+    String label = portLabel(d, p), key = "p" + String(p.num);
+    setPoint(d, key, p.up ? "1" : "0", "Port " + String(p.num) + (label.length() ? " " + label : String("")), vars);
+    String issue;
+    for (size_t i = 0; i < d.expect.size(); i++) {
+      const SwExpect& e = d.expect[i];
+      if (e.num != p.num) continue;
+      // (the list was remembered again while this poll ran: skip the MAC check once)
+      uint16_t on = u.seenOn.size() == d.expect.size() ? u.seenOn[i] : p.num;
+      if (e.up == 1 && !p.up) issue = on && on != p.num ? "unplugged, device now on port " + String(on) : String("unplugged / device off");
+      else if (e.up == 0 && p.up) issue = "something plugged in";
+      else if (p.up) {
+        if (e.hasMac && on != p.num) issue = on ? "device moved to port " + String(on) : p.macs ? "other device (" + macText(p.mac) + ")" : String("");
+        if (!issue.length() && e.speed && p.speed && p.speed != e.speed) issue = speedText(p.speed) + " instead of " + speedText(e.speed);
+        if (!issue.length() && e.poe == 1 && p.poe == 0) issue = "no PoE power";
+        if (!issue.length() && p.poe == 2) issue = "PoE fault";
+      }
+    }
+    String was;
+    bool known = false;
+    for (auto& x : d.issues) if (x.first == p.num) { was = x.second; known = true; }
+    if (issue != was || (!d.compared && issue.length())) {
+      String what = "port " + String(p.num) + (label.length() ? " (" + label + ")" : String(""));
+      if (issue.length()) LOGW(Sys, "Netgear %s: %s %s", d.name.c_str(), what.c_str(), issue.c_str());
+      else if (known) LOGI(Sys, "Netgear %s: %s back to normal", d.name.c_str(), what.c_str());
+    }
+    bool stored = false;
+    for (auto& x : d.issues) if (x.first == p.num) { x.second = issue; stored = true; }
+    if (!stored) d.issues.push_back({p.num, issue});
+    if (issue.length()) {
+      count++;
+      if (list.length() < 300) list += (list.length() ? ", " : "") + String(p.num) + " " + issue;
+    }
+  }
+  d.compared = true;
+  setPoint(d, "changes", String(count), "Ports not as remembered", vars);
+  setPoint(d, "changed", list, "What changed", vars);
+}
+
 // Stores a poll result or a pushed status (caller holds mtx).
 void applyUpdate(Drv& d, const Update& u, bool ok, VarSets& vars) {
   for (auto& i : u.info) if (i.second.length()) setInfo(d, i.first, i.second);
@@ -736,6 +1133,7 @@ void applyUpdate(Drv& d, const Update& u, bool ok, VarSets& vars) {
   if (u.newLists && ok) { d.playlists = u.playlists; d.c4trigs = u.c4trigs; d.listSig = u.listSig; d.listsDue = false; }
   if (u.newTriggers && ok && !u.triggers.empty()) d.triggers = u.triggers;
   if (u.uptime >= 0) noteUptime(d, u.uptime);
+  if (u.newPorts && ok) { netgearCompare(d, u, vars); d.listsDue = false; }
 }
 
 // Runs one queued command or a status poll in the HTTP thread.
@@ -747,6 +1145,8 @@ void execHttp(const Job& job) {
   uint32_t polls = dp->polls;
   DigiKnown known;
   if (c.type == Digi) known = {dp->scenes, dp->playlists, dp->listSig, dp->listsDue};
+  SwKnown sw;
+  if (c.type == Netgear) sw = {dp->ports, dp->bridge, dp->expect, dp->listsDue};
   mtx.unlock();
 
   bool isPoll = job.method == "POLL", ok = false;
@@ -757,6 +1157,7 @@ void execHttp(const Job& job) {
     else if (c.type == Bsign) pollBsign(c, u, err, ok);
     else if (c.type == Pharos) pollPharos(c, u, err, ok);
     else if (c.type == Digi) pollDigi(c, u, err, ok, polls, known);
+    else if (c.type == Netgear) pollNetgear(c, u, err, ok, polls, sw);
   } else {
     HttpRes r;
     ok = c.type == Digi ? digi(c, job.body, r, err) : request(c, job.method, job.path, job.body, r, err);
@@ -1716,6 +2117,18 @@ bool netioCmd(Drv& d, const std::vector<String>& t, String& msg) {
   return queueHttp(d, "POST", "/netio.json", json(j), label, msg);
 }
 
+// Read-only for now: "refresh" reads everything (names, descriptions) again now.
+bool netgearCmd(Drv& d, const std::vector<String>& t, String& msg) {
+  if (t.size() == 3 && t[2].equalsIgnoreCase("refresh")) {
+    d.listsDue = true;
+    d.nextPoll = millis();
+    msg = "Netgear " + d.name + ": reading the switch";
+    return true;
+  }
+  msg = "expected: netgear <switch> refresh";
+  return false;
+}
+
 bool pharosCmd(Drv& d, const std::vector<String>& t, String& msg) {
   auto is = [&](size_t i, const char* w) { return t.size() > i && t[i].equalsIgnoreCase(w); };
   JsonDocument j;
@@ -1980,6 +2393,20 @@ void load() {
     d.udpPort = o["udpPort"] | 5000;
     d.user = o["user"] | (ty == Bsign ? "admin" : "");
     d.pass = o["password"] | "";
+    if (ty == Netgear) {
+      d.pass = o["community"] | "public";   // SNMP read community
+      for (JsonPairConst kv : o["names"].as<JsonObjectConst>()) {
+        String n = kv.value() | "";
+        if (n.length() && isNumber(kv.key().c_str())) d.portNames.push_back({(uint16_t)atoi(kv.key().c_str()), n});
+      }
+      for (JsonPairConst kv : o["expect"].as<JsonObjectConst>()) {
+        JsonObjectConst e = kv.value();
+        if (!isNumber(kv.key().c_str()) || !e) continue;
+        SwExpect x = {(uint16_t)atoi(kv.key().c_str()), (int8_t)(e["up"] | -1), (int8_t)(e["poe"] | -1), e["speed"] | 0u, {}, false};
+        x.hasMac = macParse(e["mac"] | "", x.mac);
+        if (d.expect.size() < kMaxSwPorts) d.expect.push_back(x);
+      }
+    }
     d.slots = o["slots"] | "";
     // Kiss-Box cards per slot (DO4PR, DI8DC...) decide what each slot is.
     if (o["cards"].is<JsonArrayConst>()) {
@@ -2036,6 +2463,7 @@ void load() {
         d.pushState = d.push ? old.pushState : 0; d.pushNote = old.pushNote; d.lastRead = old.lastRead;
         d.nonce = old.nonce; d.session = old.session; d.up = old.up; d.channel = old.channel; d.seq = old.seq; d.aliveAt = old.aliveAt;
         d.pluginSeen = old.pluginSeen; d.states = old.states; d.activity = old.activity; d.cardLow = old.cardLow;
+        d.ports = old.ports; d.bridge = old.bridge; d.issues = old.issues; d.compared = old.compared;
         for (auto& p : old.points)
           if (ty != Knx) d.points.push_back(p);
           else for (auto& np : d.points) if (np.key == p.key) np.value = p.value;
@@ -2194,6 +2622,7 @@ static bool runCmd(int ty, const String& ref, const std::vector<String>& t, Stri
     case Digi: ok = digiCmd(d, t, msg); break;
     case Netio: ok = netioCmd(d, t, msg); break;
     case Pharos: ok = pharosCmd(d, t, msg); break;
+    case Netgear: ok = netgearCmd(d, t, msg); break;
   }
   mtx.unlock();
   return ok;
@@ -2256,6 +2685,22 @@ void statusJson(JsonArray arr) {
     if (!d.activity.empty()) {
       JsonArray ac = o["activity"].to<JsonArray>();
       for (auto& a : d.activity) { JsonArray x = ac.add<JsonArray>(); x.add(a.first); x.add(a.second); }
+    }
+    if (!d.ports.empty()) {
+      // Netgear: n, i ifName, a description, up, sp Mb/s, mac + m (MACs learned), l LLDP name, poe, x what is not as remembered.
+      JsonArray ps = o["ports"].to<JsonArray>();
+      for (auto& p : d.ports) {
+        JsonObject x = ps.add<JsonObject>();
+        x["n"] = p.num;
+        if (p.ifName.length()) x["i"] = p.ifName;
+        if (p.alias.length()) x["a"] = p.alias;
+        x["up"] = p.up ? 1 : 0;
+        if (p.speed) x["sp"] = p.speed;
+        if (p.macs) { x["mac"] = macText(p.mac); x["m"] = p.macs; }
+        if (p.lldp.length()) x["l"] = p.lldp;
+        if (p.poe >= 0) x["poe"] = p.poe;
+        for (auto& is : d.issues) if (is.first == p.num && is.second.length()) x["x"] = is.second;
+      }
     }
     if (!d.triggers.empty()) {
       JsonArray tr = o["triggers"].to<JsonArray>();

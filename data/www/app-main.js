@@ -36,9 +36,9 @@ function addItem(kind) {
       break;
     case 'pc': { const id = nextId(p.pcs); p.pcs.push({ id, name: 'PC ' + id, ip: '192.168.1.' + (40 + id), mac: '', port: 7, startup: 'startup', shutdown: 'shutdown', reboot: 'reboot' }); break; }
     case 'projector': { const id = nextId(p.projectors); p.projectors.push({ id, name: 'Projector ' + id, ip: '192.168.1.' + (100 + id), port: 4352, password: '' }); break; }
-    case 'drv-kissbox': case 'drv-knx': case 'drv-brightsign': case 'drv-digidot': case 'drv-netio': case 'drv-pharos': {
+    case 'drv-kissbox': case 'drv-knx': case 'drv-brightsign': case 'drv-digidot': case 'drv-netio': case 'drv-pharos': case 'drv-netgear': {
       const type = kind.slice(4), id = nextId(p.drivers);
-      const base = { netio: 'rack', kissbox: 'io', knx: 'knx', brightsign: 'player', digidot: 'c4', pharos: 'lpc' }[type];
+      const base = { netio: 'rack', kissbox: 'io', knx: 'knx', brightsign: 'player', digidot: 'c4', pharos: 'lpc', netgear: 'switch' }[type];
       let name = base, n = 2;
       while (p.drivers.some((d) => d.name === name)) name = base + n++;
       const d = { id, type, name, ip: '192.168.1.' + (120 + id), port: DRIVERS[type].port };
@@ -47,6 +47,7 @@ function addItem(kind) {
       if (type === 'brightsign') Object.assign(d, { user: 'admin', password: '', udpPort: 5000, commands: [] });
       if (type === 'kissbox') Object.assign(d, { frame: 'IO3', cards: ['DO4PR', 'DI8DC', ''], listenPort: 9813, names: {} });
       if (type === 'knx') d.addresses = [];
+      if (type === 'netgear') Object.assign(d, { community: 'public', names: {}, expect: {} });
       if (type === 'pharos' || type === 'netio') d.live = false;
       d.vars = {};
       p.drivers.push(d);

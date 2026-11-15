@@ -71,7 +71,42 @@ function normDriver(d) {
   }
   if (d.type === 'knx') d.addresses = d.addresses || [];
   if (d.type === 'brightsign') d.commands = d.commands || [];
+  if (d.type === 'netgear') { d.names = d.names || {}; d.expect = d.expect || {}; }
 }
+// The switch's front in the UI's own style (theme colours): RJ45 ports in blocks of 12 (odd numbers on
+// top, even below, the key slot towards the edge), green = connected, red = not as remembered, an amber
+// dot = PoE on, and the SFP cages on the right. Click a port: its row in the table.
+const NG_SFP = { 10: 2, 12: 2, 18: 2, 28: 4, 48: 8, 52: 4 };   // usual Netgear AV port counts: the last ones are SFP cages
+function ngFront(x, j, small) {
+  const ports = j.ports || [], exp = x.expect || {}, names = x.names || {};
+  const nSfp = NG_SFP[ports.length] || 0, cu = ports.slice(0, ports.length - nSfp), sfp = ports.slice(ports.length - nSfp);
+  const tip = (p) => {
+    const label = names[p.n] || p.a || '';
+    return `Port ${p.n}${p.i ? ` (${p.i})` : ''}${label ? ' · ' + label : ''}\n${p.up ? `connected, ${ngSpeed(p.sp)}` : 'free'}${p.l ? `\n${p.l}` : ''}`
+      + `${p.mac ? `\n${p.mac}${p.m > 1 ? ` +${p.m - 1}` : ''}` : ''}${p.poe === 1 ? '\nPoE on' : p.poe === 2 ? '\nPoE fault' : ''}`
+      + `${p.x ? `\n⚠ ${p.x}` : exp[p.n] ? '\n✓ as remembered' : '\nnot watched'}`;
+  };
+  const port = (p, top, kind) => `<div class="ng-p ${kind}${top ? ' top' : ''}${p.up ? ' up' : ''}${p.x ? ' bad' : ''}${exp[p.n] ? ' watched' : ''}" title="${esc(tip(p))}" data-ngjump="${x.id}|${p.n}">
+    <span class="ng-num">${p.n}</span><span class="ng-leds"><i class="${p.x ? 'bad' : p.up ? 'on' : ''}"></i>${kind === 'rj' ? `<i class="poe${p.poe === 1 ? ' on' : p.poe === 2 ? ' bad' : ''}"></i>` : ''}</span>
+    <span class="ng-hole"><span class="ng-sock"><span class="ng-plug"></span></span></span></div>`;
+  const block = (list, kind) => {
+    const cols = [];
+    for (let c = 0; c < list.length; c += 2) cols.push(`<div class="ng-col">${port(list[c], true, kind)}${list[c + 1] ? port(list[c + 1], false, kind) : ''}</div>`);
+    return `<div class="ng-blk ${kind}">${cols.join('')}</div>`;
+  };
+  const blocks = [];
+  for (let b = 0; b < cu.length; b += 12) blocks.push(block(cu.slice(b, b + 12), 'rj'));
+  if (sfp.length) blocks.push(block(sfp, 'sfp'));
+  const model = String(j.info?.Model || '').split(/[\s,]/)[0];
+  return `<div class="ng-wrap${small ? ' small' : ''}"><div class="ng-unit">
+    <div class="ng-brand"><span class="row nowrap">${devIcon('netgear')}<b>${esc(x.name)}</b></span>${model ? `<small>${esc(model)}</small>` : ''}
+      <small><span class="dot ${!j.seen ? '' : j.online ? 'ok' : 'bad'}"></span>${!j.seen ? 'not checked yet' : j.online ? 'online' : 'offline'}</small></div>
+    ${blocks.join('')}</div></div>`;
+}
+const ngSpeed = (mb) => (!mb ? '' : mb >= 1000 && mb % 1000 === 0 ? `${mb / 1000} Gb/s` : `${mb} Mb/s`);
+// A port as it is now, as remembered by Remember as normal / Watch (the controller compares, netgearCompare in Drivers.cpp).
+const ngExpect = (p) => (p.up ? { up: 1, ...(p.sp ? { speed: p.sp } : {}), ...(p.mac && p.m === 1 ? { mac: p.mac } : {}), ...(p.poe === 1 ? { poe: 1 } : {}) } : { up: 0 });
+
 
 function drvState(id) {
   const s = S.status?.drivers?.find((x) => x.id === id);
@@ -249,6 +284,33 @@ function drvPanel(x, j, mode, i) {
       }
       return bar + body;
     }
+    case 'netgear': {
+      // Ports as read over SNMP (j.ports), compared by the controller with the remembered state (x.expect).
+      const ports = j.ports || [], exp = x.expect || {}, names = x.names || {};
+      if (!ports.length) return `<p class="muted">${j.seen && !j.online ? 'The switch doesn\'t answer SNMP: switch on SNMP v2c with this read community on the switch.' : 'The ports appear after the first status read (save first).'}</p>`;
+      const nChanged = +ptVal(j, 'changes') || 0, watched = Object.keys(exp).length;
+      const label = (p) => names[p.n] || p.a || '';
+      const summary = `<div class="row ng-sum">${!watched ? '<span class="mem-warn">Nothing remembered yet: nothing is checked.</span>'
+        : nChanged ? `<span class="mem-bad">${nChanged} port${nChanged === 1 ? '' : 's'} not as remembered</span> <span class="muted">${esc(ptVal(j, 'changed'))}</span>`
+          : `<span class="mem-ok">✓ all ${watched} watched ports as remembered</span>`}
+        ${edit ? `<button class="btn small" data-ngremember="${i}" title="Remember every connected port as it is now: link, speed, the device's MAC address, PoE. Free ports are not watched (use a row's Watch button for those).">Remember as normal</button>` : ''}
+        ${edit ? varSel(i, 'changes', vars.changes) : varTag(vars.changes)}<span class="muted" title="A variable that gets the number of ports that are not as remembered: react with a Variable change trigger">${edit ? '← number of changed ports' : ''}</span></div>`;
+      const front = ngFront(x, j, mode === 'compact');
+      if (mode === 'compact') return summary + front + ports.filter((p) => p.x).map((p) => `<div class="drv-row"><span class="drv-name">${p.n} · ${esc(label(p) || p.i || '')}</span><span class="mem-bad">${esc(p.x)}</span><span></span></div>`).join('');
+      const normal = (e) => (!e ? '<span class="muted">not watched</span>' : !e.up ? 'free' : [e.speed ? ngSpeed(e.speed) : 'connected', e.mac ? `<span class="mono" title="The device's MAC address">${esc(e.mac)}</span>` : '', e.poe ? 'PoE' : ''].filter(Boolean).join(' · '));
+      const rows = ports.map((p) => {
+        const e = exp[p.n];
+        const dev = p.up ? [p.l ? `<b>${esc(p.l)}</b>` : '', p.mac ? `<span class="mono">${esc(p.mac)}</span>${p.m > 1 ? ` <span class="muted" title="${p.m} MAC addresses on this port: a switch, an uplink or a PC with VMs">+${p.m - 1}</span>` : ''}` : ''].filter(Boolean).join(' ') || '<span class="muted">no traffic seen</span>' : '';
+        return `<tr class="${p.x ? 'ng-bad' : ''}" data-ngrow="${id}|${p.n}"><td>${p.n}</td><td class="mono muted">${esc(p.i || '')}</td>
+          <td>${edit ? `<input data-dname="${i}|${p.n}" value="${esc(names[p.n] || '')}" placeholder="${esc(p.a || 'e.g. Projector left')}" style="width:150px">` : esc(label(p))}</td>
+          <td>${led(id, 'p' + p.n, p.up ? '1' : '0', 'link')}</td><td>${p.up ? ngSpeed(p.sp) : ''}</td><td>${dev}</td>
+          <td>${p.poe === 1 ? '<span class="kiss on" title="The switch powers this device">PoE</span>' : p.poe === 2 ? '<span class="mem-bad">fault</span>' : ''}</td>
+          <td>${normal(e)}</td><td>${p.x ? `<span class="mem-bad">⚠ ${esc(p.x)}</span>` : e ? '<span class="mem-ok">✓</span>' : ''}</td>
+          ${vcell('p' + p.n)}
+          ${edit ? `<td><button class="btn small" data-ngport="${i}|${p.n}" title="${e ? 'Stop checking this port' : 'Remember this port as it is now and check it from now on'}">${e ? 'Forget' : 'Watch'}</button></td>` : ''}</tr>`;
+      }).join('');
+      return `${summary}${front}<table class="drv-tbl ng-tbl"><tr><th>#</th><th>Port</th><th>Name</th><th>Link</th><th>Speed</th><th title="LLDP name the device announces, and the MAC address(es) the switch learned on the port">Device</th><th>PoE</th><th title="What was remembered (Remember as normal)">Normal</th><th>Now</th><th>Variable</th>${edit ? '<th></th>' : ''}</tr>${rows}</table>`;
+    }
     case 'digidot': {
       const scenes = j.scenes || [];
       const lists = j.playlists || [], trigs = j.c4triggers || [];
@@ -363,6 +425,7 @@ function drvActions(x) {
     case 'brightsign': return cmdBtn(`brightsign ${ref} reboot`, 'Reboot', `Reboot ${x.name}?`);
     case 'digidot': return cmdBtn(`digidot ${ref} stop`, 'Stop') + cmdBtn(`digidot ${ref} master 100`, 'Master 100%') + cmdBtn(`digidot ${ref} master 0`, 'Master 0%');
     case 'pharos': return cmdBtn(`pharos ${ref} release all`, 'Release all') + cmdBtn(`pharos ${ref} beacon`, 'Beacon', '', 'Blinks the controller to find it; click again to stop');
+    case 'netgear': return cmdBtn(`netgear ${ref} refresh`, '⟳ Read now', '', 'Read all ports, names and descriptions from the switch now');
     case 'netio': return cmdBtn(`netio ${ref} output all on`, 'All on') + cmdBtn(`netio ${ref} output all off`, 'All off', `Switch off ALL outputs of ${x.name}?`);
     default: return '';
   }
@@ -418,6 +481,10 @@ const DRV_HELP = {
   pharos: `Pharos LPC / TPC / VLC over the Controller API (plain http). Leave the user empty if the web API is open.
     <b>Live updates</b> subscribes over a WebSocket to timeline, scene and group changes, so they show at once.
     Commands: <code>pharos lpc timeline 2 start fade 3</code>, <code>pharos lpc scene 4 start</code>, <code>pharos lpc group 1 master 50</code>, <code>pharos lpc trigger 5</code>, <code>pharos lpc api get system</code>.`,
+  netgear: `Netgear AV switches (M4250 / M4300 / M4350, and most other managed switches) read over <b>SNMP v2c</b>, read-only. On the switch: System → SNMP → SNMP v1/v2 → Community: a read-only community (e.g. <code>public</code>) for this controller's IP.
+    Every check reads each port: <b>link</b>, <b>speed</b>, <b>PoE</b>, the <b>MAC address</b> of what is plugged in and its <b>LLDP</b> name (Dante, BrightSign, PCs… announce one).
+    Click <b>Remember as normal</b> when everything is cabled and running: from then on a port that is unplugged, gets another device, runs slower (a bad cable often gives 100 Mb/s) or loses PoE shows red here and on the Monitoring page, and is written to the log as a warning.
+    Link a variable to <b>number of changed ports</b> (or to one port: 1 = connected) and react with a Variable change trigger, e.g. send an email.`,
 };
 // NETIO MQTT-flex config to paste on the NETIO (M2M API Protocols -> MQTT-flex).
 function netioMqttConfig(d) {
@@ -436,7 +503,7 @@ function netioMqttConfig(d) {
 }
 function driverPage(type) {
   const p = P(), list = p.drivers.map((d, i) => [d, i]).filter(([d]) => d.type === type), info = DRIVERS[type];
-  const auth = !['kissbox', 'knx'].includes(type);
+  const auth = !['kissbox', 'knx', 'netgear'].includes(type);
   const help = DRV_HELP[type].replace('${port}', p.settings.udpPort || 4000);
   const dev = ([d, i]) => {
     normDriver(d);
@@ -446,6 +513,7 @@ function driverPage(type) {
     let extra = '';
     if (type === 'kissbox') extra = field('Frame', `<select data-kissframe="${i}">${KISS_FRAMES.map(([f, l]) => `<option value="${f}"${f === d.frame ? ' selected' : ''}>${l}</option>`).join('')}</select>`) +
       field('Listen port', num('listenPort', 9813, 1, 65535) + '<span class="muted">UDP port the box sends input changes to (all Kiss-Boxes share the first one\'s)</span>');
+    if (type === 'netgear') extra = field('Community', `<input data-p="${b}.community" value="${esc(d.community ?? 'public')}" autocomplete="off" style="width:140px"><span class="muted">SNMP v2c read community set on the switch</span>`);
     if (type === 'knx') extra = field('Re-read every', num('readEvery', 0, 0, 86400) + '<span class="muted">s · 0 = only when the tunnel opens (the bus pushes every change)</span>');
     if (type === 'brightsign') {
       extra = field('UDP port', num('udpPort', 5000, 1, 65535) + '<span class="muted">the presentation\'s UDP input</span>') +
@@ -589,7 +657,7 @@ function updateDrvLive() {
     if (j && !typing && liveKeys(j) !== el.dataset.keys) { render(); return; }
   }
 }
-const liveKeys = (j) => [...(j.points || []).map((p) => p.k), ...(j.scenes || []), ...(j.playlists || []), ...(j.c4triggers || []), (j.triggers || []).length, (j.states || []).length, j.info?.Model || ''].join(',');
+const liveKeys = (j) => [...(j.points || []).map((p) => p.k), ...(j.ports || []).map((p) => `${p.n}${p.up}${p.sp || ''}${p.mac || ''}${p.m || ''}${p.poe ?? ''}${p.x || ''}${p.l || ''}`), ...(j.scenes || []), ...(j.playlists || []), ...(j.c4triggers || []), (j.triggers || []).length, (j.states || []).length, j.info?.Model || ''].join(',');
 // A zone plays a state: by itself (the state's name) or as a test ("(test) <state> (<file>)", see kdlink.brs).
 const bsTestOn = (v, n) => v === n || v.startsWith(`(test) ${n} (`);
 const bsActHtml = (act) => act.map(([t, s]) => `<div><span class="muted">${esc(new Date(t * 1000).toLocaleTimeString())}</span>${esc(s)}</div>`).join('')
@@ -597,7 +665,7 @@ const bsActHtml = (act) => act.map(([t, s]) => `<div><span class="muted">${esc(n
 
 // ---- global handlers (this page's inputs aren't plain data-p paths) -----------------------
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-devtab],[data-montab],[data-phtab],[data-knxadd],[data-knxpaste],[data-bscmd],[data-bsfollow],[data-cmdset] button');
+  const t = e.target.closest('[data-devtab],[data-montab],[data-phtab],[data-knxadd],[data-knxpaste],[data-bscmd],[data-bsfollow],[data-ngremember],[data-ngport],[data-ngjump],[data-cmdset] button');
   if (!t) return;
   const p = P();
   if (t.dataset.devtab) { S.devTab = t.dataset.devtab; render(); }
@@ -620,6 +688,28 @@ document.addEventListener('click', async (e) => {
   } else if (t.dataset.bsfollow) {
     const d = p.drivers[+t.dataset.bsfollow], z1 = (drvSt(d).points || []).find((q) => /^z\d+$/.test(q.k));
     (d.follow = d.follow || []).push({ timeline: p.timelines[0]?.id || 0, zone: z1 ? (z1.n || '').replace(/^Zone \d+ ?/, '') || '1' : 'Zone 1', file: '', offset: 0 });
+    markDirty(); render();
+  } else if (t.dataset.ngjump) {
+    // A port on the drawn switch: its table row (on Monitoring "All" first the switch's own tab).
+    const jump = () => {
+      const row = $(`[data-ngrow="${t.dataset.ngjump}"]`);
+      if (!row) return false;
+      row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      row.classList.remove('ng-flash'); void row.offsetWidth; row.classList.add('ng-flash');
+      return true;
+    };
+    if (!jump() && S.view === 'monitor') { S.monTab = 'netgear'; render(); setTimeout(jump, 50); }
+  } else if (t.dataset.ngremember) {
+    const d = p.drivers[+t.dataset.ngremember], ports = drvSt(d).ports || [];
+    if (!ports.length) return toast('No ports read from the switch yet', true);
+    d.expect = {};
+    for (const q of ports) if (q.up) d.expect[q.n] = ngExpect(q);
+    toast(`${Object.keys(d.expect).length} connected ports remembered: save to start checking`);
+    markDirty(); render();
+  } else if (t.dataset.ngport) {
+    const [di, n] = t.dataset.ngport.split('|'), d = p.drivers[+di], q = (drvSt(d).ports || []).find((x) => x.n === +n);
+    d.expect = d.expect || {};
+    if (d.expect[n]) delete d.expect[n]; else if (q) d.expect[n] = ngExpect(q);
     markDirty(); render();
   } else if (t.dataset.bscmd) {
     const d = p.drivers[+t.dataset.bscmd];
