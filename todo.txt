@@ -246,3 +246,28 @@ Board day 13 Nov 2026, results (board 172.16.1.165, Machine Control; LPC 1 at 17
  protection stops the trigger). To look at: the KD shows one ~48 ms gap in the Art-Net now and then
  (a frame late or skipped; the LPC stays under 36 ms) - find out where it comes from.
  Still open: 2-3 effects layered, boot time, power cuts, the 1 hour timeline, DMX on the cable.
+-the ~48 ms gap in the KD's Art-Net: FOUND and fixed 13 Nov (in 0.3.1). Two causes: (1) Log::flush asked
+ "(bool)Serial" every round of the main loop and Arduino's USB serial has a delay(1) in that check: the
+ loop made 498 rounds a second instead of 996 and frames went out up to 4.5 ms late; (2) the pacing rule
+ "at least 23 ms since the last frame" then skipped the next frame (a hole of two frames). Now: the
+ check without the delay, and pacing on the schedule with a quarter period of slack (Show.cpp due()).
+ Measured after the fix, 2 minutes, KD and LPC in one capture: KD worst gap 34.6 ms (normal 25),
+ LPC 38.7 ms (normal 30); no frame more than 10 ms late on either, none skipped.
+ /api/status stats.loop now shows per part of the main loop [us per second, worst] + rounds, gapUs,
+ sleepUs: look there first when frames come late.
+ Not repeated on 0.3.1 yet (16 Nov: the board runs the real show "Kantoor", Art-Net only on change).
+-16 Nov, repeat on 0.3.1 (2 minutes, KD and LPC in one capture): NOT conclusive, this PC's own timing
+ was noisy (launcher open, it also holds the Art-Net port): the LPC showed the same lateness as the KD.
+ KD 4800 frames (40.0 /s), worst gap 45.5 ms, 77 frames >10 ms late; LPC 3982 frames, worst 50.4 ms,
+ 49 frames >10 ms late; 40 times both late at the same moment. Main loop on 0.3.1: 996 rounds/s,
+ worst pause 3.7 ms, log part 1.8 ms per second (was 463). To do it properly: launcher closed, nothing
+ else running on the PC (or Wireshark timestamps), and count Art-Net sequence numbers.
+ One PUT /api/project to the board got no answer (the restore; the retry worked): keep an eye on it.
+-16 Nov, clean repeat on 0.3.1 (launcher closed, 3 minutes, KD and LPC in one capture):
+ KD 7200 frames (40.00 /s), worst gap 41.9 ms, no hole of two frames, nothing over 20 ms late;
+ LPC 5974 frames (33.19 /s), worst gap 51.8 ms, 1 hole, 3 frames over 20 ms late. The PC still adds
+ jitter of 6-17 ms to both (66 times both late at the same moment), so the small lateness is not the
+ controllers'. The skipped-frame problem is gone on 0.3.1.
+ UDP load over ten triggers (A0-A9, var hits ++): 200 / 500 / 900 a second all 100 % handled, engine
+ 40 fps, nothing dropped, no trigger paused. (The 17 % / 0 % of 13 Nov were the loop protection of one
+ trigger: over 100 fires in a second = paused 10 s.)

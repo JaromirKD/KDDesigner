@@ -23,9 +23,21 @@ struct Fixture { int id; int u; int address; BigRam::Vec<Slot> slots; int footpr
 enum Curve : uint8_t { CurveLinear, CurveSquare, CurveNonDim, CurvePreheat5, CurvePreheat10 };
 
 // Effects: compiled programs, and per effect cue its parameter values and fixtures.
-// A target is one fixture: its dimmer/R/G/B/W channels (-1 = none) and map position.
-struct FxTarget { uint8_t u; int16_t d, r, g, b, w; bool dWide; float x, y; };
-struct FxCue { int prog; BigRam::Vec<double> slots; double level; BigRam::Vec<FxTarget> targets; };
+// A target is one fixture: its dimmer/R/G/B/W channels (-1 = none) and what the effect gets
+// as i, x and y (its place in the track and on the map, after the clip options: Fx::place).
+// n = the fixture count the effect sees (clip options can make it smaller). data = the cue's
+// texts and pictures (Fx::setParam).
+struct FxTarget { uint8_t u; int16_t d, r, g, b, w; bool dWide; float x, y; uint16_t i; };
+// lanes = automation of number parameters (cue "auto"), wrap = a looping timeline's length in s
+// (the lines start again each round), live = what a live edit left to glide (reset when the
+// cue starts; Fx::frameInputs).
+struct FxCue {
+  int prog; BigRam::Vec<double> slots; double level; BigRam::Vec<FxTarget> targets; int n; bool invert; BigRam::Vec<uint8_t> data;
+  BigRam::Vec<Fx::Lane> lanes; double wrap = 0; Fx::Live live;
+};
+// A live edit (Show::liveTimeline): what each track's effect showed just before, so the new
+// cues carry on from there (carryEffects).
+struct FxKeep { int track, prog; double t; BigRam::Vec<double> base, s; };
 
 // The loaded project (replaced as a whole by Show::parse).
 extern Settings cfg;
@@ -51,6 +63,8 @@ extern uint32_t locStart, locUntil;
 
 void stopAllPlaybacks();               // before a new project is swapped in
 void timelineReplaced(int idx);        // live edit: a running copy carries on with the new cues
+void keepEffects(int idx, std::vector<FxKeep>& out);         // before a live edit replaces timeline idx
+void carryEffects(int idx, const std::vector<FxKeep>& kept); // after it (and timelineReplaced)
 
 // Run for every channel every frame. always_inline: the firmware is built for size (-Os),
 // which made even these function calls (half the time of the fade and mix loops).

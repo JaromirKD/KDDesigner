@@ -21,7 +21,7 @@ namespace {
 
 enum Type : uint8_t { Kiss, Knx, Bsign, Digi, Netio, Pharos, Netgear, TypeCount };
 const char* const kTypes[] = {"kissbox", "knx", "brightsign", "digidot", "netio", "pharos", "netgear"};
-const char* const kTypeNames[] = {"Kiss-Box", "KNX", "BrightSign", "DiGidot", "NETIO", "Pharos", "Netgear"};
+const char* const kTypeNames[] = {"Kiss-Box", "KNX", "BrightSign", "DiGidot", "NETIO", "Pharos", "Switch"};
 const uint16_t kDefaultPort[] = {9813, 3671, 80, 80, 80, 80, 161};
 const uint16_t kKnxLocalPort = 3672;   // our end of the KNX tunnel
 const size_t kMaxBody = 12 * 1024;     // HTTP replies are cut here (status JSON fits easily)
@@ -30,6 +30,11 @@ const size_t kMaxPoints = 200;    // a Pharos project can have many timelines, s
 int typeOf(const String& s) {
   for (int i = 0; i < TypeCount; i++) if (s.equalsIgnoreCase(kTypes[i])) return i;
   return -1;
+}
+// The first word of a command: a type, or "switch" for the netgear type (it reads any SNMP switch;
+// the type keeps its first name so older shows load).
+int cmdType(const String& s) {
+  return strcasecmp(s.c_str(), "switch") == 0 ? (int)Netgear : typeOf(s);
 }
 
 struct Point { String key, name, value, dpt; };
@@ -85,6 +90,9 @@ struct Drv {
   uint32_t session = 0;                    // DiGidot session id
   bool up = false, connPending = false, statePending = false, pollPending = false;  // KNX tunnel, Kiss-Box poll
   uint8_t channel = 0, seq = 0, tries = 0;
+  uint8_t staleCh = 0;                     // KNX: old tunnel last asked to close, at staleAt
+  uint32_t staleAt = 0;
+  uint16_t dest = 9817;                    // Kiss-Box: the port the box answers on (its destination port)
   uint32_t retryAt = 0, aliveAt = 0, sentAt = 0, pollSentAt = 0, ackAt = 0;
   // KNX: one frame at a time; the next goes out once the interface acked this one.
   std::deque<std::vector<uint8_t>> txq;
@@ -107,6 +115,8 @@ struct Drv {
   // drift: the plugin also compares the video's real position with ours and puts it right ("Correct drift").
   struct Follow { int timeline; String zone, file; int32_t offset; bool active, paused; int32_t sentPos; uint32_t sentAt, lastSend; bool drift; };
  uint8_t gpioOut = 0;            // GPIO pins ticked as outputs ("gpioOut":[3,4]): the only ones "gpio <n> on|off" switches
+  bool gpioRead = false;          // the plugin (v14) said which pins are outputs in the presentation:
+  uint8_t gpioIs = 0;             // then these count and the ticks don't
   bool cardLow = false;           // the player's card had under 5 % free at the last health report (warned once)
   std::vector<Follow> follows;
   std::deque<std::pair<uint32_t, String>> activity;   // what the player received: serial, UDP, GPIO, zone changes
@@ -133,7 +143,10 @@ std::vector<KPulse> kpulses;
 rtos::Mutex mtx;   // guards everything above; never held during network waits
 rtos::Thread httpThread(osPriorityNormal, 10 * 1024, nullptr, "drv-http");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
 rtos::Thread udpThread(osPriorityNormal, 4 * 1024, nullptr, "drv-udp");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
-volatile uint16_t kissPort = 0;            // Kiss-Box listen port (from the first Kiss-Box)
+// Kiss-Box destination ports to listen on (each box's own, the different ones; filled from the front,
+// under mtx). A box answers there, usually as a broadcast, never to the port it was asked from.
+const int kKissPorts = 4;
+uint16_t kissWant[kKissPorts] = {};
 
 Drv* byId(int id) {
   for (auto& d : list) if (d.id == id) return &d;
@@ -1109,8 +1122,8 @@ void netgearCompare(Drv& d, const Update& u, VarSets& vars) {
     for (auto& x : d.issues) if (x.first == p.num) { was = x.second; known = true; }
     if (issue != was || (!d.compared && issue.length())) {
       String what = "port " + String(p.num) + (label.length() ? " (" + label + ")" : String(""));
-      if (issue.length()) LOGW(Sys, "Netgear %s: %s %s", d.name.c_str(), what.c_str(), issue.c_str());
-      else if (known) LOGI(Sys, "Netgear %s: %s back to normal", d.name.c_str(), what.c_str());
+      if (issue.length()) LOGW(Sys, "Switch %s: %s %s", d.name.c_str(), what.c_str(), issue.c_str());
+      else if (known) LOGI(Sys, "Switch %s: %s back to normal", d.name.c_str(), what.c_str());
     }
     bool stored = false;
     for (auto& x : d.issues) if (x.first == p.num) { x.second = issue; stored = true; }
@@ -1223,22 +1236,27 @@ void runHttp() {
         }
     }
     mtx.unlock();
+    if (have) execHttp(job);
+    else rtos::ThisThread::sleep_for(100ms);
     // The plugin answers a hello with everything (and keeps sending changes for 10 minutes).
     // Sent from the trigger port, so its packets come back through Drivers::onUdp.
+    // After the status check, not before it: lwIP remembers only 10 addresses (ARP_TABLE_SIZE) and,
+    // while it looks one up, keeps just the newest packet for it. In a show with more devices than
+    // that the player's address was often forgotten again, and the check's connection right behind
+    // the hello pushed the hello out: the plugin never heard it ("waiting" for ever). The check has
+    // just looked the address up, so now the hello goes straight out.
     if (helloPort) {
       g_engine.lock();
       Triggers::sendRaw(helloIp, helloPort, (const uint8_t*)"kd\thello", 8);
       g_engine.unlock();
     }
-    if (have) execHttp(job);
-    else rtos::ThisThread::sleep_for(100ms);
   }
 }
 
 // ---- KNX (KNXnet/IP tunnelling) -----------------------------------------------
-EthernetUDP knxSock, kissSock;
+EthernetUDP knxSock, kissSock[kKissPorts];
 bool knxOpen = false;
-uint16_t kissOpen = 0;
+uint16_t kissOpen[kKissPorts] = {};   // [0] set = there is a Kiss-Box (commands go out of that socket)
 
 uint16_t parseGa(const String& s) {
   int a = s.indexOf('/'), b = s.indexOf('/', a + 1);
@@ -1347,9 +1365,14 @@ void udpSend(EthernetUDP& sock, const Drv& d, const uint8_t* p, size_t n) {
   sock.write(p, n);
   sock.endPacket();
 }
-void knxSend(const Drv& d, const uint8_t* p, size_t n) { udpSend(knxSock, d, p, n); }
+// Every KNXnet/IP packet in and out at debug level (`loglevel sys debug`), to compare with a
+// capture from a PC tunnel to the same interface.
+void knxSend(const Drv& d, const uint8_t* p, size_t n) {
+  LOGD(Sys, "KNX %s -> %s", d.name.c_str(), toHex(p, n).c_str());
+  udpSend(knxSock, d, p, n);
+}
 // Header + one HPAI (our IP and tunnel port) helper for connect / state / disconnect.
-void knxCtrl(const Drv& d, uint16_t service) {
+void knxCtrl(const Drv& d, uint16_t service, int channel = -1) {
   IPAddress me = Net::localIP();
   uint8_t hpai[8] = {0x08, 0x01, me[0], me[1], me[2], me[3], kKnxLocalPort >> 8, kKnxLocalPort & 0xff};
   uint8_t p[26];
@@ -1360,7 +1383,7 @@ void knxCtrl(const Drv& d, uint16_t service) {
     memcpy(p + n, hpai, 8); n += 8;
     p[n++] = 0x04; p[n++] = 0x04; p[n++] = 0x02; p[n++] = 0x00;
   } else {
-    p[n++] = d.channel; p[n++] = 0;
+    p[n++] = channel >= 0 ? (uint8_t)channel : d.channel; p[n++] = 0;
     memcpy(p + n, hpai, 8); n += 8;
   }
   p[5] = n;
@@ -1390,6 +1413,7 @@ void knxCemi(Drv& d, const uint8_t* c, int n, VarSets& vars) {
   setPoint(d, key, knxDecode(p->dpt, c + at + 9, dn, c[at + 8] & 0x3f), "", vars);
 }
 void knxPacket(Drv& d, const uint8_t* p, int n, std::vector<std::pair<int, bool>>& events, VarSets& vars) {
+  LOGD(Sys, "KNX %s <- %s", d.name.c_str(), toHex(p, n).c_str());
   if (n < 8 || p[0] != 0x06) return;
   uint16_t svc = p[2] << 8 | p[3];
   uint32_t now = millis();
@@ -1413,21 +1437,35 @@ void knxPacket(Drv& d, const uint8_t* p, int n, std::vector<std::pair<int, bool>
   } else if (svc == 0x0208 && p[6] == d.channel) {   // connection state response
     d.statePending = false;
     if (p[7] == 0) d.aliveAt = now;
-    else { d.up = false; d.retryAt = now + 1000; }
+    else { knxCtrl(d, 0x0209); d.up = false; d.retryAt = now + 1000; }
   } else if (svc == 0x0421 && n >= 10 && p[7] == d.channel && p[8] == d.seq && d.waitAck) {   // our frame arrived
     d.waitAck = false;
     d.seq++;
     if (!d.txq.empty()) d.txq.pop_front();
-  } else if (svc == 0x0209) {    // the interface closes the tunnel
+  } else if (svc == 0x0209) {    // the interface closes a tunnel: say OK, but only ours counts
     uint8_t r[8] = {0x06, 0x10, 0x02, 0x0A, 0x00, 0x08, p[6], 0x00};
     knxSend(d, r, 8);
+    // It also closes our older tunnels (one left from before a restart or a reconnect). Taking
+    // that for the current one made an endless chain: reconnect, the one just left goes stale,
+    // the interface closes it ~5 s later, reconnect... (seen on a KNX IP Interface, 17 Nov 2026).
+    if (!d.up || p[6] != d.channel) { LOGD(Sys, "KNX %s: old tunnel %u closed", d.name.c_str(), p[6]); return; }
     d.up = d.waitAck = false;
     d.retryAt = now + 2000;
     LOGW(Sys, "KNX %s: tunnel closed by the interface", d.name.c_str());
-  } else if (svc == 0x0420 && n > 10 && p[7] == d.channel) {   // tunnelling request: ack, then read
+  } else if (svc == 0x0420 && n > 10 && (!d.up || p[7] != d.channel)) {
+    // A frame on an old tunnel of ours that the interface still keeps (we restarted, or gave
+    // it up): close it now instead of leaving the interface repeating to us until it gives up.
+    if (p[7] != d.staleCh || now - d.staleAt > 1000) {
+      d.staleCh = p[7];
+      d.staleAt = now;
+      knxCtrl(d, 0x0209, p[7]);
+      LOGD(Sys, "KNX %s: closing old tunnel %u", d.name.c_str(), p[7]);
+    }
+  } else if (svc == 0x0420 && n > 10) {   // tunnelling request: ack, then read
     uint8_t ack[10] = {0x06, 0x10, 0x04, 0x21, 0x00, 0x0A, 0x04, d.channel, p[8], 0x00};
     knxSend(d, ack, 10);
-    d.aliveAt = now;
+    // No d.aliveAt here: the interface's 120 s time-out only counts our keep-alive requests, so
+    // a bus telegram arriving must not put ours off (the tunnel was dropped ~2 min after open).
     knxCemi(d, p + 10, n - 10, vars);
   }
 }
@@ -1450,7 +1488,7 @@ String kissSlotType(const String& slots, int idx) {
   s.toLowerCase();
   return s;
 }
-void kissSend(const Drv& d, const uint8_t* p, size_t n) { udpSend(kissSock, d, p, n); }
+void kissSend(const Drv& d, const uint8_t* p, size_t n) { udpSend(kissSock[0], d, p, n); }
 
 void runUdp() {
   rtos::ThisThread::sleep_for(4s);
@@ -1466,10 +1504,15 @@ void runUdp() {
       knxOpen = knxSock.begin(kKnxLocalPort);
       if (!knxOpen) LOGW(Sys, "KNX: cannot open UDP port %u", kKnxLocalPort);
     }
-    if (kissPort != kissOpen) {
-      if (kissOpen) kissSock.stop();
-      kissOpen = kissPort;
-      if (kissOpen && !kissSock.begin(kissOpen)) LOGW(Sys, "Kiss-Box: cannot listen on UDP port %u", kissOpen);
+    if (memcmp(kissWant, kissOpen, sizeof kissOpen)) {
+      // Close what changed first: a port may have moved to another place in the list.
+      for (int i = 0; i < kKissPorts; i++)
+        if (kissOpen[i] && kissOpen[i] != kissWant[i]) { kissSock[i].stop(); kissOpen[i] = 0; }
+      for (int i = 0; i < kKissPorts; i++) {
+        if (kissOpen[i] == kissWant[i]) continue;
+        kissOpen[i] = kissWant[i];
+        if (!kissSock[i].begin(kissOpen[i])) LOGW(Sys, "Kiss-Box: cannot listen on UDP port %u", kissOpen[i]);
+      }
     }
     // Kiss-Box pulses that are over: output off, then read the slot back.
     for (auto it = kpulses.begin(); it != kpulses.end();) {
@@ -1495,7 +1538,7 @@ void runUdp() {
         continue;
       }
       if (d->type == Knx) { if (d->txq.size() < 64) d->txq.push_back(it->data); }
-      else if (kissOpen) kissSend(*d, it->data.data(), it->data.size());
+      else if (kissOpen[0]) kissSend(*d, it->data.data(), it->data.size());
       if (!it->quiet) d->last = it->label + " sent";
       if (!it->quiet) LOGI(Sys, "%s %s: %s", kTypeNames[d->type], d->name.c_str(), it->label.c_str());
       it = ujobs.erase(it);
@@ -1507,10 +1550,10 @@ void runUdp() {
         IPAddress from = knxSock.remoteIP();
         for (auto& d : list) if (d.type == Knx && d.ip == from) { knxPacket(d, buf, n, events, vars); break; }
       }
-    if (kissOpen)
-      for (int len; (len = kissSock.parsePacket()) > 0;) {
-        int n = kissSock.read(buf, min(len, (int)sizeof buf));
-        IPAddress from = kissSock.remoteIP();
+    for (int k = 0; k < kKissPorts && kissOpen[k]; k++)
+      for (int len; (len = kissSock[k].parsePacket()) > 0;) {
+        int n = kissSock[k].read(buf, min(len, (int)sizeof buf));
+        IPAddress from = kissSock[k].remoteIP();
         for (auto& d : list)
           if (d.type == Kiss && d.ip == from) {
             if (d.pollPending) { d.pollPending = false; if (markCheck(d, true, true, "")) events.push_back({d.id, true}); }
@@ -1528,8 +1571,11 @@ void runUdp() {
           d.connPending = true;
           d.retryAt = now + 10000;
         }
-        if (d.up && !d.statePending && now - d.aliveAt > 60000) { knxCtrl(d, 0x0207); d.statePending = true; d.sentAt = now; }
+        // Signed: aliveAt may be set by a packet read after `now` was taken (unsigned, that
+        // wrapped round and sent every keep-alive twice).
+        if (d.up && !d.statePending && (int32_t)(now - d.aliveAt) > 60000) { knxCtrl(d, 0x0207); d.statePending = true; d.sentAt = now; }
         if (d.up && d.statePending && now - d.sentAt > 10000) {
+          knxCtrl(d, 0x0209);   // in case it still has it: an old tunnel left open blocks a slot and confuses the next one
           d.up = d.statePending = d.waitAck = false;
           d.retryAt = now;
           if (markCheck(d, false, false, "tunnel keep-alive lost")) events.push_back({d.id, false});
@@ -1540,6 +1586,7 @@ void runUdp() {
           else if (now - d.ackAt > 1000) {
             // No ack after a repeat: the spec says the tunnel is broken, so open a new one.
             d.txq.pop_front();
+            knxCtrl(d, 0x0209);
             d.up = d.waitAck = false;
             d.retryAt = now;
             LOGW(Sys, "KNX %s: no ack from the interface - reconnecting", d.name.c_str());
@@ -1556,12 +1603,12 @@ void runUdp() {
           for (auto& p : d.points) if (d.txq.size() < 64) d.txq.push_back(knxFrame(parseGa(p.key), false, {}, false));
         }
       }
-      if (d.type == Kiss && kissOpen) {
+      if (d.type == Kiss && kissOpen[0]) {
         if (d.pollPending && now - d.pollSentAt > 2000) {
           d.pollPending = false;
           // The box doesn't answer to the sender's port: it broadcasts (or sends to a fixed IP) on
           // the destination port set in the box. Commands still work when the ports differ, so say so.
-          if (markCheck(d, false, true, "no reply on listen port " + String(kissOpen) + " - set it to the box's destination port (Kiss-Box Editor, I/O Mode Setup)"))
+          if (markCheck(d, false, true, "no reply on destination port " + String(d.dest) + " - set it to the destination port in the box (Kiss-Box Editor, I/O Mode Setup)"))
             events.push_back({d.id, false});
         }
         if ((int32_t)(now - d.nextPoll) >= 0) {
@@ -1995,13 +2042,14 @@ bool bsignCmd(Drv& d, const std::vector<String>& t, String& msg) {
     if (t.size() == 5) return pluginSend(d, "zmute", t[3], on ? "on" : "off", msg);
     return pluginSend(d, is("mute") ? "mute" : "screen", on ? "on" : "off", "", msg);
   }
-  // A GPIO output: only pins ticked as outputs on the BrightSign tab (as they are set in BrightAuthor);
-  // the plugin never changes a pin's direction.
+  // A GPIO output: only pins that are outputs in the presentation, as the plugin read them (v14), or
+  // else as ticked on the BrightSign tab; the plugin never changes a pin's direction.
   if (is("gpio") && t.size() == 5) {
     bool on;
     if (!isNumber(t[3]) || t[3].length() != 1 || t[3].toInt() > 7) { msg = "GPIO pins are 0-7"; return false; }
     if (!truthy(t[4], on)) { msg = "expected on or off"; return false; }
-    if (!(d.gpioOut & (1 << t[3].toInt()))) { msg = "BrightSign " + d.name + ": GPIO " + t[3] + " is not ticked as an output (Devices > BrightSign > GPIO)"; return false; }
+    if (d.gpioRead && !(d.gpioIs & (1 << t[3].toInt()))) { msg = "BrightSign " + d.name + ": GPIO " + t[3] + " is an input in the presentation (BrightAuthor: Presentation Settings > Interactive > GPIO)"; return false; }
+    if (!d.gpioRead && !(d.gpioOut & (1 << t[3].toInt()))) { msg = "BrightSign " + d.name + ": GPIO " + t[3] + " is not ticked as an output (Devices > BrightSign > GPIO)"; return false; }
     return pluginSend(d, "gpio", t[3], on ? "on" : "off", msg);
   }
   if (is("serial") && t.size() >= 4) return pluginSend(d, "serial", rest(t, 3), "", msg);
@@ -2122,10 +2170,10 @@ bool netgearCmd(Drv& d, const std::vector<String>& t, String& msg) {
   if (t.size() == 3 && t[2].equalsIgnoreCase("refresh")) {
     d.listsDue = true;
     d.nextPoll = millis();
-    msg = "Netgear " + d.name + ": reading the switch";
+    msg = "Switch " + d.name + ": reading the switch";
     return true;
   }
-  msg = "expected: netgear <switch> refresh";
+  msg = "expected: switch <switch> refresh";
   return false;
 }
 
@@ -2259,6 +2307,7 @@ void pluginPacket(Drv& d, JsonDocument& j, VarSets& vars) {
     if (mediaEnds.size() < 8) mediaEnds.push_back({d.name, zone, file, state, (int)(j["i"] | 0)});
   } else if (kind == "gpio") {
     long bits = j["bits"] | 0L;
+    if (j["out"].is<int>()) { d.gpioRead = true; d.gpioIs = (uint8_t)(j["out"] | 0); }
     for (int i = 0; i < 8; i++) setPoint(d, "gpio" + String(i), (bits >> i) & 1 ? "1" : "0", "GPIO " + String(i), vars);
   } else if (kind == "log") {
     String src = j["src"] | "", text = j["text"] | "";
@@ -2379,7 +2428,7 @@ bool onUdp(const IPAddress& from, const String& text) {
 void load() {
   std::vector<Drv> nl;
   uint32_t now = millis();
-  uint16_t kp = 0;
+  uint16_t kp[kKissPorts] = {};
   for (JsonObjectConst o : Show::projectDoc()["drivers"].as<JsonArrayConst>()) {
     Drv d;
     int ty = typeOf(o["type"] | "");
@@ -2437,7 +2486,14 @@ void load() {
       if (v.length()) d.links.push_back({kv.key().c_str(), v});
     }
     d.session = random(1, 999999);
-    if (ty == Kiss && !kp) kp = o["listenPort"] | 9813;
+    if (ty == Kiss) {
+      // 9817 is the box's factory destination port (it is asked on 9813); "listenPort" is the older name.
+      d.dest = o["destPort"] | (o["listenPort"] | 9817);
+      int k = 0;
+      while (k < kKissPorts && kp[k] && kp[k] != d.dest) k++;
+      if (k < kKissPorts) kp[k] = d.dest;
+      else LOGW(Sys, "Kiss-Box %s: destination port %u not listened to (max %d different ports)", d.name.c_str(), d.dest, kKissPorts);
+    }
     String links = o["links"] | "";
     for (int at = 0; at < (int)links.length();) {
       int end = links.indexOf(',', at);
@@ -2462,7 +2518,7 @@ void load() {
         d.uptime = old.uptime; d.lastError = old.lastError; d.lastErrorAt = old.lastErrorAt;
         d.pushState = d.push ? old.pushState : 0; d.pushNote = old.pushNote; d.lastRead = old.lastRead;
         d.nonce = old.nonce; d.session = old.session; d.up = old.up; d.channel = old.channel; d.seq = old.seq; d.aliveAt = old.aliveAt;
-        d.pluginSeen = old.pluginSeen; d.states = old.states; d.activity = old.activity; d.cardLow = old.cardLow;
+        d.pluginSeen = old.pluginSeen; d.states = old.states; d.activity = old.activity; d.cardLow = old.cardLow; d.gpioRead = old.gpioRead; d.gpioIs = old.gpioIs;
         d.ports = old.ports; d.bridge = old.bridge; d.issues = old.issues; d.compared = old.compared;
         for (auto& p : old.points)
           if (ty != Knx) d.points.push_back(p);
@@ -2475,16 +2531,24 @@ void load() {
   bool broker = false;
   for (auto& d : nl) broker |= d.type == Netio && d.push;
   if (broker) Mqtt::setEnabled(true);   // stays on until reboot once started
+  // A device no longer in the project (or changed so it starts afresh): its history shows "not
+  // watched" from here on instead of its last state ("online" through a two-hour test show).
+  for (auto& old : list) {
+    if (!old.seen) continue;
+    bool kept = false;
+    for (auto& d : nl) kept |= old.type == d.type && old.name == d.name && old.ip == d.ip && old.port == d.port;
+    if (!kept) Monitor::record(kTypes[old.type], old.name, "gone");
+  }
   mtx.lock();
   list = std::move(nl);
   jobs.clear();
   ujobs.clear();
-  kissPort = kp;
+  memcpy(kissWant, kp, sizeof kp);
   mtx.unlock();
   LOGI(Sys, "%d device driver(s) loaded", (int)list.size());
 }
 
-bool isCommand(const String& word) { return typeOf(word) >= 0; }
+bool isCommand(const String& word) { return cmdType(word) >= 0; }
 
 // A device of type ty by number or name, -1 if none (caller holds mtx).
 static int findDrv(int ty, const String& ref) {
@@ -2506,7 +2570,7 @@ static bool textForm(const std::vector<String>& t) {
 }
 
 int split(const std::vector<String>& t, bool delayed, std::vector<std::vector<String>>& out, String& msg) {
-  int ty = typeOf(t[0]);
+  int ty = cmdType(t[0]);
   if (ty < 0 || t.size() < 3 || textForm(t)) return -1;
   bool listed = false;
   // The devices: one, a group of this type, or a list of either.
@@ -2597,8 +2661,8 @@ int split(const std::vector<String>& t, bool delayed, std::vector<std::vector<St
 }
 
 bool command(const std::vector<String>& t, String& msg) {
-  int ty = typeOf(t[0]);
-  if (t.size() < 3) { msg = String("expected: ") + kTypes[ty] + " <device> ..."; return false; }
+  int ty = cmdType(t[0]);
+  if (t.size() < 3) { msg = "expected: " + t[0] + " <device> ..."; return false; }
   // A group of this type: the same command for each of its devices (t[1] is only used to find the device).
   mtx.lock();
   bool single = findDrv(ty, t[1]) >= 0;
@@ -2681,6 +2745,10 @@ void statusJson(JsonArray arr) {
     if (!d.states.empty()) {
       JsonArray st = o["states"].to<JsonArray>();
       for (auto& s : d.states) { JsonObject x = st.add<JsonObject>(); x["z"] = s.zone; x["n"] = s.name; if (s.file.length()) x["f"] = s.file; if (s.ms) x["ms"] = s.ms; }
+    }
+    if (d.gpioRead) {   // the output pins as the player has them (the UI then shows no ticks)
+      JsonArray g = o["gpioOut"].to<JsonArray>();
+      for (int i = 0; i < 8; i++) if (d.gpioIs & (1 << i)) g.add(i);
     }
     if (!d.activity.empty()) {
       JsonArray ac = o["activity"].to<JsonArray>();

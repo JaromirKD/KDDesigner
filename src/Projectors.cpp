@@ -274,9 +274,18 @@ void load() {
   for (auto& p : nl)
     for (auto& old : list)
       if (old.id == p.id && old.ip == p.ip) { p.errst = old.errst; p.lampHours = old.lampHours; break; }
+  // A projector no longer in the project: its history shows "not watched" from here on, not
+  // its last state (a test show loaded for two hours drew it online all that time).
+  std::vector<String> gone;
+  for (auto& old : list) {
+    bool kept = false;
+    for (auto& p : nl) kept |= p.name == old.name;
+    if (!kept && old.everSeen) gone.push_back(old.name);
+  }
   list = std::move(nl);
   jobs.clear();
   mtx.unlock();
+  for (auto& n : gone) Monitor::record("projector", n, "gone");
   LOGI(Pjl, "%d projector(s) loaded", (int)list.size());
 }
 

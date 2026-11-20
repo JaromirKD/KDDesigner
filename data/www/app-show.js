@@ -22,9 +22,293 @@ function fxUniqueName(base, self) {
 }
 // Under a parameter's slider: its note (the comment after the param line), range and default.
 function fxParamNote(q) {
-  const range = q.type === 'color' ? `default ${q.def}` : `${q.min} … ${q.max}, default ${q.def}`;
-  return `<div class="fx-note">${q.note ? `${esc(q.note)} · ` : ''}<span class="muted">${range}</span></div>`;
+  const range = q.type === 'num' ? `${q.min} … ${q.max}, default ${q.def}` : q.type === 'image' ? '' : q.type === 'gradient' ? `default ${q.def.split(',').join(', ')}`
+    : `default ${q.type === 'text' ? `"${q.def}"` : q.def}`;
+  return `<div class="fx-note">${q.note ? `${esc(q.note)}${range ? ' · ' : ''}` : ''}<span class="muted">${esc(range)}</span></div>`;
 }
+
+// A timeline effect clip's options (c.mods, KDFX.place / invert): where the fixtures sit for
+// the effect, and dark <-> light. The controller works the places out once when loading.
+function fxModsHtml(m) {
+  const sel = (k, opts, title, num) => `<select data-fxmod="${k}"${num ? ' data-num' : ''} title="${esc(title)}">${opts.map(([v, l]) => `<option value="${v}"${String(m[k] || (num ? (k === 'repeat' ? 1 : 0) : '')) === String(v) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  const on = KDFX.hasMods(m);
+  return `<label>Clip options</label><div class="row fx-mods${on ? ' on' : ''}">
+    <span class="muted">Mirror</span>${sel('mirror', [['', 'off'], ['x', 'left | right'], ['y', 'top | bottom'], ['xy', 'both (4 quarters)']], 'The effect squeezed into one half and mirrored into the other half: a chase runs out from the middle (or in from both ends)')}
+    <span class="muted">Flip</span>${sel('flip', [['', 'off'], ['x', 'right to left'], ['y', 'bottom to top'], ['xy', 'both']], 'Runs the effect the other way: along the fixtures backwards and/or upside down on the map')}
+    <span class="muted">Repeat</span>${sel('repeat', [[1, '1x'], ...[2, 3, 4, 5, 6, 8].map((k) => [k, `${k}x`])], 'The effect side by side this many times, across the map and along the fixtures', true)}
+    <span class="muted">Kaleidoscope</span>${sel('kaleido', [[0, 'off'], ...[2, 3, 4, 5, 6, 8, 10, 12].map((k) => [k, `${k} parts`])], 'Cuts the map into slices around its middle, each a mirror image of the first: XY effects turn into patterns', true)}
+    <label class="muted" title="Dark becomes light and every colour its opposite (red <-> cyan)"><input type="checkbox" data-fxmod="invert"${m.invert ? ' checked' : ''}> Invert</label></div>`;
+}
+
+// ---- Colour lists, texts and pictures as effect parameters (Effects page and timeline clips) ----
+// Values: a colour list is "#rrggbb 0,#rrggbb 0.9,…" (colour and its place 0..1), a text plain
+// ASCII, a picture "img:<w>x<h>x<frames>:<base64 of r g b bytes>" (fx.js parseImage / parseStops;
+// the controller reads them the same way).
+const fxStops = (v, q) => (KDFX.parseStops(v) || q.stops || KDFX.parseStops('#000000,#ffffff')).map((x) => ({ ...x }));
+const fxStopsSorted = (list) => [...list].sort((a, b) => a.p - b.p);   // stable, as the controller sorts
+const fxStopsValue = (list) => fxStopsSorted(list).map((x) => `${x.c} ${+x.p.toFixed(3)}`).join(',');
+const fxGradCss = (list) => {
+  const l = fxStopsSorted(list);
+  return l.length > 1 ? `linear-gradient(90deg, ${l.map((x) => `${x.c} ${(x.p * 100).toFixed(1)}%`).join(', ')})` : l[0].c;
+};
+// Ready-made colour lists for the Presets menu (value format as above). The show's own are
+// p.colorLists [{ name, value }] (UI only, like colorThemes; the controller doesn't read them).
+const GRADIENT_PRESETS = [
+  { name: 'Fire', value: '#000000 0,#800000 0.3,#ff2000 0.55,#ff9000 0.75,#ffe040 0.9,#ffffff 1' },
+  { name: 'Lava', value: '#000000 0,#ff2d00 0.5,#ff2d00 0.85,#ffd000 1' },
+  { name: 'Red with a yellow tip', value: '#ff0000 0,#ff0000 0.9,#ffff00 1' },
+  { name: 'Sunset', value: '#1a0533 0,#6a1b9a 0.3,#ff2e63 0.6,#ff8c42 0.8,#ffd166 1' },
+  { name: 'Ocean', value: '#001a33 0,#0077b6 0.4,#00b4d8 0.7,#90e0ef 0.9,#ffffff 1' },
+  { name: 'Ice', value: '#0033aa 0,#33bbff 0.5,#e6f7ff 0.85,#ffffff 1' },
+  { name: 'Forest', value: '#0b3d20 0,#2e7d32 0.45,#9ccc65 0.8,#ffeb3b 1' },
+  { name: 'Aurora', value: '#00ff9c 0,#00c7be 0.4,#7d5cff 0.75,#ff2d92 1' },
+  { name: 'Warm white', value: '#ff8c2a 0,#ffd9a0 0.6,#ffffff 1' },
+  { name: 'Rainbow', value: '#ff0000 0,#ff8000 0.167,#ffff00 0.333,#00ff00 0.5,#00ffff 0.667,#0000ff 0.833,#8000ff 1' },
+  { name: 'Neon', value: '#ff00ff 0,#00ffff 0.333,#39ff14 0.667,#ffff00 1' },
+  { name: 'Police (hard edge)', value: '#ff0000 0,#ff0000 0.5,#0000ff 0.5,#0000ff 1' },
+  { name: 'Black to white', value: '#000000 0,#ffffff 1' },
+];
+// A colour theme as a colour list: up to MAX_STOPS of its colours (spread over the theme), evenly placed.
+function themeAsList(t) {
+  const c = t.colors, n = Math.min(c.length, KDFX.MAX_STOPS);
+  const pick = n < 2 ? [c[0] || '#000000', '#ffffff'] : Array.from({ length: n }, (_, k) => c[Math.round((k * (c.length - 1)) / (n - 1))]);
+  return pick.map((x, k) => `${x} ${+(k / (pick.length - 1)).toFixed(3)}`).join(',');
+}
+// The Presets menu of a colour list editor: ready-made lists, the show's own, every colour theme.
+function gradPresetOptions() {
+  const p = P(), own = p.colorLists || [];
+  return `<option value="">Presets…</option>
+    <optgroup label="Colour lists">${GRADIENT_PRESETS.map((g, k) => `<option value="g:${k}">${esc(g.name)}</option>`).join('')}</optgroup>
+    ${own.length ? `<optgroup label="This show's own">${own.map((g, k) => `<option value="o:${k}">${esc(g.name)}</option>`).join('')}</optgroup>` : ''}
+    <optgroup label="From a colour theme">${allThemes().map((t, k) => `<option value="t:${k}">${esc(t.name)}</option>`).join('')}</optgroup>
+    <optgroup label="Mine"><option value="save">Save this list as a preset…</option>${own.map((g, k) => `<option value="d:${k}">Delete '${esc(g.name)}'</option>`).join('')}</optgroup>`;
+}
+// The list's colour at place k (what grad() gives), as #rrggbb: for a new marker.
+function fxStopsAt(list, k) {
+  const l = fxStopsSorted(list), rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  let j = 0;
+  while (j < l.length - 2 && k >= l[j + 1].p) j++;
+  const a = l[j], b = l[Math.min(j + 1, l.length - 1)], span = b.p - a.p, q = k <= a.p ? 0 : k >= b.p ? 1 : span > 0 ? (k - a.p) / span : 1;
+  const ca = rgb(a.c), cb = rgb(b.c);
+  return '#' + ca.map((v, i) => Math.round(v + (cb[i] - v) * q).toString(16).padStart(2, '0')).join('');
+}
+// The controller's letters are ASCII only: accents are left off, other characters become '?'.
+function fxCleanText(v) {
+  const map = { ß: 'ss', æ: 'ae', Æ: 'AE', œ: 'oe', Œ: 'OE', ø: 'o', Ø: 'O', ł: 'l', Ł: 'L', '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...', '€': 'EUR' };
+  return String(v ?? '').replace(/[ßæÆœŒøØłŁ‘’“”–—…€]/g, (c) => map[c]).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7e]/g, '?').slice(0, KDFX.MAX_TEXT);
+}
+// The editor for a colour list, text or picture parameter; v = its current value.
+function fxParamInputHtml(q, v) {
+  const nm = esc(q.name);
+  if (q.type === 'gradient') {
+    // Like a gradient editor in Unity: the blend as a bar, a marker per colour under it at its place.
+    const list = fxStops(v, q), sel = Math.max(0, Math.min((S.fxGradSel || {})[q.name] ?? 0, list.length - 1)), cur = list[sel];
+    return `<div class="fx-grad" data-fxgrad="${nm}">
+      <div class="fx-grad-bar" style="background:${fxGradCss(list)}" title="Double-click to add a colour there"></div>
+      <div class="fx-grad-keys">${list.map((x, k) => `<span class="fx-key${k === sel ? ' sel' : ''}" data-key="${k}" data-c="${x.c}" data-p="${x.p}" style="left:${x.p * 100}%;--kc:${x.c}" title="Click to change it; drag it along to move it, down to take it out"></span>`).join('')}</div>
+      <div class="row fx-grad-stops">
+        <input type="color" data-keycol value="${cur.c}" title="Colour of the selected marker">
+        <span class="cw-pal fx-pal" title="Colours of the theme chosen in the colour wheels (Colours page): click one to give it to the selected marker">${cwTheme().colors.map((c) => `<button type="button" class="swatch" data-keyswatch="${c}" style="background:${c}" title="${c}"></button>`).join('')}</span>
+        <label class="muted" title="Where the selected colour is: 0 = left end, 100 = right end. Two colours at the same place make a hard edge.">at <input type="number" data-keypos min="0" max="100" step="1" value="${+(cur.p * 100).toFixed(1)}" style="width:64px"> %</label>
+        ${list.length > 1 ? '<button type="button" class="btn small ghost" data-keydel title="Take the selected colour out">✕</button>' : ''}
+        ${list.length < KDFX.MAX_STOPS ? '<button type="button" class="btn small" data-stopadd title="Add a colour halfway to the next one (or double-click the bar)">+</button>' : ''}
+        <button type="button" class="btn small ghost" data-stopeven title="Spread the colours evenly">Even</button>
+        <button type="button" class="btn small ghost" data-stoprev title="The colours the other way round">⇄</button>
+        <select data-stoppreset title="Ready-made colour lists, the show's own (saved with Save this list as a preset), or the colours of a colour theme">${gradPresetOptions()}</select></div></div>`;
+  }
+  if (q.type === 'text') return `<input type="text" class="fx-text" data-fxtext="${nm}" maxlength="${KDFX.MAX_TEXT}" value="${esc(v)}" spellcheck="false" title="Letters, digits and punctuation; accents are left off">`;
+  const im = KDFX.parseImage(v);
+  return `<div class="row fx-img" data-fximg="${nm}">${im ? `<canvas class="fx-img-thumb" width="${im.w}" height="${im.h}"></canvas><span class="muted">${im.w} × ${im.h} px${im.f > 1 ? `, ${im.f} frames` : ''}</span>` : '<span class="muted">no picture</span>'}
+    <label class="muted" title="How many pixels across the picture is kept (its height follows its shape). About as many as the LEDs across your grid looks best. All frames together hold at most ${KDFX.MAX_IMAGE} pixels: a long animation gets fewer frames.">width <input type="number" min="1" max="256" value="${S.fxImgW || 32}" data-imgw style="width:64px"> px</label>
+    <button type="button" class="btn small" data-imgpick>${im ? 'Other picture…' : 'Choose picture…'}</button>${im ? '<button type="button" class="btn small ghost" data-imgclear>Remove</button>' : ''}</div>`;
+}
+// A picture or animated GIF file -> a picture parameter's value: scaled to `wantW` pixels across
+// (at most KDFX.MAX_IMAGE pixels for all frames: a long animation keeps evenly spread frames).
+async function fxImageFromFile(file, wantW) {
+  let frames = [];
+  if (window.ImageDecoder && /gif|webp|png/.test(file.type)) {   // every frame of an animation
+    try {
+      const dec = new ImageDecoder({ data: await file.arrayBuffer(), type: file.type });
+      await dec.tracks.ready;
+      const count = Math.min(512, dec.tracks.selectedTrack?.frameCount || 1);
+      for (let k = 0; k < count; k++) frames.push((await dec.decode({ frameIndex: k })).image);
+    } catch { frames.forEach((f) => f.close?.()); frames = []; }
+  }
+  if (!frames.length) {
+    try { frames = [await createImageBitmap(file)]; } catch {
+      // SVG (and anything else createImageBitmap won't read): through an <img>
+      const url = URL.createObjectURL(file), img = new Image();
+      try {
+        await new Promise((ok, bad) => { img.onload = ok; img.onerror = () => bad(new Error('not a picture this browser can read')); img.src = url; });
+      } finally { URL.revokeObjectURL(url); }
+      frames = [Object.assign(img, { displayWidth: img.naturalWidth || 256, displayHeight: img.naturalHeight || 256 })];
+    }
+  }
+  const W0 = frames[0].displayWidth || frames[0].width, H0 = frames[0].displayHeight || frames[0].height;
+  let w = Math.max(1, Math.min(256, Math.round(wantW) || 32)), h = Math.max(1, Math.round((w * H0) / W0));
+  if (w * h > KDFX.MAX_IMAGE) { const k = Math.sqrt(KDFX.MAX_IMAGE / (w * h)); w = Math.max(1, Math.floor(w * k)); h = Math.max(1, Math.floor(h * k)); }
+  const maxF = Math.max(1, Math.floor(KDFX.MAX_IMAGE / (w * h)));
+  const use = frames.length > maxF ? Array.from({ length: maxF }, (_, k) => frames[Math.floor((k * frames.length) / maxF)]) : frames;
+  const cv = document.createElement('canvas');
+  cv.width = w;
+  cv.height = h;
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingQuality = 'high';
+  const px = new Uint8Array(w * h * 3 * use.length);
+  use.forEach((f, k) => {
+    g.fillStyle = '#000';   // see-through parts are black (= off)
+    g.fillRect(0, 0, w, h);
+    g.drawImage(f, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    for (let j = 0; j < w * h; j++) px.set([d[j * 4], d[j * 4 + 1], d[j * 4 + 2]], (k * w * h + j) * 3);
+  });
+  frames.forEach((f) => f.close?.());
+  let bin = '';
+  for (let k = 0; k < px.length; k += 8192) bin += String.fromCharCode(...px.subarray(k, k + 8192));
+  return { value: `img:${w}x${h}x${use.length}:${btoa(bin)}`, w, h, frames: use.length, dropped: frames.length - use.length };
+}
+// Wires the editors fxParamInputHtml made under root. get(name) = the current value;
+// set(name, value, done): done = a finished change (re-render), not while dragging or typing.
+function wireFxParamInputs(root, get, set) {
+  $$('[data-fxgrad]', root).forEach((el) => {
+    const name = el.dataset.fxgrad, bar = $('.fx-grad-bar', el), keysBox = $('.fx-grad-keys', el);
+    const keys = $$('[data-key]', el), list = keys.map((k) => ({ c: k.dataset.c, p: +k.dataset.p }));
+    const col = $('[data-keycol]', el), pos = $('[data-keypos]', el);
+    S.fxGradSel = S.fxGradSel || {};
+    let sel = list[Math.max(0, Math.min(S.fxGradSel[name] ?? 0, list.length - 1))];
+    const select = (x) => {
+      sel = x;
+      keys.forEach((k, i) => k.classList.toggle('sel', list[i] === x));
+      col.value = x.c;
+      pos.value = +(x.p * 100).toFixed(1);
+    };
+    // done: the editor is drawn again in place order, so remember where the selected colour lands.
+    const send = (done, l = list) => {
+      bar.style.background = fxGradCss(l);
+      if (done) S.fxGradSel[name] = Math.max(0, fxStopsSorted(l).indexOf(sel));
+      set(name, fxStopsValue(l), done);
+    };
+    keys.forEach((k, i) => k.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      const x = list[i];
+      select(x);
+      k.setPointerCapture(ev.pointerId);
+      let moved = false, gone = false;
+      const move = (e) => {
+        const r = keysBox.getBoundingClientRect();
+        x.p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+        gone = list.length > 1 && e.clientY - r.bottom > 30;   // dragged down off the bar: take it out
+        moved = true;
+        k.style.left = `${x.p * 100}%`;
+        k.classList.toggle('gone', gone);
+        pos.value = +(x.p * 100).toFixed(1);
+        send(false, gone ? list.filter((y) => y !== x) : list);
+      };
+      const up = () => {
+        k.removeEventListener('pointermove', move);
+        k.removeEventListener('pointerup', up);
+        k.removeEventListener('pointercancel', up);
+        if (gone) { list.splice(list.indexOf(x), 1); sel = list[0]; }
+        if (moved) send(true);
+        else S.fxGradSel[name] = i;
+      };
+      k.addEventListener('pointermove', move);
+      k.addEventListener('pointerup', up);
+      k.addEventListener('pointercancel', up);
+    }));
+    bar.addEventListener('dblclick', (ev) => {
+      if (list.length >= KDFX.MAX_STOPS) return toast(`A colour list has at most ${KDFX.MAX_STOPS} colours`);
+      const r = bar.getBoundingClientRect(), at = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+      sel = { c: fxStopsAt(list, at), p: at };
+      list.push(sel);
+      send(true);
+    });
+    col.addEventListener('input', () => {
+      sel.c = col.value;
+      keys[list.indexOf(sel)]?.style.setProperty('--kc', sel.c);
+      send(false);
+    });
+    col.addEventListener('change', () => send(true));
+    pos.addEventListener('change', () => { sel.p = Math.max(0, Math.min(1, (+pos.value || 0) / 100)); send(true); });
+    $('[data-keydel]', el)?.addEventListener('click', () => { list.splice(list.indexOf(sel), 1); sel = list[0]; send(true); });
+    $('[data-stopadd]', el)?.addEventListener('click', () => {
+      const l = fxStopsSorted(list), i = l.indexOf(sel), other = l[i + 1] || l[i - 1] || sel, at = (sel.p + other.p) / 2;
+      sel = { c: fxStopsAt(list, at), p: at };
+      list.push(sel);
+      send(true);
+    });
+    $('[data-stopeven]', el).addEventListener('click', () => {
+      fxStopsSorted(list).forEach((x, k, l) => (x.p = l.length > 1 ? k / (l.length - 1) : 0));
+      send(true);
+    });
+    $('[data-stoprev]', el).addEventListener('click', () => { list.forEach((x) => (x.p = 1 - x.p)); list.reverse(); send(true); });
+    $$('[data-keyswatch]', el).forEach((b) => b.addEventListener('click', () => { sel.c = b.dataset.keyswatch; send(true); }));
+    $('[data-stoppreset]', el).addEventListener('change', (ev) => {
+      const v = ev.target.value, p = P(), own = (p.colorLists = p.colorLists || []);
+      ev.target.value = '';
+      let value = null;
+      if (v.startsWith('g:')) value = GRADIENT_PRESETS[+v.slice(2)]?.value;
+      else if (v.startsWith('o:')) value = own[+v.slice(2)]?.value;
+      else if (v.startsWith('t:')) value = allThemes()[+v.slice(2)] && themeAsList(allThemes()[+v.slice(2)]);
+      else if (v === 'save') {
+        const name = (prompt('Name of the preset (saved with the show)', '') || '').trim();
+        if (!name) return;
+        const old = own.find((g) => g.name === name);
+        if (old && !confirm(`Replace the preset '${name}'?`)) return;
+        if (old) old.value = fxStopsValue(list);
+        else own.push({ name, value: fxStopsValue(list) });
+        markDirty();
+        toast(`Saved as preset '${name}'`);
+        return send(true);
+      } else if (v.startsWith('d:')) {
+        const g = own[+v.slice(2)];
+        if (g && confirm(`Delete the preset '${g.name}'? (Lists already in effects stay as they are.)`)) { own.splice(own.indexOf(g), 1); markDirty(); send(true); }
+        return;
+      }
+      const l = value && KDFX.parseStops(value);
+      if (!l) return;
+      list.splice(0, list.length, ...l);
+      sel = list[0];
+      send(true);
+    });
+  });
+  $$('[data-fxtext]', root).forEach((i) => {
+    i.addEventListener('input', () => set(i.dataset.fxtext, fxCleanText(i.value), false));
+    i.addEventListener('change', () => { i.value = fxCleanText(i.value); set(i.dataset.fxtext, i.value, false); });
+  });
+  $$('[data-fximg]', root).forEach((el) => {
+    const name = el.dataset.fximg, cv = $('canvas', el);
+    if (cv) {   // the first frame as a thumbnail
+      const im = KDFX.parseImage(get(name));
+      if (im) {
+        const d = new ImageData(im.w, im.h);
+        for (let j = 0; j < im.w * im.h; j++) d.data.set([im.px[j * 3], im.px[j * 3 + 1], im.px[j * 3 + 2], 255], j * 4);
+        cv.getContext('2d').putImageData(d, 0, 0);
+      }
+    }
+    $('[data-imgw]', el).addEventListener('change', (ev) => (S.fxImgW = Math.max(1, Math.min(256, +ev.target.value || 32))));
+    $('[data-imgclear]', el)?.addEventListener('click', () => set(name, '', true));
+    $('[data-imgpick]', el).addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'image/*';
+      inp.addEventListener('change', async () => {
+        const f = inp.files[0];
+        if (!f) return;
+        try {
+          const r = await fxImageFromFile(f, S.fxImgW || 32);
+          set(name, r.value, true);
+          toast(`Picture: ${r.w} × ${r.h} px${r.frames > 1 ? `, ${r.frames} frames` : ''}${r.dropped ? ` (${r.dropped} frames left out to stay under ${KDFX.MAX_IMAGE} pixels)` : ''}`);
+        } catch (e) {
+          toast(`Can't read that picture: ${e.message || e}`);
+        }
+      });
+      inp.click();
+    });
+  });
+}
+const fxGridSize = (src) => { const m = /^grid:(\d+)(?:x(\d+))?/.exec(src) || []; const W = +m[1] || 10; return [W, +m[2] || W]; };
 // Fixtures for a preview: those on a map (with positions), a strip of n RGB cells, or an n x n grid.
 // x / y = what the effect gets; on a map, sx / sy = where the dot is drawn (they differ with
 // the effect's "round on wide maps", KDModel.effectXY).
@@ -32,9 +316,9 @@ function fxPreviewFixtures(src, round) {
   if (Array.isArray(src)) return src;
   const p = P(), m = src?.startsWith('map:') ? mapView(p.maps[+src.slice(4)]) : null;
   if (m) return m.items.map((it) => ({ f: fixture(it.fixture), sx: it.x, sy: it.y, s: it.s, ...KDModel.effectXY(m, it.x, it.y, round) })).filter((o) => o.f);
-  if (src?.startsWith('grid:')) {
-    const g = +src.slice(5) || 10;
-    return Array.from({ length: g * g }, (_, k) => ({ f: { channels: ['r', 'g', 'b'] }, x: (k % g) / (g - 1), y: Math.floor(k / g) / (g - 1) }));
+  if (src?.startsWith('grid:')) {   // grid:10 = 10 x 10, grid:32x8 = an LED matrix 32 wide, 8 high (x / y at the LEDs' middles)
+    const [W, H] = fxGridSize(src), shape = { aspect: W / H };
+    return Array.from({ length: W * H }, (_, k) => ({ f: { channels: ['r', 'g', 'b'] }, ...KDModel.effectXY(shape, ((k % W) + 0.5) / W, (Math.floor(k / W) + 0.5) / H, round) }));
   }
   const n = +(src || '').replace('strip:', '') || 16;
   return Array.from({ length: n }, (_, k) => ({ f: { channels: ['r', 'g', 'b'] }, x: n > 1 ? k / (n - 1) : 0.5, y: 0.5 }));
@@ -44,11 +328,13 @@ function fxOutputs(f) {
   const ro = channelRoles(f);
   return { dim: !!ro.dim, r: !!ro.r, g: !!ro.g, b: !!ro.b, w: !!ro.w };
 }
-// Colour of one fixture in a preview frame (what toFixture would send, as CSS).
-function fxPreviewColor(prog, base, outs, i, n, x, y, t, level = 1) {
-  const s = Float64Array.from(base);
-  s[0] = t; s[1] = i; s[2] = n; s[3] = i / n; s[4] = x; s[5] = y;
+// Colour of one fixture in a preview frame (what toFixture would send, as CSS). fb = the
+// frame's slots (KDFX.frame / atTime: t, parameters, clocks); inv = the clip option "invert".
+function fxPreviewColor(prog, fb, outs, i, n, x, y, level = 1, inv = false) {
+  const s = Float64Array.from(fb);
+  s[1] = i; s[2] = n; s[3] = i / n; s[4] = x; s[5] = y;
   KDFX.run(prog, s);
+  if (inv) KDFX.invert(s);
   const o = KDFX.toFixture(s, outs, level);
   if (o.r == null) { const d = o.dim ?? 0; return { css: `rgba(255,214,150,${(0.1 + d * 0.9).toFixed(2)})`, level: d }; }
   const d = o.dim ?? 1, w = o.w || 0;
@@ -60,7 +346,7 @@ function fxPreviewHtml(src) {
   const p = P(), fx = fxPreviewFixtures(src), m = src?.startsWith('map:') ? mapView(p.maps[+src.slice(4)]) : null;
   if (m) return `<div class="map-wrap"><div class="fx-prev map-canvas${fx.length > 40 ? ' dense' : ''}" style="${mapSizeStyle('kd.mapH.effects', m.aspect, 'calc(50 * var(--vh))')}">${mapImgsHtml(m)}${fxOverlayOn() ? '<canvas class="fx-ovl"></canvas>' : ''}
     ${mapShapesHtml(m)}${fx.map((o, k) => `<div class="mfx" style="left:${o.sx * 100}%;top:${o.sy * 100}%${mapScale(o.s)}" title="${esc(o.f.name)}"><span class="dot" data-pv="${k}"></span></div>`).join('')}${mapResizeHtml('kd.mapH.effects')}</div></div>`;
-  if (src?.startsWith('grid:')) return `<div class="fx-prev grid" style="grid-template-columns:repeat(${Math.round(Math.sqrt(fx.length))},1fr)">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
+  if (src?.startsWith('grid:')) return `<div class="fx-prev grid" style="grid-template-columns:repeat(${fxGridSize(src)[0]},1fr)">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
   return `<div class="fx-prev strip">${fx.map((_, k) => `<span data-pv="${k}"></span>`).join('')}</div>`;
 }
 // Effect overlay on the map preview: on/off is a per-browser preference.
@@ -73,11 +359,11 @@ function setFxOverlay(on) {
 // The overlay runs the effect at every spot of a coarse grid over the map (x, y of that spot),
 // as an RGB fixture at full level, so the pattern shows between and under the fixtures too.
 // i / n / u are those of the nearest fixture, so list-order effects show each fixture's area.
-function fxOverlayPainter(cv, prog, base, fx, m, round) {
+function fxOverlayPainter(cv, prog, fx, m, round, mods) {
   const W = 64, H = Math.max(8, Math.min(96, Math.round((W * cv.clientHeight) / Math.max(1, cv.clientWidth))));
   cv.width = W;
   cv.height = H;
-  const g = cv.getContext('2d'), img = g.createImageData(W, H), s = new Float64Array(base.length), n = Math.max(1, fx.length);
+  const g = cv.getContext('2d'), img = g.createImageData(W, H), s = new Float64Array(prog.slots), n = Math.max(1, fx.length);
   const rgb = { r: true, g: true, b: true }, near = new Int32Array(W * H);
   // Each spot's effect x / y (the effect's "round on wide maps" applies here too).
   const ex = new Float64Array(W * H), ey = new Float64Array(W * H);
@@ -87,11 +373,19 @@ function fxOverlayPainter(cv, prog, base, fx, m, round) {
     fx.forEach((o, j) => { const d = (o.x - x) ** 2 + (o.y - y) ** 2; if (d < bd) { bd = d; best = j; } });
     near[k] = best;
   }
-  return (t) => {
+  // Clip options: each spot moved as its nearest fixture would be (KDFX.place).
+  const pi = new Float64Array(W * H), pn = new Float64Array(W * H);
+  for (let k = 0; k < W * H; k++) {
+    const q = KDFX.place(mods, near[k], n, ex[k], ey[k]);
+    pi[k] = q.i; pn[k] = q.n; ex[k] = q.x; ey[k] = q.y;
+  }
+  const inv = !!mods?.invert;
+  return (fb) => {   // fb = the frame's slots (KDFX.frame)
     for (let k = 0; k < W * H; k++) {
-      s.set(base);
-      s[0] = t; s[1] = near[k]; s[2] = n; s[3] = near[k] / n; s[4] = ex[k]; s[5] = ey[k];
+      s.set(fb);
+      s[1] = pi[k]; s[2] = pn[k]; s[3] = pi[k] / pn[k]; s[4] = ex[k]; s[5] = ey[k];
       KDFX.run(prog, s);
+      if (inv) KDFX.invert(s);
       const o = KDFX.toFixture(s, rgb);
       img.data[k * 4] = o.r * 255; img.data[k * 4 + 1] = o.g * 255; img.data[k * 4 + 2] = o.b * 255; img.data[k * 4 + 3] = 255;
     }
@@ -100,21 +394,43 @@ function fxOverlayPainter(cv, prog, base, fx, m, round) {
 }
 // Animate a preview container; values: param overrides; level 0..1.
 // ovlMap: the map under an overlay when src is a fixture list (the timeline cue preview).
-function runFxPreview(box, prog, src, values = {}, level = 1, round = false, ovlMap = null) {
+// mods: a timeline clip's options (mirror, repeat…), applied as the controller does.
+// clip: { key, auto, len } of a timeline clip: its automation, and its length in ms (the
+// preview plays the clip over and over). Called again for the same preview (key, or the box
+// for the Effects page) with new values, it carries on as the controller does after a live
+// edit (KDFX.carry: the values glide, a speed change goes on from where it is) instead of
+// starting again from 0 s.
+const fxPrevRuns = new Map();   // box id -> { key, R, t0, lap }
+function runFxPreview(box, prog, src, values = {}, level = 1, round = false, ovlMap = null, mods = null, clip = null) {
   if (!box || !prog || prog.error) return;
-  const fx = fxPreviewFixtures(src, round), base = KDFX.slotsFor(prog, values), t0 = performance.now();
+  const fx = fxPreviewFixtures(src, round), now = performance.now();
+  const len = clip?.len > 0 ? clip.len / 1000 : 0, key = `${box.id}|${clip?.key ?? ''}`;
+  const R = KDFX.runner(prog, values, clip?.auto, 0), old = fxPrevRuns.get(box.id);
+  let t0 = now;
+  if (old && old.key === key) {
+    t0 = old.t0;
+    const el = (now - t0) / 1000, t = len ? el % len : el;
+    KDFX.carry(old.R, t, R, t);
+  }
+  const run = { key, R, t0, lap: -1 };
+  fxPrevRuns.set(box.id, run);
+  const pl = fx.map((o, k) => KDFX.place(mods, k, fx.length, o.x, o.y)), inv = !!mods?.invert;
   // Cells by their data-pv number (= the fixture's i): a preview may leave fixtures out.
   const cells = [];
   box.querySelectorAll('[data-pv]').forEach((el) => (cells[+el.dataset.pv] = el));
   const outs = fx.map((o) => fxOutputs(o.f));   // once, not every frame
   const glow = fx.length <= 40;   // the glow is costly to draw for hundreds of dots every frame
-  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, base, fx, typeof src === 'string' && src.startsWith('map:') ? P().maps[+src.slice(4)] : ovlMap, round);
+  const ovl = box.querySelector('canvas.fx-ovl'), paintOvl = ovl && fxOverlayPainter(ovl, prog, fx, typeof src === 'string' && src.startsWith('map:') ? P().maps[+src.slice(4)] : ovlMap, round, mods);
   pageAnimation('fxPreview', () => {
-    const t = (performance.now() - t0) / 1000;
-    if (paintOvl) paintOvl(t);
+    const el = (performance.now() - run.t0) / 1000, lap = len ? Math.floor(el / len) : 0, t = len ? el - lap * len : el;
+    // The clip starts again: from its start, nothing left over from an edit.
+    if (lap !== run.lap) { if (run.lap >= 0) { R.gT0 = -1; R.gOff = []; R.cOff.fill(0); R.cG.fill(0); } run.lap = lap; }
+    run.at = t;
+    const fb = KDFX.frame(R, t);
+    if (paintOvl) paintOvl(fb);
     fx.forEach((o, k) => {
       if (!cells[k]) return;
-      const c = fxPreviewColor(prog, base, outs[k], k, fx.length, o.x, o.y, t, level);
+      const c = fxPreviewColor(prog, fb, outs[k], pl[k].i, pl[k].n, pl[k].x, pl[k].y, level, inv);
       cells[k].style.background = c.css;
       if (glow) cells[k].style.boxShadow = c.level > 0.05 ? `0 0 ${3 + c.level * 10}px ${c.css}` : 'none';
     });
@@ -148,7 +464,7 @@ views.effects = () => {
         <div class="fx-err" id="fxErr"></div>
       </div>
       <div class="row" style="margin-top:8px"><b>Preview</b>
-        <select id="fxSrc"><option value="strip:16"${src === 'strip:16' ? ' selected' : ''}>Strip of 16</option><option value="strip:8"${src === 'strip:8' ? ' selected' : ''}>Strip of 8</option><option value="grid:10"${src === 'grid:10' ? ' selected' : ''}>Grid 10 × 10 (for XY)</option>
+        <select id="fxSrc"><option value="strip:16"${src === 'strip:16' ? ' selected' : ''}>Strip of 16</option><option value="strip:8"${src === 'strip:8' ? ' selected' : ''}>Strip of 8</option><option value="grid:10"${src === 'grid:10' ? ' selected' : ''}>Grid 10 × 10 (for XY)</option><option value="grid:32x8"${src === 'grid:32x8' ? ' selected' : ''}>LED matrix 32 × 8 (for text)</option><option value="grid:24"${src === 'grid:24' ? ' selected' : ''}>LED matrix 24 × 24 (for pictures)</option>
           ${p.maps.map((m, i) => `<option value="map:${i}"${src === `map:${i}` ? ' selected' : ''}>Map: ${esc(m.name)}</option>`).join('')}</select>
         <label class="muted" title="Saved with the effect, used wherever it plays. On: x and y have the same scale both ways, so a circle or ripple is round on a wide map, not stretched (the long side of the map runs 0…1). Off: x and y each run 0…1 across the map."><input type="checkbox" data-p="effects.${S.sel.effect}.round" data-t="bool"${e.round ? ' checked' : ''} data-r> Round on wide maps</label>
         ${src.startsWith('map:') ? `<label class="muted" title="Runs the effect over the whole map, not only where the fixtures are, so you can see the pattern between them"><input type="checkbox" id="fxOvl"${fxOverlayOn() ? ' checked' : ''}> show effect on the whole map</label>` : ''}
@@ -159,7 +475,10 @@ views.effects = () => {
       <details class="fx-ref" ${S.fxRef ? 'open' : ''}><summary>Language reference</summary>
         <p><b>Each line</b>: <code>name = expression</code>, or <code>r, g, b = hsv(...)</code> / <code>r, g, b = colorParam</code>. <code>//</code> starts a comment.
           Operators <code>+ - * / %</code>, compare <code>&lt; &gt; &lt;= &gt;= == !=</code>, <code>&amp;&amp; || !</code>, and <code>cond ? a : b</code>.</p>
-        <p><b>Parameters</b>: <code>param speed = 0.5 [0, 4]</code> (slider), <code>param color = #ff8800</code> (colour: <code>color.r</code>, <code>.g</code>, <code>.b</code>). Each timeline cue can set its own values.</p>
+        <p><b>Parameters</b>: <code>param speed = 0.5 [0, 4]</code> (slider), <code>param color = #ff8800</code> (colour: <code>color.r</code>, <code>.g</code>, <code>.b</code>),
+          <code>param pal = #ff0000, #ffff00 0.9, #0000ff</code> (colour list of 1 to 8, each with an optional place 0…1: <code>r, g, b = grad(pal, k)</code>, k 0…1),
+          <code>param msg = "HELLO"</code> (text: <code>txt(msg, px, py)</code> is 1 on a letter pixel, letters 5 × 7 pixels, 6 apart; <code>msg.w</code> = its width),
+          <code>param pic = image</code> (picture or animated GIF, chosen per timeline clip: <code>r, g, b = img(pic, x, y, frame)</code>; <code>pic.w</code>, <code>pic.h</code>, <code>pic.frames</code>). Each timeline cue can set its own values.</p>
         <p><b>Inputs</b>: <code>t</code> seconds since the cue · <code>i</code> fixture number in the track (0…) · <code>n</code> how many · <code>u</code> = i / n ·
           <code>x</code>, <code>y</code> position on the map (0…1) · <code>pi</code>, <code>tau</code></p>
         <p><b>Outputs</b>: <code>r g b</code> 0…1 · <code>dim</code> 0…1 (default 1) · <code>w</code> (default: the white part of r, g, b). Fixtures without a dimmer get r, g, b × dim; dimmer-only fixtures get dim × the brightest of r, g, b.</p>
@@ -196,11 +515,12 @@ views.effects.after = () => {
     // Cue values for parameters the new code doesn't have (or of another type) are dropped.
     const params = KDFX.compile(tpl.code).params;
     for (const tl of p.timelines) for (const c of tl.cues) {
-      if (c.effect !== e.id || !c.params) continue;
-      for (const k of Object.keys(c.params)) {
+      if (c.effect !== e.id) continue;
+      for (const k of Object.keys(c.params || {})) {
         const q = params.find((x) => x.name === k);
-        if (!q || (q.type === 'color') !== (typeof c.params[k] === 'string')) delete c.params[k];
+        if (!q || (q.type === 'num') !== (typeof c.params[k] === 'number')) delete c.params[k];
       }
+      if (c.auto) { for (const k of Object.keys(c.auto)) if (!params.some((x) => x.name === k && x.type === 'num')) delete c.auto[k]; setAuto(c, c.auto); }
     }
     S.fxValues = null;
     markDirty();
@@ -223,11 +543,17 @@ views.effects.after = () => {
       sig = s2;
       $('#fxParams').innerHTML = prog.params.length ? `<b>Parameters</b> <span class="muted">(try values here, not saved; set defaults in the code, or per cue on the timeline. A comment after a param line is its note)</span>` + prog.params.map((q) => (q.type === 'color'
         ? `<div class="row nowrap"><span class="fx-pn">${esc(q.name)}</span><input type="color" data-fxp="${esc(q.name)}" value="${esc(S.fxValues.v[q.name] || q.def)}"><span class="cw-pal fx-pal" title="Colours of the theme chosen in the colour wheels (Colours page)">${cwTheme().colors.map((c) => `<button type="button" class="swatch" data-fxpal="${c}" style="background:${c}" title="${c}"></button>`).join('')}</span></div>`
+        : q.type !== 'num' ? `<div class="row nowrap fx-prow"><span class="fx-pn">${esc(q.name)}</span><div style="flex:1;min-width:0">${fxParamInputHtml(q, S.fxValues.v[q.name] ?? q.def)}</div></div>`
         : `<div class="row nowrap"><span class="fx-pn">${esc(q.name)}</span><input type="range" data-fxp="${esc(q.name)}" min="${q.min}" max="${q.max}" step="${(q.max - q.min) / 200}" value="${S.fxValues.v[q.name] ?? q.def}" style="flex:1"><span class="mono fx-pv">${(+(S.fxValues.v[q.name] ?? q.def)).toFixed(2)}</span></div>`) + fxParamNote(q)).join('') : '';
+      wireFxParamInputs($('#fxParams'), (name) => S.fxValues.v[name] ?? '', (name, v, done) => {
+        S.fxValues.v[name] = v;
+        if (done) { sig = ''; refresh(); }   // rebuilds the parameter editors
+        else runFxPreview($('#fxPrev'), fxProg(e), S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round, null, null, { key: 'fx' + e.id });
+      });
       $$('[data-fxp]').forEach((i) => i.addEventListener('input', () => {
         S.fxValues.v[i.dataset.fxp] = i.type === 'color' ? i.value : +i.value;
         if (i.nextElementSibling?.classList.contains('fx-pv')) i.nextElementSibling.textContent = (+i.value).toFixed(2);
-        runFxPreview($('#fxPrev'), fxProg(e), S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round);
+        runFxPreview($('#fxPrev'), fxProg(e), S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round, null, null, { key: 'fx' + e.id });
       }));
       $$('[data-fxpal]').forEach((b) => b.addEventListener('click', () => {
         const i = b.closest('.row').querySelector('[data-fxp]');
@@ -235,7 +561,7 @@ views.effects.after = () => {
         i.dispatchEvent(new Event('input'));
       }));
     }
-    runFxPreview($('#fxPrev'), prog, S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round);
+    runFxPreview($('#fxPrev'), prog, S.fxSrc || (p.maps.length ? 'map:0' : 'strip:16'), S.fxValues.v, 1, !!e.round, null, null, { key: 'fx' + e.id });
   };
   ta.addEventListener('input', () => { e.code = ta.value; markDirty(); refresh(); });
   ta.addEventListener('scroll', () => (gutter.scrollTop = ta.scrollTop));
@@ -819,15 +1145,16 @@ function paintClip(t, c, el, end) {
     if (!prog || prog.error || !fx.length) return;
     const rows = Math.min(fx.length, THUMB_ROWS, Math.floor(H / 2));
     const pick = Array.from({ length: rows }, (_, r) => Math.floor((r * fx.length) / rows));
-    const outs = pick.map((k) => fxOutputs(fx[k].f)), base = KDFX.slotsFor(prog, c.params || {}), level = (c.dim ?? 100) / 100;
+    const outs = pick.map((k) => fxOutputs(fx[k].f)), R = KDFX.runner(prog, c.params || {}, c.auto, 0), level = (c.dim ?? 100) / 100;
+    const pl = pick.map((k) => KDFX.place(c.mods, k, fx.length, fx[k].x, fx[k].y)), inv = !!c.mods?.invert;
     const msPerPx = Math.max(1, end - c.t) / W, step = 2;   // one sample per 2 screen pixels
     cv.width = W;
     cv.height = H;
     for (let x = 0; x < W; x += step) {
-      const ts = ((x + step / 2) * msPerPx) / 1000;
+      const ts = ((x + step / 2) * msPerPx) / 1000, fb = KDFX.frame(R, ts);
       pick.forEach((k, r) => {
         const y0 = Math.round((r * H) / rows), y1 = Math.round(((r + 1) * H) / rows);
-        g.fillStyle = fxPreviewColor(prog, base, outs[r], k, fx.length, fx[k].x, fx[k].y, ts, level).css;
+        g.fillStyle = fxPreviewColor(prog, fb, outs[r], pl[r].i, pl[r].n, pl[r].x, pl[r].y, level, inv).css;
         g.fillRect(x, y0, step, y1 - y0);
       });
     }
@@ -850,6 +1177,92 @@ function paintClip(t, c, el, end) {
   }
   keepThumb(key, cv);
 }
+// ---- Automation, like Ableton's: an effect clip's number parameter follows a line over the
+// clip (cue "auto": { name: [[ms from the clip's start, value, curve -1..1], ...] }, points in
+// time order; KDFX.runner / Fx::frameInputs play it). Drawn and edited in a lane under the
+// track (S.tlAuto: "timeline id:track" -> the parameter shown there; not saved).
+function autoParams(c) {
+  const e = c.effect != null && P().effects.find((x) => x.id === c.effect), prog = e && fxProg(e);
+  return prog && !prog.error ? prog.params.filter((q) => q.type === 'num') : [];
+}
+const autoKey = (t, r) => `${t.id}:${r}`;
+// The number parameters of the effect clips on a track, in order of first use.
+function trackAutoNames(t, r) {
+  const names = [];
+  for (const c of [...t.cues].sort((a, b) => a.t - b.t))
+    if (isLight(c) && (c.track || 0) === r) for (const q of autoParams(c)) if (!names.includes(q.name)) names.push(q.name);
+  return names;
+}
+function setAuto(c, auto) { if (auto && Object.keys(auto).length) c.auto = auto; else delete c.auto; }
+// The value of a line at ms (= KDFX.laneValue).
+function autoValueAt(pts, ms) {
+  const L = KDFX.laneFor(0, pts, 0);
+  return L ? KDFX.laneValue(L, ms / 1000) : null;
+}
+// Lines for a clip that now starts d ms later (d < 0: earlier): what was at d is now at 0.
+function autoShifted(auto, d) {
+  if (!auto) return undefined;
+  const out = {};
+  for (const [k, pts] of Object.entries(auto)) {
+    if (!Array.isArray(pts) || !pts.length) continue;
+    const keep = pts.filter((p) => p[0] > d).map((p) => [p[0] - d, p[1], p[2] || 0]);
+    if (d > 0 && pts.some((p) => p[0] <= d)) {
+      const before = pts.filter((p) => p[0] <= d).pop();
+      keep.unshift([0, +autoValueAt(pts, d).toFixed(4), before[2] || 0]);
+    }
+    if (keep.length) out[k] = keep;
+  }
+  return out;
+}
+// Lines for a clip cut off at d ms: the points after it go, one at d keeps the value there.
+function autoCut(auto, d) {
+  if (!auto) return undefined;
+  const out = {};
+  for (const [k, pts] of Object.entries(auto)) {
+    if (!Array.isArray(pts) || !pts.length) continue;
+    const keep = pts.filter((p) => p[0] < d).map((p) => [...p]);
+    if (pts.some((p) => p[0] >= d)) keep.push([d, +autoValueAt(pts, d).toFixed(4), 0]);
+    out[k] = keep;
+  }
+  return out;
+}
+// Inside of one clip's part of an automation lane: the line and its points (0..1 high = the
+// parameter's min..max), or a dashed line at its fixed value when it has no points.
+function autoClipInner(c, q, span) {
+  const pts = c.auto?.[q.name] || [], rng = q.max - q.min || 1;
+  const y = (v) => (100 * (1 - Math.max(0, Math.min(1, (v - q.min) / rng)))).toFixed(2);
+  const fixed = c.params?.[q.name] ?? q.def;
+  let line;
+  if (!pts.length) line = `<polyline class="flat" points="0,${y(fixed)} ${span},${y(fixed)}"/>`;
+  else {
+    const xy = [`0,${y(pts[0][1])}`];
+    pts.forEach((a, j) => {
+      xy.push(`${a[0]},${y(a[1])}`);
+      const b = pts[j + 1];
+      if (!b) return;
+      const e = KDFX.curveExp(+a[2] || 0);
+      if (e !== 1) for (let k = 1; k < 16; k++) { const x = k / 16; xy.push(`${a[0] + (b[0] - a[0]) * x},${y(a[1] + (b[1] - a[1]) * x ** e)}`); }
+    });
+    xy.push(`${Math.max(span, pts[pts.length - 1][0])},${y(pts[pts.length - 1][1])}`);
+    line = `<polyline points="${xy.join(' ')}"/>`;
+  }
+  return `<svg viewBox="0 0 ${Math.max(1, span)} 100" preserveAspectRatio="none">${line}</svg>
+    ${pts.map((p, j) => `<i class="apt" data-apt="${j}" style="left:${(p[0] / Math.max(1, span)) * 100}%;top:${y(p[1])}%" title="${esc(q.name)} ${+p[1].toFixed(3)} at ${(p[0] / 1000).toFixed(2)} s · drag to move · double-click or right-click to delete"></i>`).join('')}
+    <span class="aname">${esc(q.name)} ${pts.length ? '' : `${+(+fixed).toFixed(2)} (click to add a point)`}</span>`;
+}
+// The automation lane under track r: each effect clip with that parameter.
+function autoLaneHtml(t, r, name, len, sel, extra) {
+  const names = trackAutoNames(t, r), pct = (ms) => (ms / len) * 100;
+  const clips = t.cues.map((c, i) => [c, i]).filter(([c]) => isLight(c) && (c.track || 0) === r && c.effect != null).map(([c, i]) => {
+    const q = autoParams(c).find((x) => x.name === name), end = cueEnd(t, c, len);
+    if (!q) return '';
+    return `<div class="aclip${sel.has(c) ? ' sel' : ''}${c.auto?.[name]?.length ? ' on' : ''}" data-acue="${i}" style="left:${pct(c.t)}%;width:${pct(end - c.t)}%">${autoClipInner(c, q, end - c.t)}</div>`;
+  }).join('');
+  return `<div class="tl-row tl-arow"><div class="tl-h tl-ah" title="Automation of '${esc(t.tracks[r].name)}': click in a clip to add a point, drag points, Alt+drag a line to bend it, double-click or right-click a point to delete it">
+      <span class="muted">⤷</span><select data-autoname="${r}">${names.map((n) => `<option${n === name ? ' selected' : ''}>${esc(n)}</option>`).join('')}${names.includes(name) ? '' : `<option selected>${esc(name)}</option>`}</select>
+      <button class="btn small ghost" data-autoclose="${r}" title="Hide this automation lane (the lines stay)">✕</button></div>
+    <div class="tl-lane tl-alane" data-alane="${r}">${extra}${clips}<div class="head"></div></div></div>`;
+}
 // The track lanes: a ruler, a lane for trigger cues, then one lane per track with a clip per cue.
 function tlGridHtml(t) {
   syncXfades(t);   // a typed time or length may have changed an overlap
@@ -865,7 +1278,7 @@ function tlGridHtml(t) {
     return `<div class="tcue${tr ? '' : ' bad'}${sel.has(c) ? ' sel' : ''}" data-cue="${i}" style="left:${pct(c.t)}%${col ? `;--tc:${col}` : ''}" title="${(c.t / 1000).toFixed(2)} s: ${esc(cueLabel(c, t))}"><span>◆ ${esc(tr ? tr.name : String(c.trigger))}</span></div>`;
   }).join('');
   const lanes = t.tracks.map((tr, r) => {
-    const fx = trackFxIds(tr);
+    const fx = trackFxIds(tr), autoName = S.tlAuto?.[autoKey(t, r)];
     // In start order, so a clip that crossfades in is drawn over the one it fades from.
     const blocks = t.cues.map((c, i) => [c, i]).filter(([c]) => isLight(c) && (c.track || 0) === r).sort((a, b) => a[0].t - b[0].t).map(([c, i]) => {
       const end = cueEnd(t, c, len), xa = xfadePrev(t, c);
@@ -878,8 +1291,10 @@ function tlGridHtml(t) {
     return `<div class="tl-row"><div class="tl-h${S.trackEdit === r ? ' on' : ''}${S.tlCursorLane === r ? ' cur' : ''}" data-trackhead="${r}">
         <input data-p="timelines.${S.sel.timeline}.tracks.${r}.name" value="${esc(tr.name)}" title="Track name">
         <button class="btn small${fx.length ? '' : ' ghost'}" data-trackedit="${r}" title="Choose the fixtures of this track">${fx.length ? `${fx.length} fixture${fx.length > 1 ? 's' : ''}` : 'whole rig'}</button>
+        <button class="btn small ghost${autoName ? ' on' : ''}" data-trackauto="${r}" title="Automation: draw how an effect parameter (like speed) changes over the clips, in a lane under the track">⤴</button>
         ${t.tracks.length > 1 ? `<button class="btn small ghost" data-trackdel="${r}" title="Delete track">✕</button>` : ''}</div>
-      <div class="tl-lane${S.tlCursorLane === r ? ' curlane' : ''}" data-lane="${r}">${after}${cur}${blocks}<div class="head"></div></div></div>`;
+      <div class="tl-lane${S.tlCursorLane === r ? ' curlane' : ''}" data-lane="${r}">${after}${cur}${blocks}<div class="head"></div></div></div>
+      ${autoName ? autoLaneHtml(t, r, autoName, len, sel, after + cur) : ''}`;
   }).join('');
   return `<div class="row tl-tools">
       <label class="muted">Snap</label><div class="seg">${TL_SNAPS.map(([v, n]) => `<button class="${String(S.tlSnap ?? 'auto') === v ? 'on' : ''}" data-tlsnap="${v}" title="${v === 'auto' ? 'Snap to the grid lines (they follow the zoom)' : ''}">${n}</button>`).join('')}</div>
@@ -910,7 +1325,7 @@ function resolveOverlaps(t, moved) {
         else if (oe > e) { o.len = oe - e; o.t = e; }
         else drop.add(o);
       } else if (o.t < s && oe != null && oe > s) {
-        if (oe > e) { add.push({ ...structuredClone(o), t: e, len: oe - e, fade: 0 }); o.len = s - o.t; o.out = 0; }
+        if (oe > e) { const rest = { ...structuredClone(o), t: e, len: oe - e, fade: 0 }; setAuto(rest, autoShifted(o.auto, e - o.t)); add.push(rest); o.len = s - o.t; o.out = 0; }
         else o.out = 0;   // m's start over o's end: crossfade
       }
     }
@@ -1038,12 +1453,18 @@ function cueEditorHtml(t) {
           <a href="#" data-goto-effect="${c.effect}" class="muted">edit →</a></div>
         <label>Level</label><div class="row nowrap"><input type="range" min="0" max="100" data-p="${base}.dim" data-t="num" value="${c.dim ?? 100}" oninput="this.nextElementSibling.value=this.value" style="flex:1"><input type="number" min="0" max="100" data-p="${base}.dim" data-t="num" value="${c.dim ?? 100}" style="width:64px" data-r><span class="muted">%</span></div>
         ${prog?.error ? `<label></label><span class="bad">The effect has an error (line ${prog.error.line}: ${esc(prog.error.msg)})</span>` : ''}
+        ${fxModsHtml(c.mods || {})}
         ${prog && !prog.error ? prog.params.map((q) => {
           const set = pv[q.name] != null, v = set ? pv[q.name] : q.def;
           const reset = set ? `<button class="btn small ghost" data-fxreset="${esc(q.name)}" title="Back to the effect's default">default</button>` : '<span class="muted fx-def">default</span>';
           return q.type === 'color'
             ? `<label>${esc(q.name)}</label><div>${fxParamNote(q)}${reset}${colorWheelHtml('fxp:' + q.name, v)}</div>`
-            : `<label>${esc(q.name)}</label><div><div class="row nowrap"><input type="range" min="${q.min}" max="${q.max}" step="${(q.max - q.min) / 200}" data-fxparam="${esc(q.name)}" value="${v}" style="flex:1"><span class="mono fx-pv">${(+v).toFixed(2)}</span>${reset}</div>${fxParamNote(q)}</div>`;
+            : q.type !== 'num' ? `<label>${esc(q.name)}</label><div><div class="row nowrap fx-prow"><div style="flex:1;min-width:0">${fxParamInputHtml(q, v)}</div>${reset}</div>${fxParamNote(q)}</div>`
+            : c.auto?.[q.name]?.length
+              ? `<label>${esc(q.name)}</label><div><div class="row nowrap"><span class="tag auto-tag" title="This value follows its line in the automation lane under the track">⤴ automated · ${c.auto[q.name].length} point${c.auto[q.name].length > 1 ? 's' : ''}</span>
+                  <button class="btn small" data-autoshow="${esc(q.name)}">Show line</button><button class="btn small ghost" data-autoclear="${esc(q.name)}" title="Remove the automation: the value is fixed again">Remove</button></div>${fxParamNote(q)}</div>`
+              : `<label>${esc(q.name)}</label><div><div class="row nowrap"><input type="range" min="${q.min}" max="${q.max}" step="${(q.max - q.min) / 200}" data-fxparam="${esc(q.name)}" value="${v}" style="flex:1"><span class="mono fx-pv">${(+v).toFixed(2)}</span>${reset}
+                  <button class="btn small ghost" data-autoshow="${esc(q.name)}" title="Automate: draw how ${esc(q.name)} changes over the clip, in a lane under the track (like Ableton)">⤴</button></div>${fxParamNote(q)}</div>`;
         }).join('') : ''}
 `;
       prevHtml = `<div class="cue-prev" id="cueFxPrev">${fx.length ? cuePreviewHtml(tr, cuePrevKey(t, c.track)) : `<b>Preview</b><p>${noFx}</p>`}</div>`;
@@ -1150,7 +1571,7 @@ views.timelines.after = () => {
     const add = e.shiftKey || e.ctrlKey || e.metaKey, wasSel = sel.has(c);
     if (!wasSel) { if (!add) sel.clear(); sel.add(c); markSel(); }
     const group = mode === 'move' ? [...sel] : [c];
-    const orig = new Map(group.map((x) => [x, { t: x.t, track: x.track || 0, len: x.len, fade: x.fade || 0, out: x.out || 0 }]));
+    const orig = new Map(group.map((x) => [x, { t: x.t, track: x.track || 0, len: x.len, fade: x.fade || 0, out: x.out || 0, auto: x.auto }]));
     const o = orig.get(c), end0 = cueEnd(t, c, len), ms0 = msAt(e.clientX);
     const xa = mode === 'fade' ? xfadePrev(t, c) : null, xaEl = xa && grid.querySelector(`[data-cue="${t.cues.indexOf(xa)}"]`);
     const others = new Set(group);
@@ -1198,6 +1619,7 @@ views.timelines.after = () => {
         const end = o.len ? o.t + o.len : end0;
         c.t = Math.max(prevT, Math.min(end - 100, snap(at, ev)));
         if (o.len) c.len = end - c.t;
+        setAuto(c, autoShifted(o.auto, c.t - o.t));   // the lines stay where they were in the timeline
       } else if (mode === 'fade') {
         const span = cueEnd(t, c, len) - c.t;
         c.fade = Math.max(0, Math.min(span - (c.out || 0), Math.round((at - c.t) / (ev.altKey ? 10 : 100)) * (ev.altKey ? 10 : 100)));
@@ -1300,6 +1722,103 @@ views.timelines.after = () => {
     lane.addEventListener('pointermove', move);
     lane.addEventListener('pointerup', up, { once: true });
   }));
+  // Automation lanes (autoLaneHtml): open / close / which parameter, and editing the points.
+  $$('[data-trackauto]', grid).forEach((b) => b.addEventListener('click', () => {
+    const r = +b.dataset.trackauto, k = autoKey(t, r), names = trackAutoNames(t, r);
+    S.tlAuto ||= {};
+    if (S.tlAuto[k]) delete S.tlAuto[k];
+    else if (!names.length) return toast('Automation is for effect clips with number parameters (like speed): this track has none yet', true);
+    else S.tlAuto[k] = names[0];
+    render();
+  }));
+  $$('[data-autoname]', grid).forEach((el) => el.addEventListener('change', () => { S.tlAuto[autoKey(t, +el.dataset.autoname)] = el.value; render(); }));
+  $$('[data-autoclose]', grid).forEach((b) => b.addEventListener('click', () => { delete S.tlAuto[autoKey(t, +b.dataset.autoclose)]; render(); }));
+  // In a clip: click adds a point (and drags it), a point drags (time snaps like clips, Alt =
+  // no snap; the value follows the mouse up and down), Alt+drag on the line bends the segment,
+  // double-click or right-click a point deletes it, right-click on the line makes it straight.
+  const autoOf = (el) => {
+    const c = t.cues[+el.dataset.acue], name = S.tlAuto?.[autoKey(t, c.track || 0)], q = autoParams(c).find((x) => x.name === name);
+    return q ? { c, q, span: cueEnd(t, c, len) - c.t } : null;
+  };
+  const autoDone = (c) => { if (c.auto) for (const k of Object.keys(c.auto)) if (!c.auto[k].length) delete c.auto[k]; setAuto(c, c.auto); markDirty(); tlSelect(t, [c], c); render(); };
+  $$('[data-acue]', grid).forEach((el) => {
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      const a = autoOf(el);
+      if (!a) return;
+      e.stopPropagation();
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const { c, q, span } = a, rng = q.max - q.min || 1;
+      c.auto ||= {};
+      const pts = (c.auto[q.name] ||= []);
+      const b0 = el.getBoundingClientRect();
+      const valAt = (y) => { const k = 1 - (y - b0.top) / b0.height; return +Math.max(q.min, Math.min(q.max, q.min + k * rng)).toFixed(4); };
+      const relAt = (x, ev) => Math.max(0, Math.min(span, snap(msAt(x), ev) - c.t));
+      const hit = e.target.closest('[data-apt]');
+      let j = hit ? +hit.dataset.apt : -1, mode = 'point', moved = false;
+      const rel0 = msAt(e.clientX) - c.t;
+      if (!hit && e.altKey && pts.length >= 2) {
+        mode = 'bend';   // the segment under the mouse
+        j = Math.max(0, Math.min(pts.length - 2, pts.filter((p) => p[0] <= rel0).length - 1));
+      } else if (!hit) {
+        const p = [relAt(e.clientX, e), valAt(e.clientY), 0];
+        j = pts.filter((x) => x[0] <= p[0]).length;
+        pts.splice(j, 0, p);
+        moved = true;   // a new point counts as an edit even without dragging
+        el.innerHTML = autoClipInner(c, q, span);
+      }
+      const c0 = pts[j]?.[2] || 0, y0 = e.clientY;
+      // Double-click on a point (counted here: the pointer is captured).
+      const now = Date.now(), last = S.lastAptClick;
+      S.lastAptClick = { c, j, at: now };
+      if (hit && last && last.c === c && last.j === j && now - last.at < 450) {
+        S.lastAptClick = null;
+        pts.splice(j, 1);
+        return autoDone(c);
+      }
+      const move = (ev) => {
+        if (mode === 'point' && !moved && Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) < 3) return;
+        moved = true;
+        if (mode === 'bend') {
+          // Up bends the line up (it rises early), down bends it down.
+          const up = pts[j + 1][1] >= pts[j][1] ? 1 : -1;
+          pts[j][2] = +Math.max(-1, Math.min(1, c0 + ((y0 - ev.clientY) / 80) * up)).toFixed(3);
+          info(`${q.name}: curve ${pts[j][2]}`);
+        } else {
+          const lo = j > 0 ? pts[j - 1][0] : 0, hi = j < pts.length - 1 ? pts[j + 1][0] : span;
+          pts[j][0] = Math.max(lo, Math.min(hi, relAt(ev.clientX, ev)));
+          pts[j][1] = valAt(ev.clientY);
+          info(`${q.name} ${pts[j][1]} at ${((c.t + pts[j][0]) / 1000).toFixed(2)} s`);
+        }
+        el.innerHTML = autoClipInner(c, q, span);
+        const blk = grid.querySelector(`.blk[data-cue="${t.cues.indexOf(c)}"]`);
+        if (blk) paintClip(t, c, blk, cueEnd(t, c, len));
+      };
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', () => {
+        el.removeEventListener('pointermove', move);
+        if (moved) return autoDone(c);
+        if (!pts.length) delete c.auto[q.name];
+        tlSelect(t, [c], c);
+        selectUi();
+      }, { once: true });
+    });
+    el.addEventListener('contextmenu', (e) => {
+      const a = autoOf(el), pts = a?.c.auto?.[a.q.name];
+      e.preventDefault();
+      e.stopPropagation();
+      if (!pts?.length) return;
+      const hit = e.target.closest('[data-apt]');
+      if (hit) pts.splice(+hit.dataset.apt, 1);
+      else {
+        const rel = msAt(e.clientX) - a.c.t, j = pts.filter((p) => p[0] <= rel).length - 1;
+        if (j < 0 || j >= pts.length - 1 || !pts[j][2]) return;
+        pts[j][2] = 0;
+      }
+      autoDone(a.c);
+    });
+  });
   // Ruler: click/drag puts the cursor there; the end marker sets the timeline length.
   ruler.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -1479,7 +1998,7 @@ views.timelines.after = () => {
   $$('[data-cuekind]', box).forEach((b) => b.addEventListener('click', () => {
     const k = b.dataset.cuekind;
     if (k === 'effect' && !p.effects.length) return toast('Make an effect first (Effects page)', true);
-    for (const f of ['trigger', 'dim', 'color', 'scene', 'effect', 'params']) delete c[f];
+    for (const f of ['trigger', 'dim', 'color', 'scene', 'effect', 'params', 'auto']) delete c[f];
     if (k === 'trigger') { const real = p.triggers.filter((x) => x.type !== 'comment'); c.trigger = (real.find((x) => x.type === 'manual') || real[0])?.name || '1'; delete c.track; delete c.fade; delete c.path; }
     else {
       c.track ??= 0;
@@ -1526,13 +2045,47 @@ views.timelines.after = () => {
     if (c.effect != null) startCuePreview();
   }));
   $$('[data-fxreset]', box).forEach((b) => b.addEventListener('click', () => { delete c.params[b.dataset.fxreset]; markDirty(); render(); }));
+  // Automation: show the parameter's lane under the track, or remove its line.
+  $$('[data-autoshow]', box).forEach((b) => b.addEventListener('click', () => {
+    (S.tlAuto ||= {})[autoKey(t, c.track || 0)] = b.dataset.autoshow;
+    render();
+    if (!c.auto?.[b.dataset.autoshow]?.length) toast(`Click in the clip in the lane under the track to add points for ${b.dataset.autoshow}`);
+  }));
+  $$('[data-autoclear]', box).forEach((b) => b.addEventListener('click', () => {
+    if (c.auto) delete c.auto[b.dataset.autoclear];
+    setAuto(c, c.auto);
+    markDirty();
+    render();
+  }));
+  // Colour lists, texts and pictures of the effect.
+  wireFxParamInputs(box, (name) => c.params?.[name] ?? '', (name, v, done) => {
+    c.params = c.params || {};
+    c.params[name] = v;
+    markDirty();
+    const blk = grid.querySelector(`.blk[data-cue="${S.sel.cue}"]`);
+    if (blk) paintClip(t, c, blk, cueEnd(t, c, len));
+    if (done) render();
+    else startCuePreview();
+  });
+  // Clip options (mirror, flip, repeat, kaleidoscope, invert): c.mods, left out when all off.
+  $$('[data-fxmod]', box).forEach((el) => el.addEventListener('change', () => {
+    const m = { ...(c.mods || {}) }, k = el.dataset.fxmod;
+    const v = el.type === 'checkbox' ? el.checked : el.dataset.num != null ? +el.value : el.value;
+    if (!v || (k === 'repeat' && v < 2) || (k === 'kaleido' && v < 2)) delete m[k];
+    else m[k] = v;
+    if (Object.keys(m).length) c.mods = m;
+    else delete c.mods;
+    markDirty();
+    render();
+  }));
   // Live preview of an effect cue on the track's fixtures.
   function startCuePreview() {
     if (!c || c.effect == null) return;
     const e = p.effects.find((x) => x.id === c.effect), tr = t.tracks[c.track || 0];
     if (!e || !tr) return;
     const m = cuePreviewMap(trackFxIds(tr), cuePrevKey(t, c.track));
-    runFxPreview($('#cueFxPrev'), fxProg(e), trackPreviewFixtures(tr, e), c.params || {}, (c.dim ?? 100) / 100, KDModel.effectRound(p, e), m);
+    runFxPreview($('#cueFxPrev'), fxProg(e), trackPreviewFixtures(tr, e), c.params || {}, (c.dim ?? 100) / 100, KDModel.effectRound(p, e), m, c.mods,
+      { key: `${t.id}:${c.track || 0}:${c.effect}`, auto: c.auto, len: c.len || 0 });
   }
   $$('[data-cueprevmap]', box).forEach((el) => el.addEventListener('change', () => {
     (S.cuePrevMap ||= {})[cuePrevKey(t, c.track)] = el.value === 'strip' ? 'strip' : +el.value;
@@ -1786,6 +2339,9 @@ function splitAtCursor(t, e) {
   const halves = hit.map((x) => {
     const end = x.len ? x.t + x.len : null;
     const b = { ...structuredClone(x), t: at, fade: 0 };
+    // Automation: each half keeps its part of the lines.
+    setAuto(b, autoShifted(x.auto, at - x.t));
+    setAuto(x, autoCut(x.auto, at - x.t));
     if (end != null) { b.len = end - at; x.len = at - x.t; x.out = 0; x.fade = Math.min(x.fade || 0, x.len); b.out = Math.min(b.out || 0, b.len); }
     return b;
   });
@@ -1870,7 +2426,7 @@ function insertTrack(t, at, track, cues = []) {
 // Empty space on a track (or the trigger lane): add a clip there, paste, play, cursor, split.
 function tlLaneMenu(lane, e) {
   const p = P(), t = p.timelines[S.sel.timeline], at = tlMsAtX(e.clientX, e);
-  if (!t || at == null) return null;
+  if (!t || at == null || lane.dataset.lane == null) return null;   // an automation lane: its own clicks
   const trig = lane.dataset.lane === 'trig', r = trig ? null : +lane.dataset.lane;
   const sec = `${(at / 1000).toFixed(2)} s`;
   const here = () => { S.tlCursor = at; S.tlCursorLane = trig ? 'trig' : r; };

@@ -1848,7 +1848,7 @@
       "name": "io",
       "ip": "192.168.1.121",
       "port": 9813,
-      "listenPort": 9813,
+      "destPort": 9817,
       "frame": "IO3",
       "cards": [
         "DI8DC",

@@ -101,6 +101,7 @@ private:
   RingBufferN<SOCKET_BUFFER_SIZE> rxBuffer;
   bool _status = false;
   bool _own_socket = false;
+  bool _tls = false;   // KD Designer: TLS decrypts in the reader thread, which then needs the full stack
   mbed::Callback<int(void)> beforeConnect;
   SocketAddress address;
   rtos::Thread* reader_th = nullptr;

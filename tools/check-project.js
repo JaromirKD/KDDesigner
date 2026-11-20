@@ -49,8 +49,8 @@ function tryEffect(label, code) {
     if (prog.error) throw new Error(`line ${prog.error.line}: ${prog.error.msg}`);
     // A few times, on fixture 2 of 4 at the middle of the map.
     for (const t of [0, 0.37, 2.5, 61]) {
-      const s = FX.slotsFor(prog);
-      Object.assign(s, { [IN.t]: t, [IN.i]: 1, [IN.n]: 4, [IN.u]: 0.25, [IN.x]: 0.5, [IN.y]: 0.5 });
+      const s = FX.atTime(prog, FX.slotsFor(prog), t);
+      Object.assign(s, { [IN.i]: 1, [IN.n]: 4, [IN.u]: 0.25, [IN.x]: 0.5, [IN.y]: 0.5 });
       FX.run(prog, s);
       if (s.some((x) => Number.isNaN(x))) throw new Error(`NaN at t=${t}`);
     }

@@ -90,7 +90,13 @@ static const int KD_DMX_DE[KD_DMX_PORTS] = {-1, -1};           // -1 = not used
 
 // ---- Web -------------------------------------------------------------------
 #define KD_HTTP_PORT 80
-#define KD_MAX_SSE 4              // simultaneous live-log browser tabs
+// Live-update streams (/api/events): one per open editor tab and per touch panel. Each open
+// connection costs ~4.5 KB of heap (Arduino's reader thread) and one of lwIP's 20 TCP slots.
+#define KD_MAX_SSE 8
+// Connections accepted but whose request hasn't fully arrived yet (browsers open spare ones
+// and send nothing on them for a while), and how long one may take to send its request.
+#define KD_HTTP_WAITING 10
+#define KD_HTTP_HEAD_MS 10000
 
 // ---- Network fallback (DHCP on but no answer) ------------------------------------
 // The office / bench network (172.16.1.x), so a PC there still reaches the controller when

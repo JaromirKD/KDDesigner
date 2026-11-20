@@ -207,17 +207,59 @@ bool parseTimeline(JsonObjectConst o, const TlCtx& x, Timeline& t, BigRam::Vec<F
       const Fx::Program& prog = x.nfp[fc.prog];
       fc.slots.resize(prog.slots);
       Fx::init(prog, fc.slots.data());
+      fc.data = prog.data;
       JsonObjectConst pv = c["params"];
       for (const auto& q : prog.params) {
         JsonVariantConst v = pv[q.name];
         if (v.isNull()) continue;
-        String s = v.as<String>();
-        Fx::setParam(q, s.c_str(), fc.slots.data());
+        if (q.type == Fx::PNum || q.type == Fx::PColor) {
+          String s = v.as<String>();
+          Fx::setParam(q, s.c_str(), fc.slots.data(), fc.data);
+        } else if (v.is<const char*>()) {   // a picture can be ~64 KB of text: read in place, no copy
+          Fx::setParam(q, v.as<const char*>(), fc.slots.data(), fc.data);
+        }
+      }
+      // Automation: "auto": {"speed": [[ms, value, curve], ...]} - a number parameter follows a
+      // line over the clip (Fx::frameInputs). A looping timeline's lines start again each round.
+      fc.wrap = t.loop && t.length ? t.length / 1000.0 : 0;
+      JsonObjectConst au = c["auto"];
+      for (const auto& q : prog.params) {
+        JsonArrayConst pts = au[q.name];
+        if (q.type != Fx::PNum || pts.isNull() || !pts.size()) continue;
+        std::vector<double> tvc;
+        tvc.reserve(pts.size() * 3);
+        for (JsonArrayConst pt : pts) {
+          tvc.push_back(pt[0].is<double>() ? pt[0].as<double>() : NAN);
+          tvc.push_back(pt[1].is<double>() ? pt[1].as<double>() : NAN);
+          tvc.push_back(pt[2] | 0.0);
+        }
+        Fx::Lane l;
+        if (Fx::makeLane(q.slot, tvc.data(), tvc.size() / 3, fc.wrap, l)) fc.lanes.push_back(std::move(l));
       }
       fc.level = (c["dim"].isNull() ? 100 : clampInt(c["dim"] | 100, 0, 100)) / 100.0;
+      // Clip options ("mods", = place() in fx.js): where each fixture sits for the effect, once here.
+      JsonObjectConst mo = c["mods"];
+      auto axes = [](const char* v) -> uint8_t { return !v ? 0 : !strcmp(v, "x") ? 1 : !strcmp(v, "y") ? 2 : !strcmp(v, "xy") ? 3 : 0; };
+      Fx::Mods mods;
+      mods.flip = axes(mo["flip"].as<const char*>());
+      mods.mirror = axes(mo["mirror"].as<const char*>());
+      mods.repeat = clampInt(mo["repeat"] | 1, 1, 8);
+      mods.kaleido = clampInt(mo["kaleido"] | 0, 0, 12);
+      fc.invert = mo["invert"] | false;
       const bool round = x.fxRound[fc.prog];
       float pos[2];
-      for (size_t k = 0; k < fx.size(); k++) fc.targets.push_back(effectTarget(nf[fx[k]], k, fx.size(), x.posOf(fx[k], round, pos)));
+      fc.n = fx.size();
+      for (size_t k = 0; k < fx.size(); k++) {
+        FxTarget tg = effectTarget(nf[fx[k]], k, fx.size(), x.posOf(fx[k], round, pos));
+        int i = k, n = fx.size();
+        double ex = tg.x, ey = tg.y;
+        Fx::place(mods, i, n, ex, ey);
+        tg.i = i;
+        tg.x = ex;
+        tg.y = ey;
+        fc.n = n;   // the same for every fixture
+        fc.targets.push_back(tg);
+      }
       cue.fx = nfc.size();
       nfc.push_back(fc);
       pushCue(cue);
@@ -519,6 +561,8 @@ bool liveTimeline(const char* json, size_t len, String& err) {
   if (!parseTimeline(o, ctx, t, nfc, ncs, err)) return false;
   int idx = -1;
   for (size_t i = 0; i < timelines.size(); i++) if (timelines[i].id == t.id) idx = i;
+  std::vector<FxKeep> kept;   // what its effects show now, before their places are reused
+  if (idx >= 0) keepEffects(idx, kept);
   // Free the old timeline's places, then hand them out again.
   std::vector<int> freeFx, freeSc;
   if (idx >= 0)
@@ -543,6 +587,7 @@ bool liveTimeline(const char* json, size_t len, String& err) {
   if (idx < 0) { idx = timelines.size(); timelines.push_back(std::move(t)); }
   else timelines[idx] = std::move(t);
   timelineReplaced(idx);
+  carryEffects(idx, kept);
   LOGI(Show, "Timeline %d '%s' changed live (not saved)", timelines[idx].id, timelines[idx].name.c_str());
   return true;
 }

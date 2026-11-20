@@ -4,6 +4,10 @@
 #define SOCKET_TIMEOUT 1500
 #endif
 
+#ifndef KD_SOCKET_READER_STACK
+#define KD_SOCKET_READER_STACK 1536
+#endif
+
 arduino::MbedClient::MbedClient()
   : _status(false),
     _timeout(SOCKET_TIMEOUT) {
@@ -81,7 +85,11 @@ void arduino::MbedClient::configureSocket(Socket *_s) {
   }
   mutex->lock();
   if (reader_th == nullptr) {
-    reader_th = new rtos::Thread(osPriorityNormal, OS_STACK_SIZE, nullptr, "readSocket");
+    // KD Designer: every open connection has one of these threads, with its stack on the heap.
+    // A plain TCP reader used ~640 of Arduino's 4096 bytes (measured with /api/threads under
+    // load; interrupts use the main stack), so 1.5 KB leaves room and saves ~2.5 KB per
+    // connection - many panels and browsers at once ran the heap low. TLS keeps the full size.
+    reader_th = new rtos::Thread(osPriorityNormal, _tls ? OS_STACK_SIZE : KD_SOCKET_READER_STACK, nullptr, "readSocket");
     reader_th->start(mbed::callback(this, &MbedClient::readSocket));
   }
   mutex->unlock();
@@ -150,6 +158,7 @@ int arduino::MbedClient::connectSSL(SocketAddress socketAddress) {
     sock = new TLSSocket();
     _own_socket = true;
   }
+  _tls = true;
   if (sock == nullptr) {
     return 0;
   }

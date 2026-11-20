@@ -52,8 +52,10 @@ void poll() {
     usbfs.unmount();
     isMounted = false;
     LOGW(Usb, "Storage device removed");
+    spaceChanged();
   } else if (!isMounted) {
     tryMount();
+    if (isMounted) spaceChanged();
   }
 }
 
@@ -201,9 +203,24 @@ bool writeProjectNow(const char* data, size_t len, String& err) {
   return true;
 }
 
+// Room on the stick in KB (0 = not known). Written by the save thread only.
+volatile uint32_t stickTotalKb = 0, stickFreeKb = 0;
+
+void measureSpace() {
+  struct statvfs sv;
+  uint32_t t0 = millis();
+  if (!isMounted || usbfs.statvfs("/", &sv) != 0) { stickTotalKb = stickFreeKb = 0; return; }
+  uint64_t unit = sv.f_frsize ? sv.f_frsize : sv.f_bsize;
+  stickTotalKb = (uint32_t)((uint64_t)sv.f_blocks * unit / 1024);
+  stickFreeKb = (uint32_t)((uint64_t)sv.f_bfree * unit / 1024);
+  // Normally instant (the stick keeps its free count); seconds = it had to be counted.
+  if (millis() - t0 > 500) LOGI(Usb, "Counted the free space on the stick (%lu ms)", (unsigned long)(millis() - t0));
+}
+
 void saverRun() {
+  measureSpace();
   for (;;) {
-    wake.wait_any(1);
+    wake.wait_any(1 | 2);   // 1 = a project to write, 2 = the space changed
     for (;;) {
       smtx.lock();
       if (!waiting.data) { smtx.unlock(); break; }
@@ -227,9 +244,19 @@ void saverRun() {
       if (ok) LOGI(Usb, "Project written to the stick (%u bytes, %lu ms)", (unsigned)len, (unsigned long)ms);
       else LOGE(Usb, "Project NOT written to the stick: %s - it runs, but is lost at the next restart. Save again", err.c_str());
     }
+    measureSpace();
   }
 }
 }  // namespace
+
+void spaceChanged() { wake.set(2); }
+
+void spaceJson(JsonObject o) {
+  uint32_t total = stickTotalKb;
+  if (!isMounted || !total) return;
+  o["total"] = total;
+  o["free"] = stickFreeKb;
+}
 
 void beginWriter() {
   // D2 SRAM if it has room (the playback buffers and the log ring come first), else 8 KB pieces.

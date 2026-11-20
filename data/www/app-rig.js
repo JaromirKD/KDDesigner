@@ -2,37 +2,105 @@
 // KD Designer web UI - Dashboard, Patch, Fixtures, Map and the colour wheel.
 // Plain scripts sharing one global scope; load order is in index.html.
 
-views.dashboard = () => `
-  <h2>Dashboard</h2>
-  <div class="grid">
-    <div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">Running</h3><div id="pbs"></div><div id="sched"></div></div>
-    <div class="card"><h3 style="margin-top:0">System</h3><div id="sys"></div></div>
-    <div class="card"><h3 style="margin-top:0">Outputs</h3><div id="outs" class="row"></div>
-      <p class="muted" style="margin:8px 0 0">Switches the output at once and changes the project setting (same switch as under Patch): save to keep it after a restart.</p></div>
-    ${dashHasDevices() ? `<div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">Devices</h3><div id="dashDev" class="lv-devs"></div>
-      <p class="muted" style="margin:8px 0 0">Every device the controller watches, offline first. Click one for Monitoring.</p></div>` : ''}
-    ${P().projectors.length ? `<div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">Projectors</h3><div id="pjs"></div></div>` : ''}
-    ${P().pcs.length ? `<div class="card" style="grid-column:span 2;min-width:0"><h3 style="margin-top:0">PCs</h3><div id="pcs"></div></div>` : ''}
-  </div>
-  <h3>Timelines</h3>
-  <div class="row">${P().timelines.map((t) => `<button class="btn" data-cmd="start timeline ${t.id}">▶ ${esc(t.name)}</button>`).join('') || '<span class="muted">No timelines yet</span>'}</div>
-  <h3>Scenes</h3>
-  <div class="row">${P().scenes.map((s) => `<button class="btn" data-cmd="scene ${s.id} fade 1">${esc(s.name)}</button>`).join('') || '<span class="muted">No scenes yet</span>'}
-    <button class="btn danger" data-cmd="release all fade 2">Release all</button></div>
-  <h3>Recent warnings &amp; errors</h3>
-  <div class="log" id="recent" style="height:auto;max-height:240px;min-height:0"></div>`;
-views.dashboard.after = () => { renderPlaybacks(); renderRecent(); };
+// Dashboard sections: [key, title, width (1 or 2 columns as a card, 0 = full width without a
+// card), has(p) = the show has something for it, html(p)]. What is hidden and the order is
+// settings.dashboard {hide: [keys], order: [keys]} (UI-only, saved with the show); a section
+// the show has nothing for is left out anyway. The contents are filled in by renderPlaybacks.
+const DASH_SECTIONS = [
+  ['running', 'Running', 2, () => true, () => '<div id="pbs"></div><div id="sched"></div>'],
+  ['system', 'System', 1, () => true, () => '<div id="sys"></div>'],
+  ['outputs', 'Outputs', 1, () => true, () => `<div id="outs" class="row"></div>
+    <p class="muted" style="margin:8px 0 0">Switches the output at once and changes the project setting (same switch as under Patch): save to keep it after a restart.</p>`],
+  ['modes', 'Modes', 2, (p) => p.modes.length, () => `<div id="modes" class="mode-groups">${modesNowHtml()}</div>`],
+  ['devices', 'Device status', 2, dashHasDevices, () => `<div id="dashDev" class="lv-devs"></div>
+    <p class="muted" style="margin:8px 0 0">Every device the controller watches, offline first. Click one for Monitoring.</p>`],
+  ['projectors', 'Projectors', 2, (p) => p.projectors.length, () => '<div id="pjs"></div>'],
+  ['pcs', 'PCs', 2, (p) => p.pcs.length, () => '<div id="pcs"></div>'],
+  ['showdev', 'Show devices', 0, (p) => p.drivers.length, () => '<div id="dashDrv" class="grid mon-grid"></div>'],
+  ['netdev', 'Network devices, TCP and Modbus', 0, (p) => p.devices.length + p.tcp.length + p.modbus.length, () => '<div id="dashNet" class="grid mon-grid"></div>'],
+  ['variables', 'Variables', 1, (p) => p.variables.some((v) => v.live), () => '<div id="lvVars"></div>'],
+  ['timelines', 'Timelines', 0, () => true, (p) => `<div class="row">${p.timelines.map((t) => `<button class="btn" data-cmd="start timeline ${t.id}">▶ ${esc(t.name)}</button>`).join('') || '<span class="muted">No timelines yet</span>'}</div>`],
+  ['scenes', 'Scenes', 0, () => true, (p) => `<div class="row">${p.scenes.map((x) => `<button class="btn" data-cmd="scene ${x.id} fade 1">${esc(x.name)}</button>`).join('') || '<span class="muted">No scenes yet</span>'}
+    <button class="btn danger" data-cmd="release all fade 2">Release all</button></div>`],
+  ['warnings', 'Recent warnings &amp; errors', 0, () => true, () => '<div class="log" id="recent" style="height:auto;max-height:240px;min-height:0"></div>'],
+];
+const DASH_EMPTY = { modes: 'no mode groups', devices: 'no devices', projectors: 'no projectors', pcs: 'no PCs', showdev: 'no show devices',
+  netdev: 'none in this show', variables: 'tick "Live" on the Variables page' };
+function dashCfg() {
+  const d = P().settings.dashboard || {};
+  return { hide: d.hide || [], order: d.order || [] };
+}
+// The sections in the user's order; ones the order doesn't know (a newer version's) come after them.
+function dashOrder() {
+  const { order } = dashCfg();
+  const known = order.map((k) => DASH_SECTIONS.find((x) => x[0] === k)).filter(Boolean);
+  return [...known, ...DASH_SECTIONS.filter((x) => !known.includes(x))];
+}
+function dashSet(hide, order) {
+  const usual = order.every((k, i) => DASH_SECTIONS[i]?.[0] === k);
+  if (!hide.length && usual) delete P().settings.dashboard;
+  else P().settings.dashboard = { hide, order: usual ? [] : order };
+  markDirty();
+  render();
+}
+views.dashboard = () => {
+  const p = P(), { hide } = dashCfg(), all = dashOrder();
+  const shown = all.filter((x) => !hide.includes(x[0]) && x[3](p));
+  const edit = !S.dashEdit ? '' : `<div class="card" style="margin-bottom:14px;max-width:560px"><h3 style="margin-top:0">What to show on the Dashboard</h3>
+    ${all.map((x, i) => `<div class="row nowrap" style="padding:2px 0">
+      <label class="row nowrap" style="flex:1;gap:8px;cursor:pointer"><input type="checkbox" data-dash-show="${x[0]}"${hide.includes(x[0]) ? '' : ' checked'}><span>${x[1]}</span>
+        ${x[3](p) ? '' : `<span class="muted">· ${DASH_EMPTY[x[0]] || 'nothing to show'}</span>`}</label>
+      <button class="btn small ghost" data-dash-move="${x[0]}:-1" title="Move up"${i ? '' : ' disabled'}>▲</button>
+      <button class="btn small ghost" data-dash-move="${x[0]}:1" title="Move down"${i < all.length - 1 ? '' : ' disabled'}>▼</button></div>`).join('')}
+    <p class="muted" style="margin:8px 0 0">Kept in the show: press Save, and every browser that opens this controller sees the same Dashboard. A part the show has nothing for is left out by itself.</p>
+    <div class="row" style="margin-top:8px"><button class="btn small" data-dash-reset>Show everything, usual order</button><span class="spacer" style="flex:1"></span><button class="btn small primary" data-dash-edit>Done</button></div></div>`;
+  return `<div id="dash"><div class="row"><h2 style="flex:1">Dashboard</h2><button class="btn small${S.dashEdit ? ' primary' : ''}" data-dash-edit title="Choose what the Dashboard shows, and in which order">⚙ Customize</button></div>
+  ${edit}<div class="grid">${shown.map((x) => (x[2]
+    ? `<div class="card" style="${x[2] > 1 ? 'grid-column:span 2;' : ''}min-width:0"><h3 style="margin-top:0">${x[1]}</h3>${x[4](p)}</div>`
+    : `<div style="grid-column:1 / -1;min-width:0"><h3 style="margin:4px 0 8px">${x[1]}</h3>${x[4](p)}</div>`)).join('')
+    || '<span class="muted">Everything is hidden: press Customize to choose what to show.</span>'}</div></div>`;
+};
+views.dashboard.after = () => {
+  renderPlaybacks();
+  renderRecent();
+  const el = $('#dash');
+  // The device cards are redrawn as their readings change; don't replace a button between press and release.
+  el.addEventListener('pointerdown', (e) => { if (e.target.closest('#dashDrv, #dashNet')) S.dashHold = true; });
+  el.addEventListener('click', (e) => {
+    const mv = e.target.closest('[data-dash-move]'), mon = e.target.closest('[data-mon-open]');
+    if (e.target.closest('[data-dash-edit]')) { S.dashEdit = !S.dashEdit; render(); }
+    else if (e.target.closest('[data-dash-reset]')) dashSet([], []);
+    else if (mv) {
+      const [k, d] = mv.dataset.dashMove.split(':'), order = dashOrder().map((x) => x[0]), i = order.indexOf(k), j = i + +d;
+      if (j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]];
+      dashSet(dashCfg().hide, order);
+    } else if (mon && !e.target.closest('button, input, select, textarea, a, label, [data-live]')) {
+      // A device card: open it on the Monitoring page, with its history and log.
+      S.view = 'monitor'; S.monTab = 'all'; S.monOpen = mon.dataset.monOpen;
+      render();
+    }
+  });
+  el.addEventListener('change', (e) => {
+    const k = e.target.dataset?.dashShow;
+    if (!k) return;
+    const hide = dashCfg().hide.filter((x) => x !== k);
+    if (!e.target.checked) hide.push(k);
+    dashSet(hide, dashOrder().map((x) => x[0]));
+  });
+};
+addEventListener('pointerup', () => setTimeout(() => (S.dashHold = false)));   // after the click handlers ran
 function dashHasDevices() {
   const p = P();
   return !!(p.devices.length + p.pcs.length + p.projectors.length + p.drivers.length + p.tcp.length + p.modbus.length);
 }
 
 function renderPlaybacks() {
-  const el = $('#pbs');
-  if (!el) return;
+  if (!$('#dash')) return;
+  const el = $('#pbs');   // any part can be hidden (Customize): every element here is optional
   const st = S.status;
   const pbs = st?.playbacks || [];
-  el.innerHTML = pbs.length ? pbs.map((p) => {
+  if (el) el.innerHTML = pbs.length ? pbs.map((p) => {
     const pct = p.length ? Math.min(100, (p.pos / p.length) * 100) : 100;
     const ref = `${p.kind} ${p.id}`;
     return `<div class="pb"><div class="row"><span class="tag">${p.kind}</span><b>${p.id} · ${esc(p.name)}</b>
@@ -47,7 +115,7 @@ function renderPlaybacks() {
   const trigName = (id) => P().triggers.find((t) => t.id === id)?.name || '?';
   // wait = "wait until" (in -1: no timeout), loop = "repeat <n> times every", sleep = the rest of a run.
   const kind = (s) => (s.wait != null ? 'wait' : s.loop != null ? 'loop' : s.sleep ? 'sleep' : s.every ? 'repeat' : 'delayed');
-  $('#sched').innerHTML = (st?.scheduled || []).map((s) => `<div class="pb row"><span class="tag">${kind(s)}</span>
+  if (el) $('#sched').innerHTML = (st?.scheduled || []).map((s) => `<div class="pb row"><span class="tag">${kind(s)}</span>
     <b>${s.trigger} · ${esc(trigName(s.trigger))}</b><span class="spacer"></span>
     <span class="muted">${s.wait != null ? `until ${esc(s.wait)}${s.in >= 0 ? ` · gives up in ${(s.in / 1000).toFixed(1)}s` : ''}`
       : `${s.loop != null ? `${s.loop} left · ` : s.every ? `#${s.count}${s.remaining > 0 ? ` · ${s.remaining} left` : ' · forever'} · ` : ''}next in ${(Math.max(0, s.in) / 1000).toFixed(1)}s`}</span>
@@ -57,7 +125,7 @@ function renderPlaybacks() {
     <span class="muted" title="It fired over 100 times in a second: probably a feedback loop">loop? runs again in ${Math.ceil(Math.max(0, s.in) / 1000)}s</span></div>`).join('');
   // Only when it changed: rebuilding at every status update (~10/s) could swallow a click.
   const outsHtml = PROTOCOLS.map(([k, n]) => outputSwitch(k, n)).join(''), outsEl = $('#outs');
-  if (outsEl.dataset.html !== outsHtml) { outsEl.innerHTML = outsHtml; outsEl.dataset.html = outsHtml; }
+  if (outsEl && outsEl.dataset.html !== outsHtml) { outsEl.innerHTML = outsHtml; outsEl.dataset.html = outsHtml; }
   // Only when it changed, like the outputs: a rebuild under the mouse could swallow a click.
   const devEl = $('#dashDev');
   if (devEl) { const h = deviceChipsHtml(st); if (devEl.dataset.html !== h) { devEl.innerHTML = h; devEl.dataset.html = h; } }
@@ -75,11 +143,25 @@ function renderPlaybacks() {
       <span class="muted" style="flex:1">${esc(pcLast(x.id))}</span>${pcButtons(x.id)}</div>`).join('') +
       `<div class="row" style="margin-top:8px"><span class="muted" style="flex:1">All PCs</span>${pcButtons('all')}</div>`;
   }
+  // Device cards (the Monitoring page's own, compact): only when changed, and not under a press or while typing in one.
+  const act = document.activeElement;
+  const busy = S.dashHold || (act && /^(INPUT|SELECT|TEXTAREA)$/.test(act.tagName) && act.type !== 'range' && act.closest('#dashDrv, #dashNet'));
+  const cards = (id, html) => {
+    const e = $(id);
+    if (!e || busy) return;
+    const h = html() || '<span class="muted">Not on the controller yet: save first.</span>';
+    if (e.dataset.html !== h) { e.innerHTML = h; e.dataset.html = h; }
+  };
+  cards('#dashDrv', () => P().drivers.map((x) => drvMonCard(x, monCard, true)).join(''));
+  cards('#dashNet', () => [...(st?.monitor?.hosts || []).filter((h) => h.kind === 'device').map((h) => monHostCard(h, 'device')),
+    ...(st?.io?.tcp || []).map(monTcpCard), ...(st?.io?.modbus || []).map(monModbusCard)].join(''));
+  renderModes();
+  liveVars(st);
   const s = st?.stats;
-  $('#sys').innerHTML = st ? `
+  if ($('#sys')) $('#sys').innerHTML = st ? `
     <div class="form" style="grid-template-columns:110px 1fr">
       <label>Firmware</label><span>${esc(st.version)}</span>
-      <label>Uptime</label><span>${fmtTime(st.uptime).replace(/\.\d$/, '')}</span>
+      <label>Uptime</label><span>${fmtUptime(st.uptime)}</span>
       <label>Last start</label><span>${startedText(st.started)}</span>
       <label>Clock</label><span>${st.time > 1600000000 ? euDateTime(new Date(st.time * 1000)) : 'not set'}</span>
       <label>Engine</label><span>${s.engineFps} fps · tick ${s.tickUs} µs</span>
@@ -1829,9 +1911,7 @@ views.map.after = () => {
     const ext = (file.name.match(/\.(png|jpe?g|webp|gif|svg)$/i)?.[1] || 'png').toLowerCase();
     const name = `map${m.id}-${Date.now().toString(36)}.${ext}`;
     try {
-      const r = await fetch(`/api/media?name=${encodeURIComponent(name)}`, { method: 'PUT', body: file });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.reply);
+      await mediaUpload(name, file, file.name);
       if (m.background) S.mediaTrash.add(m.background);   // deleted once the project is saved
       m.background = name;
       // Take the map's shape from the image.

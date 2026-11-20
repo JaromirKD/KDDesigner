@@ -203,21 +203,24 @@ KD_FAST void runEffect(Playback& p, int track, uint32_t now) {
   double local[kStack];
   double* s = prog.slots <= kStack ? local : fxScratch.data();
   memcpy(s, fc.slots.data(), sizeof(double) * prog.slots);
-  const int n = fc.targets.size();
+  const int count = fc.targets.size(), n = fc.n;   // n: what the effect sees (clip options)
+  const uint8_t* data = fc.data.data();
   const int live = p.tf[track].fading ? -1 : track;
-  s[Fx::T] = KD_SINCE(now, p.tf[track].fxStart) / 1000.0;
+  // t, automation, a live edit's glide and the clocks ("t * speed"): once per frame.
+  Fx::frameInputs(prog, fc.slots.data(), fc.lanes, fc.wrap, fc.live, KD_SINCE(now, p.tf[track].fxStart) / 1000.0, s);
   s[Fx::N] = n;
-  Fx::runFrame(prog, s);
+  Fx::runFrame(prog, s, data);
   double outs[Fx::DIM - Fx::R + 1];
   memcpy(outs, fc.slots.data() + Fx::R, sizeof(outs));
-  for (int i = 0; i < n; i++) {
+  for (int i = 0; i < count; i++) {
     const FxTarget& x = fc.targets[i];
     memcpy(s + Fx::R, outs, sizeof(outs));
-    s[Fx::I] = i;
-    s[Fx::U] = (double)i / n;
+    s[Fx::I] = x.i;
+    s[Fx::U] = (double)x.i / n;
     s[Fx::X] = x.x;
     s[Fx::Y] = x.y;
-    Fx::run(prog, s);
+    Fx::run(prog, s, data);
+    if (fc.invert) Fx::invert(s);
     auto cl = [](double v) { return v < 0 ? 0.0 : v > 1 ? 1.0 : v; };
     double dim = cl(s[Fx::DIM]) * fc.level;
     double r = cl(s[Fx::R]), g = cl(s[Fx::G]), b = cl(s[Fx::B]), w = s[Fx::W] >= 0 ? cl(s[Fx::W]) : -1;
@@ -240,7 +243,8 @@ KD_FAST void runEffect(Playback& p, int track, uint32_t now) {
 // Effect cue: the track's fixtures crossfade (over the cue's fade) into the running effect.
 // at = when the cue was due (its fade and the effect's time count from there).
 void startEffect(Playback& p, const Cue& c, uint32_t at, uint32_t now) {
-  const FxCue& fc = fxCues[c.fx];
+  FxCue& fc = fxCues[c.fx];
+  fc.live = Fx::Live();   // a fresh start: nothing to glide (carryEffects sets it after a live edit)
   for (const auto& x : fc.targets)
     for (int ch : {(int)x.d, (int)x.r, (int)x.g, (int)x.b, (int)x.w}) {
       if (ch < 0) continue;
@@ -471,6 +475,47 @@ void ShowImpl::timelineReplaced(int idx) {
   uint32_t at = e > 0 ? (uint32_t)e : 0;
   if (t.length && at >= t.length) at = t.loop ? at % t.length : t.length - 1;
   moveTimeline(p, idx, at, now, true);
+}
+
+// A live edit of a running timeline: each track's effect carries on from what it showed (the
+// values glide over Fx::kGlide s, a "t * speed" clock goes on from where it was), when the
+// track still plays the same effect afterwards. Otherwise changing a speed made the whole
+// look jump, as the effect worked out its place from t * the new speed.
+void ShowImpl::keepEffects(int idx, std::vector<FxKeep>& out) {
+  out.clear();
+  Playback* p = findPlayback(false, idx);
+  if (!p || p->releasing) return;
+  const uint32_t at = p->paused ? p->pausedAt : millis();
+  for (int tr = 0; tr < KD_MAX_TRACKS; tr++) {
+    const int f = p->tf[tr].fx;
+    if (f < 0 || f >= (int)fxCues.size()) continue;
+    const FxCue& fc = fxCues[f];
+    FxKeep k;
+    k.track = tr;
+    k.prog = fc.prog;
+    k.t = KD_SINCE(at, p->tf[tr].fxStart) / 1000.0;
+    k.base = fc.slots;
+    k.s = fc.slots;
+    Fx::frameInputs(fxProgs[fc.prog], fc.slots.data(), fc.lanes, fc.wrap, fc.live, k.t, k.s.data());
+    out.push_back(std::move(k));
+  }
+}
+
+void ShowImpl::carryEffects(int idx, const std::vector<FxKeep>& kept) {
+  Playback* p = findPlayback(false, idx);
+  if (!p || p->releasing) return;
+  const uint32_t at = p->paused ? p->pausedAt : millis();
+  for (const auto& k : kept) {
+    const int f = p->tf[k.track].fx;
+    if (f < 0 || f >= (int)fxCues.size() || fxCues[f].prog != k.prog) continue;
+    FxCue& fc = fxCues[f];
+    const Fx::Program& prog = fxProgs[fc.prog];
+    if ((int)k.s.size() != prog.slots) continue;
+    const double t = KD_SINCE(at, p->tf[k.track].fxStart) / 1000.0;
+    BigRam::Vec<double> sn = fc.slots;
+    Fx::frameInputs(prog, fc.slots.data(), fc.lanes, fc.wrap, Fx::Live(), t, sn.data());
+    Fx::carry(prog, k.base.data(), fc.slots.data(), k.s.data(), sn.data(), t, fc.live);
+  }
 }
 
 namespace Show {

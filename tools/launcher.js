@@ -448,7 +448,9 @@ async function ctlSend(ip, dir) {
   for (const [n, b64] of Object.entries(show.media)) await ctlJson(ip, 'PUT', '/api/media?name=' + encodeURIComponent(n), Buffer.from(b64, 'base64'), 30000);
   const j = await ctlJson(ip, 'POST', '/api/project', Buffer.from(JSON.stringify(show.project)), 30000);
   const lost = mediaNames(show.project).filter((n) => !(n in show.media));
-  return { reply: (j.reply || 'Sent') + (lost.length ? ` - image(s) not found on the PC: ${lost.join(', ')}` : ''), backup: bak };
+  // Asked back: the launcher says what the controller runs now, not what it meant to send.
+  const st = await ctlJson(ip, 'GET', '/api/status', null, 5000).catch(() => null);
+  return { reply: (j.reply || 'Sent') + (lost.length ? ` - image(s) not found on the PC: ${lost.join(', ')}` : ''), backup: bak, running: st?.project || '' };
 }
 function updateFiles() {
   try {

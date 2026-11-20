@@ -28,6 +28,7 @@ class String {
   bool operator!=(const String& o) const { return s != o.s; }
   char operator[](unsigned i) const { return s[i]; }
   String& operator+=(const String& o) { s += o.s; return *this; }
+  bool concat(const char* c, unsigned n) { s.append(c, n); return true; }
 };
 inline String operator+(const String& a, const String& b) { return String(a.s + b.s); }
 inline String operator+(const String& a, const char* b) { return String(a.s + b); }

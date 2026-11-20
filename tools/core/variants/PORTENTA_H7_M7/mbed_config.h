@@ -214,7 +214,7 @@
 #define MBED_CONF_LWIP_L3IP_ENABLED                                             0                                                                                                // set by library:lwip
 #define MBED_CONF_LWIP_MBOX_SIZE                                                8                                                                                                // set by library:lwip
 #define MBED_CONF_LWIP_MEMP_NUM_TCPIP_MSG_INPKT                                 8                                                                                                // set by library:lwip
-#define MBED_CONF_LWIP_MEMP_NUM_TCP_SEG                                         48                                                                                               // set by application[*]
+#define MBED_CONF_LWIP_MEMP_NUM_TCP_SEG                                         64                                                                                               // set by application[*]
 #define MBED_CONF_LWIP_MEM_SIZE                                                 16000                                                                                            // set by application[*]
 #define MBED_CONF_LWIP_ND6_QUEUEING                                             0                                                                                                // set by library:lwip
 #define MBED_CONF_LWIP_ND6_RDNSS_MAX_DNS_SERVERS                                0                                                                                                // set by library:lwip
@@ -228,7 +228,7 @@
 #define MBED_CONF_LWIP_PPP_THREAD_STACKSIZE                                     768                                                                                              // set by library:lwip
 #define MBED_CONF_LWIP_PRESENT                                                  1                                                                                                // set by library:lwip
 #define MBED_CONF_LWIP_RAW_SOCKET_ENABLED                                       1                                                                                                // set by application[*]
-#define MBED_CONF_LWIP_SOCKET_MAX                                               32                                                                                               // set by application[*]
+#define MBED_CONF_LWIP_SOCKET_MAX                                               48                                                                                               // set by application[*]
 #define MBED_CONF_LWIP_TCPIP_THREAD_PRIORITY                                    osPriorityNormal                                                                                 // set by library:lwip
 #define MBED_CONF_LWIP_TCPIP_THREAD_STACKSIZE                                   1200                                                                                             // set by library:lwip
 #define MBED_CONF_LWIP_TCP_CLOSE_TIMEOUT                                        1000                                                                                             // set by library:lwip
@@ -237,7 +237,7 @@
 #define MBED_CONF_LWIP_TCP_MSS                                                  536                                                                                              // set by library:lwip
 #define MBED_CONF_LWIP_TCP_SERVER_MAX                                           4                                                                                                // set by application[*]
 #define MBED_CONF_LWIP_TCP_SND_BUF                                              (2 * TCP_MSS)                                                                                    // set by library:lwip
-#define MBED_CONF_LWIP_TCP_SOCKET_MAX                                           20                                                                                               // set by application[*]
+#define MBED_CONF_LWIP_TCP_SOCKET_MAX                                           32                                                                                               // set by application[*]
 #define MBED_CONF_LWIP_TCP_SYNMAXRTX                                            6                                                                                                // set by library:lwip
 #define MBED_CONF_LWIP_TCP_WND                                                  (4 * TCP_MSS)                                                                                    // set by library:lwip
 #define MBED_CONF_LWIP_UDP_SOCKET_MAX                                           16                                                                                               // set by application[*]

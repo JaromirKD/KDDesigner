@@ -263,9 +263,10 @@ function drawNet() {
       : ['err', c.lastSeen ? `offline · last seen ${ago(c.lastSeen)}` : 'not answering'];
     const u = ups(c.target);
     return `<div class="card" data-ctl="${esc(c.ip)}">
-      <div class="head"><span class="dot ${state[0]}"></span><b>${esc(c.project || 'KD controller')}</b>
+      <div class="head"><span class="dot ${state[0]}"></span><b>KD controller</b>
         <span class="mono muted">${esc(c.ip)}</span><span class="grow"></span>
         <button class="small" data-c="forget" title="Remove from this list">✕</button></div>
+      <div title="The show the controller has loaded, read from it every 10 seconds">${c.online ? 'Running show' : 'Last seen running'}: <b>${esc(c.project || (c.online ? '(no name)' : '?'))}</b></div>
       <div class="small muted">${esc(state[1])}${c.online ? ` · firmware ${esc(c.version)} · ${esc(c.target)} · up ${dur(c.uptime)}${c.usb === false ? ' · <span style="color:var(--err)">no storage device</span>' : ''}` : ''}${c.found ? '' : c.online ? ' · added by address' : ''}</div>
       ${c.online ? `<div class="acts">
         <a class="btn small" href="${esc(url)}" target="_blank">Open web UI</a>
@@ -368,6 +369,18 @@ async function scan() {
   try { S.net = await get('/api/net'); } catch { /* launcher gone */ }
   S.busy.delete('scan'); draw();
 }
+// The controllers' cards follow what they run (a show sent or saved from elsewhere): asked
+// quietly every 10 s, redrawn only when a card would change.
+let lastNet = '';
+async function watchNet() {
+  if (S.busy.size) return;
+  let n;
+  try { n = await get('/api/net'); } catch { return; }
+  if (S.busy.size) return;
+  S.net = n;
+  const txt = JSON.stringify(n.controllers.map((c) => [c.ip, c.online, c.project, c.version, c.restarting, c.safeMode, c.usb]));
+  if (txt !== lastNet && !picking()) { lastNet = txt; draw(); }
+}
 const showByPath = (p) => S.state.shows.find((s) => k(s.path) === k(p));
 
 // ---- events -------------------------------------------------------------------
@@ -455,7 +468,8 @@ $('#net').addEventListener('click', async (e) => {
     const c = S.net.controllers.find((x) => x.ip === ip);
     if (!s || !confirm(`Send "${s.example || s.name}" to ${ip}?\n\nIt replaces "${c?.project || 'the current show'}" on the controller (saved in Backups first) and loads at once. The controller keeps its own network settings.`)) return;
     const j = await act('ctlSend', { ip, path: s.path }, 'send:' + ip);
-    if (j?.backup) toast('Old show saved: ' + j.backup);
+    // What the controller itself says it runs after the send, not what was meant to arrive.
+    if (j) toast(j.running ? `${ip} now runs "${j.running}". Old show saved: ${j.backup}` : `Sent, but ${ip} did not say what it runs now - press Rescan`, !j.running);
     return scan();
   }
   if (a === 'update') {
@@ -509,6 +523,7 @@ refresh().then(() => { get('/api/net?cached=1').then((n) => { S.net = n; draw();
 pollUsb();
 every(refresh, 3000);
 every(pollUsb, 5000);
+every(watchNet, 10000);
 every(scan, 20000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); pollUsb(); } });
 </script>

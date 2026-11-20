@@ -61,6 +61,9 @@ function normDriver(d) {
     delete d.links;
   }
   if (d.type === 'kissbox') {
+    // "listenPort" is the older name of the destination port.
+    if (d.destPort == null) d.destPort = d.listenPort ?? 9817;
+    delete d.listenPort;
     if (!d.cards) {
       const map = { out: 'DO4PR', in: 'DI8DC', aout: 'AO8DA', ain: 'AI8RA' };
       d.cards = String(d.slots || 'out').split(',').map((s) => map[s.trim()] || '');
@@ -339,8 +342,13 @@ function drvPanel(x, j, mode, i) {
       const zname = (p) => p.n.replace(/^Zone \d+ ?/, '') || p.k.slice(1);
       const zref = (p) => quote(zname(p));
       const gpio = pts.filter((p) => /^gpio\d$/.test(p.k));
+      // Which pins are outputs: read from the presentation by the plugin (v14), else the ticks of the project.
+      const outsRead = Array.isArray(j.gpioOut), outs = outsRead ? j.gpioOut : (x.gpioOut || []);
       const leds = gpio.length ? `<span class="row nowrap" style="gap:3px">${gpio.map((p) => led(id, p.k, p.v, `GPIO ${p.k.slice(4)}`)).join('')}</span>` : '';
-      if (mode === 'compact') return zones.map((p) => `<div class="drv-row"><span class="drv-name">${esc(zname(p))}</span><span>${liveText(id, p.k, p.v)}</span><span></span></div>`).join('') +
+      // A zone's volume: what the controller set, else what the zone has in the presentation (kdlink v14).
+      const zvol = (p) => pts.some((q) => q.k === p.k + '.vol');
+      const volNow = (p) => `<span style="white-space:nowrap" title="Volume of this zone${ptVal(j, p.k + '.mute') === '1' ? ' (muted)' : ''}">🔊 ${liveText(id, p.k + '.vol', ptVal(j, p.k + '.vol'))} %</span>`;
+      if (mode === 'compact') return zones.map((p) => `<div class="drv-row"><span class="drv-name">${esc(zname(p))}</span><span>${liveText(id, p.k, p.v)}</span><span class="muted">${zvol(p) ? volNow(p) : ''}</span></div>`).join('') +
         (leds ? `<div class="drv-row"><span class="drv-name">GPIO</span>${leds}<span></span></div>` : '') +
         `<div class="drv-row"><span class="drv-name">Player says</span><span>${says}</span><span></span></div>`;
       const cmds = x.commands || [];
@@ -359,7 +367,11 @@ function drvPanel(x, j, mode, i) {
       const folRow = (f, k) => {
         const b = `drivers.${i}.follow.${k}`, tl = P().timelines.find((q) => q.id === f.timeline), zn = bsZoneNo(j, f.zone);
         if (!edit) return `<tr><td>${tl ? `<a href="#" data-goto-timeline="${tl.id}">${esc(tl.name || 'Timeline ' + tl.id)}</a>` : 'no timeline'}</td><td>${esc(f.zone || '')}</td><td>${esc(f.file || '')}</td><td>${f.offset || 0}</td><td>${f.drift ? '✓' : ''}</td></tr>`;
-        const names = [...new Set(states.filter((s) => s.f && (!zn || s.z === zn)).map((s) => (s.n && s.n !== s.f ? s.n : s.f)))];
+        // The zone's own media (by state name where it has one), then the other zones' files by file name:
+        // a state name only works in its own zone.
+        const mineF = new Set(states.filter((s) => s.f && s.z === zn).map((s) => s.f.toLowerCase()));
+        const names = [...new Set([...states.filter((s) => s.f && (!zn || s.z === zn)).map((s) => (s.n && s.n !== s.f ? s.n : s.f)),
+          ...(zn ? states.filter((s) => s.f && s.z !== zn && !mineF.has(s.f.toLowerCase())).map((s) => s.f) : [])])];
         return `<tr><td><select data-p="${b}.timeline" data-t="num"><option value="0">choose…</option>${P().timelines.map((q) => `<option value="${q.id}"${q.id === f.timeline ? ' selected' : ''}>${esc(q.name || 'Timeline ' + q.id)}</option>`).join('')}</select></td>
           <td><select data-p="${b}.zone" data-r>${[...new Set([...znames, ...(f.zone ? [f.zone] : [])])].map((n) => `<option${n === f.zone ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></td>
           <td><input data-p="${b}.file" value="${esc(f.file || '')}" list="bsfol-${i}-${k}" placeholder="vid1 or clip.mp4" style="width:170px"><datalist id="bsfol-${i}-${k}">${names.map((n) => `<option value="${esc(n)}">`).join('')}</datalist></td>
@@ -372,7 +384,7 @@ function drvPanel(x, j, mode, i) {
         ${edit ? `<div class="row" style="margin-top:6px"><button class="btn small" data-bsfollow="${i}">+ Follow a timeline</button><span class="muted">While that timeline runs, the zone plays the file at the timeline's position; when it stops, the zone goes back to the presentation.</span></div>`
           : fol.length ? '' : '<p class="muted">Not set (Devices &gt; BrightSign).</p>'}`;
       // Sound, screen and health (kdlink v13: the readings are there once the plugin has reported them).
-      const has = (k) => pts.some((p) => p.k === k), v13 = has('vol');
+      const has = (k) => pts.some((p) => p.k === k), v13 = has('vol'), v14 = +(/kdlink v(\d+)/.exec(j.info?.['KD plugin'] || '') || [])[1] >= 14;
       const soundRows = [
         has('vol') && ['Master volume (%)', 'vol', liveText(id, 'vol', ptVal(j, 'vol')), cmdRange(`brightsign ${ref} master {v}`, ptVal(j, 'vol'), 0, 100, id, 'vol'), 'The volume of the whole player: all zones, on its HDMI, analog and SPDIF outputs'],
         has('mute') && ['Mute', 'mute', led(id, 'mute', ptVal(j, 'mute')), cmdBtn(`brightsign ${ref} mute on`, 'Mute') + cmdBtn(`brightsign ${ref} mute off`, 'Sound on'), 'Mutes the whole player'],
@@ -384,16 +396,16 @@ function drvPanel(x, j, mode, i) {
         ${soundRows.map(([n, k, now, ctl, tip]) => `<tr><td title="${esc(tip)}">${n}</td><td>${now}</td>${vcell(k)}<td><div class="row nowrap">${ctl}</div></td></tr>`).join('')}</table>`
         : '<p class="muted">Volume, mute, screen on/off and the player\'s health need <b>kdlink v13</b>: download the plugin again and publish the presentation once more.</p>'}`;
       const plugin = !x.plugin ? '' : `${tests ? `<h4>Test</h4><p class="muted" style="margin:0 0 4px">Plays the file of that state in the zone. When it ends, the presentation carries on by itself.</p>${tests}` : ''}
-        ${gpio.length ? `<h4>GPIO</h4><div class="row">${leds}<span class="muted">link one to a variable in the table below${edit ? '; tick <b>output</b> there for the pins that are outputs in BrightAuthor' : ''}</span></div>` : ''}
+        ${gpio.length ? `<h4>GPIO</h4><div class="row">${leds}<span class="muted">link one to a variable in the table below${outsRead ? `; outputs as set in BrightAuthor: ${outs.length ? outs.join(', ') : 'none'}` : edit ? '; tick <b>output</b> there for the pins that are outputs in BrightAuthor' : ''}</span></div>` : ''}
         <h4>Activity <span class="muted" style="font-weight:normal">what the player received: serial, UDP, GPIO, zone changes</span></h4>
         <div class="bs-act" data-bsact="${id}">${bsActHtml(act)}</div>
         ${soundHtml}
         <h4>Zones</h4>${zones.length ?`<table class="drv-tbl"><tr><th>#</th><th>Zone</th><th>Playing (state)</th><th>File</th><th>Variable</th><th>Control</th>${v13 ? '<th>Volume</th>' : ''}</tr>
           ${zones.map((p) => `<tr><td>${p.k.slice(1)}</td><td>${esc(zname(p))}</td><td>${liveText(id, p.k, p.v)}</td><td class="mono">${liveText(id, p.k + '.file', ptVal(j, p.k + '.file'))}</td>${vcell(p.k)}
             <td><div class="row nowrap">${cmdSet(`brightsign ${ref} play ${zref(p)} {v}`, 'file.mp4')}${cmdBtn(`brightsign ${ref} stop ${zref(p)}`, '■', '', 'Stop the video/audio of this zone')}</div></td>
-            ${v13 ? `<td><div class="row nowrap" title="Volume of this zone">${cmdRange(`brightsign ${ref} volume ${zref(p)} {v}`, ptVal(j, p.k + '.vol') || 100, 0, 100, id, p.k + '.vol')}
+            ${!v13 ? '' : v14 && !zvol(p) ? '<td class="muted">no sound</td>' : `<td><div class="row nowrap" title="Volume of this zone">${zvol(p) ? `<span style="min-width:58px">${volNow(p)}</span>` : ''}${cmdRange(`brightsign ${ref} volume ${zref(p)} {v}`, ptVal(j, p.k + '.vol') || 100, 0, 100, id, p.k + '.vol')}
               ${cmdBtn(`brightsign ${ref} mute ${zref(p)} on`, 'Mute', '', 'Mute this zone')}${cmdBtn(`brightsign ${ref} mute ${zref(p)} off`, 'Sound', '', 'Give this zone its sound back')}
-              <span class="kiss ${ptVal(j, p.k + '.mute') === '1' ? 'on' : ''}" data-live="${id}|${p.k}.mute" data-fmt="muted" title="Lit = this zone is muted">${ptVal(j, p.k + '.mute') === '1' ? 'muted' : ''}</span></div></td>` : ''}</tr>`).join('')}</table>`
+              <span class="kiss ${ptVal(j, p.k + '.mute') === '1' ? 'on' : ''}" data-live="${id}|${p.k}.mute" data-fmt="muted" title="Lit = this zone is muted">${ptVal(j, p.k + '.mute') === '1' ? 'muted' : ''}</span></div></td>`}</tr>`).join('')}</table>`
           : '<p class="muted">No zones reported yet: the plugin answers at the next status check (check it is in the presentation, named <code>kdlink</code>).</p>'}
         <div class="row" style="margin-top:6px"><span class="muted" title="A Plugin Message event (plugin kdlink) in the presentation: use it on a transition to go to any state in any zone">Plugin message:</span>${cmdSet(`brightsign ${ref} event {v}`, 'e.g. video_intro', true)}</div>
         <h4>User variables</h4>${uvars.length ? `<table class="drv-tbl"><tr><th>Name</th><th>Value</th><th>Variable</th><th>Set</th></tr>
@@ -403,8 +415,8 @@ function drvPanel(x, j, mode, i) {
       return `${plugin}<table class="drv-tbl"><tr><th>Reading</th><th>Now</th><th>Variable</th><th>Control</th></tr>
           <tr><td title="The last UDP message the presentation sent to the controller (or a Send Plugin Message to kdlink)">Player says</td><td>${says}</td>${vcell('msg')}</tr>
           ${pts.some((p) => p.k === 'serial') ? `<tr><td title="The last line the player received on its serial port">Serial in</td><td class="mono">${liveText(id, 'serial', ptVal(j, 'serial'))}</td>${vcell('serial')}</tr>` : ''}
-          ${gpio.map((p) => { const n = +p.k.slice(4), out = (x.gpioOut || []).includes(n); return `<tr><td>GPIO ${n}${out && !edit ? ' <span class="muted">out</span>' : ''}</td><td>${led(id, p.k, p.v)}</td>${vcell(p.k)}
-            <td><div class="row nowrap">${edit ? `<label class="chk" title="Tick when this pin is set as an output in BrightAuthor (Presentation Settings > Interactive > GPIO). KD never changes a pin's direction; it only switches pins ticked here."><input type="checkbox" data-bsgpio="${i}|${n}"${out ? ' checked' : ''}> output</label>` : ''}
+          ${gpio.map((p) => { const n = +p.k.slice(4), out = outs.includes(n); return `<tr><td>GPIO ${n}${out && (!edit || outsRead) ? ' <span class="muted" title="An output in the presentation (BrightAuthor: Presentation Settings > Interactive > GPIO)">out</span>' : ''}</td><td>${led(id, p.k, p.v)}</td>${vcell(p.k)}
+            <td><div class="row nowrap">${edit && !outsRead ? `<label class="chk" title="Tick when this pin is set as an output in BrightAuthor (Presentation Settings > Interactive > GPIO). KD never changes a pin's direction; it only switches pins ticked here."><input type="checkbox" data-bsgpio="${i}|${n}"${out ? ' checked' : ''}> output</label>` : ''}
               ${out ? cmdBtn(`brightsign ${ref} gpio ${n} on`, 'On') + cmdBtn(`brightsign ${ref} gpio ${n} off`, 'Off') : ''}</div></td></tr>`; }).join('')}
           ${x.plugin ? `<tr><td title="Send a line out of the player's serial port">Serial out</td><td></td><td></td><td>${cmdSet(`brightsign ${ref} serial {v}`, 'text', true)}</td></tr>` : ''}</table>
         <h4>Commands</h4>
@@ -425,7 +437,7 @@ function drvActions(x) {
     case 'brightsign': return cmdBtn(`brightsign ${ref} reboot`, 'Reboot', `Reboot ${x.name}?`);
     case 'digidot': return cmdBtn(`digidot ${ref} stop`, 'Stop') + cmdBtn(`digidot ${ref} master 100`, 'Master 100%') + cmdBtn(`digidot ${ref} master 0`, 'Master 0%');
     case 'pharos': return cmdBtn(`pharos ${ref} release all`, 'Release all') + cmdBtn(`pharos ${ref} beacon`, 'Beacon', '', 'Blinks the controller to find it; click again to stop');
-    case 'netgear': return cmdBtn(`netgear ${ref} refresh`, '⟳ Read now', '', 'Read all ports, names and descriptions from the switch now');
+    case 'netgear': return cmdBtn(`switch ${ref} refresh`, '⟳ Read now', '', 'Read all ports, names and descriptions from the switch now');
     case 'netio': return cmdBtn(`netio ${ref} output all on`, 'All on') + cmdBtn(`netio ${ref} output all off`, 'All off', `Switch off ALL outputs of ${x.name}?`);
     default: return '';
   }
@@ -461,7 +473,7 @@ function mqttCard(m, card) {
 // ---- Devices tab per type ------------------------------------------------------------
 const DRV_HELP = {
   kissbox: `Kiss-Box I/O with the <b>Kiss-Box protocol</b> firmware in <b>UDP</b> mode (port 9813). Pick the frame and the card in each slot, name the channels and link them to variables.
-    <b>The box answers on its own destination port</b> (Kiss-Box Editor, I/O Mode Setup), usually as a broadcast, not to the port it was asked from: set the <b>listen port</b> below to that port (e.g. 9817). If they differ, commands still work but the box shows <b>offline</b>, the buttons don't follow and inputs never arrive. If the box sends to a fixed IP instead of broadcast, that IP must be this controller's.
+    <b>The box answers on its own destination port</b> (Kiss-Box Editor, I/O Mode Setup), usually as a broadcast, not to the port it was asked from: set the <b>destination port</b> below to that port (9817 from the factory). If they differ, commands still work but the box shows <b>offline</b>, the buttons don't follow and inputs never arrive. If the box sends to a fixed IP instead of broadcast, that IP must be this controller's.
     For instant input changes, also switch on automatic input state (timed updates) for the input cards.
     Commands: <code>kissbox io 1.3 on</code>, <code>kissbox io 1.3 toggle</code>, <code>kissbox io 1.3 pulse 0.5</code> (on for half a second), <code>kissbox io 2 all 1 0 1 0 0 0 0 0</code>, <code>kissbox io read 3</code>, <code>kissbox io 3.1 128</code> (analog).`,
   knx: `A <b>KNX IP interface or router</b> (KNXnet/IP tunnelling, UDP 3671; it uses one of its tunnels). Add the group addresses with their datapoint type.
@@ -481,7 +493,8 @@ const DRV_HELP = {
   pharos: `Pharos LPC / TPC / VLC over the Controller API (plain http). Leave the user empty if the web API is open.
     <b>Live updates</b> subscribes over a WebSocket to timeline, scene and group changes, so they show at once.
     Commands: <code>pharos lpc timeline 2 start fade 3</code>, <code>pharos lpc scene 4 start</code>, <code>pharos lpc group 1 master 50</code>, <code>pharos lpc trigger 5</code>, <code>pharos lpc api get system</code>.`,
-  netgear: `Netgear AV switches (M4250 / M4300 / M4350, and most other managed switches) read over <b>SNMP v2c</b>, read-only. On the switch: System → SNMP → SNMP v1/v2 → Community: a read-only community (e.g. <code>public</code>) for this controller's IP.
+  netgear: `Managed network switches of any make (Netgear AV M4250 / M4300 / M4350, Cisco, HP / Aruba, Luminex…) read over <b>SNMP v2c</b>, read-only. The switch must have SNMP: small "Plus" / "Easy Smart" switches (e.g. Netgear GS305EP) have none.
+    On the switch: switch SNMP v1/v2 on with a read-only community (e.g. <code>public</code>) for this controller's IP (Netgear: System → SNMP → SNMP v1/v2). What a switch reports differs per make: link and speed nearly always, PoE, MAC addresses and names not on every one.
     Every check reads each port: <b>link</b>, <b>speed</b>, <b>PoE</b>, the <b>MAC address</b> of what is plugged in and its <b>LLDP</b> name (Dante, BrightSign, PCs… announce one).
     Click <b>Remember as normal</b> when everything is cabled and running: from then on a port that is unplugged, gets another device, runs slower (a bad cable often gives 100 Mb/s) or loses PoE shows red here and on the Monitoring page, and is written to the log as a warning.
     Link a variable to <b>number of changed ports</b> (or to one port: 1 = connected) and react with a Variable change trigger, e.g. send an email.`,
@@ -512,7 +525,8 @@ function driverPage(type) {
     const num = (k, def, min, max, w) => `<input type="number" data-p="${b}.${k}" data-t="num" min="${min}" max="${max}" value="${d[k] ?? def}" style="width:${w || 90}px">`;
     let extra = '';
     if (type === 'kissbox') extra = field('Frame', `<select data-kissframe="${i}">${KISS_FRAMES.map(([f, l]) => `<option value="${f}"${f === d.frame ? ' selected' : ''}>${l}</option>`).join('')}</select>`) +
-      field('Listen port', num('listenPort', 9813, 1, 65535) + '<span class="muted">UDP port the box sends input changes to (all Kiss-Boxes share the first one\'s)</span>');
+      field('Destination port', num('destPort', 9817, 1, 65535) + '<span class="muted">UDP port the box sends its answers to: the destination port in the Kiss-Box Editor (9817 from the factory)</span>',
+        'The port above is the one the box listens on for commands (9813). Up to 4 different destination ports over all Kiss-Boxes.');
     if (type === 'netgear') extra = field('Community', `<input data-p="${b}.community" value="${esc(d.community ?? 'public')}" autocomplete="off" style="width:140px"><span class="muted">SNMP v2c read community set on the switch</span>`);
     if (type === 'knx') extra = field('Re-read every', num('readEvery', 0, 0, 86400) + '<span class="muted">s · 0 = only when the tunnel opens (the bus pushes every change)</span>');
     if (type === 'brightsign') {

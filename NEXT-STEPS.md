@@ -290,10 +290,10 @@ already left the unused functions out), so nothing on the board behaves differen
 - Docs: size figures brought up to date, `KD_MAX_UNIVERSES` is 8 (not 4) in CLAUDE.md,
   `tools/bs-probe.js` listed.
 
-**Watch out on the board**: the Machine Control `firmware.bin` is now **783,928 bytes**, only
-~2.5 KB under the 768 KB (786,432) that 0.2.0 accepts by network update. If the board still runs
-0.2.0, install 0.3.0 first and check the file size after the last build; if it is over, install
-over USB once (after that the full 1.75 MB is allowed).
+**Watch out on the board**: the Machine Control `firmware.bin` is now **794,152 bytes** (17 Nov
+2026, after colour lists / text / pictures / clip options), **7 KB over** the 768 KB (786,432)
+that 0.2.0 accepts by network update. If the board still runs 0.2.0 (`/api/status` `version`),
+install this one over USB once (after that the full 1.75 MB is allowed).
 
 Left as it is (works, but could be one place some day):
 - The device state is worked out twice in the UI: `mapDevStatus` (app-rig.js, map markers) and

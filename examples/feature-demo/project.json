@@ -147,6 +147,28 @@
       "useDmx": true,
       "useArtnet": true,
       "useSacn": false
+    },
+    {
+      "id": 4,
+      "name": "Sign A",
+      "dmxPort": 0,
+      "artnet": 3,
+      "artnetDest": "192.168.1.61",
+      "sacn": 4,
+      "useDmx": false,
+      "useArtnet": true,
+      "useSacn": false
+    },
+    {
+      "id": 5,
+      "name": "Sign B",
+      "dmxPort": 0,
+      "artnet": 4,
+      "artnetDest": "192.168.1.61",
+      "sacn": 5,
+      "useDmx": false,
+      "useArtnet": true,
+      "useSacn": false
     }
   ],
   "fixtures": [
@@ -854,6 +876,3078 @@
     },
     {
       "id": 57,
+      "name": "Sign 1.1",
+      "universe": 4,
+      "address": 1,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 58,
+      "name": "Sign 2.1",
+      "universe": 4,
+      "address": 4,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 59,
+      "name": "Sign 3.1",
+      "universe": 4,
+      "address": 7,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 60,
+      "name": "Sign 4.1",
+      "universe": 4,
+      "address": 10,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 61,
+      "name": "Sign 5.1",
+      "universe": 4,
+      "address": 13,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 62,
+      "name": "Sign 6.1",
+      "universe": 4,
+      "address": 16,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 63,
+      "name": "Sign 7.1",
+      "universe": 4,
+      "address": 19,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 64,
+      "name": "Sign 8.1",
+      "universe": 4,
+      "address": 22,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 65,
+      "name": "Sign 9.1",
+      "universe": 4,
+      "address": 25,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 66,
+      "name": "Sign 10.1",
+      "universe": 4,
+      "address": 28,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 67,
+      "name": "Sign 11.1",
+      "universe": 4,
+      "address": 31,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 68,
+      "name": "Sign 12.1",
+      "universe": 4,
+      "address": 34,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 69,
+      "name": "Sign 13.1",
+      "universe": 4,
+      "address": 37,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 70,
+      "name": "Sign 14.1",
+      "universe": 4,
+      "address": 40,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 71,
+      "name": "Sign 15.1",
+      "universe": 4,
+      "address": 43,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 72,
+      "name": "Sign 16.1",
+      "universe": 4,
+      "address": 46,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 73,
+      "name": "Sign 17.1",
+      "universe": 4,
+      "address": 49,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 74,
+      "name": "Sign 18.1",
+      "universe": 4,
+      "address": 52,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 75,
+      "name": "Sign 19.1",
+      "universe": 4,
+      "address": 55,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 76,
+      "name": "Sign 20.1",
+      "universe": 4,
+      "address": 58,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 77,
+      "name": "Sign 21.1",
+      "universe": 4,
+      "address": 61,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 78,
+      "name": "Sign 22.1",
+      "universe": 4,
+      "address": 64,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 79,
+      "name": "Sign 23.1",
+      "universe": 4,
+      "address": 67,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 80,
+      "name": "Sign 24.1",
+      "universe": 4,
+      "address": 70,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 81,
+      "name": "Sign 25.1",
+      "universe": 4,
+      "address": 73,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 82,
+      "name": "Sign 26.1",
+      "universe": 4,
+      "address": 76,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 83,
+      "name": "Sign 27.1",
+      "universe": 4,
+      "address": 79,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 84,
+      "name": "Sign 28.1",
+      "universe": 4,
+      "address": 82,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 85,
+      "name": "Sign 29.1",
+      "universe": 4,
+      "address": 85,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 86,
+      "name": "Sign 30.1",
+      "universe": 4,
+      "address": 88,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 87,
+      "name": "Sign 31.1",
+      "universe": 4,
+      "address": 91,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 88,
+      "name": "Sign 32.1",
+      "universe": 4,
+      "address": 94,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 89,
+      "name": "Sign 1.2",
+      "universe": 4,
+      "address": 97,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 90,
+      "name": "Sign 2.2",
+      "universe": 4,
+      "address": 100,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 91,
+      "name": "Sign 3.2",
+      "universe": 4,
+      "address": 103,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 92,
+      "name": "Sign 4.2",
+      "universe": 4,
+      "address": 106,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 93,
+      "name": "Sign 5.2",
+      "universe": 4,
+      "address": 109,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 94,
+      "name": "Sign 6.2",
+      "universe": 4,
+      "address": 112,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 95,
+      "name": "Sign 7.2",
+      "universe": 4,
+      "address": 115,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 96,
+      "name": "Sign 8.2",
+      "universe": 4,
+      "address": 118,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 97,
+      "name": "Sign 9.2",
+      "universe": 4,
+      "address": 121,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 98,
+      "name": "Sign 10.2",
+      "universe": 4,
+      "address": 124,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 99,
+      "name": "Sign 11.2",
+      "universe": 4,
+      "address": 127,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 100,
+      "name": "Sign 12.2",
+      "universe": 4,
+      "address": 130,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 101,
+      "name": "Sign 13.2",
+      "universe": 4,
+      "address": 133,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 102,
+      "name": "Sign 14.2",
+      "universe": 4,
+      "address": 136,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 103,
+      "name": "Sign 15.2",
+      "universe": 4,
+      "address": 139,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 104,
+      "name": "Sign 16.2",
+      "universe": 4,
+      "address": 142,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 105,
+      "name": "Sign 17.2",
+      "universe": 4,
+      "address": 145,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 106,
+      "name": "Sign 18.2",
+      "universe": 4,
+      "address": 148,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 107,
+      "name": "Sign 19.2",
+      "universe": 4,
+      "address": 151,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 108,
+      "name": "Sign 20.2",
+      "universe": 4,
+      "address": 154,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 109,
+      "name": "Sign 21.2",
+      "universe": 4,
+      "address": 157,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 110,
+      "name": "Sign 22.2",
+      "universe": 4,
+      "address": 160,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 111,
+      "name": "Sign 23.2",
+      "universe": 4,
+      "address": 163,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 112,
+      "name": "Sign 24.2",
+      "universe": 4,
+      "address": 166,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 113,
+      "name": "Sign 25.2",
+      "universe": 4,
+      "address": 169,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 114,
+      "name": "Sign 26.2",
+      "universe": 4,
+      "address": 172,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 115,
+      "name": "Sign 27.2",
+      "universe": 4,
+      "address": 175,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 116,
+      "name": "Sign 28.2",
+      "universe": 4,
+      "address": 178,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 117,
+      "name": "Sign 29.2",
+      "universe": 4,
+      "address": 181,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 118,
+      "name": "Sign 30.2",
+      "universe": 4,
+      "address": 184,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 119,
+      "name": "Sign 31.2",
+      "universe": 4,
+      "address": 187,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 120,
+      "name": "Sign 32.2",
+      "universe": 4,
+      "address": 190,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 121,
+      "name": "Sign 1.3",
+      "universe": 4,
+      "address": 193,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 122,
+      "name": "Sign 2.3",
+      "universe": 4,
+      "address": 196,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 123,
+      "name": "Sign 3.3",
+      "universe": 4,
+      "address": 199,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 124,
+      "name": "Sign 4.3",
+      "universe": 4,
+      "address": 202,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 125,
+      "name": "Sign 5.3",
+      "universe": 4,
+      "address": 205,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 126,
+      "name": "Sign 6.3",
+      "universe": 4,
+      "address": 208,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 127,
+      "name": "Sign 7.3",
+      "universe": 4,
+      "address": 211,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 128,
+      "name": "Sign 8.3",
+      "universe": 4,
+      "address": 214,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 129,
+      "name": "Sign 9.3",
+      "universe": 4,
+      "address": 217,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 130,
+      "name": "Sign 10.3",
+      "universe": 4,
+      "address": 220,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 131,
+      "name": "Sign 11.3",
+      "universe": 4,
+      "address": 223,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 132,
+      "name": "Sign 12.3",
+      "universe": 4,
+      "address": 226,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 133,
+      "name": "Sign 13.3",
+      "universe": 4,
+      "address": 229,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 134,
+      "name": "Sign 14.3",
+      "universe": 4,
+      "address": 232,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 135,
+      "name": "Sign 15.3",
+      "universe": 4,
+      "address": 235,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 136,
+      "name": "Sign 16.3",
+      "universe": 4,
+      "address": 238,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 137,
+      "name": "Sign 17.3",
+      "universe": 4,
+      "address": 241,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 138,
+      "name": "Sign 18.3",
+      "universe": 4,
+      "address": 244,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 139,
+      "name": "Sign 19.3",
+      "universe": 4,
+      "address": 247,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 140,
+      "name": "Sign 20.3",
+      "universe": 4,
+      "address": 250,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 141,
+      "name": "Sign 21.3",
+      "universe": 4,
+      "address": 253,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 142,
+      "name": "Sign 22.3",
+      "universe": 4,
+      "address": 256,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 143,
+      "name": "Sign 23.3",
+      "universe": 4,
+      "address": 259,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 144,
+      "name": "Sign 24.3",
+      "universe": 4,
+      "address": 262,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 145,
+      "name": "Sign 25.3",
+      "universe": 4,
+      "address": 265,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 146,
+      "name": "Sign 26.3",
+      "universe": 4,
+      "address": 268,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 147,
+      "name": "Sign 27.3",
+      "universe": 4,
+      "address": 271,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 148,
+      "name": "Sign 28.3",
+      "universe": 4,
+      "address": 274,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 149,
+      "name": "Sign 29.3",
+      "universe": 4,
+      "address": 277,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 150,
+      "name": "Sign 30.3",
+      "universe": 4,
+      "address": 280,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 151,
+      "name": "Sign 31.3",
+      "universe": 4,
+      "address": 283,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 152,
+      "name": "Sign 32.3",
+      "universe": 4,
+      "address": 286,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 153,
+      "name": "Sign 1.4",
+      "universe": 4,
+      "address": 289,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 154,
+      "name": "Sign 2.4",
+      "universe": 4,
+      "address": 292,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 155,
+      "name": "Sign 3.4",
+      "universe": 4,
+      "address": 295,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 156,
+      "name": "Sign 4.4",
+      "universe": 4,
+      "address": 298,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 157,
+      "name": "Sign 5.4",
+      "universe": 4,
+      "address": 301,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 158,
+      "name": "Sign 6.4",
+      "universe": 4,
+      "address": 304,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 159,
+      "name": "Sign 7.4",
+      "universe": 4,
+      "address": 307,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 160,
+      "name": "Sign 8.4",
+      "universe": 4,
+      "address": 310,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 161,
+      "name": "Sign 9.4",
+      "universe": 4,
+      "address": 313,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 162,
+      "name": "Sign 10.4",
+      "universe": 4,
+      "address": 316,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 163,
+      "name": "Sign 11.4",
+      "universe": 4,
+      "address": 319,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 164,
+      "name": "Sign 12.4",
+      "universe": 4,
+      "address": 322,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 165,
+      "name": "Sign 13.4",
+      "universe": 4,
+      "address": 325,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 166,
+      "name": "Sign 14.4",
+      "universe": 4,
+      "address": 328,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 167,
+      "name": "Sign 15.4",
+      "universe": 4,
+      "address": 331,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 168,
+      "name": "Sign 16.4",
+      "universe": 4,
+      "address": 334,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 169,
+      "name": "Sign 17.4",
+      "universe": 4,
+      "address": 337,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 170,
+      "name": "Sign 18.4",
+      "universe": 4,
+      "address": 340,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 171,
+      "name": "Sign 19.4",
+      "universe": 4,
+      "address": 343,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 172,
+      "name": "Sign 20.4",
+      "universe": 4,
+      "address": 346,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 173,
+      "name": "Sign 21.4",
+      "universe": 4,
+      "address": 349,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 174,
+      "name": "Sign 22.4",
+      "universe": 4,
+      "address": 352,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 175,
+      "name": "Sign 23.4",
+      "universe": 4,
+      "address": 355,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 176,
+      "name": "Sign 24.4",
+      "universe": 4,
+      "address": 358,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 177,
+      "name": "Sign 25.4",
+      "universe": 4,
+      "address": 361,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 178,
+      "name": "Sign 26.4",
+      "universe": 4,
+      "address": 364,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 179,
+      "name": "Sign 27.4",
+      "universe": 4,
+      "address": 367,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 180,
+      "name": "Sign 28.4",
+      "universe": 4,
+      "address": 370,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 181,
+      "name": "Sign 29.4",
+      "universe": 4,
+      "address": 373,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 182,
+      "name": "Sign 30.4",
+      "universe": 4,
+      "address": 376,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 183,
+      "name": "Sign 31.4",
+      "universe": 4,
+      "address": 379,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 184,
+      "name": "Sign 32.4",
+      "universe": 4,
+      "address": 382,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 185,
+      "name": "Sign 1.5",
+      "universe": 4,
+      "address": 385,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 186,
+      "name": "Sign 2.5",
+      "universe": 4,
+      "address": 388,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 187,
+      "name": "Sign 3.5",
+      "universe": 4,
+      "address": 391,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 188,
+      "name": "Sign 4.5",
+      "universe": 4,
+      "address": 394,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 189,
+      "name": "Sign 5.5",
+      "universe": 4,
+      "address": 397,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 190,
+      "name": "Sign 6.5",
+      "universe": 4,
+      "address": 400,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 191,
+      "name": "Sign 7.5",
+      "universe": 4,
+      "address": 403,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 192,
+      "name": "Sign 8.5",
+      "universe": 4,
+      "address": 406,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 193,
+      "name": "Sign 9.5",
+      "universe": 4,
+      "address": 409,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 194,
+      "name": "Sign 10.5",
+      "universe": 4,
+      "address": 412,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 195,
+      "name": "Sign 11.5",
+      "universe": 4,
+      "address": 415,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 196,
+      "name": "Sign 12.5",
+      "universe": 4,
+      "address": 418,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 197,
+      "name": "Sign 13.5",
+      "universe": 4,
+      "address": 421,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 198,
+      "name": "Sign 14.5",
+      "universe": 4,
+      "address": 424,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 199,
+      "name": "Sign 15.5",
+      "universe": 4,
+      "address": 427,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 200,
+      "name": "Sign 16.5",
+      "universe": 4,
+      "address": 430,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 201,
+      "name": "Sign 17.5",
+      "universe": 4,
+      "address": 433,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 202,
+      "name": "Sign 18.5",
+      "universe": 4,
+      "address": 436,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 203,
+      "name": "Sign 19.5",
+      "universe": 4,
+      "address": 439,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 204,
+      "name": "Sign 20.5",
+      "universe": 4,
+      "address": 442,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 205,
+      "name": "Sign 21.5",
+      "universe": 4,
+      "address": 445,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 206,
+      "name": "Sign 22.5",
+      "universe": 4,
+      "address": 448,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 207,
+      "name": "Sign 23.5",
+      "universe": 4,
+      "address": 451,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 208,
+      "name": "Sign 24.5",
+      "universe": 4,
+      "address": 454,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 209,
+      "name": "Sign 25.5",
+      "universe": 4,
+      "address": 457,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 210,
+      "name": "Sign 26.5",
+      "universe": 4,
+      "address": 460,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 211,
+      "name": "Sign 27.5",
+      "universe": 4,
+      "address": 463,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 212,
+      "name": "Sign 28.5",
+      "universe": 4,
+      "address": 466,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 213,
+      "name": "Sign 29.5",
+      "universe": 4,
+      "address": 469,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 214,
+      "name": "Sign 30.5",
+      "universe": 4,
+      "address": 472,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 215,
+      "name": "Sign 31.5",
+      "universe": 4,
+      "address": 475,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 216,
+      "name": "Sign 32.5",
+      "universe": 4,
+      "address": 478,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 217,
+      "name": "Sign 1.6",
+      "universe": 4,
+      "address": 481,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 218,
+      "name": "Sign 2.6",
+      "universe": 4,
+      "address": 484,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 219,
+      "name": "Sign 3.6",
+      "universe": 4,
+      "address": 487,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 220,
+      "name": "Sign 4.6",
+      "universe": 4,
+      "address": 490,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 221,
+      "name": "Sign 5.6",
+      "universe": 4,
+      "address": 493,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 222,
+      "name": "Sign 6.6",
+      "universe": 4,
+      "address": 496,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 223,
+      "name": "Sign 7.6",
+      "universe": 4,
+      "address": 499,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 224,
+      "name": "Sign 8.6",
+      "universe": 4,
+      "address": 502,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 225,
+      "name": "Sign 9.6",
+      "universe": 4,
+      "address": 505,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 226,
+      "name": "Sign 10.6",
+      "universe": 4,
+      "address": 508,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 227,
+      "name": "Sign 11.6",
+      "universe": 5,
+      "address": 1,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 228,
+      "name": "Sign 12.6",
+      "universe": 5,
+      "address": 4,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 229,
+      "name": "Sign 13.6",
+      "universe": 5,
+      "address": 7,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 230,
+      "name": "Sign 14.6",
+      "universe": 5,
+      "address": 10,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 231,
+      "name": "Sign 15.6",
+      "universe": 5,
+      "address": 13,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 232,
+      "name": "Sign 16.6",
+      "universe": 5,
+      "address": 16,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 233,
+      "name": "Sign 17.6",
+      "universe": 5,
+      "address": 19,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 234,
+      "name": "Sign 18.6",
+      "universe": 5,
+      "address": 22,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 235,
+      "name": "Sign 19.6",
+      "universe": 5,
+      "address": 25,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 236,
+      "name": "Sign 20.6",
+      "universe": 5,
+      "address": 28,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 237,
+      "name": "Sign 21.6",
+      "universe": 5,
+      "address": 31,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 238,
+      "name": "Sign 22.6",
+      "universe": 5,
+      "address": 34,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 239,
+      "name": "Sign 23.6",
+      "universe": 5,
+      "address": 37,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 240,
+      "name": "Sign 24.6",
+      "universe": 5,
+      "address": 40,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 241,
+      "name": "Sign 25.6",
+      "universe": 5,
+      "address": 43,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 242,
+      "name": "Sign 26.6",
+      "universe": 5,
+      "address": 46,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 243,
+      "name": "Sign 27.6",
+      "universe": 5,
+      "address": 49,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 244,
+      "name": "Sign 28.6",
+      "universe": 5,
+      "address": 52,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 245,
+      "name": "Sign 29.6",
+      "universe": 5,
+      "address": 55,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 246,
+      "name": "Sign 30.6",
+      "universe": 5,
+      "address": 58,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 247,
+      "name": "Sign 31.6",
+      "universe": 5,
+      "address": 61,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 248,
+      "name": "Sign 32.6",
+      "universe": 5,
+      "address": 64,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 249,
+      "name": "Sign 1.7",
+      "universe": 5,
+      "address": 67,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 250,
+      "name": "Sign 2.7",
+      "universe": 5,
+      "address": 70,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 251,
+      "name": "Sign 3.7",
+      "universe": 5,
+      "address": 73,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 252,
+      "name": "Sign 4.7",
+      "universe": 5,
+      "address": 76,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 253,
+      "name": "Sign 5.7",
+      "universe": 5,
+      "address": 79,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 254,
+      "name": "Sign 6.7",
+      "universe": 5,
+      "address": 82,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 255,
+      "name": "Sign 7.7",
+      "universe": 5,
+      "address": 85,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 256,
+      "name": "Sign 8.7",
+      "universe": 5,
+      "address": 88,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 257,
+      "name": "Sign 9.7",
+      "universe": 5,
+      "address": 91,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 258,
+      "name": "Sign 10.7",
+      "universe": 5,
+      "address": 94,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 259,
+      "name": "Sign 11.7",
+      "universe": 5,
+      "address": 97,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 260,
+      "name": "Sign 12.7",
+      "universe": 5,
+      "address": 100,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 261,
+      "name": "Sign 13.7",
+      "universe": 5,
+      "address": 103,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 262,
+      "name": "Sign 14.7",
+      "universe": 5,
+      "address": 106,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 263,
+      "name": "Sign 15.7",
+      "universe": 5,
+      "address": 109,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 264,
+      "name": "Sign 16.7",
+      "universe": 5,
+      "address": 112,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 265,
+      "name": "Sign 17.7",
+      "universe": 5,
+      "address": 115,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 266,
+      "name": "Sign 18.7",
+      "universe": 5,
+      "address": 118,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 267,
+      "name": "Sign 19.7",
+      "universe": 5,
+      "address": 121,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 268,
+      "name": "Sign 20.7",
+      "universe": 5,
+      "address": 124,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 269,
+      "name": "Sign 21.7",
+      "universe": 5,
+      "address": 127,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 270,
+      "name": "Sign 22.7",
+      "universe": 5,
+      "address": 130,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 271,
+      "name": "Sign 23.7",
+      "universe": 5,
+      "address": 133,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 272,
+      "name": "Sign 24.7",
+      "universe": 5,
+      "address": 136,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 273,
+      "name": "Sign 25.7",
+      "universe": 5,
+      "address": 139,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 274,
+      "name": "Sign 26.7",
+      "universe": 5,
+      "address": 142,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 275,
+      "name": "Sign 27.7",
+      "universe": 5,
+      "address": 145,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 276,
+      "name": "Sign 28.7",
+      "universe": 5,
+      "address": 148,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 277,
+      "name": "Sign 29.7",
+      "universe": 5,
+      "address": 151,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 278,
+      "name": "Sign 30.7",
+      "universe": 5,
+      "address": 154,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 279,
+      "name": "Sign 31.7",
+      "universe": 5,
+      "address": 157,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 280,
+      "name": "Sign 32.7",
+      "universe": 5,
+      "address": 160,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 281,
+      "name": "Sign 1.8",
+      "universe": 5,
+      "address": 163,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 282,
+      "name": "Sign 2.8",
+      "universe": 5,
+      "address": 166,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 283,
+      "name": "Sign 3.8",
+      "universe": 5,
+      "address": 169,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 284,
+      "name": "Sign 4.8",
+      "universe": 5,
+      "address": 172,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 285,
+      "name": "Sign 5.8",
+      "universe": 5,
+      "address": 175,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 286,
+      "name": "Sign 6.8",
+      "universe": 5,
+      "address": 178,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 287,
+      "name": "Sign 7.8",
+      "universe": 5,
+      "address": 181,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 288,
+      "name": "Sign 8.8",
+      "universe": 5,
+      "address": 184,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 289,
+      "name": "Sign 9.8",
+      "universe": 5,
+      "address": 187,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 290,
+      "name": "Sign 10.8",
+      "universe": 5,
+      "address": 190,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 291,
+      "name": "Sign 11.8",
+      "universe": 5,
+      "address": 193,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 292,
+      "name": "Sign 12.8",
+      "universe": 5,
+      "address": 196,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 293,
+      "name": "Sign 13.8",
+      "universe": 5,
+      "address": 199,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 294,
+      "name": "Sign 14.8",
+      "universe": 5,
+      "address": 202,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 295,
+      "name": "Sign 15.8",
+      "universe": 5,
+      "address": 205,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 296,
+      "name": "Sign 16.8",
+      "universe": 5,
+      "address": 208,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 297,
+      "name": "Sign 17.8",
+      "universe": 5,
+      "address": 211,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 298,
+      "name": "Sign 18.8",
+      "universe": 5,
+      "address": 214,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 299,
+      "name": "Sign 19.8",
+      "universe": 5,
+      "address": 217,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 300,
+      "name": "Sign 20.8",
+      "universe": 5,
+      "address": 220,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 301,
+      "name": "Sign 21.8",
+      "universe": 5,
+      "address": 223,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 302,
+      "name": "Sign 22.8",
+      "universe": 5,
+      "address": 226,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 303,
+      "name": "Sign 23.8",
+      "universe": 5,
+      "address": 229,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 304,
+      "name": "Sign 24.8",
+      "universe": 5,
+      "address": 232,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 305,
+      "name": "Sign 25.8",
+      "universe": 5,
+      "address": 235,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 306,
+      "name": "Sign 26.8",
+      "universe": 5,
+      "address": 238,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 307,
+      "name": "Sign 27.8",
+      "universe": 5,
+      "address": 241,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 308,
+      "name": "Sign 28.8",
+      "universe": 5,
+      "address": 244,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 309,
+      "name": "Sign 29.8",
+      "universe": 5,
+      "address": 247,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 310,
+      "name": "Sign 30.8",
+      "universe": 5,
+      "address": 250,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 311,
+      "name": "Sign 31.8",
+      "universe": 5,
+      "address": 253,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 312,
+      "name": "Sign 32.8",
+      "universe": 5,
+      "address": 256,
+      "channels": [
+        "r",
+        "g",
+        "b"
+      ],
+      "icon": "pixel"
+    },
+    {
+      "id": 313,
       "name": "Winch",
       "universe": 3,
       "address": 1,
@@ -864,7 +3958,7 @@
       "icon": "motor"
     },
     {
-      "id": 58,
+      "id": 314,
       "name": "Projector shutter",
       "universe": 3,
       "address": 10,
@@ -1011,6 +4105,268 @@
         54,
         55,
         56
+      ]
+    },
+    {
+      "id": 8,
+      "name": "LED sign",
+      "fixtures": [
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191,
+        192,
+        193,
+        194,
+        195,
+        196,
+        197,
+        198,
+        199,
+        200,
+        201,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207,
+        208,
+        209,
+        210,
+        211,
+        212,
+        213,
+        214,
+        215,
+        216,
+        217,
+        218,
+        219,
+        220,
+        221,
+        222,
+        223,
+        224,
+        225,
+        226,
+        227,
+        228,
+        229,
+        230,
+        231,
+        232,
+        233,
+        234,
+        235,
+        236,
+        237,
+        238,
+        239,
+        240,
+        241,
+        242,
+        243,
+        244,
+        245,
+        246,
+        247,
+        248,
+        249,
+        250,
+        251,
+        252,
+        253,
+        254,
+        255,
+        256,
+        257,
+        258,
+        259,
+        260,
+        261,
+        262,
+        263,
+        264,
+        265,
+        266,
+        267,
+        268,
+        269,
+        270,
+        271,
+        272,
+        273,
+        274,
+        275,
+        276,
+        277,
+        278,
+        279,
+        280,
+        281,
+        282,
+        283,
+        284,
+        285,
+        286,
+        287,
+        288,
+        289,
+        290,
+        291,
+        292,
+        293,
+        294,
+        295,
+        296,
+        297,
+        298,
+        299,
+        300,
+        301,
+        302,
+        303,
+        304,
+        305,
+        306,
+        307,
+        308,
+        309,
+        310,
+        311,
+        312
       ]
     }
   ],
@@ -1691,12 +5047,12 @@
       "name": "Winch up + raw channel",
       "levels": [
         {
-          "fixture": 57,
+          "fixture": 313,
           "ch": "pos",
           "v": 52000
         },
         {
-          "fixture": 57,
+          "fixture": 313,
           "ch": "speed",
           "v": 128
         },
@@ -2028,7 +5384,7 @@
           "t": 0,
           "track": 1,
           "fade": 2000,
-          "effect": 9,
+          "effect": 11,
           "params": {
             "speed": 0.1,
             "color": "#ff9040"
@@ -2041,7 +5397,7 @@
           "fade": 2000,
           "len": 15000,
           "out": 2000,
-          "effect": 21,
+          "effect": 24,
           "params": {},
           "dim": 80
         },
@@ -2051,7 +5407,7 @@
           "fade": 2000,
           "len": 15000,
           "out": 2000,
-          "effect": 17,
+          "effect": 20,
           "params": {},
           "dim": 80
         },
@@ -2065,7 +5421,34 @@
           "params": {
             "speed": 0.5
           },
-          "dim": 100
+          "dim": 100,
+          "mods": {
+            "mirror": "x"
+          },
+          "auto": {
+            "speed": [
+              [
+                0,
+                0.2,
+                0
+              ],
+              [
+                2000,
+                0.2,
+                0.6
+              ],
+              [
+                6000,
+                1.6,
+                0
+              ],
+              [
+                9000,
+                0.3,
+                0
+              ]
+            ]
+          }
         },
         {
           "t": 10000,
@@ -2073,7 +5456,7 @@
           "fade": 1000,
           "len": 10000,
           "out": 1000,
-          "effect": 18,
+          "effect": 21,
           "params": {
             "speed": 0.6,
             "color": "#00c7be"
@@ -2086,7 +5469,7 @@
           "fade": 1000,
           "len": 10000,
           "out": 1000,
-          "effect": 23,
+          "effect": 37,
           "params": {
             "speed": 0.6,
             "color": "#ff8a00"
@@ -2097,7 +5480,7 @@
           "t": 0,
           "track": 4,
           "fade": 2000,
-          "effect": 24,
+          "effect": 38,
           "params": {},
           "dim": 100
         }
@@ -2211,7 +5594,7 @@
           "fade": 2000,
           "len": 20000,
           "out": 2000,
-          "effect": 18,
+          "effect": 21,
           "params": {
             "speed": 0.8,
             "color": "#00c7be"
@@ -2224,7 +5607,7 @@
           "fade": 2000,
           "len": 20000,
           "out": 2000,
-          "effect": 20,
+          "effect": 23,
           "params": {},
           "dim": 100
         },
@@ -2242,7 +5625,7 @@
           "fade": 0,
           "len": 3000,
           "out": 500,
-          "effect": 11,
+          "effect": 13,
           "params": {},
           "dim": 100
         },
@@ -2297,7 +5680,7 @@
         {
           "t": 0,
           "fade": 5000,
-          "effect": 22,
+          "effect": 25,
           "params": {},
           "dim": 70
         }
@@ -2315,7 +5698,7 @@
         {
           "name": "Winch",
           "fixtures": [
-            57
+            313
           ],
           "groups": []
         }
@@ -2326,6 +5709,79 @@
           "fade": 8000,
           "scene": 7,
           "path": "damped"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "LED sign",
+      "length": 40000,
+      "loop": true,
+      "priority": 0,
+      "tracks": [
+        {
+          "name": "Sign",
+          "fixtures": [],
+          "groups": [
+            8
+          ]
+        }
+      ],
+      "cues": [
+        {
+          "t": 0,
+          "track": 0,
+          "fade": 1000,
+          "len": 14000,
+          "out": 1000,
+          "effect": 35,
+          "params": {
+            "msg": "WELCOME TO THE MUSEUM",
+            "speed": 12,
+            "cols": 32,
+            "color": "#ffd60a"
+          },
+          "dim": 100
+        },
+        {
+          "t": 14000,
+          "track": 0,
+          "fade": 1000,
+          "len": 8000,
+          "out": 1000,
+          "effect": 26,
+          "params": {
+            "pal": "#000814 0,#5e5ce6 0.6,#ff2d92 0.85,#ffd60a 1"
+          },
+          "dim": 100
+        },
+        {
+          "t": 22000,
+          "track": 0,
+          "fade": 1000,
+          "len": 8000,
+          "out": 1000,
+          "effect": 31,
+          "params": {
+            "arms": 2
+          },
+          "dim": 100,
+          "mods": {
+            "kaleido": 6
+          }
+        },
+        {
+          "t": 30000,
+          "track": 0,
+          "fade": 1000,
+          "len": 10000,
+          "out": 1000,
+          "effect": 36,
+          "params": {
+            "pic": "img:32x8x4:////////////GACUIACQKACMMACIOACEQACASAB8UAB4WAB0YABwaABscABoeABkgABgiABckABYmABUoABQqABMsABIuABEwABAyAA80AA42AA04AAw6AAs8AAo+AAk////////////GBiUIBiQKBiMMBiIOBiEQBiASBh8UBh4WBh0YBhwaBhscBhoeBhkgBhgiBhckBhYmBhUoBhQqBhMsBhIuBhEwBhAyBg80Bg42Bg04Bgw6Bgs8Bgo+Bgk////////////GDCUIDCQKDCMMDCIODCEQDCASDB8UDB4WDB0YDBwaDBscDBoeDBkgDBgiDBckDBYmDBUoDBQqDBMsDBIuDBEwDBAyDA80DA42DA04DAw6DAs8DAo+DAk////////////GEiUIEiQKEiMMEiIOEiEQEiASEh8UEh4WEh0YEhwaEhscEhoeEhkgEhgiEhckEhYmEhUoEhQqEhMsEhIuEhEwEhAyEg80Eg42Eg04Egw6Egs8Ego+Egk////////////GGCUIGCQKGCMMGCIOGCEQGCASGB8UGB4WGB0YGBwaGBscGBoeGBkgGBgiGBckGBYmGBUoGBQqGBMsGBIuGBEwGBAyGA80GA42GA04GAw6GAs8GAo+GAk////////////GHiUIHiQKHiMMHiIOHiEQHiASHh8UHh4WHh0YHhwaHhscHhoeHhkgHhgiHhckHhYmHhUoHhQqHhMsHhIuHhEwHhAyHg80Hg42Hg04Hgw6Hgs8Hgo+Hgk////////////GJCUIJCQKJCMMJCIOJCEQJCASJB8UJB4WJB0YJBwaJBscJBoeJBkgJBgiJBckJBYmJBUoJBQqJBMsJBIuJBEwJBAyJA80JA42JA04JAw6JAs8JAo+JAk////////////GKiUIKiQKKiMMKiIOKiEQKiASKh8UKh4WKh0YKhwaKhscKhoeKhkgKhgiKhckKhYmKhUoKhQqKhMsKhIuKhEwKhAyKg80Kg42Kg04Kgw6Kgs8Kgo+KgkAACgCACcEACYGACUIACQKACMMACIOACE////////////WAB0YABwaABscABoeABkgABgiABckABYmABUoABQqABMsABIuABEwABAyAA80AA42AA04AAw6AAs8AAo+AAkABigCBicEBiYGBiUIBiQKBiMMBiIOBiE////////////WBh0YBhwaBhscBhoeBhkgBhgiBhckBhYmBhUoBhQqBhMsBhIuBhEwBhAyBg80Bg42Bg04Bgw6Bgs8Bgo+BgkADCgCDCcEDCYGDCUIDCQKDCMMDCIODCE////////////WDB0YDBwaDBscDBoeDBkgDBgiDBckDBYmDBUoDBQqDBMsDBIuDBEwDBAyDA80DA42DA04DAw6DAs8DAo+DAkAEigCEicEEiYGEiUIEiQKEiMMEiIOEiE////////////WEh0YEhwaEhscEhoeEhkgEhgiEhckEhYmEhUoEhQqEhMsEhIuEhEwEhAyEg80Eg42Eg04Egw6Egs8Ego+EgkAGCgCGCcEGCYGGCUIGCQKGCMMGCIOGCE////////////WGB0YGBwaGBscGBoeGBkgGBgiGBckGBYmGBUoGBQqGBMsGBIuGBEwGBAyGA80GA42GA04GAw6GAs8GAo+GAkAHigCHicEHiYGHiUIHiQKHiMMHiIOHiE////////////WHh0YHhwaHhscHhoeHhkgHhgiHhckHhYmHhUoHhQqHhMsHhIuHhEwHhAyHg80Hg42Hg04Hgw6Hgs8Hgo+HgkAJCgCJCcEJCYGJCUIJCQKJCMMJCIOJCE////////////WJB0YJBwaJBscJBoeJBkgJBgiJBckJBYmJBUoJBQqJBMsJBIuJBEwJBAyJA80JA42JA04JAw6JAs8JAo+JAkAKigCKicEKiYGKiUIKiQKKiMMKiIOKiE////////////WKh0YKhwaKhscKhoeKhkgKhgiKhckKhYmKhUoKhQqKhMsKhIuKhEwKhAyKg80Kg42Kg04Kgw6Kgs8Kgo+KgkAACgCACcEACYGACUIACQKACMMACIOACEQACASAB8UAB4WAB0YABwaABscABoeABk////////////mABUoABQqABMsABIuABEwABAyAA80AA42AA04AAw6AAs8AAo+AAkABigCBicEBiYGBiUIBiQKBiMMBiIOBiEQBiASBh8UBh4WBh0YBhwaBhscBhoeBhk////////////mBhUoBhQqBhMsBhIuBhEwBhAyBg80Bg42Bg04Bgw6Bgs8Bgo+BgkADCgCDCcEDCYGDCUIDCQKDCMMDCIODCEQDCASDB8UDB4WDB0YDBwaDBscDBoeDBk////////////mDBUoDBQqDBMsDBIuDBEwDBAyDA80DA42DA04DAw6DAs8DAo+DAkAEigCEicEEiYGEiUIEiQKEiMMEiIOEiEQEiASEh8UEh4WEh0YEhwaEhscEhoeEhk////////////mEhUoEhQqEhMsEhIuEhEwEhAyEg80Eg42Eg04Egw6Egs8Ego+EgkAGCgCGCcEGCYGGCUIGCQKGCMMGCIOGCEQGCASGB8UGB4WGB0YGBwaGBscGBoeGBk////////////mGBUoGBQqGBMsGBIuGBEwGBAyGA80GA42GA04GAw6GAs8GAo+GAkAHigCHicEHiYGHiUIHiQKHiMMHiIOHiEQHiASHh8UHh4WHh0YHhwaHhscHhoeHhk////////////mHhUoHhQqHhMsHhIuHhEwHhAyHg80Hg42Hg04Hgw6Hgs8Hgo+HgkAJCgCJCcEJCYGJCUIJCQKJCMMJCIOJCEQJCASJB8UJB4WJB0YJBwaJBscJBoeJBk////////////mJBUoJBQqJBMsJBIuJBEwJBAyJA80JA42JA04JAw6JAs8JAo+JAkAKigCKicEKiYGKiUIKiQKKiMMKiIOKiEQKiASKh8UKh4WKh0YKhwaKhscKhoeKhk////////////mKhUoKhQqKhMsKhIuKhEwKhAyKg80Kg42Kg04Kgw6Kgs8Kgo+KgkAACgCACcEACYGACUIACQKACMMACIOACEQACASAB8UAB4WAB0YABwaABscABoeABkgABgiABckABYmABUoABQqABMsABIuABE////////////2AA04AAw6AAs8AAo+AAkABigCBicEBiYGBiUIBiQKBiMMBiIOBiEQBiASBh8UBh4WBh0YBhwaBhscBhoeBhkgBhgiBhckBhYmBhUoBhQqBhMsBhIuBhE////////////2Bg04Bgw6Bgs8Bgo+BgkADCgCDCcEDCYGDCUIDCQKDCMMDCIODCEQDCASDB8UDB4WDB0YDBwaDBscDBoeDBkgDBgiDBckDBYmDBUoDBQqDBMsDBIuDBE////////////2DA04DAw6DAs8DAo+DAkAEigCEicEEiYGEiUIEiQKEiMMEiIOEiEQEiASEh8UEh4WEh0YEhwaEhscEhoeEhkgEhgiEhckEhYmEhUoEhQqEhMsEhIuEhE////////////2Eg04Egw6Egs8Ego+EgkAGCgCGCcEGCYGGCUIGCQKGCMMGCIOGCEQGCASGB8UGB4WGB0YGBwaGBscGBoeGBkgGBgiGBckGBYmGBUoGBQqGBMsGBIuGBE////////////2GA04GAw6GAs8GAo+GAkAHigCHicEHiYGHiUIHiQKHiMMHiIOHiEQHiASHh8UHh4WHh0YHhwaHhscHhoeHhkgHhgiHhckHhYmHhUoHhQqHhMsHhIuHhE////////////2Hg04Hgw6Hgs8Hgo+HgkAJCgCJCcEJCYGJCUIJCQKJCMMJCIOJCEQJCASJB8UJB4WJB0YJBwaJBscJBoeJBkgJBgiJBckJBYmJBUoJBQqJBMsJBIuJBE////////////2JA04JAw6JAs8JAo+JAkAKigCKicEKiYGKiUIKiQKKiMMKiIOKiEQKiASKh8UKh4WKh0YKhwaKhscKhoeKhkgKhgiKhckKhYmKhUoKhQqKhMsKhIuKhE////////////2Kg04Kgw6Kgs8Kgo+Kgk",
+            "fps": 4
+          },
+          "dim": 100
         }
       ]
     }
@@ -3944,7 +7400,7 @@
         "if var switch_changes > 0 then email tech@example.com \"Network\" {value} switch port(s) not as remembered else log Network cabling back to normal"
       ],
       "conditions": [],
-      "notes": "The Netgear switch on the Devices page counts the ports that are not as remembered (unplugged, other device, slower, no PoE) into switch_changes."
+      "notes": "The network switch on the Devices page counts the ports that are not as remembered (unplugged, other device, slower, no PoE) into switch_changes."
     },
     {
       "id": 69,
@@ -4831,6 +8287,1296 @@
       "grid": 20
     },
     {
+      "id": 7,
+      "name": "LED sign 32 x 8",
+      "aspect": 4,
+      "background": "",
+      "snap": true,
+      "labels": true,
+      "items": [
+        {
+          "fixture": 57,
+          "x": 0.0156,
+          "y": 0.0625
+        },
+        {
+          "fixture": 58,
+          "x": 0.0469,
+          "y": 0.0625
+        },
+        {
+          "fixture": 59,
+          "x": 0.0781,
+          "y": 0.0625
+        },
+        {
+          "fixture": 60,
+          "x": 0.1094,
+          "y": 0.0625
+        },
+        {
+          "fixture": 61,
+          "x": 0.1406,
+          "y": 0.0625
+        },
+        {
+          "fixture": 62,
+          "x": 0.1719,
+          "y": 0.0625
+        },
+        {
+          "fixture": 63,
+          "x": 0.2031,
+          "y": 0.0625
+        },
+        {
+          "fixture": 64,
+          "x": 0.2344,
+          "y": 0.0625
+        },
+        {
+          "fixture": 65,
+          "x": 0.2656,
+          "y": 0.0625
+        },
+        {
+          "fixture": 66,
+          "x": 0.2969,
+          "y": 0.0625
+        },
+        {
+          "fixture": 67,
+          "x": 0.3281,
+          "y": 0.0625
+        },
+        {
+          "fixture": 68,
+          "x": 0.3594,
+          "y": 0.0625
+        },
+        {
+          "fixture": 69,
+          "x": 0.3906,
+          "y": 0.0625
+        },
+        {
+          "fixture": 70,
+          "x": 0.4219,
+          "y": 0.0625
+        },
+        {
+          "fixture": 71,
+          "x": 0.4531,
+          "y": 0.0625
+        },
+        {
+          "fixture": 72,
+          "x": 0.4844,
+          "y": 0.0625
+        },
+        {
+          "fixture": 73,
+          "x": 0.5156,
+          "y": 0.0625
+        },
+        {
+          "fixture": 74,
+          "x": 0.5469,
+          "y": 0.0625
+        },
+        {
+          "fixture": 75,
+          "x": 0.5781,
+          "y": 0.0625
+        },
+        {
+          "fixture": 76,
+          "x": 0.6094,
+          "y": 0.0625
+        },
+        {
+          "fixture": 77,
+          "x": 0.6406,
+          "y": 0.0625
+        },
+        {
+          "fixture": 78,
+          "x": 0.6719,
+          "y": 0.0625
+        },
+        {
+          "fixture": 79,
+          "x": 0.7031,
+          "y": 0.0625
+        },
+        {
+          "fixture": 80,
+          "x": 0.7344,
+          "y": 0.0625
+        },
+        {
+          "fixture": 81,
+          "x": 0.7656,
+          "y": 0.0625
+        },
+        {
+          "fixture": 82,
+          "x": 0.7969,
+          "y": 0.0625
+        },
+        {
+          "fixture": 83,
+          "x": 0.8281,
+          "y": 0.0625
+        },
+        {
+          "fixture": 84,
+          "x": 0.8594,
+          "y": 0.0625
+        },
+        {
+          "fixture": 85,
+          "x": 0.8906,
+          "y": 0.0625
+        },
+        {
+          "fixture": 86,
+          "x": 0.9219,
+          "y": 0.0625
+        },
+        {
+          "fixture": 87,
+          "x": 0.9531,
+          "y": 0.0625
+        },
+        {
+          "fixture": 88,
+          "x": 0.9844,
+          "y": 0.0625
+        },
+        {
+          "fixture": 89,
+          "x": 0.0156,
+          "y": 0.1875
+        },
+        {
+          "fixture": 90,
+          "x": 0.0469,
+          "y": 0.1875
+        },
+        {
+          "fixture": 91,
+          "x": 0.0781,
+          "y": 0.1875
+        },
+        {
+          "fixture": 92,
+          "x": 0.1094,
+          "y": 0.1875
+        },
+        {
+          "fixture": 93,
+          "x": 0.1406,
+          "y": 0.1875
+        },
+        {
+          "fixture": 94,
+          "x": 0.1719,
+          "y": 0.1875
+        },
+        {
+          "fixture": 95,
+          "x": 0.2031,
+          "y": 0.1875
+        },
+        {
+          "fixture": 96,
+          "x": 0.2344,
+          "y": 0.1875
+        },
+        {
+          "fixture": 97,
+          "x": 0.2656,
+          "y": 0.1875
+        },
+        {
+          "fixture": 98,
+          "x": 0.2969,
+          "y": 0.1875
+        },
+        {
+          "fixture": 99,
+          "x": 0.3281,
+          "y": 0.1875
+        },
+        {
+          "fixture": 100,
+          "x": 0.3594,
+          "y": 0.1875
+        },
+        {
+          "fixture": 101,
+          "x": 0.3906,
+          "y": 0.1875
+        },
+        {
+          "fixture": 102,
+          "x": 0.4219,
+          "y": 0.1875
+        },
+        {
+          "fixture": 103,
+          "x": 0.4531,
+          "y": 0.1875
+        },
+        {
+          "fixture": 104,
+          "x": 0.4844,
+          "y": 0.1875
+        },
+        {
+          "fixture": 105,
+          "x": 0.5156,
+          "y": 0.1875
+        },
+        {
+          "fixture": 106,
+          "x": 0.5469,
+          "y": 0.1875
+        },
+        {
+          "fixture": 107,
+          "x": 0.5781,
+          "y": 0.1875
+        },
+        {
+          "fixture": 108,
+          "x": 0.6094,
+          "y": 0.1875
+        },
+        {
+          "fixture": 109,
+          "x": 0.6406,
+          "y": 0.1875
+        },
+        {
+          "fixture": 110,
+          "x": 0.6719,
+          "y": 0.1875
+        },
+        {
+          "fixture": 111,
+          "x": 0.7031,
+          "y": 0.1875
+        },
+        {
+          "fixture": 112,
+          "x": 0.7344,
+          "y": 0.1875
+        },
+        {
+          "fixture": 113,
+          "x": 0.7656,
+          "y": 0.1875
+        },
+        {
+          "fixture": 114,
+          "x": 0.7969,
+          "y": 0.1875
+        },
+        {
+          "fixture": 115,
+          "x": 0.8281,
+          "y": 0.1875
+        },
+        {
+          "fixture": 116,
+          "x": 0.8594,
+          "y": 0.1875
+        },
+        {
+          "fixture": 117,
+          "x": 0.8906,
+          "y": 0.1875
+        },
+        {
+          "fixture": 118,
+          "x": 0.9219,
+          "y": 0.1875
+        },
+        {
+          "fixture": 119,
+          "x": 0.9531,
+          "y": 0.1875
+        },
+        {
+          "fixture": 120,
+          "x": 0.9844,
+          "y": 0.1875
+        },
+        {
+          "fixture": 121,
+          "x": 0.0156,
+          "y": 0.3125
+        },
+        {
+          "fixture": 122,
+          "x": 0.0469,
+          "y": 0.3125
+        },
+        {
+          "fixture": 123,
+          "x": 0.0781,
+          "y": 0.3125
+        },
+        {
+          "fixture": 124,
+          "x": 0.1094,
+          "y": 0.3125
+        },
+        {
+          "fixture": 125,
+          "x": 0.1406,
+          "y": 0.3125
+        },
+        {
+          "fixture": 126,
+          "x": 0.1719,
+          "y": 0.3125
+        },
+        {
+          "fixture": 127,
+          "x": 0.2031,
+          "y": 0.3125
+        },
+        {
+          "fixture": 128,
+          "x": 0.2344,
+          "y": 0.3125
+        },
+        {
+          "fixture": 129,
+          "x": 0.2656,
+          "y": 0.3125
+        },
+        {
+          "fixture": 130,
+          "x": 0.2969,
+          "y": 0.3125
+        },
+        {
+          "fixture": 131,
+          "x": 0.3281,
+          "y": 0.3125
+        },
+        {
+          "fixture": 132,
+          "x": 0.3594,
+          "y": 0.3125
+        },
+        {
+          "fixture": 133,
+          "x": 0.3906,
+          "y": 0.3125
+        },
+        {
+          "fixture": 134,
+          "x": 0.4219,
+          "y": 0.3125
+        },
+        {
+          "fixture": 135,
+          "x": 0.4531,
+          "y": 0.3125
+        },
+        {
+          "fixture": 136,
+          "x": 0.4844,
+          "y": 0.3125
+        },
+        {
+          "fixture": 137,
+          "x": 0.5156,
+          "y": 0.3125
+        },
+        {
+          "fixture": 138,
+          "x": 0.5469,
+          "y": 0.3125
+        },
+        {
+          "fixture": 139,
+          "x": 0.5781,
+          "y": 0.3125
+        },
+        {
+          "fixture": 140,
+          "x": 0.6094,
+          "y": 0.3125
+        },
+        {
+          "fixture": 141,
+          "x": 0.6406,
+          "y": 0.3125
+        },
+        {
+          "fixture": 142,
+          "x": 0.6719,
+          "y": 0.3125
+        },
+        {
+          "fixture": 143,
+          "x": 0.7031,
+          "y": 0.3125
+        },
+        {
+          "fixture": 144,
+          "x": 0.7344,
+          "y": 0.3125
+        },
+        {
+          "fixture": 145,
+          "x": 0.7656,
+          "y": 0.3125
+        },
+        {
+          "fixture": 146,
+          "x": 0.7969,
+          "y": 0.3125
+        },
+        {
+          "fixture": 147,
+          "x": 0.8281,
+          "y": 0.3125
+        },
+        {
+          "fixture": 148,
+          "x": 0.8594,
+          "y": 0.3125
+        },
+        {
+          "fixture": 149,
+          "x": 0.8906,
+          "y": 0.3125
+        },
+        {
+          "fixture": 150,
+          "x": 0.9219,
+          "y": 0.3125
+        },
+        {
+          "fixture": 151,
+          "x": 0.9531,
+          "y": 0.3125
+        },
+        {
+          "fixture": 152,
+          "x": 0.9844,
+          "y": 0.3125
+        },
+        {
+          "fixture": 153,
+          "x": 0.0156,
+          "y": 0.4375
+        },
+        {
+          "fixture": 154,
+          "x": 0.0469,
+          "y": 0.4375
+        },
+        {
+          "fixture": 155,
+          "x": 0.0781,
+          "y": 0.4375
+        },
+        {
+          "fixture": 156,
+          "x": 0.1094,
+          "y": 0.4375
+        },
+        {
+          "fixture": 157,
+          "x": 0.1406,
+          "y": 0.4375
+        },
+        {
+          "fixture": 158,
+          "x": 0.1719,
+          "y": 0.4375
+        },
+        {
+          "fixture": 159,
+          "x": 0.2031,
+          "y": 0.4375
+        },
+        {
+          "fixture": 160,
+          "x": 0.2344,
+          "y": 0.4375
+        },
+        {
+          "fixture": 161,
+          "x": 0.2656,
+          "y": 0.4375
+        },
+        {
+          "fixture": 162,
+          "x": 0.2969,
+          "y": 0.4375
+        },
+        {
+          "fixture": 163,
+          "x": 0.3281,
+          "y": 0.4375
+        },
+        {
+          "fixture": 164,
+          "x": 0.3594,
+          "y": 0.4375
+        },
+        {
+          "fixture": 165,
+          "x": 0.3906,
+          "y": 0.4375
+        },
+        {
+          "fixture": 166,
+          "x": 0.4219,
+          "y": 0.4375
+        },
+        {
+          "fixture": 167,
+          "x": 0.4531,
+          "y": 0.4375
+        },
+        {
+          "fixture": 168,
+          "x": 0.4844,
+          "y": 0.4375
+        },
+        {
+          "fixture": 169,
+          "x": 0.5156,
+          "y": 0.4375
+        },
+        {
+          "fixture": 170,
+          "x": 0.5469,
+          "y": 0.4375
+        },
+        {
+          "fixture": 171,
+          "x": 0.5781,
+          "y": 0.4375
+        },
+        {
+          "fixture": 172,
+          "x": 0.6094,
+          "y": 0.4375
+        },
+        {
+          "fixture": 173,
+          "x": 0.6406,
+          "y": 0.4375
+        },
+        {
+          "fixture": 174,
+          "x": 0.6719,
+          "y": 0.4375
+        },
+        {
+          "fixture": 175,
+          "x": 0.7031,
+          "y": 0.4375
+        },
+        {
+          "fixture": 176,
+          "x": 0.7344,
+          "y": 0.4375
+        },
+        {
+          "fixture": 177,
+          "x": 0.7656,
+          "y": 0.4375
+        },
+        {
+          "fixture": 178,
+          "x": 0.7969,
+          "y": 0.4375
+        },
+        {
+          "fixture": 179,
+          "x": 0.8281,
+          "y": 0.4375
+        },
+        {
+          "fixture": 180,
+          "x": 0.8594,
+          "y": 0.4375
+        },
+        {
+          "fixture": 181,
+          "x": 0.8906,
+          "y": 0.4375
+        },
+        {
+          "fixture": 182,
+          "x": 0.9219,
+          "y": 0.4375
+        },
+        {
+          "fixture": 183,
+          "x": 0.9531,
+          "y": 0.4375
+        },
+        {
+          "fixture": 184,
+          "x": 0.9844,
+          "y": 0.4375
+        },
+        {
+          "fixture": 185,
+          "x": 0.0156,
+          "y": 0.5625
+        },
+        {
+          "fixture": 186,
+          "x": 0.0469,
+          "y": 0.5625
+        },
+        {
+          "fixture": 187,
+          "x": 0.0781,
+          "y": 0.5625
+        },
+        {
+          "fixture": 188,
+          "x": 0.1094,
+          "y": 0.5625
+        },
+        {
+          "fixture": 189,
+          "x": 0.1406,
+          "y": 0.5625
+        },
+        {
+          "fixture": 190,
+          "x": 0.1719,
+          "y": 0.5625
+        },
+        {
+          "fixture": 191,
+          "x": 0.2031,
+          "y": 0.5625
+        },
+        {
+          "fixture": 192,
+          "x": 0.2344,
+          "y": 0.5625
+        },
+        {
+          "fixture": 193,
+          "x": 0.2656,
+          "y": 0.5625
+        },
+        {
+          "fixture": 194,
+          "x": 0.2969,
+          "y": 0.5625
+        },
+        {
+          "fixture": 195,
+          "x": 0.3281,
+          "y": 0.5625
+        },
+        {
+          "fixture": 196,
+          "x": 0.3594,
+          "y": 0.5625
+        },
+        {
+          "fixture": 197,
+          "x": 0.3906,
+          "y": 0.5625
+        },
+        {
+          "fixture": 198,
+          "x": 0.4219,
+          "y": 0.5625
+        },
+        {
+          "fixture": 199,
+          "x": 0.4531,
+          "y": 0.5625
+        },
+        {
+          "fixture": 200,
+          "x": 0.4844,
+          "y": 0.5625
+        },
+        {
+          "fixture": 201,
+          "x": 0.5156,
+          "y": 0.5625
+        },
+        {
+          "fixture": 202,
+          "x": 0.5469,
+          "y": 0.5625
+        },
+        {
+          "fixture": 203,
+          "x": 0.5781,
+          "y": 0.5625
+        },
+        {
+          "fixture": 204,
+          "x": 0.6094,
+          "y": 0.5625
+        },
+        {
+          "fixture": 205,
+          "x": 0.6406,
+          "y": 0.5625
+        },
+        {
+          "fixture": 206,
+          "x": 0.6719,
+          "y": 0.5625
+        },
+        {
+          "fixture": 207,
+          "x": 0.7031,
+          "y": 0.5625
+        },
+        {
+          "fixture": 208,
+          "x": 0.7344,
+          "y": 0.5625
+        },
+        {
+          "fixture": 209,
+          "x": 0.7656,
+          "y": 0.5625
+        },
+        {
+          "fixture": 210,
+          "x": 0.7969,
+          "y": 0.5625
+        },
+        {
+          "fixture": 211,
+          "x": 0.8281,
+          "y": 0.5625
+        },
+        {
+          "fixture": 212,
+          "x": 0.8594,
+          "y": 0.5625
+        },
+        {
+          "fixture": 213,
+          "x": 0.8906,
+          "y": 0.5625
+        },
+        {
+          "fixture": 214,
+          "x": 0.9219,
+          "y": 0.5625
+        },
+        {
+          "fixture": 215,
+          "x": 0.9531,
+          "y": 0.5625
+        },
+        {
+          "fixture": 216,
+          "x": 0.9844,
+          "y": 0.5625
+        },
+        {
+          "fixture": 217,
+          "x": 0.0156,
+          "y": 0.6875
+        },
+        {
+          "fixture": 218,
+          "x": 0.0469,
+          "y": 0.6875
+        },
+        {
+          "fixture": 219,
+          "x": 0.0781,
+          "y": 0.6875
+        },
+        {
+          "fixture": 220,
+          "x": 0.1094,
+          "y": 0.6875
+        },
+        {
+          "fixture": 221,
+          "x": 0.1406,
+          "y": 0.6875
+        },
+        {
+          "fixture": 222,
+          "x": 0.1719,
+          "y": 0.6875
+        },
+        {
+          "fixture": 223,
+          "x": 0.2031,
+          "y": 0.6875
+        },
+        {
+          "fixture": 224,
+          "x": 0.2344,
+          "y": 0.6875
+        },
+        {
+          "fixture": 225,
+          "x": 0.2656,
+          "y": 0.6875
+        },
+        {
+          "fixture": 226,
+          "x": 0.2969,
+          "y": 0.6875
+        },
+        {
+          "fixture": 227,
+          "x": 0.3281,
+          "y": 0.6875
+        },
+        {
+          "fixture": 228,
+          "x": 0.3594,
+          "y": 0.6875
+        },
+        {
+          "fixture": 229,
+          "x": 0.3906,
+          "y": 0.6875
+        },
+        {
+          "fixture": 230,
+          "x": 0.4219,
+          "y": 0.6875
+        },
+        {
+          "fixture": 231,
+          "x": 0.4531,
+          "y": 0.6875
+        },
+        {
+          "fixture": 232,
+          "x": 0.4844,
+          "y": 0.6875
+        },
+        {
+          "fixture": 233,
+          "x": 0.5156,
+          "y": 0.6875
+        },
+        {
+          "fixture": 234,
+          "x": 0.5469,
+          "y": 0.6875
+        },
+        {
+          "fixture": 235,
+          "x": 0.5781,
+          "y": 0.6875
+        },
+        {
+          "fixture": 236,
+          "x": 0.6094,
+          "y": 0.6875
+        },
+        {
+          "fixture": 237,
+          "x": 0.6406,
+          "y": 0.6875
+        },
+        {
+          "fixture": 238,
+          "x": 0.6719,
+          "y": 0.6875
+        },
+        {
+          "fixture": 239,
+          "x": 0.7031,
+          "y": 0.6875
+        },
+        {
+          "fixture": 240,
+          "x": 0.7344,
+          "y": 0.6875
+        },
+        {
+          "fixture": 241,
+          "x": 0.7656,
+          "y": 0.6875
+        },
+        {
+          "fixture": 242,
+          "x": 0.7969,
+          "y": 0.6875
+        },
+        {
+          "fixture": 243,
+          "x": 0.8281,
+          "y": 0.6875
+        },
+        {
+          "fixture": 244,
+          "x": 0.8594,
+          "y": 0.6875
+        },
+        {
+          "fixture": 245,
+          "x": 0.8906,
+          "y": 0.6875
+        },
+        {
+          "fixture": 246,
+          "x": 0.9219,
+          "y": 0.6875
+        },
+        {
+          "fixture": 247,
+          "x": 0.9531,
+          "y": 0.6875
+        },
+        {
+          "fixture": 248,
+          "x": 0.9844,
+          "y": 0.6875
+        },
+        {
+          "fixture": 249,
+          "x": 0.0156,
+          "y": 0.8125
+        },
+        {
+          "fixture": 250,
+          "x": 0.0469,
+          "y": 0.8125
+        },
+        {
+          "fixture": 251,
+          "x": 0.0781,
+          "y": 0.8125
+        },
+        {
+          "fixture": 252,
+          "x": 0.1094,
+          "y": 0.8125
+        },
+        {
+          "fixture": 253,
+          "x": 0.1406,
+          "y": 0.8125
+        },
+        {
+          "fixture": 254,
+          "x": 0.1719,
+          "y": 0.8125
+        },
+        {
+          "fixture": 255,
+          "x": 0.2031,
+          "y": 0.8125
+        },
+        {
+          "fixture": 256,
+          "x": 0.2344,
+          "y": 0.8125
+        },
+        {
+          "fixture": 257,
+          "x": 0.2656,
+          "y": 0.8125
+        },
+        {
+          "fixture": 258,
+          "x": 0.2969,
+          "y": 0.8125
+        },
+        {
+          "fixture": 259,
+          "x": 0.3281,
+          "y": 0.8125
+        },
+        {
+          "fixture": 260,
+          "x": 0.3594,
+          "y": 0.8125
+        },
+        {
+          "fixture": 261,
+          "x": 0.3906,
+          "y": 0.8125
+        },
+        {
+          "fixture": 262,
+          "x": 0.4219,
+          "y": 0.8125
+        },
+        {
+          "fixture": 263,
+          "x": 0.4531,
+          "y": 0.8125
+        },
+        {
+          "fixture": 264,
+          "x": 0.4844,
+          "y": 0.8125
+        },
+        {
+          "fixture": 265,
+          "x": 0.5156,
+          "y": 0.8125
+        },
+        {
+          "fixture": 266,
+          "x": 0.5469,
+          "y": 0.8125
+        },
+        {
+          "fixture": 267,
+          "x": 0.5781,
+          "y": 0.8125
+        },
+        {
+          "fixture": 268,
+          "x": 0.6094,
+          "y": 0.8125
+        },
+        {
+          "fixture": 269,
+          "x": 0.6406,
+          "y": 0.8125
+        },
+        {
+          "fixture": 270,
+          "x": 0.6719,
+          "y": 0.8125
+        },
+        {
+          "fixture": 271,
+          "x": 0.7031,
+          "y": 0.8125
+        },
+        {
+          "fixture": 272,
+          "x": 0.7344,
+          "y": 0.8125
+        },
+        {
+          "fixture": 273,
+          "x": 0.7656,
+          "y": 0.8125
+        },
+        {
+          "fixture": 274,
+          "x": 0.7969,
+          "y": 0.8125
+        },
+        {
+          "fixture": 275,
+          "x": 0.8281,
+          "y": 0.8125
+        },
+        {
+          "fixture": 276,
+          "x": 0.8594,
+          "y": 0.8125
+        },
+        {
+          "fixture": 277,
+          "x": 0.8906,
+          "y": 0.8125
+        },
+        {
+          "fixture": 278,
+          "x": 0.9219,
+          "y": 0.8125
+        },
+        {
+          "fixture": 279,
+          "x": 0.9531,
+          "y": 0.8125
+        },
+        {
+          "fixture": 280,
+          "x": 0.9844,
+          "y": 0.8125
+        },
+        {
+          "fixture": 281,
+          "x": 0.0156,
+          "y": 0.9375
+        },
+        {
+          "fixture": 282,
+          "x": 0.0469,
+          "y": 0.9375
+        },
+        {
+          "fixture": 283,
+          "x": 0.0781,
+          "y": 0.9375
+        },
+        {
+          "fixture": 284,
+          "x": 0.1094,
+          "y": 0.9375
+        },
+        {
+          "fixture": 285,
+          "x": 0.1406,
+          "y": 0.9375
+        },
+        {
+          "fixture": 286,
+          "x": 0.1719,
+          "y": 0.9375
+        },
+        {
+          "fixture": 287,
+          "x": 0.2031,
+          "y": 0.9375
+        },
+        {
+          "fixture": 288,
+          "x": 0.2344,
+          "y": 0.9375
+        },
+        {
+          "fixture": 289,
+          "x": 0.2656,
+          "y": 0.9375
+        },
+        {
+          "fixture": 290,
+          "x": 0.2969,
+          "y": 0.9375
+        },
+        {
+          "fixture": 291,
+          "x": 0.3281,
+          "y": 0.9375
+        },
+        {
+          "fixture": 292,
+          "x": 0.3594,
+          "y": 0.9375
+        },
+        {
+          "fixture": 293,
+          "x": 0.3906,
+          "y": 0.9375
+        },
+        {
+          "fixture": 294,
+          "x": 0.4219,
+          "y": 0.9375
+        },
+        {
+          "fixture": 295,
+          "x": 0.4531,
+          "y": 0.9375
+        },
+        {
+          "fixture": 296,
+          "x": 0.4844,
+          "y": 0.9375
+        },
+        {
+          "fixture": 297,
+          "x": 0.5156,
+          "y": 0.9375
+        },
+        {
+          "fixture": 298,
+          "x": 0.5469,
+          "y": 0.9375
+        },
+        {
+          "fixture": 299,
+          "x": 0.5781,
+          "y": 0.9375
+        },
+        {
+          "fixture": 300,
+          "x": 0.6094,
+          "y": 0.9375
+        },
+        {
+          "fixture": 301,
+          "x": 0.6406,
+          "y": 0.9375
+        },
+        {
+          "fixture": 302,
+          "x": 0.6719,
+          "y": 0.9375
+        },
+        {
+          "fixture": 303,
+          "x": 0.7031,
+          "y": 0.9375
+        },
+        {
+          "fixture": 304,
+          "x": 0.7344,
+          "y": 0.9375
+        },
+        {
+          "fixture": 305,
+          "x": 0.7656,
+          "y": 0.9375
+        },
+        {
+          "fixture": 306,
+          "x": 0.7969,
+          "y": 0.9375
+        },
+        {
+          "fixture": 307,
+          "x": 0.8281,
+          "y": 0.9375
+        },
+        {
+          "fixture": 308,
+          "x": 0.8594,
+          "y": 0.9375
+        },
+        {
+          "fixture": 309,
+          "x": 0.8906,
+          "y": 0.9375
+        },
+        {
+          "fixture": 310,
+          "x": 0.9219,
+          "y": 0.9375
+        },
+        {
+          "fixture": 311,
+          "x": 0.9531,
+          "y": 0.9375
+        },
+        {
+          "fixture": 312,
+          "x": 0.9844,
+          "y": 0.9375
+        }
+      ]
+    },
+    {
       "id": 4,
       "name": "Ground floor",
       "kind": "floor",
@@ -5006,96 +9752,180 @@
     },
     {
       "id": 9,
+      "name": "Palette scroll",
+      "code": "// The colours of a colour list rolling along the fixtures\nparam speed = 0.2 [-2, 2]      // lists passing per second (minus = the other way)\nparam spread = 1 [0, 4]        // lists across the rig (the map's width)\nparam pal = #ff0000, #ffcc00, #00c853, #0091ff, #aa00ff   // the colours (2 to 8; change them per timeline clip)\nr, g, b = grad(pal, tri((x * spread - t * speed) / 2))",
+      "round": true
+    },
+    {
+      "id": 10,
+      "name": "Comet",
+      "code": "// A light running along the fixtures with a fading tail\nparam speed = 0.5 [-4, 4]      // rounds per second (minus = the other way)\nparam tail = 0.3 [0.02, 1]     // length of the tail, part of the rig\nparam color = #ffffff          // colour of the head\nparam back = #000000           // colour of the other fixtures\npos = fract(t * speed)\nd = speed >= 0 ? fract(pos - u) : fract(u - pos)\nk = pow(max(1 - d / tail, 0), 2)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
+      "round": true
+    },
+    {
+      "id": 11,
       "name": "Breathe",
       "code": "// Slow fade up and down\nparam speed = 0.25 [0.02, 2]   // breaths per second\nparam low = 0.1 [0, 1]         // lowest level (0 = all the way off)\nparam color = #ffb347          // colour\nr, g, b = color\ndim = mix(low, 1, 0.5 - 0.5 * cos(t * speed * tau))",
       "round": true
     },
     {
-      "id": 10,
+      "id": 12,
       "name": "Heartbeat",
       "code": "// Double pulse, like a heartbeat\nparam bpm = 60 [20, 180]       // beats per minute\nparam low = 0.05 [0, 0.5]      // level between the beats\nparam color = #ff2040          // colour\nph = fract(t * bpm / 60)\nbeat = max(1 - abs(ph - 0.08) * 14, 0) + 0.7 * max(1 - abs(ph - 0.3) * 12, 0)\nr, g, b = color\ndim = mix(low, 1, min(beat, 1))",
       "round": true
     },
     {
-      "id": 11,
+      "id": 13,
       "name": "Strobe",
       "code": "// Flashes; rate in flashes per second\nparam rate = 8 [0.5, 25]       // flashes per second\nparam duty = 0.15 [0.02, 0.9]  // part of each flash that is on (0.5 = half on, half off)\nparam color = #ffffff          // colour of the flash\nr, g, b = color\ndim = pulse(t * rate, duty)",
       "round": true
     },
     {
-      "id": 12,
+      "id": 14,
       "name": "Lightning",
       "code": "// Random lightning flashes over the whole rig\nparam rate = 0.5 [0.05, 4]     // flashes per second, on average\nparam base = 0 [0, 0.3]        // level between the flashes\nparam color = #dfe8ff          // colour of the flash\ns = floor(t * 20)\nhit = rand(s * 0.0137) < rate / 20\nr, g, b = color\ndim = hit ? 0.4 + 0.6 * rand(s * 0.0291 + 0.5) : base",
       "round": true
     },
     {
-      "id": 13,
+      "id": 15,
       "name": "Fire",
       "code": "// Flickering flame, every fixture its own\nparam speed = 3 [0.5, 10]      // how fast the flames flicker\nf = noise(t * speed + i * 17.3) * 0.7 + noise(t * speed * 2.7 + i * 5.1) * 0.3\nr = 1\ng = 0.25 + f * 0.35\nb = 0\ndim = 0.35 + f * 0.65",
       "round": true
     },
     {
-      "id": 14,
+      "id": 16,
       "name": "Candle",
       "code": "// Warm, gentle flicker\nparam color = #ff9329          // colour of the flame\nf = noise(t * 2.1 + i * 3.7) * 0.6 + noise(t * 7.3 + i) * 0.4\nr, g, b = color\ndim = 0.6 + f * 0.4",
       "round": true
     },
     {
-      "id": 15,
+      "id": 17,
       "name": "Sparkle",
       "code": "// Random short flashes on a coloured base\nparam rate = 6 [1, 30]         // chances to flash per second\nparam chance = 0.08 [0, 0.5]   // part of the fixtures that flash each time\nparam base = #1a2a6c           // background colour\nparam flash = #ffffff          // colour of the flash\nstep_t = floor(t * rate)\non = rand(step_t * 0.37 + i * 0.011) < chance\nr = on ? flash.r : base.r\ng = on ? flash.g : base.g\nb = on ? flash.b : base.b",
       "round": true
     },
     {
-      "id": 16,
+      "id": 18,
+      "name": "Palette fade",
+      "code": "// The whole rig fading through the colours of a colour list, and back\nparam speed = 0.1 [0, 2]       // trips through the list and back per second\nparam offset = 0 [0, 1]        // shift along the rig: 0 = all the same colour\nparam pal = #ff2d92, #ffb000, #00c7be, #5e5ce6   // the colours (2 to 8; change them per timeline clip)\nr, g, b = grad(pal, tri(t * speed + u * offset))",
+      "round": true
+    },
+    {
+      "id": 19,
       "name": "Twinkle",
       "code": "// Every fixture slowly fades in and out on its own (starry sky)\nparam speed = 0.3 [0.05, 2]    // how fast the stars fade in and out\nparam amount = 0.45 [0, 1]     // how many stars are lit at a time\nparam color = #ffffff          // colour of the stars\nparam base = #000814           // background colour\nk = smoothstep(1 - amount, 1, noise(t * speed + i * 7.31))\nr = mix(base.r, color.r, k)\ng = mix(base.g, color.g, k)\nb = mix(base.b, color.b, k)",
       "round": true
     },
     {
-      "id": 17,
+      "id": 20,
       "name": "Wave across the map",
       "code": "// Brightness wave moving left to right over the map\nparam speed = 0.3 [0, 2]       // waves passing per second\nparam size = 1.5 [0.2, 6]      // waves across the map's width\nparam color = #00c7be          // colour\nr, g, b = color\ndim = 0.5 + 0.5 * sin((x * size - t * speed) * tau)",
       "round": true
     },
     {
-      "id": 18,
+      "id": 21,
       "name": "XY ripple",
       "code": "// Rings rippling out from a point on the map, like a stone in water\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.5 [0, 3]       // rings per second\nparam size = 3 [0.5, 10]       // rings from the centre to the edge\nparam color = #00c7be          // colour of the rings\nparam back = #000000           // colour between the rings\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nk = pow(0.5 + 0.5 * sin((d * size - t * speed) * tau), 3)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
       "round": true
     },
     {
-      "id": 19,
+      "id": 22,
       "name": "XY sweep",
       "code": "// A bar of light sweeping over the map, in any direction\nparam angle = 0 [0, 360]       // direction in degrees: 0 = to the right, 90 = down, 180 = to the left\nparam speed = 0.3 [0, 2]       // sweeps per second\nparam width = 0.2 [0.02, 1]    // thickness of the bar, part of the map\nparam color = #ffffff          // colour of the bar\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a)\npos = fract(t * speed) * (1.42 + width) - 0.71 - width / 2\nr, g, b = color\ndim = smoothstep(width / 2, 0, abs(p - pos))",
       "round": true
     },
     {
-      "id": 20,
+      "id": 23,
       "name": "XY radar",
       "code": "// A beam turning around a point, with a fading tail\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.25 [-2, 2]     // turns per second (minus = the other way round)\nparam tail = 0.3 [0.02, 1]     // length of the tail, part of a turn\nparam color = #30d158          // colour of the beam\na = atan(y - cy, x - cx) / tau\nk = speed >= 0 ? fract(t * speed - a) : fract(a - t * speed)\nr, g, b = color\ndim = smoothstep(tail, 0, k)",
       "round": true
     },
     {
-      "id": 21,
+      "id": 24,
       "name": "XY plasma",
       "code": "// Soft colour clouds drifting over the map\nparam speed = 0.3 [0, 2]       // how fast the clouds move\nparam scale = 3 [0.5, 10]      // bigger = more, smaller clouds\nparam sat = 1 [0, 1]           // saturation: 0 = white, 1 = full colour\nv = sin(x * scale * 3 + t * speed * 3) + sin((y * scale + t * speed * 2) * 2) + sin((x + y) * scale * 2 - t * speed * 4)\nr, g, b = hsv(v / 6 + t * speed * 0.2, sat, 1)",
       "round": true
     },
     {
-      "id": 22,
+      "id": 25,
       "name": "XY gradient",
       "code": "// Two colours blended across the map at an angle, optionally moving\nparam angle = 0 [0, 360]       // direction of the blend in degrees: 0 = left to right, 90 = top to bottom\nparam speed = 0 [-1, 1]        // how fast the colours move (0 = still)\nparam c1 = #ff2d92             // colour at the start\nparam c2 = #0a84ff             // colour at the end\na = angle / 360 * tau\np = (x - 0.5) * cos(a) + (y - 0.5) * sin(a) + 0.5\nk = tri((p + t * speed) / 2)\nr = mix(c1.r, c2.r, k)\ng = mix(c1.g, c2.g, k)\nb = mix(c1.b, c2.b, k)",
       "round": true
     },
     {
-      "id": 23,
+      "id": 26,
+      "name": "Palette clouds",
+      "code": "// Soft clouds in the colours of a colour list, drifting over the map\nparam speed = 0.2 [0, 2]       // how fast the clouds move\nparam scale = 3 [0.5, 10]      // bigger = more, smaller clouds\nparam pal = #001a33, #0a84ff, #5ac8fa, #ffffff   // from the darkest part of the clouds to the brightest\nv = noise(x * scale + t * speed) * 0.5 + noise(y * scale * 1.3 - t * speed * 0.7 + 50) * 0.3 + noise((x + y) * scale * 2 + t * speed * 1.3 + 100) * 0.2\nr, g, b = grad(pal, v)",
+      "round": true
+    },
+    {
+      "id": 27,
+      "name": "Rain",
+      "code": "// Drops falling down the map, every column on its own (green on black = digital rain)\nparam speed = 0.6 [0.05, 3]    // falls per second\nparam columns = 16 [2, 64]     // columns of drops across the map\nparam length = 0.25 [0.02, 1]  // length of a drop with its tail, part of the map's height\nparam color = #9fd8ff          // colour of the drops\nparam back = #000000           // background colour\nc = floor(x * columns)\np = fract(t * speed * (0.6 + rand(c * 0.0173) * 0.8) + rand(c * 0.0311)) * (1 + length)\nd = p - y\nk = d >= 0 && d < length ? pow(1 - d / length, 2) : 0\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
+      "round": true
+    },
+    {
+      "id": 28,
+      "name": "Bursts",
+      "code": "// Rings of colour bursting at random places on the map, like fireworks\nparam rate = 0.7 [0.1, 4]      // bursts per second\nparam size = 0.4 [0.05, 1]     // how far a burst spreads, part of the map\nparam width = 0.06 [0.01, 0.3] // thickness of the ring\nparam pal = #ff3b30, #ffcc00, #34c759, #0a84ff, #bf5af2   // each burst takes one of these colours\nc = floor(t * rate)\nph = fract(t * rate)\ncx = 0.15 + rand(c * 0.0231) * 0.7\ncy = 0.15 + rand(c * 0.0377 + 0.5) * 0.7\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nr, g, b = grad(pal, rand(c * 0.0119 + 0.25))\ndim = smoothstep(width, 0, abs(d - ph * size)) * (1 - ph)",
+      "round": true
+    },
+    {
+      "id": 29,
+      "name": "Starfield",
+      "code": "// Stars streaming out from the middle of the map, like flying through space\nparam speed = 0.4 [0.05, 2]    // how fast the stars fly\nparam lanes = 24 [4, 64]       // directions the stars fly in\nparam color = #ffffff          // colour of the stars\na = atan(y - 0.5, x - 0.5) / tau + 0.5\nl = floor(a * lanes)\nd = sqrt((x - 0.5) * (x - 0.5) + (y - 0.5) * (y - 0.5)) * 1.42\np = fract(t * speed * (0.5 + rand(l * 0.0137)) + rand(l * 0.0291))\nr, g, b = color\ndim = smoothstep(0.12, 0, abs(d - p * p)) * p",
+      "round": true
+    },
+    {
+      "id": 30,
+      "name": "Lava lamp",
+      "code": "// Soft blobs drifting and melting into each other\nparam speed = 0.15 [0, 1]      // how fast the blobs drift\nparam size = 0.18 [0.05, 0.5]  // size of the blobs, part of the map\nparam pal = #1a0033, #ff2d55, #ffcc00   // background, edge of a blob, middle of a blob\ns = size * size\nax = 0.5 + 0.32 * sin(t * speed * 3.1)\nay = 0.5 + 0.3 * cos(t * speed * 2.3)\nbx = 0.5 + 0.3 * sin(t * speed * 1.7 + 2)\nby = 0.5 + 0.32 * sin(t * speed * 2.9 + 1)\ncx = 0.5 + 0.28 * cos(t * speed * 2.2 + 4)\ncy = 0.5 + 0.28 * sin(t * speed * 1.3 + 3)\nf = s / ((x - ax) * (x - ax) + (y - ay) * (y - ay) + 0.001) + s / ((x - bx) * (x - bx) + (y - by) * (y - by) + 0.001) + s / ((x - cx) * (x - cx) + (y - cy) * (y - cy) + 0.001)\nr, g, b = grad(pal, smoothstep(0.5, 2, f))",
+      "round": true
+    },
+    {
+      "id": 31,
+      "name": "Spiral",
+      "code": "// A spiral turning around the middle of the map\nparam speed = 0.3 [-2, 2]      // turns per second (minus = the other way round)\nparam arms = 3 [1, 8]          // arms of the spiral\nparam twist = 4 [-12, 12]      // how tightly it winds (minus = the other way)\nparam pal = #000000, #00c7be, #ffffff   // colours across each arm\na = atan(y - 0.5, x - 0.5) / tau\nd = sqrt((x - 0.5) * (x - 0.5) + (y - 0.5) * (y - 0.5))\nr, g, b = grad(pal, tri(a * floor(arms) + d * twist - t * speed))",
+      "round": true
+    },
+    {
+      "id": 32,
+      "name": "Checkerboard",
+      "code": "// Squares in two colours that swap over and over\nparam cells = 4 [1, 16]        // squares across the map\nparam rate = 0.5 [0, 4]        // swaps per second\nparam fade = 0.3 [0, 1]        // 0 = hard swap, 1 = slow fade\nparam c1 = #ffffff             // first colour\nparam c2 = #000000             // second colour\nq = mod(floor(x * cells) + floor(y * cells), 2)\nk = smoothstep(0.5 - fade / 2, 0.5 + fade / 2 + 0.0001, tri(t * rate / 2))\nk2 = q > 0 ? k : 1 - k\nr = mix(c1.r, c2.r, k2)\ng = mix(c1.g, c2.g, k2)\nb = mix(c1.b, c2.b, k2)",
+      "round": true
+    },
+    {
+      "id": 33,
+      "name": "Aurora",
+      "code": "// Slow curtains of light waving across the top of the map (northern lights)\nparam speed = 0.15 [0, 1]      // how fast the curtains move\nparam height = 0.5 [0.1, 1]    // how far down the curtains hang, part of the map\nparam pal = #00ff9c, #00c7be, #7d5cff, #ff2d92   // colours along the curtains\nw = noise(x * 3 + t * speed) * 0.6 + noise(x * 7 - t * speed * 1.7) * 0.4\nedge = 0.1 + w * 0.3\nk = smoothstep(edge + height, edge, y) * smoothstep(edge - 0.05, edge + 0.05, y)\nr, g, b = grad(pal, tri(x * 0.7 + w + t * speed * 0.2))\ndim = k * (0.4 + 0.6 * noise(x * 11 + t * speed * 3))",
+      "round": true
+    },
+    {
+      "id": 34,
+      "name": "Equalizer",
+      "code": "// Bars going up and down like a music level meter\nparam speed = 2 [0.2, 8]       // how fast the bars move\nparam bars = 8 [2, 32]         // bars across the map\nparam pal = #30d158, #ffd60a, #ff453a   // colours from the bottom to the top\nc = floor(x * bars)\nlvl = noise(t * speed + c * 13.7) * 0.8 + noise(t * speed * 2.3 + c * 5.1) * 0.2\nh = 1 - y\nr, g, b = grad(pal, h)\ndim = h <= lvl",
+      "round": true
+    },
+    {
+      "id": 35,
+      "name": "Scrolling text",
+      "code": "// Text running across a pixel grid (LED matrix), like a news ticker\nparam msg = \"WELCOME\"          // the text: letters, digits and punctuation (accents are left off)\nparam speed = 10 [-60, 60]     // LEDs per second (minus = to the right, 0 = standing still in the middle)\nparam cols = 32 [4, 256]       // LEDs across your matrix (the map's long side): letters then land on whole LEDs\nparam zoom = 1 [1, 4]          // letter size: 1 = one LED per letter pixel (7 LEDs high), 2 = twice as big\nparam ypos = 0.5 [0, 1]        // where the line is: 0 = top, 1 = bottom\nparam smooth = 1 [0, 1]        // 1 = glides evenly (letters a little soft while moving), 0 = jumps a whole LED at a time\nparam color = #ffffff          // colour of the letters\nparam back = #000000           // background colour\nz = max(floor(zoom), 1)\nps = z / cols\nvw = cols / z\nsp = mod(t * speed / z, msg.w + vw)\np = speed == 0 ? floor(vw / 2 + msg.w / 2) : smooth >= 0.5 ? sp : floor(sp)\n// where this LED is in the text, in letter pixels; between pixels the four around it blend\nfx0 = x / ps - vw + p - 0.5\nfy0 = (y - ypos) / ps + 3.5\nax = floor(fx0)\nay = floor(fy0)\nqx = fx0 - ax\nqy = fy0 - ay\nk0 = mix(txt(msg, ax + 0.5, ay + 0.5), txt(msg, ax + 1.5, ay + 0.5), qx)\nk1 = mix(txt(msg, ax + 0.5, ay + 1.5), txt(msg, ax + 1.5, ay + 1.5), qx)\nk = mix(k0, k1, qy)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
+      "round": true
+    },
+    {
+      "id": 36,
+      "name": "Picture",
+      "code": "// A picture or animated GIF on the fixtures, by their place on the map (choose it per timeline clip)\nparam pic = image              // the picture: choose one here to try it, and on each timeline clip\nparam fps = 10 [0, 30]         // frames per second of an animated GIF\nparam zoom = 1 [0.1, 4]        // 1 = the picture fills the map, 2 = twice as big\nparam speed = 0 [-1, 1]        // scroll sideways, picture widths per second (0 = still)\nparam tile = 1 [0, 1]          // 1 = repeat the picture next to itself, 0 = black around it\npx = (x - 0.5) / zoom + 0.5 - t * speed\npy = (y - 0.5) / zoom + 0.5\nqx = tile >= 0.5 ? fract(px) : px\nqy = tile >= 0.5 ? fract(py) : py\nr, g, b = img(pic, qx, qy, t * fps)",
+      "round": true
+    },
+    {
+      "id": 37,
       "name": "XY ripple (stretched)",
       "code": "// Rings rippling out from a point on the map, like a stone in water\nparam cx = 0.5 [0, 1]          // centre: 0 = left edge, 1 = right edge\nparam cy = 0.5 [0, 1]          // centre: 0 = top edge, 1 = bottom edge\nparam speed = 0.5 [0, 3]       // rings per second\nparam size = 3 [0.5, 10]       // rings from the centre to the edge\nparam color = #00c7be          // colour of the rings\nparam back = #000000           // colour between the rings\nd = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))\nk = pow(0.5 + 0.5 * sin((d * size - t * speed) * tau), 3)\nr = mix(back.r, color.r, k)\ng = mix(back.g, color.g, k)\nb = mix(back.b, color.b, k)",
       "round": false
     },
     {
-      "id": 24,
+      "id": 38,
       "name": "Vitrine shimmer (own)",
       "code": "// Our own effect: a slow warm shimmer for the showcase\nparam speed = 0.3 [0, 2]       // shimmer waves per second\nparam color = #ffb070          // base colour\nparam depth = 0.4 [0, 1]       // how deep the shimmer dips\nk = 1 - depth * (0.5 + 0.5 * sin((u * 2 + t * speed) * tau))\nr, g, b = color\ndim = k * (0.8 + 0.2 * noise(t * 3 + i))",
       "round": true
@@ -5118,7 +9948,7 @@
       "name": "io",
       "ip": "192.168.1.121",
       "port": 9813,
-      "listenPort": 9813,
+      "destPort": 9817,
       "frame": "IO3",
       "cards": [
         "DO4PR",

@@ -7,11 +7,11 @@ cd ~/kdcore/ArduinoCore-mbed
 CONF=variants/PORTENTA_H7_M7/conf/mbed_app.json
 git checkout -q -- "$CONF"
 jq '.target_overrides["*"] += {
-  "lwip.socket-max": 32,
-  "lwip.tcp-socket-max": 20,
+  "lwip.socket-max": 48,
+  "lwip.tcp-socket-max": 32,
   "lwip.udp-socket-max": 16,
   "lwip.tcp-server-max": 4,
-  "lwip.memp-num-tcp-seg": 48,
+  "lwip.memp-num-tcp-seg": 64,
   "lwip.mem-size": 16000,
   "lwip.pbuf-pool-size": 8,
   "lwip.num-pbuf": 16,

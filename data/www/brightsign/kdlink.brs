@@ -44,13 +44,15 @@
 '   {"kd":"var","name":"mode","value":"day"}
 '   {"kd":"ended","i":1,"name":"Video","file":"intro.mp4","state":"Intro"}   a zone's video / audio file played to its end
 '                                     (a looping video: each time it starts again)
-'   {"kd":"gpio","bits":5}            the GPIO inputs, bit n = GPIO n (models with a GPIO port)
+'   {"kd":"gpio","bits":5,"out":192}  the GPIO pins, bit n = GPIO n (models with a GPIO port); out (v14) = the pins
+'                                     the presentation has set as outputs (left out when it can't be read)
 '   {"kd":"log","src":"serial","text":"..."}   what the player receives: serial lines, UDP, buttons
 '   {"kd":"msg","text":"..."}         a Send Plugin Message (plugin kdlink) from the presentation;
 '                                     "zone <zone> <text>" sets what that zone shows as playing instead
 '   {"kd":"reply","ok":true,"text":"..."}
+'   {"kd":"vol","i":1,"v":80,"mute":false}   a zone's volume: what the controller set, else (v14) what the zone
+'                                     starts with in the presentation; none for a zone without sound
 '   {"kd":"audio","master":100,"mute":false,"screen":true}   v13: master volume, mute and the video output
-'   {"kd":"vol","i":1,"v":60,"mute":false}   a zone's volume, once the controller has set it
 '   {"kd":"health","up":86400,"fw":"9.1.164","serial":"...","free":12000,"size":29000,"hdmi":1}
 '                                     every minute and when the screen is plugged in or out: seconds since the
 '                                     player started, the card in MB, hdmi 1 = a screen is connected, 0 = none, -1 = unknown
@@ -201,7 +203,7 @@ Sub kdlink_command(m As Object, text As String, host As String, port As Integer)
     model = ""
     di = CreateObject("roDeviceInfo")
     if type(di) = "roDeviceInfo" then model = di.GetModel()
-    kdlink_queue(m, {kd: "hello", v: 13, zones: zones.Count(), vars: nVars, model: model, gpio: m.gpio <> invalid, serial: m.serial <> invalid})
+    kdlink_queue(m, {kd: "hello", v: 14, zones: zones.Count(), vars: nVars, model: model, gpio: m.gpio <> invalid, serial: m.serial <> invalid})
     kdlink_states(m)
     kdlink_tick(m)
     return
@@ -264,8 +266,13 @@ Sub kdlink_command(m As Object, text As String, host As String, port As Integer)
       kdlink_reply(m, false, "GPIO pins are 0-7")
     else
       level = LCase(f[3]) <> "off"
-      m.gpio.SetOutputState(pin, level)
       bitv = Int(2 ^ pin + 0.5)
+      outs = kdlink_gpioOut(m)
+      if outs >= 0 and (outs and bitv) = 0 then
+        kdlink_reply(m, false, "GPIO " + f[2] + " is an input in the presentation")
+        return
+      end if
+      m.gpio.SetOutputState(pin, level)
       if (m.outMask and bitv) = 0 then m.outMask = m.outMask + bitv
       if level and (m.outBits and bitv) = 0 then m.outBits = m.outBits + bitv
       if not level and (m.outBits and bitv) <> 0 then m.outBits = m.outBits - bitv
@@ -426,6 +433,7 @@ Sub kdlink_tick(m As Object)
       kdlink_queue(m, {kd: "zone", i: i + 1, name: z.name, state: z.state, file: z.file})
     end if
     zv = m.zoneVol[LCase(z.name)]
+    if zv = invalid and z.vol >= 0 then zv = {v: z.vol, mute: false}
     if zv <> invalid then
       vs = Str(zv.v).Trim() + "|" + kdlink_str(zv.mute)
       if kdlink_str(m.volSeen[k]) <> vs then
@@ -479,9 +487,14 @@ Sub kdlink_tick(m As Object)
         if (m.outBits and bitv) <> 0 then bits = bits + bitv
       end if
     end for
-    if bits <> m.gpioSeen then
-      m.gpioSeen = bits
-      kdlink_queue(m, {kd: "gpio", bits: bits})
+    ' Which pins are outputs comes along (in the same number as "seen", from bit 8 up; -1 = can't tell).
+    outs = kdlink_gpioOut(m)
+    seen = bits + (outs + 1) * 256
+    if seen <> m.gpioSeen then
+      m.gpioSeen = seen
+      o = {kd: "gpio", bits: bits}
+      if outs >= 0 then o.out = outs
+      kdlink_queue(m, o)
     end if
   end if
   sent = 0
@@ -815,7 +828,10 @@ Function kdlink_zones(m As Object) As Object
         end if
       end if
       if said <> invalid and (state = "" or Left(said, 7) = "(test) ") then state = said
-      out.Push({name: Left(name, 100), state: Left(state, 150), file: Left(file, 150)})
+      ' The volume the zone has in the presentation (-1 = a zone without sound), shown until the controller sets one.
+      vol = -1
+      if type(z.videoPlayer) = "roVideoPlayer" or type(z.audioPlayer) = "roAudioPlayer" then vol = kdlink_startVol(z)
+      out.Push({name: Left(name, 100), state: Left(state, 150), file: Left(file, 150), vol: vol})
     end if
   end for
   return out
@@ -1126,6 +1142,24 @@ Sub kdlink_probe(m As Object)
   if g = "" then g = " nothing found"
   kdlink_reply(m, true, "gpio settings:" + g)
 End Sub
+
+' The GPIO pins the presentation has set as outputs (Presentation Settings > Interactive > GPIO),
+' bit n = GPIO n; -1 when the presentation doesn't say. It keeps them as sign.gpio<n>Config =
+' "input" / "output" (seen on OS 9.1 with "kd probe").
+Function kdlink_gpioOut(m As Object) As Integer
+  if type(m.bsp) <> "roAssociativeArray" then return -1
+  s = m.bsp.sign
+  if type(s) <> "roAssociativeArray" then return -1
+  mask = 0
+  known = false
+  for pin = 0 to 7
+    v = LCase(kdlink_str(s["gpio" + Str(pin).Trim() + "config"]))
+    if v <> "" then known = true
+    if Left(v, 3) = "out" then mask = mask + Int(2 ^ pin + 0.5)
+  end for
+  if not known then return -1
+  return mask
+End Function
 
 ' " <where>.<key>=<value>" for every entry of an associative array with "gpio" in its name
 ' (a list or a table: its first 8 values).

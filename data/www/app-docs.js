@@ -79,8 +79,8 @@ async function docUpload(m, file) {
   const base = file.name.slice(0, -ext.length).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'doc';
   const head = `doc${m.id}-${Date.now().toString(36)}${Math.floor(Math.random() * 36).toString(36)}-`;
   const name = head + base.slice(0, 64 - head.length - ext.length) + ext;
-  const j = await (await fetch(`/api/media?name=${encodeURIComponent(name)}`, { method: 'PUT', body: file })).json();
-  if (!j.ok) throw new Error(`${file.name}: ${j.reply}`);
+  try { await mediaUpload(name, file, file.name); }
+  catch (e) { throw new Error(`${file.name}: ${e.message}`); }
   return name;
 }
 const docTitle = (fileName) => fileName.replace(DOC_EXT, '') || fileName;

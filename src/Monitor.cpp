@@ -42,7 +42,7 @@ struct Rec {
 };
 std::deque<Rec> recQueue;
 std::vector<Rec> lastRec;
-uint32_t histDay = 0, histLastWrite = 0;
+uint32_t histDay = 0, histLastAlive = 0;   // when the last "alive" line went out
 bool histBooted = false;
 rtos::Mutex mtx;
 rtos::Thread thread(osPriorityNormal, 6 * 1024, nullptr, "monitor");   // Normal: it mostly waits on the network; BelowNormal starved it for seconds
@@ -150,8 +150,16 @@ void load() {
   failLimit = constrain((int)(m["failures"] | 2), 1, 10);
   add("pc", doc["pcs"]);
   add("device", doc["devices"]);
+  // Hosts no longer watched: their history shows a gap from here on, not their last state.
+  std::vector<std::pair<String, String>> gone;
+  for (auto& old : targets) {
+    bool kept = false;
+    for (auto& t : nt) kept |= old.kind == t.kind && old.name == t.name && old.ip == t.ip;
+    if (!kept && old.state >= 0) gone.push_back({old.kind, old.name});
+  }
   targets = std::move(nt);
   mtx.unlock();
+  for (auto& g : gone) record(g.first.c_str(), g.second, "gone");
   LOGI(Sys, "Monitoring %d host(s) every %lu s", (int)targets.size(), (unsigned long)intervalS);
 }
 
@@ -229,7 +237,11 @@ void flushHistory() {
   std::deque<Rec> q;
   q.swap(recQueue);
   mtx.unlock();
-  if (q.empty() && histBooted && t - histLastWrite < KD_HISTORY_ALIVE_S) return;
+  // "alive" goes out every KD_HISTORY_ALIVE_S even while other devices write lines: the device
+  // view reads only its own lines plus boot/alive, so a chatty KNX tunnel once hid the alive
+  // lines and every quiet device showed "controller off" from then on.
+  const bool aliveDue = t - histLastAlive >= KD_HISTORY_ALIVE_S;
+  if (q.empty() && histBooted && !aliveDue) return;
 
   uint32_t day = t / 86400;
   mkdir(KD_HISTORY_DIR, 0777);
@@ -248,7 +260,7 @@ void flushHistory() {
     for (auto& r : q) if (r.at < 1600000000UL) r.at = bootAt;
     histBooted = true;
   }
-  if (q.empty()) fprintf(f, "%lu alive - -\n", (unsigned long)t);
+  if (aliveDue) { fprintf(f, "%lu alive - -\n", (unsigned long)t); histLastAlive = t; }
   for (auto& r : q) {
     fprintf(f, "%lu %s %s %s\n", (unsigned long)(r.at < 1600000000UL ? t : r.at), r.state.c_str(), r.kind.c_str(), r.name.c_str());
     String ln = lane(r.state);
@@ -258,7 +270,6 @@ void flushHistory() {
     else lastRec.push_back(r);
   }
   fclose(f);
-  histLastWrite = t;
 }
 
 // Read in 8 KB pieces (Storage::Reader), names compared in place and the reply in SDRAM: a day

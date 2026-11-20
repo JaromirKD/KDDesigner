@@ -23,7 +23,7 @@
 //                "links":"out1=rackPower, in1=door"}]       point=variable (device -> variable)
 //   "vars":{"out1":"rackPower"}                             point -> variable, same as "links"
 //   "live":true                                             Pharos: WebSocket; NETIO: MQTT-flex to our broker
-//   kissbox:    "frame":"IO8", "cards":["DO4PR","DI8DC",""], "listenPort":9813   (or "slots":"out,in,ain")
+//   kissbox:    "frame":"IO8", "cards":["DO4PR","DI8DC",""], "destPort":9817   (the port the box answers on; older shows: "listenPort"; or "slots":"out,in,ain")
 //   brightsign: "udpPort":5000, "plugin":true, "pluginPort":5010   (kdlink plugin: zones, user variables, control)
 //               "gpioOut":[3,4]   GPIO pins that are outputs in the presentation ("gpio 3 on")
 //               "follow":[{"timeline":2,"zone":"Video","file":"Video 3","offset":0,"drift":true}]   a zone's video in step with a timeline
@@ -33,7 +33,7 @@
 namespace Drivers {
 void begin();                                             // starts the worker threads
 void load();                                              // caller holds g_engine
-bool isCommand(const String& word);                       // kissbox|knx|brightsign|digidot|netio|pharos|netgear
+bool isCommand(const String& word);                       // kissbox|knx|brightsign|digidot|netio|pharos|switch (netgear)
 bool command(const std::vector<String>& t, String& msg);  // t[0] is the device type
 // A command for several things as one command each, in order (Cmd.cpp runs them, "interval <s>" apart):
 // a list or group of devices ("kissbox a,b ..."), Kiss-Box channels ("1.1,1.2", "<slot>.all", "all"

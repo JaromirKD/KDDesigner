@@ -102,7 +102,7 @@ function logSearch(name, ip, from, to, max) {
 // ---- device history (mirrors Monitor::record / flushHistory / historyJson) ----------
 const HIST = path.join(LOGS, 'history');
 const histQueue = [], lastRec = [];
-let histDay = 0, histLastWrite = 0, histBooted = false;
+let histDay = 0, histLastAlive = 0, histBooted = false;
 const dayFile = (day) => path.join(HIST, new Date(day * 86400000).toISOString().slice(0, 10) + '.txt');
 // Which lane a state belongs to: online/offline, power on/off, or a reading "p:<key>=1".
 const histLane = (s) => (s === 'on' || s === 'off' ? 'power' : s.startsWith('p:') ? s.split('=')[0] : 'up');
@@ -114,7 +114,8 @@ function histRecord(kind, name, state) {
 function flushHistory() {
   const t = epoch();
   const q = histQueue.splice(0);
-  if (!q.length && histBooted && t - histLastWrite < 600) return;
+  const aliveDue = t - histLastAlive >= 600;   // even while others write lines (= Monitor.cpp)
+  if (!q.length && histBooted && !aliveDue) return;
   const day = Math.floor(t / 86400);
   let out = '';
   if (day !== histDay) {   // a new day file starts with the state of every device
@@ -123,14 +124,13 @@ function flushHistory() {
     histDay = day;
   }
   if (!histBooted) { out += `${Math.floor(t0 / 1000)} boot - -\n`; histBooted = true; }
-  if (!q.length) out += `${t} alive - -\n`;
+  if (aliveDue) { out += `${t} alive - -\n`; histLastAlive = t; }
   for (const r of q) {
     out += `${r.at} ${r.state} ${r.kind} ${r.name}\n`;
     const old = lastRec.find((x) => x.kind === r.kind && x.name === r.name && histLane(x.state) === histLane(r.state));
     if (old) old.state = r.state; else lastRec.push(r);
   }
   try { fs.mkdirSync(HIST, { recursive: true }); fs.appendFileSync(dayFile(day), out); } catch { /* lost, like a missing stick */ }
-  histLastWrite = t;
 }
 setInterval(flushHistory, 1000);
 function historyLines(name, from, to) {
@@ -302,7 +302,10 @@ function hostOnline(name) {
 
 // ---- simulated device drivers (mirrors src/Drivers.cpp) -------------------------
 // Each type keeps a fake device state; commands change it, polls report it.
-const DRV_NAMES = { kissbox: 'Kiss-Box', knx: 'KNX', brightsign: 'BrightSign', digidot: 'DiGidot', netio: 'NETIO', pharos: 'Pharos', netgear: 'Netgear' };
+const DRV_NAMES = { kissbox: 'Kiss-Box', knx: 'KNX', brightsign: 'BrightSign', digidot: 'DiGidot', netio: 'NETIO', pharos: 'Pharos', netgear: 'Switch' };
+// The command word per type is its name, plus "switch" for the netgear type (any SNMP switch): cmdType in Drivers.cpp.
+const drvWord = (t) => (String(t[0]).toLowerCase() === 'switch' ? ['netgear', ...t.slice(1)] : t);
+const isDrvWord = (w) => w === 'switch' || !!DRV_NAMES[w];
 const drvState = new Map();   // "type:name:ip" -> state
 function drv(d) {
   const key = `${d.type}:${d.name}:${d.ip}:${d.model || ''}`;
@@ -473,8 +476,8 @@ function netgearPoll(d) {
     const was = st.issues[p.n];
     if (issue !== (was || '') || (!st.compared && issue)) {
       const what = `port ${p.n}${label ? ` (${label})` : ''}`;
-      if (issue) log(2, 'SYS', `Netgear ${d.name}: ${what} ${issue}`);
-      else if (was !== undefined) log(1, 'SYS', `Netgear ${d.name}: ${what} back to normal`);
+      if (issue) log(2, 'SYS', `Switch ${d.name}: ${what} ${issue}`);
+      else if (was !== undefined) log(1, 'SYS', `Switch ${d.name}: ${what} back to normal`);
     }
     st.issues[p.n] = issue;
     if (issue) { count++; list.push(`${p.n} ${issue}`); }
@@ -497,9 +500,12 @@ function bsPlugin(d) {
   st.liveNote = undefined;
   st.info.Card = `${(st.sdFree / 1024).toFixed(1)} GB free of ${(st.sdSize / 1024).toFixed(1)} GB`;
   st.info.Screen = st.hdmi ? 'connected (HDMI)' : 'not connected';
-  st.info['KD plugin'] = `kdlink v13 · ${st.zones.length} zones · ${Object.keys(st.uvars).length} user variables · GPIO · serial port`;
+  st.info['KD plugin'] = `kdlink v14 · ${st.zones.length} zones · ${Object.keys(st.uvars).length} user variables · GPIO · serial port`;
   bsReport(d);
 }
+// The GPIO pins that are outputs in the simulated presentation (the plugin's "out" in its gpio packet,
+// which wins over the ticks): the pins an older project has ticked, else 4-7.
+const bsOuts = (d) => ((d.gpioOut || []).length ? d.gpioOut : [4, 5, 6, 7]);
 // Like pluginPacket in Drivers.cpp: zone changes and what the player receives go into the Activity list.
 function bsActivity(st, text) {
   st.activity.push([epoch(), String(text).slice(0, 160)]);
@@ -535,7 +541,8 @@ function bsReport(d) {
   // The plugin's "audio", "vol" and "health" packets.
   drvSet(d, 'vol', st.vol, 'Master volume (%)'); drvSet(d, 'mute', st.mute, 'Mute'); drvSet(d, 'screen', st.screen, 'Screen output');
   st.zones.forEach((z, i) => {
-    const zv = st.zvol[i];
+    // What the controller set, else what the zone starts with in the presentation (v14); the Ticker has no sound.
+    const zv = st.zvol[i] || (z.name === 'Ticker' ? null : { v: z.name === 'Audio' ? 70 : 100, mute: 0 });
     if (zv) { drvSet(d, `z${i + 1}.vol`, zv.v, `Zone ${i + 1} ${z.name} volume (%)`); drvSet(d, `z${i + 1}.mute`, zv.mute, `Zone ${i + 1} ${z.name} mute`); }
   });
   drvSet(d, 'sdfree', st.sdFree, 'Card free (MB)'); drvSet(d, 'hdmi', st.hdmi, 'Screen connected');
@@ -556,7 +563,7 @@ setInterval(() => {
     st.zones[1].file = st.zones[1].state.toLowerCase() + '.png';
     st.uvars.visitors = String(Math.floor(now / 60000) % 500);
     const motion = Math.floor(now / 10000) % 2;
-    if (!(d.gpioOut || []).includes(0) && motion !== (st.gpio & 1)) { st.gpio = (st.gpio & ~1) | motion; bsActivity(st, `gpio: input 0 ${motion ? 'on' : 'off'}`); }
+    if (!bsOuts(d).includes(0) && motion !== (st.gpio & 1)) { st.gpio = (st.gpio & ~1) | motion; bsActivity(st, `gpio: input 0 ${motion ? 'on' : 'off'}`); }
     if (Math.floor(now / 1000) % 7 === 0) {
       const line = `TEMP ${(21 + Math.sin(now / 60000) * 1.5).toFixed(1)}`;
       bsActivity(st, 'serial: ' + line);
@@ -611,7 +618,7 @@ function spread(t, delay) {
     return delay || listed ? each(names) : null;
   }
   if (w[0] === 'io' && t.length >= 3) { const n = splitList(t[1]); return delay || n.length > 1 ? each(n) : null; }
-  if (DRV_NAMES[w[0]]) return drvSplit(t, delay);
+  if (isDrvWord(w[0])) return drvSplit(drvWord(t), delay);
   return null;
 }
 function drvSplit(t, delay) {
@@ -687,7 +694,7 @@ function drvCommand(t) {
 }
 function drvCommandOne(t) {
   const w = t.map((x) => x.toLowerCase()), type = w[0], tn = DRV_NAMES[type];
-  if (t.length < 3) throw new Error(`expected: ${type} <device> ...`);
+  if (t.length < 3) throw new Error(`expected: ${type === 'netgear' ? 'switch' : type} <device> ...`);
   const list = (project.drivers || []).filter((d) => d.type === type);
   const d = ref(list, t[1]);
   if (!d) throw new Error(`unknown ${tn} device '${t[1]}'`);
@@ -810,16 +817,16 @@ function drvCommandOne(t) {
         return [true, `play ${label} in ${t[3]}`];
       });
     }
-    // A GPIO output (only pins ticked as outputs: "gpioOut") and a line out of the serial port.
+    // A GPIO output (only pins that are outputs in the presentation) and a line out of the serial port.
     if (w[2] === 'gpio' && t.length === 5) {
       const on = truthy(t[4]);
       if (!/^[0-7]$/.test(t[3])) throw new Error('GPIO pins are 0-7');
       if (on == null) throw new Error('expected on or off');
-      if (!(d.gpioOut || []).includes(+t[3])) throw new Error(`BrightSign ${d.name}: GPIO ${t[3]} is not ticked as an output (Devices > BrightSign > GPIO)`);
+      if (!bsOuts(d).includes(+t[3])) throw new Error(`BrightSign ${d.name}: GPIO ${t[3]} is an input in the presentation (BrightAuthor: Presentation Settings > Interactive > GPIO)`);
       return plug(`gpio ${t[3]} ${on ? 'on' : 'off'}`, () => { st.gpio = (st.gpio & ~(1 << +t[3])) | (on << +t[3]); return [true, `GPIO ${t[3]} ${on ? 'on' : 'off'}`]; });
     }
     if (w[2] === 'serial' && t.length >= 4) return plug(`serial ${rest(3)}`, () => { bsActivity(st, `serial out: ${rest(3)}`); return [true, `serial out: ${rest(3)}`]; });
-    if (w[2] === 'probe' && t.length === 3) return plug('probe', () => [true, `gpio settings: (simulated player) outputs ${(d.gpioOut || []).join(',') || 'none'}`]);
+    if (w[2] === 'probe' && t.length === 3) return plug('probe', () => [true, `gpio settings: (simulated player) outputs ${bsOuts(d).join(',')}`]);
     // Sound and screen (bsignCmd in Drivers.cpp).
     if ((w[2] === 'volume' && t.length === 5) || (w[2] === 'master' && t.length === 4)) {
       const v = t[t.length - 1];
@@ -829,7 +836,7 @@ function drvCommandOne(t) {
         const z = zone(t[3]), i = st.zones.indexOf(z);
         if (!z) return [false, `no zone '${t[3]}'`];
         if (z.name === 'Ticker') return [false, `zone '${t[3]}' has no sound`];
-        st.zvol[i] = { mute: 0, ...st.zvol[i], v: +v };
+        st.zvol[i] = { mute: 0, ...st.zvol[i], v: +v };   // (a zone without sound is refused by the real plugin)
         return [true, `volume ${t[3]} ${+v} %`];
       });
     }
@@ -918,8 +925,8 @@ function drvCommandOne(t) {
     });
   }
   if (type === 'netgear') {
-    if (w[2] === 'refresh' && t.length === 3) { setTimeout(() => { if (answers(d.ip)) netgearPoll(d); }, 300); return `Netgear ${d.name}: reading the switch`; }
-    throw new Error('expected: netgear <switch> refresh');
+    if (w[2] === 'refresh' && t.length === 3) { setTimeout(() => { if (answers(d.ip)) netgearPoll(d); }, 300); return `Switch ${d.name}: reading the switch`; }
+    throw new Error('expected: switch <switch> refresh');
   }
   if (type === 'pharos') {
     if ((w[2] === 'timeline' || w[2] === 'scene') && t.length >= 5) {
@@ -965,6 +972,7 @@ function drvStatus() {
       ...(st.lastError ? { lastError: st.lastError, lastErrorAt: st.lastErrorAt } : {}),
       ...(st.live ? { live: st.live } : {}), ...(st.liveNote ? { liveNote: st.liveNote } : {}), ...(st.triggers ? { triggers: st.triggers } : {}), ...(st.scenes.length ? { scenes: st.scenes } : {}), ...(st.playlists ? { playlists: st.playlists, c4triggers: st.c4triggers } : {}), ...(d.type === 'knx' ? { tunnel: !!st.tunnel } : {}),
       ...(d.plugin && st.pluginSeen && st.states ? { states: st.states.map(([z, n, f, ms]) => ({ z, n, ...(f ? { f } : {}), ...(ms ? { ms } : {}) })) } : {}),
+      ...(d.type === 'brightsign' && d.plugin && st.pluginSeen ? { gpioOut: bsOuts(d) } : {}),
       ...(st.activity?.length ? { activity: st.activity } : {}),
       ...(d.type === 'netgear' && st.ports && st.compared ? { ports: st.ports.map((p) => ({ n: p.n, i: p.i, ...(p.a ? { a: p.a } : {}), up: p.up, ...(p.sp ? { sp: p.sp } : {}),
         ...(p.m ? { mac: p.mac, m: p.m } : {}), ...(p.l && p.up ? { l: p.l } : {}), ...(p.poe >= 0 ? { poe: p.poe } : {}), ...(st.issues?.[p.n] ? { x: st.issues[p.n] } : {}) })) } : {}) };
@@ -1052,21 +1060,27 @@ function effectRun(t, c) {
   const prog = effectProg(c.effect);
   if (!prog) { log(2, 'SHOW', `Timeline ${t.id}: effect ${c.effect} missing or has errors`); return null; }
   const fx = trackFixtures(t, c.track || 0), round = effectRound(project, (project.effects || []).find((x) => x.id === c.effect));
+  // The clip options (c.mods) move each fixture once, as the controller does when loading (FX.place).
+  let n = fx.length;
   const targets = fx.map((f, k) => {
     const ro = channelRoles(f), at = mapPosition(project, f.id, round);
     const ch = (s) => (s ? { key: `${f.universe}.${f.address + s.offset}`, wide: s.wide } : null);
-    return { d: ch(ro.dim), r: ch(ro.r), g: ch(ro.g), b: ch(ro.b), w: ch(ro.w),
-      x: at ? at.x : k / fx.length, y: at ? at.y : 0.5 };
+    const pl = FX.place(c.mods, k, fx.length, at ? at.x : k / fx.length, at ? at.y : 0.5);
+    n = pl.n;
+    return { d: ch(ro.dim), r: ch(ro.r), g: ch(ro.g), b: ch(ro.b), w: ch(ro.w), i: pl.i, x: pl.x, y: pl.y };
   });
-  return { prog, base: FX.slotsFor(prog, c.params || {}), level: (c.dim ?? 100) / 100, targets, start: Date.now() };
+  // The clip's values, automation (c.auto) and later a live edit's glide (FX.runner / FX.carry = Fx::frameInputs).
+  const R = FX.runner(prog, c.params || {}, c.auto, t.loop && t.length ? t.length / 1000 : 0);
+  return { prog, R, effect: c.effect, level: (c.dim ?? 100) / 100, targets, n, invert: !!c.mods?.invert, start: Date.now() };
 }
 // One frame -> [key, value, wide] for all target channels.
 function effectFrame(run, now) {
-  const out = [], n = run.targets.length;
-  run.targets.forEach((x, i) => {
-    const s = Float64Array.from(run.base);
-    s[0] = (now - run.start) / 1000; s[1] = i; s[2] = n; s[3] = i / n; s[4] = x.x; s[5] = x.y;
+  const out = [], n = run.n, base = FX.frame(run.R, (now - run.start) / 1000);
+  run.targets.forEach((x) => {
+    const s = Float64Array.from(base);
+    s[1] = x.i; s[2] = n; s[3] = x.i / n; s[4] = x.x; s[5] = x.y;
     FX.run(run.prog, s);
+    if (run.invert) FX.invert(s);
     const v = FX.toFixture(s, { dim: !!x.d, r: !!x.r, g: !!x.g, b: !!x.b, w: !!x.w }, run.level);
     for (const k of ['dim', 'r', 'g', 'b', 'w']) {
       const c = x[k === 'dim' ? 'd' : k];
@@ -1281,7 +1295,14 @@ function timelineReplaced(t) {
   if (!pb || pb.releasing) return;
   let at = Math.max(0, (pb.paused ? pb.pausedAt : Date.now()) - pb.start);
   if (t.length && at >= t.length) at = t.loop ? at % t.length : t.length - 1;
+  // Each track's effect carries on from what it showed (keepEffects / carryEffects in Show.cpp).
+  const now = pb.paused ? pb.pausedAt : Date.now(), kept = Object.entries(pb.fx || {}).map(([tr, run]) => [tr, run, (now - run.start) / 1000]);
   moveTimeline(pb, t, at, true);
+  const now2 = pb.paused ? pb.pausedAt : Date.now();
+  for (const [tr, old, tOld] of kept) {
+    const run = pb.fx?.[tr];
+    if (run && run.effect === old.effect) FX.carry(old.R, tOld, run.R, (now2 - run.start) / 1000);
+  }
 }
 // Show::timelinePosition: { pos, paused } (paused also = held at its end) or null when not running.
 function timelinePosition(id) {
@@ -1993,7 +2014,7 @@ function execLine(line, src, vars) {
     log(1, 'SYS', `Monitor interval set to ${monInterval} s`);
     r = `Monitor interval ${monInterval} s`;
   } else if (w[0] === 'io') r = boardCommand(t);
-  else if (DRV_NAMES[w[0]]) r = drvCommand(t);
+  else if (isDrvWord(w[0])) r = drvCommand(drvWord(t));
   else if (w[0] === 'reload') { loadProject(); r = 'Project reloaded'; }
   else throw new Error('unknown command');
   if (r.startsWith('Started') || r.startsWith('Released') || r.startsWith('Scene') || r.startsWith('Paused') || r.startsWith('Resumed')) log(1, 'SHOW', r);
@@ -2381,8 +2402,16 @@ function tlEvent(id, on, reason = '') {
       }
   });
 }
+// Devices the history follows, as "kind name" (+ what makes a show device start afresh = Drivers.cpp).
+const histDevs = (p) => p ? [...(p.drivers || []).map((d) => [d.type, d.name, `${d.ip}:${d.port || ''}`]), ...(p.projectors || []).map((x) => ['projector', x.name, '']),
+  ...(p.pcs || []).filter((x) => x.monitor !== false).map((x) => ['pc', x.name, x.ip]), ...(p.devices || []).filter((x) => x.monitor !== false).map((x) => ['device', x.name, x.ip])] : [];
 function loadProject() {
+  const before = histDevs(project);
   project = JSON.parse(fs.readFileSync(PROJECT, 'utf8'));
+  // Left the project: the history shows "not watched" from here on (= the load()s in the firmware).
+  const after = histDevs(project).map((d) => d.join('	'));
+  for (const d of before)
+    if (!after.includes(d.join('	')) && lastRec.some((r) => r.kind === d[0] && r.name === d[1] && histLane(r.state) === 'up' && r.state !== 'gone')) histRecord(d[0], d[1], 'gone');
   pbs = [];
   tlEvents = [];   // a (re)load lets go of everything without "released" triggers
   loc.until = 0;   // its fixtures may have moved (= Show::parse)
@@ -2717,9 +2746,17 @@ function mockSent() {
 const SAVE_LOAD_MS = +process.env.KD_SAVE_LOAD_MS || 0, SAVE_WRITE_MS = +process.env.KD_SAVE_WRITE_MS || 0;
 const SAVE_FAIL = process.env.KD_SAVE_FAIL === '1';
 const saveSt = { seq: 0, written: 0, failed: 0, error: '', ms: 0, busyUntil: 0, timer: 0 };
+// Room on the "stick" = the disk the show folder is on, in KB (= Storage::spaceJson).
+function stickSpace() {
+  try {
+    const s = fs.statfsSync(SHOW);
+    return { total: Math.floor(s.blocks * s.bsize / 1024), free: Math.floor(s.bavail * s.bsize / 1024) };
+  } catch { return {}; }   // older Node: not known
+}
 function status() {
   const now = Date.now();
   return {
+    stick: stickSpace(),
     version: upd.version, uptime: now - t0, started: 'power on',
     update: { target: updTarget(), ready: true, bootloader: 25, ...(upd.last ? { last: upd.last, lastOk: true } : {}), ...(upd.restarting ? { restarting: true } : {}) }, time: clock ? Math.floor(now / 1000) : 0, usb: true, ip: '127.0.0.1',
     net: mockNet(),

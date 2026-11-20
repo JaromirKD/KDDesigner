@@ -18,6 +18,7 @@ struct Stats {
   uint32_t loopRounds = 0, loopGapUs = 0, loopSleepUs = 0;
   uint32_t udpDropped = 0;    // UDP packets the receive queue had no room for (since boot)
   uint32_t httpRequests = 0;
+  uint32_t httpRefused = 0;   // connections closed unserved: waiting list full, or no request in time
   // Heap (dynamic memory): total size, in use, free now, lowest free since boot.
   uint32_t heapSize = 0, heapUsed = 0, heapFree = 0, heapMinFree = 0;
   const char* resetReason = "";   // why the board last started (power on, watchdog...)

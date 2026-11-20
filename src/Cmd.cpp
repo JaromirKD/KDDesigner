@@ -480,7 +480,7 @@ bool run(const std::vector<String>& t, String& r, const Vars* vars) {
   }
   // io <point> on|off|toggle|pulse <s>|<volts> [fade <s>]  (Machine Control I/O)
   if (is(0, "io")) return Board::command(t, r);
-  // kissbox | knx | brightsign | digidot | netio | pharos | netgear <device> ...
+  // kissbox | knx | brightsign | digidot | netio | pharos | switch (or netgear) <device> ...
   if (!t.empty() && Drivers::isCommand(t[0])) return Drivers::command(t, r);
   if (is(0, "reload") && t.size() == 1) {
     // From a trigger's actions: after its run (the reload replaces the trigger table and the

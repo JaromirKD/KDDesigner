@@ -45,7 +45,7 @@ function addItem(kind) {
       if (type === 'netio') Object.assign(d, { user: 'netio', password: 'netio' });
       if (type === 'digidot') Object.assign(d, { user: 'admin', password: 'admin' });
       if (type === 'brightsign') Object.assign(d, { user: 'admin', password: '', udpPort: 5000, commands: [] });
-      if (type === 'kissbox') Object.assign(d, { frame: 'IO3', cards: ['DO4PR', 'DI8DC', ''], listenPort: 9813, names: {} });
+      if (type === 'kissbox') Object.assign(d, { frame: 'IO3', cards: ['DO4PR', 'DI8DC', ''], destPort: 9817, names: {} });
       if (type === 'knx') d.addresses = [];
       if (type === 'netgear') Object.assign(d, { community: 'public', names: {}, expect: {} });
       if (type === 'pharos' || type === 'netio') d.live = false;
@@ -284,6 +284,97 @@ function whereUsed(listName, x) {
     }
   for (const g of groups) out.push({ where: `Device group ${g.name}`, what: 'member', attr: 'data-view="devices"' });
   return out;
+}
+// ---- Renaming: trigger lines and settings that name the item follow --------------------
+// Called by onBound BEFORE the new name is written: the grammar only recognises a reference
+// while the item still has its old name. path = the name field's data-p (scenes.3.name,
+// pcs.0.name, deviceGroups.1.name, drivers.2.addresses.4.name…). Returns how many places changed.
+// Timelines, triggers, panels and modes have their own (renameTimelineRefs, renameTriggerRefs,
+// renamePanelRefs, renameModeRefs); fixtures and groups are named by number in commands.
+const RENAME_PARTS = {
+  scenes: ['{sc}'], variables: ['{var}'], calendar: ['{calname}'],
+  devices: ['{device}', '{devname}'], pcs: ['{pc}', '{devname}'], projectors: ['{pj}', '{devname}'],
+  tcp: ['{tcpdev}', '{devname}'], modbus: ['{mbdev}', '{devname}'], drivers: ['{devname}'],
+};
+const GROUP_PARTS = { network: ['{device}'], pc: ['{pc}'], projector: ['{pj}'], tcp: ['{tcpdev}'] };
+const DEVICE_LISTS = ['devices', 'pcs', 'projectors', 'tcp', 'modbus', 'drivers'];
+function renameNameRefs(path, oldName, newName) {
+  const p = P(), lo = String(oldName || '').toLowerCase(), nlo = String(newName || '').toLowerCase();
+  if (!lo || !nlo || lo === nlo || /^\d+$/.test(lo)) return 0;
+  let m, parts, item, list, kindName = null;
+  const knx = /^drivers\.(\d+)\.addresses\.(\d+)\.name$/.exec(path);
+  if (knx) {
+    const d = p.drivers[+knx[1]];
+    list = d?.addresses || [];
+    item = list[+knx[2]];
+    parts = ['{knxga}'];
+  } else if ((m = /^(\w+)\.(\d+)\.name$/.exec(path)) && (RENAME_PARTS[m[1]] || m[1] === 'deviceGroups')) {
+    list = p[m[1]];
+    item = list?.[+m[2]];
+    if (!item) return 0;
+    if (m[1] === 'drivers') parts = [Object.keys(DRV_PART).find((q) => DRV_PART[q] === item.type), '{devname}'].filter(Boolean);
+    else if (m[1] === 'deviceGroups') {
+      kindName = item.kind || 'network';
+      parts = GROUP_PARTS[kindName] || [Object.keys(DRV_PART).find((q) => DRV_PART[q] === kindName)].filter(Boolean);
+    } else parts = RENAME_PARTS[m[1]];
+  } else return 0;
+  if (!item) return 0;
+  // Two items with the old or the new name: a line can't tell which one it meant, leave them.
+  const same = (x) => String(x ?? '').toLowerCase();
+  const pools = m && (DEVICE_LISTS.includes(m[1]) || m[1] === 'deviceGroups')
+    ? [...DEVICE_LISTS.flatMap((k) => p[k] || []), ...(p.deviceGroups || [])] : list;
+  if (pools.some((x) => x !== item && [lo, nlo].includes(same(x.name)))) return 0;
+  const listName = m?.[1];
+  let n = 0;
+  const isVar = listName === 'variables', varWord = /^[A-Za-z_][\w.]*$/.test(newName);
+  const fix = (grammar) => (line) => {
+    if (typeof line !== 'string' || !line.trim() || line.trim().startsWith('#')) return line;
+    let refs = [];
+    try { refs = lineRefs(line, grammar); } catch { /* a line the grammar can't read */ }
+    let out = line;
+    // Right to left keeps earlier positions valid.
+    for (const r of refs.filter((q) => parts.includes(q.part) && same(q.v) === lo).sort((a, b) => b.start - a.start)) {
+      out = out.slice(0, r.start) + quote(newName) + out.slice(r.end);
+      n++;
+    }
+    // {name} / {=maths with name}: a variable read when the line runs.
+    if (isVar && varWord)
+      out = out.replace(/\{(=?)([^}]*)\}/g, (all, eq, body) => {
+        const nb = body.replace(/[A-Za-z_][\w.]*/g, (w) => (same(w) === lo ? (n++, newName) : w));
+        return `{${eq}${nb}}`;
+      });
+    return out;
+  };
+  const fixA = fix(GRAMMAR), fixC = fix(COND_GRAMMAR);
+  for (const t of p.triggers) {
+    if (t.type === 'comment') continue;
+    t.actions = (t.actions || []).map(fixA);
+    t.conditions = (t.conditions || []).map(fixC);
+    // What sets the trigger off.
+    const field = isVar ? 'variable' : listName === 'calendar' ? 'calendar'
+      : listName === 'projectors' && t.type === 'projector' ? 'projector'
+      : DEVICE_LISTS.includes(listName) && ['device', 'tcp', 'media_end'].includes(t.type) ? 'device' : null;
+    if (field && same(t[field]) === lo) { t[field] = newName; n++; }
+  }
+  for (const g of p.modes || []) {
+    for (const info of Object.values(g.stateInfo || {}))
+      for (const k of ['enter', 'leave']) if (Array.isArray(info?.[k])) info[k] = info[k].map(fixA);
+    if (isVar && same(g.var) === lo) { g.var = newName; n++; }
+  }
+  if (isVar) {
+    for (const pg of p.panel.pages)
+      for (const c of pg.controls) {
+        if (same(c.var) === lo) { c.var = newName; n++; }
+        for (const k of Object.keys(c.links || {})) if (same(c.links[k]) === lo) { c.links[k] = newName; n++; }
+      }
+    for (const d of p.drivers || []) {
+      for (const k of Object.keys(d.vars || {})) if (same(d.vars[k]) === lo) { d.vars[k] = newName; n++; }
+      for (const a of d.addresses || []) if (same(a.var) === lo) { a.var = newName; n++; }
+    }
+  }
+  if (listName === 'modbus')
+    for (const v of p.variables) if (v.modbus && same(v.modbus.device) === lo) { v.modbus.device = newName; n++; }
+  return n;
 }
 const usedLines = (list, max = 8) => list.slice(0, max).map((u) => `• ${u.where}: ${u.what}`).join('\n') + (list.length > max ? `\n… and ${list.length - max} more` : '');
 // "Used in N places" for an editor: a fold-out list with open → links.
@@ -731,7 +822,9 @@ window.addEventListener('resize', () => acs.forEach((a) => a.hide()));
 // ---------------------------------------------------------------------------
 (async () => {
   try {
-    S.project = normalize(await apiProgress('/api/project', 'Loading the project'));
+    const loaded = await apiProgress('/api/project', 'Loading the project');
+    S.ctlText = JSON.stringify(loaded);   // before normalize() changes it (ctlProjectCheck in app-core.js)
+    S.project = normalize(loaded);
     // Older projects: put the trigger numbers in list order once (references follow).
     if (renumberTriggers(P(), false)) { S.dirty = true; setTimeout(() => toast('Triggers renumbered in list order - press Save to keep it'), 500); }
     const seqs = normalize.sequences;

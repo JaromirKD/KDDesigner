@@ -15,7 +15,8 @@ const DRIVERS = {
   digidot: { label: 'DiGidot C4', port: 80, about: 'pixel controller · JSON API' },
   netio: { label: 'NETIO', port: 80, about: 'power sockets · JSON API' },
   pharos: { label: 'Pharos', port: 80, about: 'LPC / TPC · HTTP API' },
-  netgear: { label: 'Netgear switch', port: 161, about: 'AV network switch · SNMP' },
+  // Any managed switch with SNMP; the type keeps its first name so older shows still load.
+  netgear: { label: 'Network switch', port: 161, about: 'any managed switch · SNMP' },
 };
 // Icons per kind of device (24 x 24 line drawings in currentColor, like the fixture icons):
 // key -> [name, svg, Devices tab]. Used on the Devices / Monitoring tabs and in the trigger list.
@@ -41,8 +42,8 @@ const DEVICE_ICONS = {
     [12.13, 5.2, 1.25], [17.82, 7.67, 1.25], [18.81, 14.35, 1.25], [15.1, 18.56, 1.25], [8.91, 18.56, 1.25], [5.2, 13.86, 1.25], [6.43, 7.92, 1.25],
     [12.13, 2.72, 1], [19.8, 6.19, 1], [21.28, 15.34, 1], [16.08, 20.79, 1], [7.67, 20.79, 1], [2.72, 14.35, 1], [4.45, 6.43, 1],
   ].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}"/>`).join('')}</g>`, 'pharos'],
-  // A switch front with two rows of ports, in Netgear's purple.
-  netgear: ['Netgear switch', '<rect x="2" y="6" width="20" height="12" rx="1.5" fill="#5b2d8e" stroke="none"/><g fill="#fff" stroke="none">'
+  // A switch front with two rows of ports (purple: it began as the Netgear AV driver).
+  netgear: ['Network switch (SNMP)','<rect x="2" y="6" width="20" height="12" rx="1.5" fill="#5b2d8e" stroke="none"/><g fill="#fff" stroke="none">'
     + [5, 9, 13, 17].map((x) => `<rect x="${x}" y="8.6" width="2.6" height="2.4" rx=".3"/><rect x="${x}" y="13" width="2.6" height="2.4" rx=".3"/>`).join('') + '</g>', 'netgear'],
   // A finger tapping (shape after the Lucide "pointer" icon).
   panel: ['Touch panel', '<path d="M22 14a8 8 0 0 1-8 8M18 11v-1a2 2 0 0 0-4 0M14 10V9a2 2 0 0 0-4 0v1M10 9.5V4a2 2 0 0 0-4 0v10"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>', ''],
@@ -200,7 +201,7 @@ function emptyProject() {
 function normalize(p) {
   const e = emptyProject();
   for (const k of ['universes', 'fixtures', 'groups', 'scenes', 'timelines', 'triggers', 'projectors', 'pcs', 'devices', 'modes',
-    'variables', 'tcp', 'modbus', 'calendar', 'maps', 'effects', 'deviceGroups', 'fixtureTypes', 'drivers', 'colorThemes', 'variableGroups']) p[k] = p[k] || [];
+    'variables', 'tcp', 'modbus', 'calendar', 'maps', 'effects', 'deviceGroups', 'fixtureTypes', 'drivers', 'colorThemes', 'variableGroups', 'colorLists']) p[k] = p[k] || [];
   // A variable's group that is not in the list (typed by hand, an older project) gets its tab.
   for (const v of p.variables) if (v.group && !p.variableGroups.some((g) => g.name === v.group)) p.variableGroups.push({ name: v.group });
   p.deviceGroups.forEach((g) => (g.devices = g.devices || []));
@@ -300,7 +301,8 @@ async function api(path, opts = {}) {
 }
 // ---------------------------------------------------------------------------
 // Progress bar along the bottom of the header (saving and loading the project): frac 0..1,
-// or null = "busy, no figure". kind 'err' = red, stays until closed (×) or the next use.
+// or null = "busy, no figure". kind 'err' = red, stays until closed (×) or the next use;
+// 'up' = a file upload (green striped bar, so it doesn't look like a save).
 // Never blocks the page: the lights keep running and the editor stays usable.
 // ---------------------------------------------------------------------------
 function progress(label, frac = null, kind = '') {
@@ -348,7 +350,7 @@ async function apiProgress(path, label) {
 
 // PUT/POST through XMLHttpRequest: fetch() can't report upload progress. onUp(sent, total);
 // onSent() once the whole body is out (the controller is then loading it).
-function xhrSend(method, path, body, headers, onUp, onSent) {
+function xhrSend(method, path, body, headers, onUp, onSent, timeout = 120000) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open(method, path);
@@ -365,9 +367,27 @@ function xhrSend(method, path, body, headers, onUp, onSent) {
     x.onerror = () => reject(sent ? Object.assign(new Error('the connection was lost while the controller was loading it'), { stage: 'load' })
                                   : Object.assign(new Error('no connection to the controller'), { stage: 'send' }));
     x.ontimeout = () => reject(Object.assign(new Error('no answer'), { stage: 'load' }));
-    x.timeout = 120000;
+    x.timeout = timeout;
     x.send(body);
   });
+}
+// Puts a file (File or bytes) in show/media, with the progress bar: the controller's stick
+// takes a few hundred KB a second, so a PDF of some MB is a while. Throws with the reason.
+async function mediaUpload(name, body, label) {
+  const size = body.size ?? body.length ?? 0, big = size > 150000;   // small images: no bar flashing up
+  const what = `Uploading ${label || name}`;
+  if (big) progress(what, 0, 'up');
+  try {
+    const j = await xhrSend('PUT', `/api/media?name=${encodeURIComponent(name)}`, body, null,
+      (sent, total) => { if (big) progress(`${what} ${Math.round(sent / total * 100)} % of ${kb(size)}`, sent / total, 'up'); },
+      () => { if (big) progress(`${what}: writing to the stick…`, null, 'up'); }, 900000);
+    if (!j || !j.ok) throw new Error((j && j.reply) || 'failed');
+    if (big) { progress(`${label || name} uploaded`, 1, 'up'); progressHide(1200); }
+    return j;
+  } catch (e) {
+    if (big) progressHide();
+    throw e;
+  }
 }
 
 async function cmd(line) {
@@ -388,6 +408,7 @@ async function save() {
   const netBad = KDModel.netProblems(P().network);
   if (netBad.length) { toast(`Not saved - Settings > Network: ${netBad[0].text}`, true); return; }
   const netChanged = S.netSaved !== undefined && JSON.stringify(P().network) !== S.netSaved;
+  if (S.ctlReplaced && !confirm(`The show on the controller was replaced while this page was open: it now runs "${S.ctlReplaced}".\n\nSave "${P().name}" from this page over it?\n\nCancel keeps the controller's show (F5 loads it here; your unsaved changes are then lost).`)) return;
   // On a controller: ask once per browser tab, the first save changes the running show.
   if (isLive()) {
     let asked = false;
@@ -414,6 +435,8 @@ async function save() {
     progress('Saved', 1);
     progressHide(800);
     S.dirty = false;
+    S.ctlText = JSON.stringify(JSON.parse(body));   // what the controller has now (ctlProjectCheck)
+    S.ctlReplaced = '';
     S.tlLiveSent = {};   // the controller reloaded: it has the saved timelines (live editing)
     S.tlLiveErr = {};
     if (undo.timer) undoSnap();
@@ -667,6 +690,12 @@ function onBound(e) {
   // ...and on the maps (any list with names, Modbus too).
   const mapRename = /^(devices|tcp|pcs|projectors|drivers|modbus)\.(\d+)\.name$/.exec(el.dataset.p);
   const mapOld = mapRename && P()[mapRename[1]][+mapRename[2]]?.name;
+  // Scenes, variables, devices, device groups, calendar periods, KNX addresses: trigger lines
+  // and settings that name it follow (app-main.js; before the new name is in: the grammar
+  // only recognises the old name while the item still has it).
+  const nameRefs = /\.name$/.test(el.dataset.p) && !rename && !/^(timelines|panel)\./.test(el.dataset.p)
+    ? renameNameRefs(el.dataset.p, getPath(P(), el.dataset.p), readInput(el)) : 0;
+  if (nameRefs) toast(`Updated ${nameRefs} reference${nameRefs > 1 ? 's' : ''} to the new name`);
   setPath(P(), el.dataset.p, readInput(el));
   if (devOld && devOld !== el.value)
     P().deviceGroups.filter((g) => (g.kind || 'network') === devKind).forEach((g) => (g.devices = g.devices.map((n) => (n === devOld ? el.value : n))));
@@ -772,6 +801,11 @@ const fmtTime = (ms) => {
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${Math.floor((ms % 1000) / 100)}`;
 };
+// The controller's uptime (ms) as days:hours:minutes, "03:07:42".
+const fmtUptime = (ms) => {
+  const m = Math.floor(Math.max(0, ms || 0) / 60000), p = (n) => String(n).padStart(2, '0');
+  return `${p(Math.floor(m / 1440))}:${p(Math.floor(m / 60) % 24)}:${p(m % 60)}`;
+};
 const opts = (list, sel, label = (o) => `${o.id} · ${o.name || ''}`) =>
   list.map((o) => `<option value="${o.id}"${o.id === sel ? ' selected' : ''}>${esc(label(o))}</option>`).join('');
 // True while the user is typing in a field (page keys leave it alone).
@@ -822,6 +856,7 @@ function updateHeader() {
     else if (sv?.busy) chips.push('<span class="chip warn" title="The project is saved and running; it is now being written to the storage device. Don\'t switch the controller off until this goes away.">writing to the stick…</span>');
     const pjOff = (st.projectors || []).filter((x) => x.seen && !x.online).length;
     if (pjOff) chips.push(`<span class="chip bad">${pjOff} projector${pjOff > 1 ? 's' : ''} offline</span>`);
+    if (S.ctlReplaced) chips.unshift(`<span class="chip bad" title="The controller now runs &quot;${esc(S.ctlReplaced)}&quot;, put there from somewhere else. This page still has &quot;${esc(p.name)}&quot; with unsaved changes. Save puts this page's show back over it (it asks first); F5 loads the controller's show and drops your changes.">show replaced on the controller</span>`);
     if (st.safeMode) chips.unshift('<span class="chip bad" title="The controller restarted after a crash several times in a row, so triggers only run when you fire them by hand (no Startup). Fix the project and save it, or restart the controller.">SAFE MODE</span>');
     const paused = st.paused?.length || 0;
     if (paused) chips.push(`<span class="chip bad" title="Fired over 100 times in a second (a feedback loop?) and paused for 10 s: ${esc(st.paused.map((x) => '#' + x.trigger).join(', '))}">${paused} trigger${paused > 1 ? 's' : ''} paused</span>`);
@@ -838,6 +873,10 @@ function onStatus(st) {
   S.status = st;
   S.statusAt = st._at = Date.now();   // st._at: panel controls that follow a timeline move on from here
   if (st.net?.trial) netTrialSeen();
+  if (st.projectVersion != null && st.projectVersion !== S.ctlVer) {
+    if (S.ctlVer === undefined) S.ctlVer = st.projectVersion;
+    else ctlProjectCheck(st.projectVersion);
+  }
   if (st.time < 1600000000) {
     api('/api/time', { method: 'POST', body: String(Math.floor(Date.now() / 1000)) }).catch(() => {});
   }
@@ -852,6 +891,36 @@ function onStatus(st) {
   if (S.view === 'triggers') updateTrigRunning();
   const off = monSummary(st).offline;
   $('#monBadge').textContent = off || '';
+}
+
+// The show on the controller can be replaced while this page still holds the old one (the
+// launcher's "Send show", another browser, a restored backup): the next Save here would put
+// the old show back without anyone noticing (16 Nov 2026: a sent show was gone a minute
+// later). The status' projectVersion goes up on every load - also our own saves and a
+// `reload` - so the stored text decides: S.ctlText is what the controller had when this page
+// last loaded or saved it. Not edited here = load the new show; edited = warn, and Save asks.
+async function ctlProjectCheck(ver) {
+  if (ctlProjectCheck.busy || S.saving) return;
+  ctlProjectCheck.busy = true;
+  try {
+    const r = await fetch('/api/project', { cache: 'no-store' });
+    if (!r.ok) return;   // tried again on the next status
+    const now = await r.json(), text = JSON.stringify(now);
+    if (S.saving) return;   // our own save crossed it: checked again after
+    S.ctlVer = ver;
+    if (text === S.ctlText) return;
+    S.ctlText = text;
+    const name = now.name || 'another show';
+    if (!S.dirty) {
+      toast(`The show on the controller was replaced (now "${name}") - loading it`);
+      setTimeout(() => location.reload(), 1500);
+      return;
+    }
+    S.ctlReplaced = name;
+    toast(`The show on the controller was replaced (now "${name}"). This page still has "${P().name}" with unsaved changes: Save would put it back.`, true);
+    updateHeader();
+  } catch { /* offline: tried again on the next status */ }
+  finally { ctlProjectCheck.busy = false; }
 }
 
 // ---------------------------------------------------------------------------

@@ -62,19 +62,44 @@ struct Request {
   String ifNoneMatch;    // ETag the browser already has
 };
 
-bool readLine(EthernetClient& c, String& line, uint32_t timeoutMs) {
-  line = "";
-  uint32_t t0 = millis();
-  while (millis() - t0 < timeoutMs) {
-    while (c.available()) {
-      char ch = c.read();
-      if (ch == '\n') return true;
-      if (ch != '\r' && line.length() < 1024) line += ch;
-    }
-    if (!c.connected()) return false;
-    rtos::ThisThread::sleep_for(1ms);
+// Connections waiting for their request (httpLoop). The server used to read each request in
+// turn and wait up to 2 s on one that sent nothing - browsers open spare connections ahead
+// and may never use them - so every other browser and panel waited behind it, and with ~7
+// connections queued lwIP reset the new ones (a page with a dead script, seen on the board).
+// Now every connection is taken at once and served only when its request header is all in.
+struct Waiting {
+  EthernetClient c;
+  String head;          // request line + header lines so far
+  uint32_t since = 0;   // accepted at (millis)
+  bool used = false;
+  bool ready = false;   // header complete: read no further (the body is the handler's)
+};
+Waiting waiting[KD_HTTP_WAITING];
+const size_t kHeadMax = 6144;   // a panel's vars=… query can be long; more is not a browser
+
+// Reads what has arrived of a waiting request: 1 = header complete, 0 = not yet, -1 = closed / too big.
+// Stops exactly at the blank line, so a body stays in the socket for the handler.
+int takeHead(Waiting& w) {
+  while (w.c.available()) {
+    int ch = w.c.read();
+    if (ch < 0) break;
+    if (ch == '\r') continue;
+    w.head += (char)ch;
+    size_t n = w.head.length();
+    if (ch == '\n' && (n == 1 ? false : w.head[n - 2] == '\n')) return 1;
+    if (n > kHeadMax) return -1;
   }
-  return false;
+  return w.c.connected() ? 0 : -1;
+}
+
+// The next header line of `head` from `at` (without the '\n'); false at the end.
+bool nextLine(const String& head, int& at, String& line) {
+  if (at >= (int)head.length()) return false;
+  int nl = head.indexOf('\n', at);
+  if (nl < 0) nl = head.length();
+  line = head.substring(at, min(nl, at + 1024));
+  at = nl + 1;
+  return true;
 }
 
 String queryParam(const String& q, const char* key) {
@@ -291,6 +316,7 @@ void buildStatus(JsonDocument& d) {
   d["started"] = g_stats.resetReason;
   d["time"] = (uint32_t)time(nullptr);
   d["usb"] = Storage::mounted();
+  Storage::spaceJson(d["stick"].to<JsonObject>());   // KB; empty while not known
   d["ip"] = Net::localIP().toString();
   Net::statusJson(d["net"].to<JsonObject>());
   JsonObject s = d["stats"].to<JsonObject>();
@@ -323,6 +349,7 @@ void buildStatus(JsonDocument& d) {
   s["trigUs"] = g_stats.trigUs;   // per second
   s["busyUs"] = g_stats.busyUs;
   s["http"] = g_stats.httpRequests;
+  s["httpRefused"] = g_stats.httpRefused;
   JsonObject heap = s["heap"].to<JsonObject>();
   heap["sdramFree"] = BigRam::freeBytes();
   heap["size"] = g_stats.heapSize;
@@ -417,31 +444,47 @@ void handleMediaPut(EthernetClient& c, const String& name, size_t len) {
   String tmp = path + ".part";
   FILE* f = fopen(tmp.c_str(), "wb");
   if (!f) { sendResult(c, false, "Cannot write to the storage device"); return; }
-  uint8_t buf[1024];
-  size_t got = 0;
-  uint32_t t0 = millis();
+  // Collected into 8 KB pieces (16 sectors = one USB command) and written unbuffered, like
+  // Storage::writeFile: 1 KB pieces through stdio took minutes for a PDF of a few MB, with the
+  // web UI waiting behind it. Its own buffer from the heap; without memory, the whole sectors
+  // that fit in txBuf (only 8 TCP segments = 4288 bytes: 8 KB written into it ran over what
+  // lies behind it and hung the board), free here because the reply only goes out afterwards.
+  setvbuf(f, nullptr, _IONBF, 0);
+  size_t piece = 8192;
+  uint8_t* buf = (uint8_t*)malloc(piece);
+  if (!buf) { buf = txBuf; piece = sizeof(txBuf) / 512 * 512; }
+  size_t got = 0, fill = 0;
+  uint32_t t0 = millis(), began = t0;
   bool ok = true;
   while (got < len && millis() - t0 < 10000) {
-    int n = c.read(buf, min(sizeof(buf), len - got));
+    int n = c.read(buf + fill, min(piece - fill, len - got));
     if (n > 0) {
-      if (fwrite(buf, 1, n, f) != (size_t)n) { ok = false; break; }
+      fill += n;
       got += n;
+      if (fill == piece || got == len) {
+        if (fwrite(buf, 1, fill, f) != fill) { ok = false; break; }
+        fill = 0;
+      }
       t0 = millis();
     } else if (!c.connected()) break;
     else rtos::ThisThread::sleep_for(1ms);
   }
-  fclose(f);
-  if (!ok || got != len) { remove(tmp.c_str()); sendResult(c, false, "Upload incomplete"); return; }
+  if (buf != txBuf) free(buf);
+  if (fclose(f) != 0) ok = false;   // the last FAT and directory updates happen here
+  if (!ok) { remove(tmp.c_str()); sendResult(c, false, "Write to the storage device failed (full or removed?)"); return; }
+  if (got != len) { remove(tmp.c_str()); sendResult(c, false, "Upload incomplete"); return; }
   remove(path.c_str());
   rename(tmp.c_str(), path.c_str());
-  LOGI(Web, "Media '%s' saved (%u bytes)", name.c_str(), (unsigned)len);
+  LOGI(Web, "Media '%s' saved (%u bytes in %lu ms)", name.c_str(), (unsigned)len, (unsigned long)(millis() - began));
+  Storage::spaceChanged();
   sendResult(c, true, "/media/" + name);
 }
 
-void handle(EthernetClient& c) {
+void handle(EthernetClient& c, const String& head) {
   Request req;
   String line;
-  if (!readLine(c, line, 2000)) { c.stop(); return; }
+  int at = 0;
+  if (!nextLine(head, at, line)) { c.stop(); return; }
   int s1 = line.indexOf(' '), s2 = line.indexOf(' ', s1 + 1);
   if (s1 < 0 || s2 < 0) { c.stop(); return; }
   req.method = line.substring(0, s1);
@@ -449,7 +492,7 @@ void handle(EthernetClient& c) {
   int q = target.indexOf('?');
   req.path = q < 0 ? target : target.substring(0, q);
   req.query = q < 0 ? "" : target.substring(q + 1);
-  while (readLine(c, line, 2000) && line.length()) {
+  while (nextLine(head, at, line) && line.length()) {
     int colon = line.indexOf(':');
     if (colon < 0) continue;
     String name = line.substring(0, colon), value = line.substring(colon + 1);
@@ -616,6 +659,21 @@ void handle(EthernetClient& c) {
     BigRam::Text out;
     Log::search(queryParam(req.query, "name"), queryParam(req.query, "ip"), queryParam(req.query, "from").toInt(), queryParam(req.query, "to").toInt(), 300, out);
     sendText(c, 200, "application/json", out);
+  } else if (p == "/api/threads") {
+    // Diagnostics: every RTOS thread with its stack size and the least it ever had free
+    // (Mbed's stack watermark), e.g. one "readSocket" per open TCP connection.
+    osThreadId_t ids[64];
+    uint32_t n = osThreadEnumerate(ids, 64);
+    JsonDocument d(BigRam::json());
+    JsonArray a = d.to<JsonArray>();
+    for (uint32_t i = 0; i < n; i++) {
+      JsonArray t = a.add<JsonArray>();
+      const char* name = osThreadGetName(ids[i]);
+      t.add(name ? name : "?");
+      t.add(osThreadGetStackSize(ids[i]));
+      t.add(osThreadGetStackSpace(ids[i]));
+    }
+    sendJson(c, d);
   } else if (p == "/api/loglevels") {
     JsonDocument d(BigRam::json());
     for (int i = 0; i < (int)Cat::COUNT; i++) d[Log::catName((Cat)i)] = Log::lvlName(Log::level((Cat)i));
@@ -683,6 +741,7 @@ void handle(EthernetClient& c) {
   } else if (p == "/api/media" && req.method == "DELETE") {
     String name = queryParam(req.query, "name");
     bool ok = mediaName(name) && remove((String(KD_MEDIA_DIR) + "/" + name).c_str()) == 0;
+    if (ok) Storage::spaceChanged();
     sendResult(c, ok, ok ? "Deleted" : "Not found");
   } else if (p == "/api/update" && (req.method == "PUT" || req.method == "POST")) {
     String msg;
@@ -713,10 +772,65 @@ void handle(EthernetClient& c) {
 void httpLoop() {
   server.begin();
   LOGI(Web, "Web UI on http://%s/", Net::localIP().toString().c_str());
+  uint32_t lastWarn = 0;
   for (;;) {
-    EthernetClient c = server.accept();
-    if (c) { Log::crumb(Log::kCrumbWeb, "handling a request"); handle(c); Log::crumb(Log::kCrumbWeb, "idle"); }
-    else { NetSafe::idle(); rtos::ThisThread::sleep_for(5ms); }
+    // 1. Take every connection lwIP has queued (its queue is short: when full it resets new ones).
+    for (;;) {
+      EthernetClient c = server.accept();
+      if (!c) break;
+      Waiting* slot = nullptr;
+      for (auto& w : waiting) if (!w.used) { slot = &w; break; }
+      if (!slot) {
+        // Full: drop the one waiting longest, preferring one that sent nothing (a spare). The
+        // new one is most likely a browser that is loading now.
+        for (auto& w : waiting)
+          if (!slot || (w.head.length() == 0) > (slot->head.length() == 0) ||
+              ((w.head.length() == 0) == (slot->head.length() == 0) && (int32_t)(w.since - slot->since) < 0)) slot = &w;
+        slot->c.stop();
+        g_stats.httpRefused++;
+        if (millis() - lastWarn > 10000) { lastWarn = millis(); LOGW(Web, "Too many connections waiting (max %d): closed the oldest", KD_HTTP_WAITING); }
+      }
+      slot->c = c;
+      slot->head = "";
+      slot->head.reserve(256);
+      slot->since = millis();
+      slot->used = true;
+      slot->ready = false;
+    }
+    // 2. Read what has come in; serve one complete request, button presses / commands (POST)
+    //    first, then the one waiting longest. Back to 1 after each, so a page load by one
+    //    browser doesn't hold a panel's press for more than one file.
+    Waiting* next = nullptr;
+    bool nextPost = false;
+    for (auto& w : waiting) {
+      if (!w.used) continue;
+      int r = w.ready ? 1 : takeHead(w);
+      if (r == 0 && millis() - w.since < KD_HTTP_HEAD_MS) continue;
+      if (r < 0 || r == 0) {   // closed, too big, or no request in time
+        if (r == 0) g_stats.httpRefused++;
+        w.c.stop();
+        w.c = EthernetClient();
+        w.head = "";
+        w.used = false;
+        continue;
+      }
+      w.ready = true;
+      bool post = w.head.startsWith("POST ");
+      if (!next || (post && !nextPost) || (post == nextPost && (int32_t)(w.since - next->since) < 0)) { next = &w; nextPost = post; }
+    }
+    if (next) {
+      EthernetClient c = next->c;
+      String head = next->head;
+      next->c = EthernetClient();
+      next->head = "";
+      next->used = next->ready = false;
+      Log::crumb(Log::kCrumbWeb, "handling a request");
+      handle(c, head);
+      Log::crumb(Log::kCrumbWeb, "idle");
+      continue;
+    }
+    NetSafe::idle();
+    rtos::ThisThread::sleep_for(2ms);
   }
 }
 

@@ -1291,8 +1291,10 @@ function cmdOutputs(cmd, most = 6) {
       return host ? [{ kind: 'http', name: host, act: `${l[1]} ${w[2]}` }] : [];
     }
     case 'modbus': return [{ kind: 'modbus', name: w[1], act: rest(2) }];
-    case 'kissbox': case 'knx': case 'brightsign': case 'digidot': case 'netio': case 'pharos': case 'netgear':
-      return each((p.drivers || []).filter((d) => d.type === l[0]), 'drv', 'devices', rest(2), l[0]).map((o) => ({ ...o, type: l[0] }));
+    case 'kissbox': case 'knx': case 'brightsign': case 'digidot': case 'netio': case 'pharos': case 'netgear': case 'switch': {
+      const ty = l[0] === 'switch' ? 'netgear' : l[0];   // "switch" is the command word of the netgear type
+      return each((p.drivers || []).filter((d) => d.type === ty), 'drv', 'devices', rest(2), ty).map((o) => ({ ...o, type: ty }));
+    }
     case 'io': return [{ kind: 'io', name: l[1] === 'all' ? 'all outputs' : pmcCfg(w[1]).name || w[1], act: rest(2) }];
     case 'email': return [{ kind: 'email', name: w[1], act: w[2] || '' }];
   }

@@ -10,6 +10,13 @@ void begin(uint32_t waitMs);   // powers the USB-A port and waits for a stick
 void poll();                   // call from the main loop
 bool mounted();
 
+// Room on the stick, for /api/status "stick" {total, free} in KB (nothing while unknown). Read
+// by the save thread, never on a status request: a stick without a kept free count makes the
+// FAT library walk the whole table once, which can take a while. spaceChanged() = read it
+// again (after an upload, a delete, a mount).
+void spaceChanged();
+void spaceJson(JsonObject o);
+
 bool readFile(const char* path, String& out, size_t maxLen = 256 * 1024);
 bool readFile(const char* path, BigRam::Buffer& out, size_t maxLen = 4 * 1024 * 1024);   // big files (project)
 // buf/bufLen: a caller's buffer in internal RAM for the pieces (default: 8 KB from the heap).

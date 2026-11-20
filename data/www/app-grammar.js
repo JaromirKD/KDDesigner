@@ -121,7 +121,7 @@ const GRAMMAR = [
   ['brightsign {bsign} mute {onoff}', 'BrightSign (KD plugin): mute the whole player, or give the sound back'],
   ['brightsign {bsign} mute {bszone} {onoff}', 'BrightSign (KD plugin): mute one zone, or give its sound back'],
   ['brightsign {bsign} screen {onoff}', 'BrightSign (KD plugin): the video output off (the screen gets no signal and goes to standby) or on again'],
-  ['brightsign {bsign} gpio {num} {onoff}', 'BrightSign (KD plugin): switch a GPIO output of the player (pin 0-7, ticked as an output on the BrightSign tab)'],
+  ['brightsign {bsign} gpio {num} {onoff}', 'BrightSign (KD plugin): switch a GPIO output of the player (pin 0-7; one that is set as an output in BrightAuthor)'],
   ['brightsign {bsign} serial {text...}', 'BrightSign (KD plugin): send a line out of the player\'s serial port'],
   ['brightsign {bsign} probe', 'BrightSign (KD plugin): for fault-finding - the plugin writes what it sees (video positions, GPIO settings) to the log'],
   ['brightsign {bsign} reboot', 'BrightSign: reboot the player'],
@@ -140,7 +140,8 @@ const GRAMMAR = [
   ['netio {netio} output {netioout} {netioact}', 'NETIO: switch a power output'],
   ['netio {netio} output {netioout} {netioact} {sec}', 'NETIO: restart (off) or pulse (on) an output for this many seconds'],
   ['netio {netio} send {text...}', 'NETIO: post any netio.json content'],
-  ['netgear {netgear} refresh', 'Netgear switch: read all ports, names and descriptions now'],
+  ['switch {netgear} refresh', 'Network switch: read all ports, names and descriptions now'],
+  ['netgear {netgear} refresh', 'Network switch: the older word for "switch … refresh"', { hidden: true }],
   ['pharos {pharos} timeline {num} {pharostl}', 'Pharos: start, release, toggle, pause or resume a timeline'],
   ['pharos {pharos} timeline {num} {pharostl} fade {sec}', 'Pharos: timeline action with a fade'],
   ['pharos {pharos} timeline {num} rate {num}', 'Pharos: timeline speed (1 = normal)'],
@@ -498,7 +499,13 @@ function candidates(part, partial) {
       const items = (st?.states || []).filter((s) => s.f && (!zn || s.z === zn) && (s.f.toLowerCase().includes(pl) || (s.n || '').toLowerCase().includes(pl)))
         .filter((s) => !seen.has(own(s) ? s.n : s.f) && seen.add(own(s) ? s.n : s.f))
         .sort((a, b) => a.z - b.z || (own(a) ? a.n : a.f).localeCompare(own(b) ? b.n : b.f, undefined, { numeric: true }));
-      return [...items.map((s) => ({ insert: quote(own(s) ? s.n : s.f), label: own(s) ? s.n : s.f, desc: `zone ${s.z}${own(s) ? ' · ' + s.f : ''}`, key: 'bf' + s.z + s.n + s.f })), ...hint('<state name, or a file on the card, e.g. clip.mp4>')];
+      // After those the files of the other zones, by file name: a state name only works in its own zone.
+      const mine = new Set((st?.states || []).filter((s) => s.f && s.z === zn).map((s) => s.f.toLowerCase()));
+      const others = !zn ? [] : (st?.states || []).filter((s) => s.f && s.z !== zn && !mine.has(s.f.toLowerCase()) && (s.f.toLowerCase().includes(pl) || (s.n || '').toLowerCase().includes(pl)))
+        .filter((s) => !seen.has('f:' + s.f.toLowerCase()) && seen.add('f:' + s.f.toLowerCase()))
+        .sort((a, b) => a.z - b.z || a.f.localeCompare(b.f, undefined, { numeric: true }));
+      return [...items.map((s) => ({ insert: quote(own(s) ? s.n : s.f), label: own(s) ? s.n : s.f, desc: `zone ${s.z}${own(s) ? ' · ' + s.f : ''}`, key: 'bf' + s.z + s.n + s.f })),
+        ...others.map((s) => ({ insert: quote(s.f), label: s.f, desc: `from zone ${s.z}${own(s) ? ' · ' + s.n : ''}`, key: 'bo' + s.z + s.f })), ...hint('<state name, or a file on the card, e.g. clip.mp4>')];
     }
     case '{bsstate}': {
       // The states of the zone typed before (by name or number), as the plugin read them from the presentation.
@@ -692,7 +699,7 @@ function splitHead(text) {
 // "<command> interval <s>" (spread in Cmd.cpp): a pc / projector / io / show-device line for several
 // devices or outputs, one after another. {base, kw, sec} or null (also for a text form: there
 // "interval 2" is part of the text).
-const INTERVAL_HEADS = /^(pc|projector|io|kissbox|knx|brightsign|digidot|netio|pharos|netgear)$/i;
+const INTERVAL_HEADS = /^(pc|projector|io|kissbox|knx|brightsign|digidot|netio|pharos|netgear|switch)$/i;
 const INTERVAL_G = { pattern: '<command> interval {sec}', parts: ['<command>', 'interval', '{sec}'],
   doc: 'One after another, this many seconds apart (the first at once): every PC / projector / device of "all", a group or a list (a,b,c), the channels of a Kiss-Box card (1.all) or of every output card (all), KNX addresses (1/1/1,1/1/2), NETIO outputs (all or 1,3)' };
 function splitInterval(line) {
@@ -755,7 +762,7 @@ function intervalSteps(line) {
     known = /^\d+(\.\d+)?$/.test(val);
     gap = known ? +val : 1;
   }
-  const t = tokenize(d.base).map((x) => x.v), w = t.map((x) => x.toLowerCase()), p = P(), type = w[0];
+  const t = tokenize(d.base).map((x) => x.v), w = t.map((x) => x.toLowerCase()), p = P(), type = w[0] === 'switch' ? 'netgear' : w[0];
   const steps = [];
   let open = false;
   if (type === 'io') for (const n of listOf(t[1])) steps.push({ dev: pmcCfg(pmcFind(n) || n).name || n, item: '' });
@@ -1134,8 +1141,9 @@ const KEYWORD_HELP = {
   brightsign: 'A BrightSign media player (Devices page): UDP commands to the presentation and the local DWS API.',
   digidot: 'A DiGidot C4 LED pixel controller (Devices page).', netio: 'NETIO switchable power sockets (Devices page).',
   pharos: 'A Pharos lighting controller (LPC/TPC) via its HTTP API (Devices page).',
-  netgear: 'A Netgear AV (or other managed) network switch, watched over SNMP: ports, links, devices plugged in (Devices page).',
-  refresh: 'Read the device again now (DiGidot: scenes, playlists, triggers; Netgear: ports and names).',
+  switch: 'A managed network switch of any make, watched over SNMP: ports, links, devices plugged in (Devices page).',
+  netgear: 'The older word for "switch": a managed network switch watched over SNMP (Devices page).',
+  refresh: 'Read the device again now (DiGidot: scenes, playlists, triggers; network switch: ports and names).',
   read: 'Ask the device for its current value.', reboot: 'Restart the device.', api: 'Raw API call: any endpoint of the device.',
   playlist: 'A DiGidot playlist.', speed: 'Playback speed in percent.', reset: 'DiGidot: restart the controller. Panel: back to how it is set on the Panel page.',
   rate: 'Timeline speed: 1 = normal, 0.5 = half speed.', position: 'Jump to a point in the timeline (percent of its length).',
@@ -1403,7 +1411,7 @@ function category(g) {
   if (/^(mode |label|fire|cancel|repeat|stop repeat)/.test(p)) return 'Show control';
   if (/^(send|reply|email)/.test(p)) return 'Network & messages';
   if (/^(projector|output|pc )/.test(p)) return 'Devices & outputs';
-  if (/^(kissbox|knx|brightsign|digidot|netio|pharos|netgear) /.test(p)) return 'Show devices';
+  if (/^(kissbox|knx|brightsign|digidot|netio|pharos|netgear|switch) /.test(p)) return 'Show devices';
   if (/^io \{iopoint\} (is|\{op\})/.test(p)) return 'Conditions';
   if (/^io /.test(p)) return 'Machine Control';
   if (/^(var \{var\} \{op\}|calendar|date)/.test(p)) return 'Conditions';

@@ -27,6 +27,9 @@ const vitrine = [];
 for (let k = 0; k < 4; k++) vitrine.push(fx(`Vitrine cell ${k + 1}`, 1, 140 + k * 3, ['r', 'g', 'b'], { icon: 'pixel', type: 'Museum / Vitrine LED strip', mode: '4 cells' }));
 const pixels = [];
 for (let k = 0; k < 32; k++) pixels.push(fx(`Pixel ${k + 1}`, 2, 1 + k * 3, ['r', 'g', 'b'], { icon: 'pixel' }));
+// An LED sign of 32 x 8 RGB pixels for text and pictures: 170 pixels per universe (4 and 5).
+const sign = [];
+for (let k = 0; k < 256; k++) sign.push(fx(`Sign ${(k % 32) + 1}.${Math.floor(k / 32) + 1}`, k < 170 ? 4 : 5, 1 + (k % 170) * 3, ['r', 'g', 'b'], { icon: 'pixel' }));
 const WINCH = fx('Winch', 3, 1, ['pos:16', 'speed'], { icon: 'motor' });
 const SCREEN = fx('Projector shutter', 3, 10, ['shutter'], { icon: 'screen' });
 // Plain channel names are fine in the firmware; the home value notation is UI-only, so strip it.
@@ -40,6 +43,7 @@ const groups = [
   { id: 5, name: 'Pixel grid', fixtures: pixels },
   { id: 6, name: 'Vitrine', fixtures: vitrine },
   { id: 7, name: 'All colour', fixtures: [...walls, ...pars, ...pixels] },
+  { id: 8, name: 'LED sign', fixtures: sign },
 ];
 
 // ---------- maps ----------
@@ -53,6 +57,8 @@ const grid = pixels.map((f, k) => { const row = Math.floor(k / 8), col = row % 2
 const circle = pars.map((f, k) => { const a = (k / 8) * Math.PI * 2 - Math.PI / 2; return [f, 0.5 + 0.38 * Math.cos(a), 0.5 + 0.38 * Math.sin(a)]; });
 const map = (id, name, aspect, items) => ({ id, name, aspect, background: '', snap: true, labels: true, items: items.map(([fixture, x, y]) => ({ fixture, x: +x.toFixed(4), y: +y.toFixed(4) })) });
 const maps = [map(1, 'Stage plan', 1.5, stage), map(2, 'Pixel grid 8 x 4', 2, grid), map(3, 'Circle', 1, circle)];
+// The LED sign: each pixel at the middle of its cell, so text lands on whole LEDs (Scrolling text: cols 32).
+maps.push(map(7, 'LED sign 32 x 8', 4, sign.map((f, k) => [f, ((k % 32) + 0.5) / 32, (Math.floor(k / 32) + 0.5) / 8])));
 // The stage plan: a floor plan drawn with shapes and texts (no background image).
 Object.assign(maps[0], {
   shapes: [
@@ -140,6 +146,16 @@ k = 1 - depth * (0.5 + 0.5 * sin((u * 2 + t * speed) * tau))
 r, g, b = color
 dim = k * (0.8 + 0.2 * noise(t * 3 + i))`, round: true });
 const OWN_FX = effects.length;
+// A picture parameter's value: 4 frames of 32 x 8 (img:<w>x<h>x<frames>:<base64 of r g b>), a
+// white bar sweeping over a colour fade, as the UI makes from a GIF.
+const signPic = (() => {
+  const px = [];
+  for (let f = 0; f < 4; f++) for (let y = 0; y < 8; y++) for (let x = 0; x < 32; x++) {
+    const bar = (x - f * 8 + 32) % 32 < 3;
+    px.push(bar ? 255 : x * 8, bar ? 255 : y * 24, bar ? 255 : 160 - x * 4);
+  }
+  return `img:32x8x4:${Buffer.from(px).toString('base64')}`;
+})();
 
 // ---------- timelines ----------
 const timelines = [
@@ -151,7 +167,10 @@ const timelines = [
       { t: 0, track: 1, fade: 2000, effect: fxId('Breathe'), params: { speed: 0.1, color: '#ff9040' }, dim: 100 },
       { t: 0, track: 2, fade: 2000, len: 15000, out: 2000, effect: fxId('XY plasma'), params: {}, dim: 80 },
       { t: 15000, track: 2, fade: 2000, len: 15000, out: 2000, effect: fxId('Wave across the map'), params: {}, dim: 80 },
-      { t: 0, track: 3, fade: 1000, len: 10000, out: 1000, effect: fxId('Chase'), params: { speed: 0.5 }, dim: 100 },
+      // Clip option: mirrored, so the chase runs out from the middle of the grid both ways.
+      // Automation: its speed follows a line (slow, a curved rise to fast, back to slow).
+      { t: 0, track: 3, fade: 1000, len: 10000, out: 1000, effect: fxId('Chase'), params: { speed: 0.5 }, dim: 100, mods: { mirror: 'x' },
+        auto: { speed: [[0, 0.2, 0], [2000, 0.2, 0.6], [6000, 1.6, 0], [9000, 0.3, 0]] } },
       // The same ripple twice: round on the wide grid, then with "Round on wide maps" off.
       { t: 10000, track: 3, fade: 1000, len: 10000, out: 1000, effect: fxId('XY ripple'), params: { speed: 0.6, color: '#00c7be' }, dim: 100 },
       { t: 20000, track: 3, fade: 1000, len: 10000, out: 1000, effect: fxId('XY ripple (stretched)'), params: { speed: 0.6, color: '#ff8a00' }, dim: 100 },
@@ -182,6 +201,15 @@ const timelines = [
   { id: 5, name: 'Winch move', length: 12000, loop: false, end: 'release', endFade: 3000, priority: 5,
     tracks: [{ name: 'Winch', fixtures: [WINCH], groups: [] }],
     cues: [{ t: 0, fade: 8000, scene: 7, path: 'damped' }] },
+  // Text, colour lists, clip options and a picture on the LED sign.
+  { id: 6, name: 'LED sign', length: 40000, loop: true, priority: 0,
+    tracks: [{ name: 'Sign', fixtures: [], groups: [8] }],
+    cues: [
+      { t: 0, track: 0, fade: 1000, len: 14000, out: 1000, effect: fxId('Scrolling text'), params: { msg: 'WELCOME TO THE MUSEUM', speed: 12, cols: 32, color: '#ffd60a' }, dim: 100 },
+      { t: 14000, track: 0, fade: 1000, len: 8000, out: 1000, effect: fxId('Palette clouds'), params: { pal: '#000814 0,#5e5ce6 0.6,#ff2d92 0.85,#ffd60a 1' }, dim: 100 },
+      { t: 22000, track: 0, fade: 1000, len: 8000, out: 1000, effect: fxId('Spiral'), params: { arms: 2 }, dim: 100, mods: { kaleido: 6 } },
+      { t: 30000, track: 0, fade: 1000, len: 10000, out: 1000, effect: fxId('Picture'), params: { pic: signPic, fps: 4 }, dim: 100 },
+    ] },
 ];
 
 // ---------- triggers ----------
@@ -284,7 +312,7 @@ trig('Lamp hours 4000', 'projector', { projector: 'PJ left', alarm: 'lamp_hours'
 trig('Door opened (PLC)', 'variable', { variable: 'door', value: 'on' }, ['if mode Museum is Open then log Door opened during opening hours else email tech@example.com "Door" Door opened outside opening hours']);
 trig('KNX hall light changed', 'variable', { variable: 'hall_light' }, ['log Hall light is now {value} (was {old})']);
 trig('Network cabling changed', 'variable', { variable: 'switch_changes' }, ['if var switch_changes > 0 then email tech@example.com "Network" {value} switch port(s) not as remembered else log Network cabling back to normal'],
-  [], { notes: 'The Netgear switch on the Devices page counts the ports that are not as remembered (unplugged, other device, slower, no PoE) into switch_changes.' });
+  [], { notes: 'The network switch on the Devices page counts the ports that are not as remembered (unplugged, other device, slower, no PoE) into switch_changes.' });
 trig('Daylight above 5 V (ai0)', 'input', { io: 'ai0', edge: 'rising', level: 5 }, ['stop timeline "Exterior evening" fade 10']);
 trig('Visitor sensor (in1)', 'input', { io: 'in1', edge: 'rising' }, ['var visitors ++'], [], { cooldown: 1, onlyIn: { group: 'Museum', states: ['Open'] }, notes: 'Only counts while the museum is open (Only active in).' });
 trig('Reset button held (in3)', 'input', { io: 'in3', edge: 'hold', hold: 5 }, ['var visitors = 0', 'log Visitor counter reset']);
@@ -416,6 +444,8 @@ const project = {
     { id: 1, name: 'Stage', dmxPort: 1, artnet: 0, sacn: 1, useDmx: true, useArtnet: false, useSacn: true },
     { id: 2, name: 'Pixels', dmxPort: 2, artnet: 1, artnetDest: '192.168.1.60', sacn: 2, useDmx: false, useArtnet: true, useSacn: false },
     { id: 3, name: 'Motors', dmxPort: 2, artnet: 2, sacn: 3, useDmx: true, useArtnet: true, useSacn: false },
+    { id: 4, name: 'Sign A', dmxPort: 0, artnet: 3, artnetDest: '192.168.1.61', sacn: 4, useDmx: false, useArtnet: true, useSacn: false },
+    { id: 5, name: 'Sign B', dmxPort: 0, artnet: 4, artnetDest: '192.168.1.61', sacn: 5, useDmx: false, useArtnet: true, useSacn: false },
   ],
   fixtures, groups, scenes, timelines,
   devices: [
@@ -485,7 +515,7 @@ note Our own 4-cell showcase strip (example of a project fixture type)
 mode 4 cells: 4 x (r, g, b)
 mode Simple: dim, r, g, b`],
   drivers: [
-    { id: 1, type: 'kissbox', name: 'io', ip: '192.168.1.121', port: 9813, listenPort: 9813, frame: 'IO3', cards: ['DO4PR', 'DI8DC', 'AO8DA'],
+    { id: 1, type: 'kissbox', name: 'io', ip: '192.168.1.121', port: 9813, destPort: 9817, frame: 'IO3', cards: ['DO4PR', 'DI8DC', 'AO8DA'],
       names: { '1.1': 'Fog power', '1.2': 'Hazer', '1.3': 'Doors', '1.4': 'Spare', '2.1': 'Door contact', '3.1': 'Fan speed' }, vars: { '2.1': 'door' } },
     { id: 2, type: 'knx', name: 'gw', ip: '192.168.1.123', port: 3671, addresses: [
       { ga: '1/1/1', dpt: '1', name: 'Hall light', var: 'hall_light' }, { ga: '1/2/1', dpt: '5.001', name: 'Hall dimmer' },

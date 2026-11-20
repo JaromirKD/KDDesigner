@@ -402,8 +402,7 @@ views.panel.after = () => {
     const ext = (file.name.match(/\.(png|jpe?g|webp|gif|svg)$/i)?.[1] || 'png').toLowerCase();
     const name = `panel-${Date.now().toString(36)}.${ext}`;
     try {
-      const j = await (await fetch(`/api/media?name=${encodeURIComponent(name)}`, { method: 'PUT', body: file })).json();
-      if (!j.ok) throw new Error(j.reply);
+      await mediaUpload(name, file, file.name);
       if (c.image) S.mediaTrash.add(c.image);
       c.image = name;
       markDirty();
@@ -1226,6 +1225,21 @@ function historyBar(bits, checks) {
 const kb = (b) => `${Math.round((b || 0) / 1024)} KB`;
 // Free memory: amber below 64 KB, red below 32 KB (the firmware logs a warning too).
 const memClass = (h) => (h.free < 32768 ? 'bad' : h.free < 65536 ? 'warn' : 'ok');
+// Room on the storage device (/api/status "stick", KB): amber below 100 MB, red below 20 MB.
+// '' while the controller hasn't read it (or runs older firmware).
+const stickSize = (k) => (k >= 1048576 ? (k / 1048576).toFixed(1) + ' GB' : Math.round(k / 1024) + ' MB');
+function stickText(st) {
+  const s = st?.stick;
+  if (!st?.usb || !s?.total) return '';
+  const cls = s.free < 20480 ? 'bad' : s.free < 102400 ? 'warn' : 'ok';
+  return `<span class="mem-${cls}" title="In use ${stickSize(s.total - s.free)}: the show, its images and documents, backups, logs and the web UI">${stickSize(s.free)} free of ${stickSize(s.total)}</span>`;
+}
+function stickInfoHtml() {
+  const st = S.status;
+  if (!st) return '<span class="muted">Waiting for controller…</span>';
+  if (!st.usb) return 'Storage device: <span class="bad">missing</span>';
+  return `Storage device: ${stickText(st) || 'mounted'}`;
+}
 function memText(h) {
   if (!h || !h.size) return '—';
   return `<span class="mem-${memClass(h)}" title="In use ${kb(h.used)} · lowest free since boot ${kb(h.minFree)}">${kb(h.free)} free of ${kb(h.size)}</span>`;
@@ -1260,7 +1274,7 @@ views.monitor = () => {
   </div>
   <div id="monBody"></div>
   <p class="muted">PCs and network devices are pinged (ICMP); projectors are polled over PJLink for power, lamp hours, input, mute and error status.
-    Kiss-Box, KNX, BrightSign, DiGidot, NETIO, Pharos and Netgear devices are asked for their status in their own protocol at this same interval; with live updates they report changes at once.
+    Kiss-Box, KNX, BrightSign, DiGidot, NETIO and Pharos devices and network switches are asked for their status in their own protocol at this same interval; with live updates they report changes at once.
     Turn monitoring off per PC/device on the Devices page. Use a <b>Device online/offline</b> trigger to react, e.g. send an email.
     <b>Click a card</b> to open it with its online/offline history and its own log lines.</p>`;
 };
@@ -1449,7 +1463,7 @@ function histSegments(lines, from, to, now, upVal, downVal) {
   for (const [t, s] of lines) {
     if (t - lastLine > HIST_GAP && state !== null) change(lastLine + 600, null);
     lastLine = t;
-    if (s === 'boot') change(t, null);
+    if (s === 'boot' || s === 'gone') change(t, null);   // gone = left the project: not watched
     else if (pick(s) !== undefined) change(t, pick(s));
   }
   if (end - lastLine > HIST_GAP && state !== null) change(lastLine + 600, null);
@@ -1603,7 +1617,7 @@ function renderMonitor() {
   const card = monCard;
   const s = st?.stats;
   const controller = st ? card(Date.now() - S.statusAt < 4000 ? 'online' : 'offline', 'Controller', `${st.ip} · firmware ${st.version}`, [
-    ['Uptime', fmtTime(st.uptime).replace(/\.\d$/, '')], ['Last start', startedText(st.started)], ['Storage device', st.usb ? 'mounted' : '<span class="bad">missing</span>'],
+    ['Uptime', fmtUptime(st.uptime)], ['Last start', startedText(st.started)], ['Storage device', st.usb ? stickText(st) || 'mounted' : '<span class="bad">missing</span>'],
     ['Engine', `${s.engineFps} fps · tick ${s.tickUs} µs`], ['DMX', `${s.dmxFps} fps`],
     ['Art-Net / sACN', `${s.artTx} / ${s.sacnTx} pkt/s`], ['Clock', st.time > 1600000000 ? euDateTime(new Date(st.time * 1000)) : 'not set'],
     ['Memory', memText(s.heap)], ['Lowest free', s.heap ? kb(s.heap.minFree) + ' (since boot)' : '—'],
@@ -2373,6 +2387,7 @@ views.settings = () => {
   </div>
   <div id="netProblems" class="bad"></div>
   <h3>Controller</h3>
+  <p id="stickInfo">${stickInfoHtml()}</p>
   <div class="row"><button class="btn" id="syncClock">Set clock from this browser</button>
     <button class="btn" data-cmd="reload">Reload project from USB</button></div>
   <h3>Software update</h3>
@@ -2397,7 +2412,7 @@ views.settings.after = () => {
   });
   $('#syncClock').addEventListener('click', setClockFromPc);
   $('#updFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) installUpdate(f); });
-  pagePoll('updInfo', () => { if (!S.updating) $('#updInfo').innerHTML = updInfoHtml(); $('#netLive').innerHTML = netLiveHtml(); }, 2000);
+  pagePoll('updInfo', () => { if (!S.updating) $('#updInfo').innerHTML = updInfoHtml(); $('#netLive').innerHTML = netLiveHtml(); $('#stickInfo').innerHTML = stickInfoHtml(); }, 2000);
   // Checked while typing (the bound value is only written on "change"); Save refuses too.
   const netCheck = () => {
     const n = { ...P().network };
@@ -2612,8 +2627,7 @@ async function openShow(f) {
     try {
       const bin = atob(b64), buf = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-      const j = await (await fetch(`/api/media?name=${encodeURIComponent(name)}`, { method: 'PUT', body: buf })).json();
-      if (!j.ok) throw new Error(j.reply);
+      await mediaUpload(name, buf);
     } catch { failed.push(name); }
   }
   replaceProject(p);

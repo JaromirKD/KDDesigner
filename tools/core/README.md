@@ -16,11 +16,11 @@ Only the lwIP limits differ from Arduino's build (`conf/mbed_app.json`):
 
 | Setting | Arduino | Here |
 |---|---|---|
-| `lwip.socket-max` (all sockets) | 4 | 32 |
-| `lwip.tcp-socket-max` | 4 | 20 |
+| `lwip.socket-max` (all sockets) | 4 | 48 |
+| `lwip.tcp-socket-max` | 4 | 32 (20 until 17 Nov 2026: 8 browsers/panels plus a page load used them all up and new connections were reset) |
 | `lwip.udp-socket-max` | 4 | 16 |
 | `lwip.tcp-server-max` | 4 | 4 |
-| `lwip.memp-num-tcp-seg` | 16 | 48 |
+| `lwip.memp-num-tcp-seg` | 16 | 64 |
 | `lwip.mem-size` (bytes) | 16000 | 16000 (it sits in a fixed 16 KB slot of RAM_D2, `.ethusbram` in the linker script: more doesn't link) |
 | `lwip.pbuf-pool-size` | 5 | 8 |
 | `lwip.num-pbuf` / `lwip.num-netbuf` | 8 / 8 | 16 / 16 |
